@@ -19,7 +19,7 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { LEADS_PAGE_SIZE, MAX_LEAD_SEARCH_SCAN, useLeads, type LeadListServerFilters } from '../hooks/useLeads'
+import { useLeads, type LeadListServerFilters } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
@@ -216,12 +216,6 @@ export function LeadManagement() {
     loading,
     loadingPage,
     error,
-    totalLeadCount,
-    totalLeadCountError,
-    scopeTagCounts,
-    searchScanTruncated,
-    searchHitTotal,
-    scopeFetchTruncated,
     currentPage,
     totalPages: firestoreTotalPages,
     setPage,
@@ -399,18 +393,6 @@ export function LeadManagement() {
   }, [currentPage, displayTotalPages, setPage])
 
   const pagedRows = useMemo(() => sortedFiltered, [sortedFiltered])
-
-  const listStats = useMemo(() => {
-    if (scopeTagCounts) {
-      return {
-        hot: scopeTagCounts.HOT,
-        warm: scopeTagCounts.WARM,
-        cold: scopeTagCounts.COLD,
-        loss: scopeTagCounts.LOSS,
-      }
-    }
-    return { hot: 0, warm: 0, cold: 0, loss: 0 }
-  }, [scopeTagCounts])
 
   const toggleSort = (k: typeof sortKey) => {
     if (k === 'none') return
@@ -602,12 +584,6 @@ export function LeadManagement() {
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
             Quản lý hồ sơ
           </VietMyAccentHeading>
-          {canBulkWrite ? (
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">
-              Điều chuyển phụ trách: chọn một hoặc nhiều hồ sơ (ô đầu dòng trong bảng), bấm «Giao việc hàng loạt»; hoặc
-              mở chi tiết hồ sơ và dùng khối «Phân công &amp; CRM».
-            </p>
-          ) : null}
         </div>
         {!configured || !db ? (
           <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-xs text-amber-900">
@@ -1000,68 +976,6 @@ export function LeadManagement() {
           >
             Xóa lọc nhanh
           </button>
-        </div>
-
-        <div className="flex flex-col gap-1.5 rounded-md border border-slate-200/70 bg-white/60 px-2 py-1.5 text-[11px] leading-snug text-slate-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
-            <span>
-              <span className="font-semibold text-slate-800">
-                {totalLeadCount !== null ? totalLeadCount : '—'}
-              </span>{' '}
-              tổng (Firestore, theo lọc &amp; phạm vi quyền)
-              {totalLeadCountError ? (
-                <span className="text-rose-600" title={totalLeadCountError}>
-                  {' '}
-                  (lỗi đếm)
-                </span>
-              ) : null}
-            </span>
-            {urlQuery ? (
-              <span>
-                Khớp tìm:{' '}
-                <span className="font-semibold text-slate-800">{searchHitTotal ?? '—'}</span>
-                {searchScanTruncated ? (
-                  <span className="text-amber-800" title="Đã quét tối đa bản ghi theo cấu hình">
-                    {' '}
-                    (≤{MAX_LEAD_SEARCH_SCAN} bản ghi quét)
-                  </span>
-                ) : null}
-              </span>
-            ) : null}
-            {scopeFetchTruncated ? (
-              <span className="text-amber-900" title="Giới hạn an toàn khi tải toàn bộ phạm vi">
-                Một phần dữ liệu có thể chưa được tải hết — kiểm tra chế độ danh sách hoặc bộ lọc.
-              </span>
-            ) : null}
-            <span>
-              Trang hiện tại: <span className="font-semibold text-slate-800">{pagedRows.length}</span> dòng
-              {loadingPage ? <span className="text-slate-500"> · đang tải…</span> : null}
-            </span>
-            {showAdminGlobalFilters ? (
-              <span className="text-slate-500">
-                Admin: bộ lọc đã gửi server
-              </span>
-            ) : null}
-            <span>
-              Dòng trên trang (sau lọc điểm profile nếu có):{' '}
-              <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
-              {sortedFiltered.length > 0 ? (
-                <>
-                  {' '}
-                  · Trang <span className="font-semibold text-slate-800">{currentPage}</span>/
-                  <span className="font-semibold text-slate-800">{displayTotalPages}</span> (Firestore / tìm kiếm, tối
-                  đa {LEADS_PAGE_SIZE} dòng/trang)
-                </>
-              ) : null}
-            </span>
-            <span className="text-rose-700">HOT {listStats.hot}</span>
-            <span className="text-amber-800">WARM {listStats.warm}</span>
-            <span className="text-slate-500">COLD {listStats.cold}</span>
-            <span className="text-slate-600">LOSS {listStats.loss}</span>
-            <span className="max-w-[14rem] text-slate-500" title="Đếm nhãn theo trường priorityTag trên Firestore trong phạm vi lọc">
-              (HOT/WARM… theo DB)
-            </span>
-          </div>
         </div>
       </section>
 
