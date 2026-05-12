@@ -267,6 +267,10 @@ export function LeadManagement() {
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
+  const [sourceFilter, setSourceFilter] = useState<string>('ALL')
+  const [scoreMinInput, setScoreMinInput] = useState('')
+  const [scoreMaxInput, setScoreMaxInput] = useState('')
+  const [tablePage, setTablePage] = useState(1)
   const [selected, setSelected] = useState<Lead | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
@@ -295,16 +299,35 @@ export function LeadManagement() {
     return [...s].sort()
   }, [leadsAfterAdmin])
 
+  const sources = useMemo(() => {
+    const s = new Set<string>()
+    for (const l of leadsAfterAdmin) {
+      const src = (l.source ?? '').trim()
+      if (src) s.add(src)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leadsAfterAdmin])
+
   const filtered = useMemo(() => {
+    const minScore =
+      scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
+    const maxScore =
+      scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput)) ? null : Number(scoreMaxInput)
     return leadsAfterAdmin.filter((l) => {
       const displayTag = activeScoringProfile
         ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
         : l.priorityTag
+      const displayScore = activeScoringProfile
+        ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
+        : l.calculatedScore
       if (tagFilter !== 'ALL' && displayTag !== tagFilter) return false
       if (statusFilter !== 'ALL' && l.pipelineStatus !== statusFilter) return false
       if (crmStatusFilter !== 'ALL' && l.status !== crmStatusFilter) return false
       if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
       if (majorFilter !== 'ALL' && l.educationLevel.trim() !== majorFilter) return false
+      if (sourceFilter !== 'ALL' && (l.source ?? '').trim() !== sourceFilter) return false
+      if (minScore != null && displayScore < minScore) return false
+      if (maxScore != null && displayScore > maxScore) return false
       if (urlQuery) {
         const q = urlQuery
         const name = (l.fullName ?? '').toLowerCase()
@@ -334,6 +357,9 @@ export function LeadManagement() {
     crmStatusFilter,
     regionFilter,
     majorFilter,
+    sourceFilter,
+    scoreMinInput,
+    scoreMaxInput,
     activeScoringProfile,
     scoreByLeadId,
     urlQuery,
@@ -376,6 +402,41 @@ export function LeadManagement() {
     return rows
   }, [filtered, sortKey, sortDir, activeScoringProfile, scoreByLeadId])
 
+  const totalTablePages = Math.max(1, Math.ceil(sortedFiltered.length / LEADS_PAGE_SIZE))
+
+  useEffect(() => {
+    setTablePage(1)
+  }, [
+    tagFilter,
+    regionFilter,
+    majorFilter,
+    statusFilter,
+    crmStatusFilter,
+    sourceFilter,
+    scoreMinInput,
+    scoreMaxInput,
+    urlQuery,
+    sortKey,
+    sortDir,
+    adminUploaderIds,
+    adminRegions,
+    adminTags,
+    adminSchools,
+    adminAssignedCounselorIds,
+    adminDateFrom,
+    adminDateTo,
+    adminDateField,
+  ])
+
+  useEffect(() => {
+    setTablePage((p) => Math.min(p, totalTablePages))
+  }, [totalTablePages])
+
+  const pagedRows = useMemo(
+    () => sortedFiltered.slice((tablePage - 1) * LEADS_PAGE_SIZE, tablePage * LEADS_PAGE_SIZE),
+    [sortedFiltered, tablePage],
+  )
+
   const listStats = useMemo(() => {
     let hot = 0
     let warm = 0
@@ -410,6 +471,26 @@ export function LeadManagement() {
     else next.delete('q')
     setSearchParams(next, { replace: true })
   }
+
+  const clearQuickFilters = useCallback(() => {
+    setTagFilter('ALL')
+    setRegionFilter('ALL')
+    setMajorFilter('ALL')
+    setStatusFilter('ALL')
+    setCrmStatusFilter('ALL')
+    setSourceFilter('ALL')
+    setScoreMinInput('')
+    setScoreMaxInput('')
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('q')
+        return next
+      },
+      { replace: true },
+    )
+    setTablePage(1)
+  }, [setSearchParams])
 
   const handleExportEvaluated = () => {
     const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
@@ -449,13 +530,20 @@ export function LeadManagement() {
   }, [])
 
   const allVisibleSelected =
-    sortedFiltered.length > 0 && sortedFiltered.every((l) => selectedIds.has(l.id))
+    pagedRows.length > 0 && pagedRows.every((l) => selectedIds.has(l.id))
   const toggleSelectAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
-      if (sortedFiltered.length && sortedFiltered.every((l) => prev.has(l.id))) return new Set()
-      return new Set(sortedFiltered.map((l) => l.id))
+      const allPage = pagedRows.length > 0 && pagedRows.every((l) => prev.has(l.id))
+      if (allPage) {
+        const n = new Set(prev)
+        for (const l of pagedRows) n.delete(l.id)
+        return n
+      }
+      const n = new Set(prev)
+      for (const l of pagedRows) n.add(l.id)
+      return n
     })
-  }, [sortedFiltered])
+  }, [pagedRows])
 
   const applyBulkReassign = useCallback(async () => {
     if (!db || !profile || !bulkReassignUid || !selectedIds.size) return
@@ -917,6 +1005,45 @@ export function LeadManagement() {
           />
         </div>
 
+        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200/70 pt-2">
+          <FilterSelect
+            compact
+            label="Nguồn"
+            value={sourceFilter}
+            onChange={setSourceFilter}
+            options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
+          />
+          <label className="flex flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Điểm từ
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="—"
+              value={scoreMinInput}
+              onChange={(e) => setScoreMinInput(e.target.value)}
+              className="mt-0.5 w-[5.5rem] rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+            />
+          </label>
+          <label className="flex flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Điểm đến
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="—"
+              value={scoreMaxInput}
+              onChange={(e) => setScoreMaxInput(e.target.value)}
+              className="mt-0.5 w-[5.5rem] rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={clearQuickFilters}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
+          >
+            Xóa lọc nhanh
+          </button>
+        </div>
+
         <div className="flex flex-col gap-1.5 rounded-md border border-slate-200/70 bg-white/60 px-2 py-1.5 text-[11px] leading-snug text-slate-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
             <span>
@@ -929,7 +1056,15 @@ export function LeadManagement() {
               </span>
             ) : null}
             <span>
-              Hiển thị: <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
+              Sau lọc: <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
+              {sortedFiltered.length > 0 ? (
+                <>
+                  {' '}
+                  · Trang <span className="font-semibold text-slate-800">{tablePage}</span>/
+                  <span className="font-semibold text-slate-800">{totalTablePages}</span> (
+                  {LEADS_PAGE_SIZE}/trang)
+                </>
+              ) : null}
             </span>
             <span className="text-rose-700">HOT {listStats.hot}</span>
             <span className="text-amber-800">WARM {listStats.warm}</span>
@@ -958,8 +1093,54 @@ export function LeadManagement() {
           <span className="font-semibold text-amber-900">Mẹo:</span> bấm vào <strong>một dòng hồ sơ</strong> để mở panel
           chi tiết — xem đủ thông tin sinh viên, <strong>ghi chú &amp; lịch sử tương tác</strong>,{' '}
           <strong>đánh giá / nhãn tương tác</strong>, playbook gợi ý, phân tích AI (nếu bật) và nhật ký thao tác hệ
-          thống.
+          thống. Danh sách chia <strong>{LEADS_PAGE_SIZE} hồ sơ/trang</strong>; ô đầu dòng chỉ chọn hồ sơ{' '}
+          <strong>trên trang hiện tại</strong>.
         </p>
+        {sortedFiltered.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
+            <span className="text-slate-600">
+              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span> hồ sơ (trang{' '}
+              {tablePage}/{totalTablePages})
+              {tablePage >= totalTablePages && hasMore ? (
+                <span className="ml-2 text-amber-800">· Còn trên máy chủ — bấm «Tải thêm» phía trên.</span>
+              ) : null}
+            </span>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                disabled={tablePage <= 1}
+                onClick={() => setTablePage(1)}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+              >
+                « Đầu
+              </button>
+              <button
+                type="button"
+                disabled={tablePage <= 1}
+                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+              >
+                Trước
+              </button>
+              <button
+                type="button"
+                disabled={tablePage >= totalTablePages}
+                onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+              >
+                Sau
+              </button>
+              <button
+                type="button"
+                disabled={tablePage >= totalTablePages}
+                onClick={() => setTablePage(totalTablePages)}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+              >
+                Cuối »
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain">
           <table className="min-w-[1280px] w-full border-collapse text-left text-base">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/85 backdrop-blur-xl">
@@ -970,9 +1151,9 @@ export function LeadManagement() {
                       type="checkbox"
                       checked={allVisibleSelected}
                       onChange={toggleSelectAllVisible}
-                      disabled={!sortedFiltered.length}
+                      disabled={!pagedRows.length}
                       className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                      title="Chọn tất cả (trang lọc hiện tại)"
+                      title="Chọn tất cả hồ sơ trên trang này"
                     />
                   ) : null}
                 </th>
@@ -1100,7 +1281,7 @@ export function LeadManagement() {
                   </td>
                 </tr>
               ) : null}
-              {sortedFiltered.map((l) => {
+              {pagedRows.map((l) => {
                 const ev = activeScoringProfile ? scoreByLeadId.get(l.id) : undefined
                 const displayScore = ev?.calculatedScore ?? l.calculatedScore
                 const displayTag = ev?.priorityTag ?? l.priorityTag

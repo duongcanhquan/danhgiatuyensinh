@@ -25,8 +25,8 @@ import {
   pipelineToCounselorStatus,
 } from '../utils/leadIdentity'
 
-/** Một trang realtime / cursor — giới hạn đọc Firestore mỗi lần. */
-export const LEADS_PAGE_SIZE = 50
+/** Một trang realtime / cursor — giới hạn đọc Firestore mỗi lần (đồng bộ với UI ~30/trang). */
+export const LEADS_PAGE_SIZE = 30
 
 const PIPELINE_KEYS = new Set<string>([
   'NEW',
