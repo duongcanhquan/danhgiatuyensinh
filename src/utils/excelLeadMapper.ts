@@ -76,7 +76,12 @@ export function mapSheetRow(raw: Record<string, unknown>): Partial<ExcelLeadRow>
 }
 
 export function parseWorkbookToRows(file: ArrayBuffer): Partial<ExcelLeadRow>[] {
-  const wb = XLSX.read(file, { type: 'array' })
+  const wb = XLSX.read(file, {
+    type: 'array',
+    cellStyles: false,
+    cellDates: false,
+    dense: true,
+  })
   const names = wb.SheetNames
   const preferred =
     names.find((n) => normalizeSheetTabName(n) === 'leads') ??

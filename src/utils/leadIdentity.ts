@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha256'
 import type { Lead, LeadCounselorStatus } from '../types'
 import { LEAD_COUNSELOR_STATUS_ORDER } from '../types'
 import type { ExcelLeadRow } from './excelLeadMapper'
@@ -40,10 +41,10 @@ function normIdentity(s: string): string {
     .replace(/\p{M}/gu, '')
 }
 
-async function sha256Hex(input: string): Promise<string> {
-  const buf = new TextEncoder().encode(input)
-  const hash = await crypto.subtle.digest('SHA-256', buf)
-  return Array.from(new Uint8Array(hash))
+/** SHA-256 hex — đồng bộ, cùng kết quả với `crypto.subtle` (đã dùng trước đây) để `uniqueHash` trên Firestore không đổi. */
+function sha256HexSync(input: string): string {
+  const digest = sha256(new TextEncoder().encode(input))
+  return Array.from(digest)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 }
@@ -51,7 +52,7 @@ async function sha256Hex(input: string): Promise<string> {
 /**
  * Dedupe fingerprint: primary phone (student → parent); else normalized name + customer id + education.
  */
-export async function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): Promise<string> {
+export function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): string {
   const phoneKey = normalizePhoneKey(row.phone ?? '', row.parentPhone)
   let basis: string
   if (phoneKey.length >= 9) {
@@ -63,7 +64,7 @@ export async function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): Promise
     const grade = normIdentity(row.gradeClass ?? '')
     basis = `identity:${n}|kh:${cid}|edu:${edu}|lop:${grade}`
   }
-  return sha256Hex(basis)
+  return sha256HexSync(basis)
 }
 
 /** Map admission funnel stage to counselor Kanban when `status` is absent on legacy docs. */

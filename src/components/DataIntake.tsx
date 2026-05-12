@@ -33,7 +33,10 @@ import { VietMyAccentHeading } from './VietMyAccentHeading'
 const BATCH_SIZE = 500
 /** Mẫu lead gần đây để cân bằng tải TVV khi import (tránh phụ thuộc listener paginated). */
 const ROUTING_ASSIGNMENT_SAMPLE = 500
-const IN_QUERY_CHUNK = 25
+/** Firestore `in` tối đa 30 giá trị; chunk lớn hơn = ít round-trip hơn. */
+const IN_QUERY_CHUNK = 30
+/** Số truy vấn `in` chạy song song (tránh chặn UI quá lâu khi file lớn). */
+const EXISTING_HASH_QUERY_CONCURRENCY = 12
 
 type PreparedRow = {
   index: number
@@ -75,13 +78,20 @@ async function fetchExistingIdsByHash(
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   const uniq = [...new Set(hashes)].filter(Boolean)
-  for (const part of chunkArray(uniq, IN_QUERY_CHUNK)) {
-    const q = query(collection(db, FS_COLLECTIONS.leads), where('uniqueHash', 'in', part))
-    const snap = await getDocs(q)
-    snap.forEach((d) => {
-      const h = d.data().uniqueHash
-      if (h && !map.has(String(h))) map.set(String(h), d.id)
-    })
+  const parts = chunkArray(uniq, IN_QUERY_CHUNK)
+  for (let i = 0; i < parts.length; i += EXISTING_HASH_QUERY_CONCURRENCY) {
+    const group = parts.slice(i, i + EXISTING_HASH_QUERY_CONCURRENCY)
+    const snaps = await Promise.all(
+      group.map((part) =>
+        getDocs(query(collection(db, FS_COLLECTIONS.leads), where('uniqueHash', 'in', part))),
+      ),
+    )
+    for (const snap of snaps) {
+      snap.forEach((d) => {
+        const h = d.data().uniqueHash
+        if (h && !map.has(String(h))) map.set(String(h), d.id)
+      })
+    }
   }
   return map
 }
@@ -209,13 +219,11 @@ export function DataIntake() {
         const uploadedBy = profile.id
         const uploaderName = profile.displayName?.trim() || profile.email || uploadedBy
 
-        const hashRows = await Promise.all(
-          rows.map(async (row, index) => ({
-            index,
-            row,
-            hash: await computeLeadUniqueHash(row),
-          })),
-        )
+        const hashRows = rows.map((row, index) => ({
+          index,
+          row,
+          hash: computeLeadUniqueHash(row),
+        }))
 
         const firstIndexByHash = new Map<string, number>()
         const prepared: PreparedRow[] = hashRows.map(({ index, row, hash }) => {
