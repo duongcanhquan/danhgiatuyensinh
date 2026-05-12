@@ -32,7 +32,8 @@ function mapAudit(id: string, data: Record<string, unknown>): AuditLog | null {
 
 /**
  * Real-time audit entries for one lead (newest first).
- * Requires Firestore index: auditLogs (leadId ASC, timestamp DESC).
+ * Firestore composite index (same on every DB you use, e.g. `warmlist`):
+ * Collection `auditLogs` — leadId ASCENDING + timestamp DESCENDING.
  */
 export function useAuditLogs(leadId: string | null) {
   const [entries, setEntries] = useState<AuditLog[]>([])

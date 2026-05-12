@@ -2,8 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Production: add rules for `auditLogs` (read/write scoped by role) and a
-    // composite index on auditLogs: leadId ASC + timestamp DESC for the timeline query.
+    // Production: add rules for `auditLogs` (read/write scoped by role).
+    // Composite index (timeline): see `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
 
     // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
     // write: admin only) — collection used by RAG / Settings → Kho tri thức.
