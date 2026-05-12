@@ -33,19 +33,42 @@ export function LeadAuditTimeline({
   entries,
   loading,
   error,
+  missingIndexUrl,
 }: {
   entries: AuditLog[]
   loading: boolean
   error: string | null
+  /** Link từ Firebase khi thiếu composite index. */
+  missingIndexUrl?: string | null
 }) {
   if (error) {
     return (
       <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-base text-rose-900 shadow-sm">
-        {error}
-        <p className="mt-2 text-sm text-rose-800">
-          Nếu đây là lỗi index: tạo composite index <code className="rounded bg-rose-100 px-1">leadId</code> +{' '}
+        <p className="font-medium">Không tải được nhật ký thao tác</p>
+        <p className="mt-2 text-sm leading-relaxed text-rose-800/95">{error}</p>
+        <p className="mt-3 text-sm leading-relaxed text-rose-900">
+          Đây là yêu cầu <strong>composite index</strong> của Firestore (không phải lỗi code): truy vấn cần lọc theo{' '}
+          <code className="rounded bg-rose-100 px-1">leadId</code> và sắp xếp theo{' '}
           <code className="rounded bg-rose-100 px-1">timestamp</code> trên collection{' '}
-          <code className="rounded bg-rose-100 px-1">auditLogs</code>.
+          <code className="rounded bg-rose-100 px-1">auditLogs</code>. Index mẫu đã có trong file{' '}
+          <code className="rounded bg-rose-100 px-1">firestore.indexes.json</code> của repo.
+        </p>
+        {missingIndexUrl ? (
+          <p className="mt-3">
+            <a
+              href={missingIndexUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-lg border border-amber-400 bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-200"
+            >
+              Mở Firebase Console — tạo index (một lần)
+            </a>
+          </p>
+        ) : null}
+        <p className="mt-3 text-xs leading-relaxed text-rose-800/90">
+          Hoặc từ thư mục project: <code className="rounded bg-white/80 px-1">firebase deploy --only firestore:indexes</code>{' '}
+          (đã cấu hình database <code className="rounded bg-white/80 px-1">warmlist</code> trong <code className="rounded bg-white/80 px-1">firebase.json</code>
+          ).
         </p>
       </div>
     )

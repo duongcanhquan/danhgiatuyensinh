@@ -12,6 +12,12 @@ import type { AuditLog } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 
+/** URL tạo index trong thông báo lỗi Firestore (thường kèm failed-precondition). */
+export function extractFirestoreIndexUrl(message: string): string | null {
+  const m = message.match(/https:\/\/console\.firebase\.google\.com[^\s"'<>]+/)
+  return m?.[0] ?? null
+}
+
 function mapAudit(id: string, data: Record<string, unknown>): AuditLog | null {
   try {
     const ts = data.timestamp as Timestamp | undefined
@@ -39,6 +45,7 @@ export function useAuditLogs(leadId: string | null) {
   const [entries, setEntries] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(Boolean(leadId))
   const [error, setError] = useState<string | null>(null)
+  const [missingIndexUrl, setMissingIndexUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!leadId) {
@@ -46,6 +53,7 @@ export function useAuditLogs(leadId: string | null) {
         setEntries([])
         setLoading(false)
         setError(null)
+        setMissingIndexUrl(null)
       })
       return
     }
@@ -55,6 +63,7 @@ export function useAuditLogs(leadId: string | null) {
         setEntries([])
         setLoading(false)
         setError(null)
+        setMissingIndexUrl(null)
       })
       return
     }
@@ -79,15 +88,18 @@ export function useAuditLogs(leadId: string | null) {
         setEntries(next)
         setLoading(false)
         setError(null)
+        setMissingIndexUrl(null)
       },
       (err) => {
         console.error(err)
-        setError(err.message || 'Không đọc được audit log')
+        const msg = err.message || 'Không đọc được audit log'
+        setError(msg)
+        setMissingIndexUrl(extractFirestoreIndexUrl(msg))
         setLoading(false)
       },
     )
     return () => unsub()
   }, [leadId])
 
-  return { entries, loading, error }
+  return { entries, loading, error, missingIndexUrl }
 }

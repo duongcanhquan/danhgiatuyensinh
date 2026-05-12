@@ -2035,7 +2035,8 @@ function LeadDetailPanel({
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<'workspace' | 'audit'>('workspace')
-  const { entries: auditEntries, loading: auditLoading, error: auditError } = useAuditLogs(lead.id)
+  const { entries: auditEntries, loading: auditLoading, error: auditError, missingIndexUrl: auditIndexUrl } =
+    useAuditLogs(lead.id)
 
   const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks()
   const notesAgg = useMemo(
@@ -2510,7 +2511,12 @@ function LeadDetailPanel({
                 Lịch sử thao tác hệ thống — trạng thái, phân công, ghi chú, AI.
               </p>
               <div className="mt-4">
-                <LeadAuditTimeline entries={auditEntries} loading={auditLoading} error={auditError} />
+                <LeadAuditTimeline
+                  entries={auditEntries}
+                  loading={auditLoading}
+                  error={auditError}
+                  missingIndexUrl={auditIndexUrl}
+                />
               </div>
             </div>
           )}

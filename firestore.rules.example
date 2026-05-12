@@ -3,7 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Production: add rules for `auditLogs` (read/write scoped by role).
-    // Composite index (timeline): see `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
+    // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
+    // Sau khi sửa index: `firebase deploy --only firestore:indexes` (database `warmlist` trong firebase.json).
 
     // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
     // write: admin only) — collection used by RAG / Settings → Kho tri thức.
