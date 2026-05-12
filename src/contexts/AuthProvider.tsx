@@ -54,6 +54,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/** Tránh treo vô hạn ở «Đang tải hồ sơ…» khi Firestore/Rules/mạng không phản hồi. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => {
+      reject(new Error(`${label} (quá ${ms / 1000}s — thường do Rules, sai database Firestore, hoặc mạng)`))
+    }, ms)
+    promise.then(
+      (v) => {
+        window.clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(t)
+        reject(e)
+      },
+    )
+  })
+}
+
 /** Đồng bộ hồ sơ users/{uid} — retry nhẹ khi mạng / Rules chưa kịp. */
 async function syncUserProfileWithRetry(
   db: NonNullable<ReturnType<typeof getFirestoreDb>>,
@@ -141,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setStatus('authenticating')
       try {
-        const p = await syncUserProfileWithRetry(db, user)
+        const p = await withTimeout(syncUserProfileWithRetry(db, user), 22_000, 'Đồng bộ users/{uid}')
         if (p.role === 'admin') {
           void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
             console.warn('[firestoreBootstrap]', e)

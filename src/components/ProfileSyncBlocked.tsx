@@ -33,6 +33,13 @@ export function ProfileSyncBlocked() {
             Tab <strong>Rules</strong>: cho phép user đã đăng nhập ghi doc của chính họ (hoặc tạm thời dùng mẫu trong
             file <code className="text-slate-800">firestore.rules.example</code> ở thư mục project) rồi <strong>Publish</strong>.
           </li>
+          <li>
+            Nếu trên Firebase bạn dùng database tên riêng (vd. <code className="text-slate-800">warmlist</code>) thay vì{' '}
+            <code className="text-slate-800">(default)</code>: biến{' '}
+            <code className="text-slate-800">VITE_FIREBASE_FIRESTORE_DATABASE_ID</code> trên Vercel / GitHub Actions phải{' '}
+            <strong>trùng</strong> tên đó — nếu thiếu hoặc sai, app có thể không đọc/ghi được{' '}
+            <code className="text-slate-800">users/{'{'}uid{'}'}</code>.
+          </li>
           <li>Sau đó bấm «Tải lại trang» bên dưới.</li>
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
