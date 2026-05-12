@@ -4,6 +4,8 @@
 
 Repo GitHub: [github.com/duongcanhquan/danhgiatuyensinh](https://github.com/duongcanhquan/danhgiatuyensinh)
 
+**Hướng dẫn sử dụng cho cán bộ / TVV:** [docs/HUONG_DAN_SU_DUNG.md](docs/HUONG_DAN_SU_DUNG.md)
+
 ## Chạy local
 
 ```bash

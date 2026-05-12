@@ -13,6 +13,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import { addDoc, collection, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import {
   CalendarClock,
+  ChevronDown,
+  Filter,
   Flame,
   GripVertical,
   MessageSquare,
@@ -84,6 +86,45 @@ function isDueTodayOrOverdue(next: Timestamp | null | undefined): boolean {
   return next.toMillis() <= eod.getTime()
 }
 
+type DateAxisFilter = 'updated' | 'created' | 'followup'
+
+function parseDayStartMs(ymd: string): number | null {
+  const t = ymd.trim()
+  if (!t) return null
+  const ms = Date.parse(`${t}T00:00:00`)
+  return Number.isNaN(ms) ? null : ms
+}
+
+function parseDayEndMs(ymd: string): number | null {
+  const t = ymd.trim()
+  if (!t) return null
+  const ms = Date.parse(`${t}T23:59:59.999`)
+  return Number.isNaN(ms) ? null : ms
+}
+
+function leadTimestampForAxis(l: Lead, axis: DateAxisFilter): Timestamp | null | undefined {
+  if (axis === 'updated') return l.updatedAt
+  if (axis === 'created') return l.createdAt
+  return l.nextFollowUpDate ?? null
+}
+
+function leadMatchesDateRange(l: Lead, axis: DateAxisFilter, dateFrom: string, dateTo: string): boolean {
+  const fromMs = parseDayStartMs(dateFrom)
+  const toMs = parseDayEndMs(dateTo)
+  if (fromMs === null && toMs === null) return true
+  const ts = leadTimestampForAxis(l, axis)
+  if (!ts) return false
+  const ms = ts.toMillis()
+  if (fromMs !== null && ms < fromMs) return false
+  if (toMs !== null && ms > toMs) return false
+  return true
+}
+
+function effectiveAssigneeUid(l: Lead): string {
+  const u = l.assignedTo ?? l.assignedCounselorId
+  return u ? String(u).trim() : ''
+}
+
 function isElevatedForBulk(role: string | undefined): boolean {
   return role === 'admin' || role === 'head_of_department' || role === 'head_of_profession'
 }
@@ -102,7 +143,7 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={[
-        'flex min-h-[min(70vh,520px)] w-[min(100%,200px)] shrink-0 flex-col rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-all duration-300',
+        'flex min-h-[min(70vh,520px)] min-w-[10.5rem] flex-1 basis-0 flex-col rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-all duration-300',
         COL_SURFACE[status],
         isOver ? 'ring-2 ring-amber-400/50 ring-offset-2 ring-offset-white/90' : '',
       ].join(' ')}
@@ -344,6 +385,13 @@ export function CounselorDashboard() {
   const [bulkReassignUid, setBulkReassignUid] = useState('')
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
+  const [regionFilter, setRegionFilter] = useState<'ALL' | string>('ALL')
+  const [dateAxis, setDateAxis] = useState<DateAxisFilter>('updated')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  /** '' = mọi TVV; '__UNASSIGNED__' = chưa gán */
+  const [counselorFilterUid, setCounselorFilterUid] = useState('')
 
   const pushToast = useCallback((text: string) => {
     const id = crypto.randomUUID()
@@ -377,9 +425,25 @@ export function CounselorDashboard() {
     [leads, scoreByLeadId],
   )
 
+  const regionOptions = useMemo(() => {
+    const s = new Set<string>()
+    for (const l of leads) {
+      const r = l.region?.trim()
+      if (r) s.add(r)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leads])
+
   const filtered = useMemo(() => {
     const q = needle.trim().toLowerCase()
     return leads.filter((l) => {
+      if (regionFilter !== 'ALL' && l.region.trim() !== regionFilter) return false
+      if (counselorFilterUid === '__UNASSIGNED__') {
+        if (effectiveAssigneeUid(l)) return false
+      } else if (counselorFilterUid) {
+        if (effectiveAssigneeUid(l) !== counselorFilterUid) return false
+      }
+      if (!leadMatchesDateRange(l, dateAxis, dateFrom, dateTo)) return false
       if (myDayFilter === 'followup' && !isDueTodayOrOverdue(l.nextFollowUpDate)) return false
       if (myDayFilter === 'hot_sla') {
         const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
@@ -392,7 +456,19 @@ export function CounselorDashboard() {
       const hay = `${l.fullName} ${l.phone} ${l.parentPhone ?? ''}`.toLowerCase()
       return hay.includes(q)
     })
-  }, [leads, needle, dueOnly, tagFilter, scoreByLeadId, myDayFilter])
+  }, [
+    leads,
+    needle,
+    dueOnly,
+    tagFilter,
+    scoreByLeadId,
+    myDayFilter,
+    regionFilter,
+    counselorFilterUid,
+    dateAxis,
+    dateFrom,
+    dateTo,
+  ])
 
   const byStatus = useMemo(() => {
     const m = new Map<LeadCounselorStatus, Lead[]>()
@@ -539,19 +615,24 @@ export function CounselorDashboard() {
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_80%_0%,rgba(56,189,248,0.08),transparent_50%)]" />
 
       <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
+        <div className="max-w-3xl">
           <h1 className="text-2xl font-semibold uppercase tracking-wide text-slate-900 md:text-3xl">
             Pipeline tư vấn
           </h1>
-          <p className="mt-1 text-base text-slate-600">
-            Kéo thả hồ sơ giữa các cột CRM. Dữ liệu đồng bộ Firestore theo thời gian thực.
+          <div className="mt-2 space-y-1 text-sm leading-snug text-slate-600">
+            <p>
+              Bộ lọc khu vực / ngày / TVV (mở rộng dưới ô tìm) quyết định hồ sơ nào vào các cột CRM.
+            </p>
+            <p>
+              Ô tìm kiếm chỉ thu hẹp thêm theo tên hoặc SĐT; kéo thả thẻ để đổi giai đoạn — đồng bộ Firestore.
+            </p>
             {profile ? (
-              <span className="ml-1 text-slate-500">
-                ({USER_ROLE_LABELS[profile.role]} — {filtered.length} hồ sơ sau lọc trên {leads.length} đã tải
-                {hasMore ? ', chưa tải hết' : ''})
-              </span>
+              <p className="text-xs text-slate-500">
+                {USER_ROLE_LABELS[profile.role]} — {filtered.length}/{leads.length} sau lọc
+                {hasMore ? ' · chưa tải hết danh sách' : ''}
+              </p>
             ) : null}
-          </p>
+          </div>
         </div>
         {hasMore ? (
           <button
@@ -568,19 +649,119 @@ export function CounselorDashboard() {
       <section className="app-card-glass overflow-hidden p-3 shadow-md md:p-4">
         <div className="grid gap-3 md:grid-cols-3 md:items-end md:gap-4">
           <div className="min-w-0 md:col-span-2">
-            <label className="text-[11px] font-medium text-slate-600">
-              Tìm kiếm hồ sơ
-              <div className="relative mt-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="search"
-                  value={needle}
-                  onChange={(e) => setNeedle(e.target.value)}
-                  placeholder="Tên hoặc SĐT…"
-                  className="w-full rounded-xl border border-slate-200/95 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <label className="min-w-0 flex-1 text-[11px] font-medium text-slate-600">
+                Tìm kiếm hồ sơ
+                <div className="relative mt-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="search"
+                    value={needle}
+                    onChange={(e) => setNeedle(e.target.value)}
+                    onFocus={() => setFiltersExpanded(true)}
+                    placeholder="Tên hoặc SĐT…"
+                    className="w-full rounded-xl border border-slate-200/95 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
+                  />
+                </div>
+              </label>
+              <button
+                type="button"
+                onClick={() => setFiltersExpanded((x) => !x)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200/95 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80"
+                aria-expanded={filtersExpanded}
+              >
+                <Filter className="h-3.5 w-3.5 text-amber-700" strokeWidth={2} />
+                Lọc khu vực · ngày · TVV
+                <ChevronDown
+                  className={[
+                    'h-3.5 w-3.5 text-slate-500 transition-transform',
+                    filtersExpanded ? 'rotate-180' : '',
+                  ].join(' ')}
+                  strokeWidth={2}
                 />
+              </button>
+            </div>
+            {filtersExpanded ? (
+              <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="block text-[11px] font-medium text-slate-600">
+                  Khu vực
+                  <select
+                    value={regionFilter}
+                    onChange={(e) => setRegionFilter(e.target.value === 'ALL' ? 'ALL' : e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  >
+                    <option value="ALL">Tất cả khu vực</option>
+                    {regionOptions.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-[11px] font-medium text-slate-600">
+                  Thời điểm theo
+                  <select
+                    value={dateAxis}
+                    onChange={(e) => setDateAxis(e.target.value as DateAxisFilter)}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  >
+                    <option value="updated">Ngày cập nhật hồ sơ</option>
+                    <option value="created">Ngày tạo hồ sơ</option>
+                    <option value="followup">Ngày follow-up đã hẹn</option>
+                  </select>
+                </label>
+                <label className="block text-[11px] font-medium text-slate-600">
+                  Từ ngày
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  />
+                </label>
+                <label className="block text-[11px] font-medium text-slate-600">
+                  Đến ngày
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  />
+                </label>
+                <label className="block text-[11px] font-medium text-slate-600 sm:col-span-2 lg:col-span-2">
+                  Tư vấn viên phụ trách
+                  <select
+                    value={counselorFilterUid}
+                    onChange={(e) => setCounselorFilterUid(e.target.value)}
+                    disabled={counselorsLoading && counselorUsers.length === 0}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
+                  >
+                    <option value="">Mọi TVV (theo dữ liệu đã tải)</option>
+                    <option value="__UNASSIGNED__">Chưa gán TVV</option>
+                    {counselorUsers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.displayName || c.email || c.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="flex items-end sm:col-span-2 lg:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegionFilter('ALL')
+                      setDateAxis('updated')
+                      setDateFrom('')
+                      setDateTo('')
+                      setCounselorFilterUid('')
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Xóa bộ lọc mở rộng
+                  </button>
+                </div>
               </div>
-            </label>
+            ) : null}
           </div>
           <div className="flex min-w-0 flex-col gap-2 md:col-span-1">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200/95 bg-white/90 px-2.5 py-2 text-[11px] font-medium text-slate-800 shadow-sm transition hover:border-amber-300">
@@ -657,17 +838,17 @@ export function CounselorDashboard() {
       ) : null}
 
       {loading ? (
-        <div className="scroll-touch flex gap-3 overflow-x-auto overscroll-x-contain pb-2">
+        <div className="scroll-touch flex w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:gap-3">
           {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
             <div
               key={s}
-              className="h-64 min-w-[180px] animate-pulse rounded-2xl border border-slate-200/80 bg-white/60"
+              className="h-64 min-w-[10.5rem] flex-1 basis-0 animate-pulse rounded-2xl border border-slate-200/80 bg-white/60"
             />
           ))}
         </div>
       ) : (
         <DndContext sensors={sensors} onDragEnd={(e) => void onDragEnd(e)}>
-          <div className="scroll-touch flex gap-4 overflow-x-auto overscroll-x-contain pb-4 pt-1">
+          <div className="scroll-touch flex w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-4 pt-1 sm:gap-3 md:gap-3">
             {LEAD_COUNSELOR_STATUS_ORDER.map((status) => (
               <KanbanColumn key={status} status={status} count={byStatus.get(status)?.length ?? 0}>
                 {(byStatus.get(status) ?? []).map((lead) => (
