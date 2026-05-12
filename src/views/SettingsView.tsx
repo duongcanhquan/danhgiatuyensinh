@@ -271,7 +271,7 @@ export function SettingsView() {
                   disabled={!t.enabled}
                   onClick={() => setTab(t.id)}
                   className={[
-                    'flex min-h-11 shrink-0 items-center rounded-xl border px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide transition sm:text-sm md:min-h-0 md:px-4 md:py-3',
+                    'flex min-h-11 shrink-0 items-center rounded-xl border px-3 py-2.5 text-left text-sm font-semibold uppercase tracking-wide transition sm:text-base md:min-h-0 md:px-4 md:py-3',
                     selected
                       ? 'border-amber-500/45 bg-amber-50/95 text-slate-900 shadow-sm ring-1 ring-amber-900/5'
                       : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50',
