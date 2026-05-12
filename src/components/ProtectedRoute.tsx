@@ -34,10 +34,10 @@ export function ProtectedRoute() {
         <div className="app-glass-panel max-w-md rounded-2xl px-8 py-6 text-center text-sm shadow-lg">
           <p className="font-medium text-slate-800">Đang tải hồ sơ người dùng…</p>
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            Đang đọc/ghi Firestore <code className="rounded bg-slate-100 px-1">users/{'{'}uid{'}'}</code>. Nếu kẹt quá ~22 giây,
-            app sẽ hiện hướng dẫn — thường do <strong>Rules</strong> chặn, thiếu/sai{' '}
-            <code className="rounded bg-slate-100 px-1">VITE_FIREBASE_FIRESTORE_DATABASE_ID</code> (vd.{' '}
-            <code className="rounded bg-slate-100 px-1">warmlist</code>) trên Vercel, hoặc chưa tạo Firestore.
+            Đang đồng bộ tài khoản với Firestore. Thường chỉ vài giây. Nếu quá khoảng 22 giây vẫn không vào được, màn
+            hình tiếp theo sẽ hướng dẫn — hay gặp nhất là Rules Firestore chặn ghi <code className="text-[11px]">users</code> hoặc
+            trên Vercel thiếu biến giống file <code className="text-[11px]">.env</code> trên máy (kể cả tên database nếu không
+            dùng mặc định).
           </p>
         </div>
       </div>
