@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   and,
   collection,
@@ -441,6 +441,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const [totalLeadCount, setTotalLeadCount] = useState<number | null>(null)
   const [totalLeadCountError, setTotalLeadCountError] = useState<string | null>(null)
   const [currentPage, setCurrentPageState] = useState(1)
+  const currentPageRef = useRef(currentPage)
   const [totalPages, setTotalPages] = useState(1)
   const [scopeTagCounts, setScopeTagCounts] = useState<{ HOT: number; WARM: number; COLD: number; LOSS: number } | null>(
     null,
@@ -458,6 +459,12 @@ export function useLeads(opts?: UseLeadsOptions) {
   const setPage = useCallback((p: number) => {
     setCurrentPageState(() => Math.max(1, Math.floor(p)))
   }, [])
+
+  const pagedFirestoreDep = dataMode === 'paged' ? currentPage : 0
+
+  useLayoutEffect(() => {
+    currentPageRef.current = currentPage
+  }, [currentPage])
 
   useEffect(() => {
     const firestore = getFirestoreDb()
@@ -503,7 +510,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       setCurrentPageState(1)
     }
 
-    const pageToLoad = fkChanged ? 1 : currentPage
+    const pageToLoad = fkChanged ? 1 : currentPageRef.current
 
     const runAggregations = async () => {
       try {
@@ -751,7 +758,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     serverFilters,
     directoryLabels,
     hoDQueryLabels,
-    ...(dataMode === 'fullScope' ? [] : [currentPage]),
+    pagedFirestoreDep,
   ])
 
   const refreshTotalLeadCount = useCallback(async () => {
