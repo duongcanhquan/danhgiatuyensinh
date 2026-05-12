@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { LEADS_PAGE_SIZE, useLeads } from '../hooks/useLeads'
+import { MAX_FULL_SCOPE_LEADS, useLeads } from '../hooks/useLeads'
 import { useAuth } from '../hooks/useAuth'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
@@ -54,11 +54,19 @@ function last30DateKeys(): string[] {
 /** Phân tích nâng cao — funnel, phân bổ nhãn, xu hướng sentiment (Recharts, nền sáng). */
 export function AnalyticsAdvancedView() {
   const { can } = useAuth()
-  const { leads, loading, loadingMore, hasMore, loadMore, error } = useLeads()
+  const {
+    leads,
+    loading,
+    error,
+    totalLeadCount,
+    totalLeadCountError,
+    scopeTagCounts,
+    scopeFetchTruncated,
+  } = useLeads({ dataMode: 'fullScope' })
   const { activeScoringProfile, scoreByLeadId } = useLeadScoring(leads)
 
   const funnelData = useMemo(() => {
-    const total = Math.max(leads.length, 1)
+    const crmTotal = Math.max(totalLeadCount ?? leads.length, 1)
     const contacted = leads.filter((l) => l.pipelineStatus !== 'NEW').length
     const qualified = leads.filter((l) =>
       ['QUALIFIED', 'APPLIED', 'ENROLLED', 'LOST', 'ARCHIVED'].includes(l.pipelineStatus),
@@ -67,14 +75,21 @@ export function AnalyticsAdvancedView() {
       ['ENROLLED', 'LOST', 'ARCHIVED'].includes(l.pipelineStatus),
     ).length
     return [
-      { name: 'Trong CRM', value: total, fill: 'rgba(56,189,248,0.85)' },
+      { name: 'Trong CRM (tổng)', value: crmTotal, fill: 'rgba(56,189,248,0.85)' },
       { name: 'Đã liên hệ+', value: Math.max(contacted, 0), fill: 'rgba(129,140,248,0.88)' },
       { name: 'Vòng sau', value: Math.max(qualified, 0), fill: 'rgba(192,132,252,0.9)' },
       { name: 'Chốt / kết thúc', value: Math.max(closed, 0), fill: 'rgba(52,211,153,0.9)' },
     ]
-  }, [leads])
+  }, [leads, totalLeadCount])
 
   const tagDistribution = useMemo(() => {
+    if (!activeScoringProfile && scopeTagCounts) {
+      return (['HOT', 'WARM', 'COLD', 'LOSS'] as const).map((name) => ({
+        name,
+        value: scopeTagCounts[name],
+        fill: TAG_COLORS[name],
+      }))
+    }
     const counts: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
     if (activeScoringProfile) {
       for (const l of leads) {
@@ -89,7 +104,7 @@ export function AnalyticsAdvancedView() {
       value: counts[name],
       fill: TAG_COLORS[name],
     }))
-  }, [leads, activeScoringProfile, scoreByLeadId])
+  }, [leads, activeScoringProfile, scoreByLeadId, scopeTagCounts])
 
   const sentimentTrend = useMemo(() => {
     const keys = last30DateKeys()
@@ -138,31 +153,41 @@ export function AnalyticsAdvancedView() {
           Phân tích nâng cao
         </VietMyAccentHeading>
         <p className="mt-1 text-base text-slate-600">
-          Funnel tuyển sinh, phân bổ HOT/WARM/COLD (theo bộ chấm điểm đang chọn trên Bảng điều khiển), và xu hướng chỉ
-          số cảm xúc AI 30 ngày — chỉ tính trên hồ sơ đã tải (Firestore pagination).
+          Funnel tuyển sinh, phân bổ HOT/WARM/COLD (theo bộ chấm điểm đang chọn trên Bảng điều khiển), và xu hướng
+          chỉ số cảm xúc AI 30 ngày. Dữ liệu biểu đồ lấy từ <strong>toàn bộ hồ sơ đã tải trong phạm vi quyền</strong>{' '}
+          (tối đa {MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')} bản ghi). Bậc đầu phễu dùng tổng Firestore (phạm vi
+          quyền); các bậc sau và biểu đồ khác theo tập đã tải.
         </p>
-        {hasMore ? (
-          <button
-            type="button"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-            className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-50"
-          >
-            {loadingMore ? 'Đang tải…' : `Tải thêm (${LEADS_PAGE_SIZE} hồ sơ)`}
-          </button>
-        ) : null}
       </header>
 
+      {scopeFetchTruncated ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm backdrop-blur-xl">
+          Chỉ tải được tối đa <strong>{MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')}</strong> hồ sơ — biểu đồ có thể
+          thiếu phần còn lại trên server.
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-base text-rose-900 shadow-sm backdrop-blur-xl">
           {error}
         </div>
       ) : null}
+      {totalLeadCountError && !error ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-950 shadow-sm">
+          Không đếm được tổng hồ sơ ({totalLeadCountError}). Bậc đầu phễu tạm theo số đã tải.
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="app-card-glass p-5 transition-all duration-300">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Hồ sơ (phạm vi)</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{loading ? '…' : leads.length}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Tổng hồ sơ (phạm vi)</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">
+            {loading && totalLeadCount === null ? '…' : totalLeadCount ?? leads.length}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Biểu đồ (trừ bậc đầu phễu) dựa trên{' '}
+            <span className="font-medium text-slate-700">{leads.length.toLocaleString('vi-VN')}</span> hồ sơ đã tải
+            trong phạm vi.
+          </p>
         </div>
         <div className="app-card-glass p-5 transition-all duration-300">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Bộ chấm điểm</p>
@@ -182,7 +207,10 @@ export function AnalyticsAdvancedView() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="app-card-glass p-5 md:p-6">
           <h2 className="app-section-heading mb-1">Funnel tuyển sinh</h2>
-          <p className="mb-4 text-sm text-slate-600">Thu hẹp theo giai đoạn pipeline (monotonic).</p>
+          <p className="mb-4 text-sm text-slate-600">
+            Thu hẹp theo giai đoạn pipeline (monotonic). Bậc đầu = tổng trong Firestore; các bậc sau chỉ tính trên
+            hồ sơ đã tải.
+          </p>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <FunnelChart margin={{ top: 12, right: 24, bottom: 12, left: 12 }}>

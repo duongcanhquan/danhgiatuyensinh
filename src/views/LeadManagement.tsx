@@ -19,7 +19,8 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { LEADS_PAGE_SIZE, useLeads } from '../hooks/useLeads'
+import { LEADS_PAGE_SIZE, MAX_FULL_SCOPE_LEADS, MAX_LEAD_SEARCH_SCAN, useLeads, type LeadListServerFilters } from '../hooks/useLeads'
+import { useMasterData } from '../hooks/useMasterData'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
@@ -88,12 +89,6 @@ function parseIsoDayEndMs(iso: string): number | null {
   return Number.isFinite(t) ? t : null
 }
 
-function leadMillisForDateFilter(l: Lead, field: AdminDateField): number {
-  const ts =
-    field === 'imported' ? (l.importedAt ?? l.createdAt) : field === 'updated' ? l.updatedAt : l.createdAt
-  return ts.toMillis()
-}
-
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
   const uid = l.assignedTo ?? l.assignedCounselorId
   if (!uid) return '—'
@@ -110,7 +105,7 @@ function formatDescPreview(raw: string, max = 52): string {
 export function LeadManagement() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
-  const { leads, loading, loadingMore, hasMore, loadMore, error } = useLeads()
+  const { regionLabels, highSchoolLabels, majorLabels } = useMasterData()
   const { profile, can } = useAuth()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
@@ -118,19 +113,6 @@ export function LeadManagement() {
     () => buildInstitutionalRagBlock(knowledgeDocuments),
     [knowledgeDocuments],
   )
-  const {
-    scoringProfiles,
-    profilesLoading,
-    setScoringProfileId,
-    resolvedScoringProfileId,
-    activeScoringProfile,
-    scoreByLeadId,
-  } = useLeadScoring(leads)
-  const {
-    snippets: scriptSnippets,
-    loading: scriptSnippetsLoading,
-    error: scriptSnippetsErr,
-  } = useScriptSnippets()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const urlQuery = (searchParams.get('q') ?? '').trim().toLowerCase()
@@ -159,30 +141,14 @@ export function LeadManagement() {
   const [adminAssignedCounselorIds, setAdminAssignedCounselorIds] = useState<string[]>([])
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
 
-  const uploaderOptions = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const l of leads) {
-      if (l.uploadedBy) m.set(l.uploadedBy, (l.uploaderName || l.uploadedBy).trim())
-    }
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'vi'))
-  }, [leads])
-
-  const schoolOptions = useMemo(() => {
-    const s = new Set<string>()
-    for (const l of leads) {
-      const n = (l.highSchool ?? '').trim()
-      if (n) s.add(n)
-    }
-    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
-  }, [leads])
-
-  const regionOptionsAdmin = useMemo(() => {
-    const s = new Set<string>()
-    for (const l of leads) {
-      if (l.province.trim()) s.add(l.province.trim())
-    }
-    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
-  }, [leads])
+  const [tagFilter, setTagFilter] = useState<string>('ALL')
+  const [regionFilter, setRegionFilter] = useState<string>('ALL')
+  const [majorFilter, setMajorFilter] = useState<string>('ALL')
+  const [statusFilter, setStatusFilter] = useState<string>('ALL')
+  const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
+  const [sourceFilter, setSourceFilter] = useState<string>('ALL')
+  const [scoreMinInput, setScoreMinInput] = useState('')
+  const [scoreMaxInput, setScoreMaxInput] = useState('')
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -191,6 +157,86 @@ export function LeadManagement() {
     }
     return m
   }, [directoryUsers])
+
+  const leadServerFilters = useMemo((): LeadListServerFilters | undefined => {
+    const o: LeadListServerFilters = {}
+    if (statusFilter !== 'ALL') o.pipelineStatus = statusFilter as LeadPipelineStatus
+    if (crmStatusFilter !== 'ALL') o.crmStatus = crmStatusFilter as LeadCounselorStatus
+    if (tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
+    if (regionFilter !== 'ALL') o.province = regionFilter
+    if (majorFilter !== 'ALL') o.educationLevel = majorFilter
+    if (sourceFilter !== 'ALL') o.source = sourceFilter
+    if (showAdminGlobalFilters) {
+      if (adminUploaderIds.length) o.uploadedByIn = adminUploaderIds.slice(0, 10)
+      if (adminRegions.length) o.provinceIn = adminRegions.slice(0, 10)
+      if (adminTags.length === 1) {
+        o.priorityTag = adminTags[0]
+      } else if (adminTags.length > 1) {
+        o.priorityTagsIn = adminTags.slice(0, 10) as PriorityTag[]
+      }
+      if (adminSchools.length) o.highSchoolIn = adminSchools.slice(0, 10)
+      if (adminAssignedCounselorIds.length) o.assignedCounselorIn = adminAssignedCounselorIds.slice(0, 10)
+      const fromMs = adminDateFrom ? parseIsoDayStartMs(adminDateFrom) : null
+      const toMs = adminDateTo ? parseIsoDayEndMs(adminDateTo) : null
+      if (fromMs != null || toMs != null) {
+        o.adminDateField = adminDateField
+        if (fromMs != null) o.adminDateFromMs = fromMs
+        if (toMs != null) o.adminDateToMs = toMs
+      }
+    }
+    return Object.keys(o).length ? o : undefined
+  }, [
+    statusFilter,
+    crmStatusFilter,
+    tagFilter,
+    regionFilter,
+    majorFilter,
+    sourceFilter,
+    showAdminGlobalFilters,
+    adminUploaderIds,
+    adminRegions,
+    adminTags,
+    adminSchools,
+    adminAssignedCounselorIds,
+    adminDateFrom,
+    adminDateTo,
+    adminDateField,
+  ])
+
+  const {
+    leads,
+    loading,
+    loadingPage,
+    error,
+    totalLeadCount,
+    totalLeadCountError,
+    scopeTagCounts,
+    searchScanTruncated,
+    searchHitTotal,
+    scopeFetchTruncated,
+    currentPage,
+    setPage,
+  } = useLeads({
+    serverFilters: leadServerFilters,
+    searchText: urlQuery,
+    directoryLabels: counselorDirectoryLabelById,
+    dataMode: 'fullScope',
+  })
+
+  const {
+    scoringProfiles,
+    profilesLoading,
+    setScoringProfileId,
+    resolvedScoringProfileId,
+    activeScoringProfile,
+    scoreByLeadId,
+  } = useLeadScoring(leads)
+
+  const {
+    snippets: scriptSnippets,
+    loading: scriptSnippetsLoading,
+    error: scriptSnippetsErr,
+  } = useScriptSnippets()
 
   const reassignPickList = useMemo(() => {
     const base = counselorUsers
@@ -204,73 +250,43 @@ export function LeadManagement() {
     )
   }, [counselorUsers, directoryUsers, profile?.role])
 
-  const leadsAfterAdmin = useMemo(() => {
-    if (!showAdminGlobalFilters) return leads
-    let xs = leads
-    if (adminUploaderIds.length) {
-      xs = xs.filter((l) => Boolean(l.uploadedBy && adminUploaderIds.includes(l.uploadedBy)))
+  const uploaderOptions = useMemo(() => {
+    if (showAdminGlobalFilters) {
+      const out: [string, string][] = []
+      for (const u of directoryUsers) {
+        if (u.isActive && u.id) out.push([u.id, formatStaffDirectoryLabel(u)])
+      }
+      return out.sort((a, b) => a[1].localeCompare(b[1], 'vi'))
     }
-    if (adminRegions.length) {
-      xs = xs.filter((l) => {
-        const r = l.province.trim()
-        return adminRegions.some((reg) => reg === r)
-      })
+    const m = new Map<string, string>()
+    for (const l of leads) {
+      if (l.uploadedBy) m.set(l.uploadedBy, (l.uploaderName || l.uploadedBy).trim())
     }
-    if (adminTags.length) {
-      xs = xs.filter((l) => {
-        const tag = activeScoringProfile
-          ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
-          : l.priorityTag
-        return adminTags.includes(tag)
-      })
-    }
-    if (adminSchools.length) {
-      xs = xs.filter((l) => {
-        const sc = (l.highSchool ?? '').trim()
-        return Boolean(sc && adminSchools.includes(sc))
-      })
-    }
-    if (adminAssignedCounselorIds.length) {
-      xs = xs.filter((l) => {
-        const uid = l.assignedTo ?? l.assignedCounselorId
-        return Boolean(uid && adminAssignedCounselorIds.includes(uid))
-      })
-    }
-    const fromMs = adminDateFrom ? parseIsoDayStartMs(adminDateFrom) : null
-    const toMs = adminDateTo ? parseIsoDayEndMs(adminDateTo) : null
-    if (fromMs != null || toMs != null) {
-      xs = xs.filter((l) => {
-        const ms = leadMillisForDateFilter(l, adminDateField)
-        if (fromMs != null && ms < fromMs) return false
-        if (toMs != null && ms > toMs) return false
-        return true
-      })
-    }
-    return xs
-  }, [
-    leads,
-    showAdminGlobalFilters,
-    adminUploaderIds,
-    adminRegions,
-    adminTags,
-    adminSchools,
-    adminAssignedCounselorIds,
-    adminDateField,
-    adminDateFrom,
-    adminDateTo,
-    activeScoringProfile,
-    scoreByLeadId,
-  ])
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'vi'))
+  }, [showAdminGlobalFilters, directoryUsers, leads])
 
-  const [tagFilter, setTagFilter] = useState<string>('ALL')
-  const [regionFilter, setRegionFilter] = useState<string>('ALL')
-  const [majorFilter, setMajorFilter] = useState<string>('ALL')
-  const [statusFilter, setStatusFilter] = useState<string>('ALL')
-  const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
-  const [sourceFilter, setSourceFilter] = useState<string>('ALL')
-  const [scoreMinInput, setScoreMinInput] = useState('')
-  const [scoreMaxInput, setScoreMaxInput] = useState('')
-  const [tablePage, setTablePage] = useState(1)
+  const schoolOptions = useMemo(() => {
+    if (showAdminGlobalFilters && highSchoolLabels.length) {
+      return [...highSchoolLabels].sort((a, b) => a.localeCompare(b, 'vi'))
+    }
+    const s = new Set<string>()
+    for (const l of leads) {
+      const n = (l.highSchool ?? '').trim()
+      if (n) s.add(n)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [showAdminGlobalFilters, highSchoolLabels, leads])
+
+  const regionOptionsAdmin = useMemo(() => {
+    if (showAdminGlobalFilters && regionLabels.length) {
+      return [...regionLabels].sort((a, b) => a.localeCompare(b, 'vi'))
+    }
+    const s = new Set<string>()
+    for (const l of leads) {
+      if (l.province.trim()) s.add(l.province.trim())
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [showAdminGlobalFilters, regionLabels, leads])
   const [selected, setSelected] = useState<Lead | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
@@ -284,87 +300,51 @@ export function LeadManagement() {
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
 
   const regions = useMemo(() => {
+    if (showAdminGlobalFilters && regionLabels.length) {
+      return [...regionLabels].sort((a, b) => a.localeCompare(b, 'vi'))
+    }
     const s = new Set<string>()
-    for (const l of leadsAfterAdmin) {
+    for (const l of leads) {
       if (l.province.trim()) s.add(l.province.trim())
     }
     return [...s].sort()
-  }, [leadsAfterAdmin])
+  }, [showAdminGlobalFilters, regionLabels, leads])
 
   const majors = useMemo(() => {
+    if (showAdminGlobalFilters && majorLabels.length) {
+      return [...majorLabels].sort((a, b) => a.localeCompare(b, 'vi'))
+    }
     const s = new Set<string>()
-    for (const l of leadsAfterAdmin) {
+    for (const l of leads) {
       if (l.educationLevel.trim()) s.add(l.educationLevel.trim())
     }
     return [...s].sort()
-  }, [leadsAfterAdmin])
+  }, [showAdminGlobalFilters, majorLabels, leads])
 
   const sources = useMemo(() => {
     const s = new Set<string>()
-    for (const l of leadsAfterAdmin) {
+    for (const l of leads) {
       const src = (l.source ?? '').trim()
       if (src) s.add(src)
     }
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
-  }, [leadsAfterAdmin])
+  }, [leads])
 
   const filtered = useMemo(() => {
     const minScore =
       scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
     const maxScore =
       scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput)) ? null : Number(scoreMaxInput)
-    return leadsAfterAdmin.filter((l) => {
-      const displayTag = activeScoringProfile
-        ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
-        : l.priorityTag
+    if (minScore == null && maxScore == null) return leads
+    return leads.filter((l) => {
       const displayScore = activeScoringProfile
         ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
         : l.calculatedScore
-      if (tagFilter !== 'ALL' && displayTag !== tagFilter) return false
-      if (statusFilter !== 'ALL' && l.pipelineStatus !== statusFilter) return false
-      if (crmStatusFilter !== 'ALL' && l.status !== crmStatusFilter) return false
-      if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
-      if (majorFilter !== 'ALL' && l.educationLevel.trim() !== majorFilter) return false
-      if (sourceFilter !== 'ALL' && (l.source ?? '').trim() !== sourceFilter) return false
       if (minScore != null && displayScore < minScore) return false
       if (maxScore != null && displayScore > maxScore) return false
-      if (urlQuery) {
-        const q = urlQuery
-        const name = (l.fullName ?? '').toLowerCase()
-        const phone = (l.phone ?? '').toLowerCase()
-        const email = (l.customerId ?? '').toLowerCase()
-        const parent = (l.parentPhone ?? '').toLowerCase()
-        const major = (l.educationLevel ?? '').toLowerCase()
-        const reg = (l.province ?? '').toLowerCase()
-        const school = (l.highSchool ?? '').toLowerCase()
-        const addr = (l.address ?? '').toLowerCase()
-        const src = (l.source ?? '').toLowerCase()
-        const desc = (l.description ?? '').toLowerCase()
-        const uid = l.assignedTo ?? l.assignedCounselorId
-        const tv = uid ? (counselorDirectoryLabelById.get(uid) ?? '').toLowerCase() : ''
-        const uploadLbl = l.uploadedBy
-          ? (counselorDirectoryLabelById.get(l.uploadedBy) ?? (l.uploaderName ?? '')).toLowerCase()
-          : (l.uploaderName ?? '').toLowerCase()
-        const hay = `${name} ${phone} ${email} ${parent} ${major} ${reg} ${school} ${addr} ${src} ${desc} ${tv} ${uploadLbl}`
-        if (!hay.includes(q)) return false
-      }
       return true
     })
-  }, [
-    leadsAfterAdmin,
-    tagFilter,
-    statusFilter,
-    crmStatusFilter,
-    regionFilter,
-    majorFilter,
-    sourceFilter,
-    scoreMinInput,
-    scoreMaxInput,
-    activeScoringProfile,
-    scoreByLeadId,
-    urlQuery,
-    counselorDirectoryLabelById,
-  ])
+  }, [leads, scoreMinInput, scoreMaxInput, activeScoringProfile, scoreByLeadId])
 
   const sortedFiltered = useMemo(() => {
     const rows = [...filtered]
@@ -402,57 +382,29 @@ export function LeadManagement() {
     return rows
   }, [filtered, sortKey, sortDir, activeScoringProfile, scoreByLeadId])
 
-  const totalTablePages = Math.max(1, Math.ceil(sortedFiltered.length / LEADS_PAGE_SIZE))
+  const displayTotalPages = Math.max(1, Math.ceil(sortedFiltered.length / LEADS_PAGE_SIZE))
 
   useEffect(() => {
-    setTablePage(1)
-  }, [
-    tagFilter,
-    regionFilter,
-    majorFilter,
-    statusFilter,
-    crmStatusFilter,
-    sourceFilter,
-    scoreMinInput,
-    scoreMaxInput,
-    urlQuery,
-    sortKey,
-    sortDir,
-    adminUploaderIds,
-    adminRegions,
-    adminTags,
-    adminSchools,
-    adminAssignedCounselorIds,
-    adminDateFrom,
-    adminDateTo,
-    adminDateField,
-  ])
-
-  useEffect(() => {
-    setTablePage((p) => Math.min(p, totalTablePages))
-  }, [totalTablePages])
+    if (currentPage > displayTotalPages) setPage(displayTotalPages)
+  }, [currentPage, displayTotalPages, setPage])
 
   const pagedRows = useMemo(
-    () => sortedFiltered.slice((tablePage - 1) * LEADS_PAGE_SIZE, tablePage * LEADS_PAGE_SIZE),
-    [sortedFiltered, tablePage],
+    () =>
+      sortedFiltered.slice((currentPage - 1) * LEADS_PAGE_SIZE, currentPage * LEADS_PAGE_SIZE),
+    [sortedFiltered, currentPage],
   )
 
   const listStats = useMemo(() => {
-    let hot = 0
-    let warm = 0
-    let cold = 0
-    let loss = 0
-    for (const l of sortedFiltered) {
-      const tag = activeScoringProfile
-        ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
-        : l.priorityTag
-      if (tag === 'HOT') hot++
-      else if (tag === 'WARM') warm++
-      else if (tag === 'COLD') cold++
-      else if (tag === 'LOSS') loss++
+    if (scopeTagCounts) {
+      return {
+        hot: scopeTagCounts.HOT,
+        warm: scopeTagCounts.WARM,
+        cold: scopeTagCounts.COLD,
+        loss: scopeTagCounts.LOSS,
+      }
     }
-    return { hot, warm, cold, loss }
-  }, [sortedFiltered, activeScoringProfile, scoreByLeadId])
+    return { hot: 0, warm: 0, cold: 0, loss: 0 }
+  }, [scopeTagCounts])
 
   const toggleSort = (k: typeof sortKey) => {
     if (k === 'none') return
@@ -489,8 +441,8 @@ export function LeadManagement() {
       },
       { replace: true },
     )
-    setTablePage(1)
-  }, [setSearchParams])
+    setPage(1)
+  }, [setSearchParams, setPage])
 
   const handleExportEvaluated = () => {
     const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
@@ -1047,22 +999,52 @@ export function LeadManagement() {
         <div className="flex flex-col gap-1.5 rounded-md border border-slate-200/70 bg-white/60 px-2 py-1.5 text-[11px] leading-snug text-slate-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
             <span>
-              <span className="font-semibold text-slate-800">{leads.length}</span> đã tải
-              {hasMore ? <span className="text-slate-500"> · tối đa {LEADS_PAGE_SIZE}/lần</span> : null}
+              <span className="font-semibold text-slate-800">
+                {totalLeadCount !== null ? totalLeadCount : '—'}
+              </span>{' '}
+              tổng (Firestore, theo lọc &amp; phạm vi quyền)
+              {totalLeadCountError ? (
+                <span className="text-rose-600" title={totalLeadCountError}>
+                  {' '}
+                  (lỗi đếm)
+                </span>
+              ) : null}
             </span>
-            {showAdminGlobalFilters ? (
-              <span className="text-slate-500">
-                Admin: <span className="font-semibold text-slate-800">{leadsAfterAdmin.length}</span>
+            {urlQuery ? (
+              <span>
+                Khớp tìm:{' '}
+                <span className="font-semibold text-slate-800">{searchHitTotal ?? '—'}</span>
+                {searchScanTruncated ? (
+                  <span className="text-amber-800" title="Đã quét tối đa bản ghi theo cấu hình">
+                    {' '}
+                    (≤{MAX_LEAD_SEARCH_SCAN} bản ghi quét)
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+            {scopeFetchTruncated ? (
+              <span className="text-amber-900" title="Giới hạn an toàn khi tải toàn bộ phạm vi">
+                Đã tải tối đa <span className="font-semibold">{MAX_FULL_SCOPE_LEADS}</span> hồ sơ — có thể còn trên
+                server.
               </span>
             ) : null}
             <span>
-              Sau lọc: <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
+              Trang hiện tại: <span className="font-semibold text-slate-800">{pagedRows.length}</span> dòng
+              {loadingPage ? <span className="text-slate-500"> · đang tải…</span> : null}
+            </span>
+            {showAdminGlobalFilters ? (
+              <span className="text-slate-500">
+                Admin: bộ lọc đã gửi server
+              </span>
+            ) : null}
+            <span>
+              Sau lọc điểm (client): <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
               {sortedFiltered.length > 0 ? (
                 <>
                   {' '}
-                  · Trang <span className="font-semibold text-slate-800">{tablePage}</span>/
-                  <span className="font-semibold text-slate-800">{totalTablePages}</span> (
-                  {LEADS_PAGE_SIZE}/trang)
+                  · Trang <span className="font-semibold text-slate-800">{currentPage}</span>/
+                  <span className="font-semibold text-slate-800">{displayTotalPages}</span> (hiển thị{' '}
+                  {LEADS_PAGE_SIZE}/trang sau lọc điểm)
                 </>
               ) : null}
             </span>
@@ -1070,17 +1052,10 @@ export function LeadManagement() {
             <span className="text-amber-800">WARM {listStats.warm}</span>
             <span className="text-slate-500">COLD {listStats.cold}</span>
             <span className="text-slate-600">LOSS {listStats.loss}</span>
+            <span className="max-w-[14rem] text-slate-500" title="Đếm nhãn theo trường priorityTag trên Firestore trong phạm vi lọc">
+              (HOT/WARM… theo DB)
+            </span>
           </div>
-          {hasMore ? (
-            <button
-              type="button"
-              disabled={loadingMore}
-              onClick={() => void loadMore()}
-              className="shrink-0 self-start rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50 sm:self-center"
-            >
-              {loadingMore ? 'Đang tải…' : `Tải thêm ${LEADS_PAGE_SIZE}`}
-            </button>
-          ) : null}
         </div>
       </section>
 
@@ -1093,47 +1068,46 @@ export function LeadManagement() {
           <span className="font-semibold text-amber-900">Mẹo:</span> bấm vào <strong>một dòng hồ sơ</strong> để mở panel
           chi tiết — xem đủ thông tin sinh viên, <strong>ghi chú &amp; lịch sử tương tác</strong>,{' '}
           <strong>đánh giá / nhãn tương tác</strong>, playbook gợi ý, phân tích AI (nếu bật) và nhật ký thao tác hệ
-          thống. Danh sách chia <strong>{LEADS_PAGE_SIZE} hồ sơ/trang</strong>; ô đầu dòng chỉ chọn hồ sơ{' '}
-          <strong>trên trang hiện tại</strong>.
+          thống. Hệ thống <strong>tải toàn bộ hồ sơ trong phạm vi lọc &amp; quyền</strong> (theo lô Firestore), rồi
+          phân trang <strong>{LEADS_PAGE_SIZE} dòng/trang</strong> trên máy bạn sau lọc điểm. Ô đầu dòng chỉ chọn hồ
+          sơ <strong>trên trang hiện tại</strong>. Ô tìm URL <code className="rounded bg-amber-100/80 px-1">?q=</code>{' '}
+          lọc trên toàn bộ tập đã tải (tối đa {MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')} hồ sơ).
         </p>
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">
               Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span> hồ sơ (trang{' '}
-              {tablePage}/{totalTablePages})
-              {tablePage >= totalTablePages && hasMore ? (
-                <span className="ml-2 text-amber-800">· Còn trên máy chủ — bấm «Tải thêm» phía trên.</span>
-              ) : null}
+              {currentPage}/{displayTotalPages})
             </span>
             <div className="flex flex-wrap items-center gap-1">
               <button
                 type="button"
-                disabled={tablePage <= 1}
-                onClick={() => setTablePage(1)}
+                disabled={currentPage <= 1 || loadingPage}
+                onClick={() => setPage(1)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 « Đầu
               </button>
               <button
                 type="button"
-                disabled={tablePage <= 1}
-                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1 || loadingPage}
+                onClick={() => setPage(currentPage - 1)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Trước
               </button>
               <button
                 type="button"
-                disabled={tablePage >= totalTablePages}
-                onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+                disabled={currentPage >= displayTotalPages || loadingPage}
+                onClick={() => setPage(currentPage + 1)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Sau
               </button>
               <button
                 type="button"
-                disabled={tablePage >= totalTablePages}
-                onClick={() => setTablePage(totalTablePages)}
+                disabled={currentPage >= displayTotalPages || loadingPage}
+                onClick={() => setPage(displayTotalPages)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Cuối »

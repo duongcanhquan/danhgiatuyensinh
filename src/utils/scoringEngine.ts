@@ -156,7 +156,8 @@ export function sumBlockMaxWeights(blocks: ScoringRuleBlock[] | undefined): numb
 }
 
 /** Không còn chặn lưu theo ngân sách 100 — luôn cho phép lưu profile. */
-export function isProfileOverBudget(_blocks: ScoringRuleBlock[] | undefined): boolean {
+export function isProfileOverBudget(blocks?: ScoringRuleBlock[]): boolean {
+  void blocks
   return false
 }
 

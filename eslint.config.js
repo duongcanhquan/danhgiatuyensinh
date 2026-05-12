@@ -18,5 +18,10 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // React 19 / Compiler rules — codebase còn nhiều effect reset UI hợp lệ; bật lại khi refactor dần.
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+    },
   },
 ])

@@ -29,11 +29,17 @@ import {
   LEAD_COUNSELOR_STATUS_ORDER,
   USER_ROLE_LABELS,
 } from '../types'
+import { Link } from 'react-router-dom'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
-import { LEADS_PAGE_SIZE, useLeads } from '../hooks/useLeads'
-import { useLeadScoring } from '../hooks/useLeadScoring'
+import {
+  leadMatchesClientSearch,
+  MAX_FULL_SCOPE_LEADS,
+  useLeads,
+} from '../hooks/useLeads'
+import { useLeadScoring, type LeadScorePreview } from '../hooks/useLeadScoring'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
+import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
@@ -60,6 +66,9 @@ const TAG_BADGE: Record<PriorityTag, string> = {
   COLD: 'bg-sky-100 text-sky-900 ring-1 ring-sky-300/80',
   LOSS: 'bg-slate-700 text-slate-200 ring-1 ring-slate-500/70',
 }
+
+/** Số thẻ tối đa mỗi cột CRM mỗi trang (lật trang trong cột). */
+const KANBAN_PAGE_SIZE = 40
 
 type Toast = { id: string; text: string }
 
@@ -137,10 +146,12 @@ function KanbanColumn({
   status,
   count,
   children,
+  footer,
 }: {
   status: LeadCounselorStatus
   count: number
   children: ReactNode
+  footer?: ReactNode
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: colId(status), data: { status } })
   return (
@@ -161,6 +172,7 @@ function KanbanColumn({
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-0.5">{children}</div>
+      {footer ? <div className="mt-2 shrink-0 border-t border-slate-200/70 pt-2">{footer}</div> : null}
     </div>
   )
 }
@@ -372,12 +384,116 @@ function KanbanLeadCard({
   )
 }
 
+function CounselorPipelineBoard({
+  byStatus,
+  scoreByLeadId,
+  sensors,
+  onDragEnd,
+  pushToast,
+  canWrite,
+  canInteract,
+  selectedIds,
+  toggleSelectId,
+}: {
+  byStatus: Map<LeadCounselorStatus, Lead[]>
+  scoreByLeadId: Map<string, LeadScorePreview>
+  sensors: ReturnType<typeof useSensors>
+  onDragEnd: (e: DragEndEvent) => void
+  pushToast: (text: string) => void
+  canWrite: boolean
+  canInteract: boolean
+  selectedIds: Set<string>
+  toggleSelectId: (id: string, e?: MouseEvent) => void
+}) {
+  const [kanbanPageByCol, setKanbanPageByCol] = useState<Partial<Record<LeadCounselorStatus, number>>>({})
+  return (
+    <DndContext sensors={sensors} onDragEnd={(e) => void onDragEnd(e)}>
+      <div className="scroll-touch flex w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-4 pt-1 sm:gap-3 md:gap-3">
+        {LEAD_COUNSELOR_STATUS_ORDER.map((status) => {
+          const fullList = byStatus.get(status) ?? []
+          const totalP = Math.max(1, Math.ceil(fullList.length / KANBAN_PAGE_SIZE))
+          const rawPage = kanbanPageByCol[status] ?? 1
+          const page = Math.min(Math.max(1, rawPage), totalP)
+          const start = (page - 1) * KANBAN_PAGE_SIZE
+          const slice = fullList.slice(start, start + KANBAN_PAGE_SIZE)
+          const bumpPage = (next: number) => {
+            setKanbanPageByCol((prev) => ({
+              ...prev,
+              [status]: Math.min(Math.max(1, next), totalP),
+            }))
+          }
+          return (
+            <KanbanColumn
+              key={status}
+              status={status}
+              count={fullList.length}
+              footer={
+                totalP > 1 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-600">
+                    <span className="tabular-nums">
+                      Trang {page}/{totalP} · hiện {slice.length}/{fullList.length}
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        disabled={page <= 1}
+                        onClick={() => bumpPage(page - 1)}
+                        className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        disabled={page >= totalP}
+                        onClick={() => bumpPage(page + 1)}
+                        className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                ) : null
+              }
+            >
+              {slice.map((lead) => (
+                <KanbanLeadCard
+                  key={lead.id}
+                  lead={lead}
+                  priorityTag={scoreByLeadId.get(lead.id)?.priorityTag ?? lead.priorityTag}
+                  onToast={pushToast}
+                  canWrite={canWrite}
+                  canInteract={canInteract}
+                  selected={selectedIds.has(lead.id)}
+                  onToggleSelect={toggleSelectId}
+                />
+              ))}
+            </KanbanColumn>
+          )
+        })}
+      </div>
+    </DndContext>
+  )
+}
+
 export function CounselorDashboard() {
   const db = getFirestoreDb()
   const { profile, can } = useAuth()
-  const { leads, loading, loadingMore, hasMore, loadMore, error } = useLeads()
-  const { scoreByLeadId, activeScoringProfile } = useLeadScoring(leads)
+  const { highSchoolLabels, majorLabels } = useMasterData()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
+
+  const counselorDirectoryLabelById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of directoryUsers) {
+      if (c.isActive) m.set(c.id, formatStaffDirectoryLabel(c))
+    }
+    return m
+  }, [directoryUsers])
+
+  const { leads, loading, error, totalLeadCount, scopeFetchTruncated } = useLeads({
+    dataMode: 'fullScope',
+    directoryLabels: counselorDirectoryLabelById,
+  })
+  const { scoreByLeadId, activeScoringProfile } = useLeadScoring(leads)
 
   const [needle, setNeedle] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
@@ -391,6 +507,8 @@ export function CounselorDashboard() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [regionFilter, setRegionFilter] = useState<'ALL' | string>('ALL')
+  const [schoolFilter, setSchoolFilter] = useState<'ALL' | string>('ALL')
+  const [majorFilter, setMajorFilter] = useState<'ALL' | string>('ALL')
   const [dateAxis, setDateAxis] = useState<DateAxisFilter>('updated')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -451,10 +569,60 @@ export function CounselorDashboard() {
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [leads])
 
+  const schoolOptions = useMemo(() => {
+    const s = new Set<string>(highSchoolLabels)
+    for (const l of leads) {
+      const n = (l.highSchool ?? '').trim()
+      if (n) s.add(n)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leads, highSchoolLabels])
+
+  const majorOptions = useMemo(() => {
+    const s = new Set<string>(majorLabels)
+    for (const l of leads) {
+      const n = (l.educationLevel ?? '').trim()
+      if (n) s.add(n)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leads, majorLabels])
+
+  const pipelineFilterSig = useMemo(
+    () =>
+      [
+        needle,
+        regionFilter,
+        schoolFilter,
+        majorFilter,
+        String(dueOnly),
+        tagFilter,
+        myDayFilter ?? '',
+        counselorFilterUid,
+        dateAxis,
+        dateFrom,
+        dateTo,
+      ].join('|'),
+    [
+      needle,
+      regionFilter,
+      schoolFilter,
+      majorFilter,
+      dueOnly,
+      tagFilter,
+      myDayFilter,
+      counselorFilterUid,
+      dateAxis,
+      dateFrom,
+      dateTo,
+    ],
+  )
+
   const filtered = useMemo(() => {
     const q = needle.trim().toLowerCase()
     return leads.filter((l) => {
       if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
+      if (schoolFilter !== 'ALL' && (l.highSchool ?? '').trim() !== schoolFilter) return false
+      if (majorFilter !== 'ALL' && l.educationLevel.trim() !== majorFilter) return false
       if (counselorFilterUid === '__UNASSIGNED__') {
         if (effectiveAssigneeUid(l)) return false
       } else if (counselorFilterUid) {
@@ -470,8 +638,7 @@ export function CounselorDashboard() {
       const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
       if (tagFilter !== 'ALL' && tag !== tagFilter) return false
       if (!q) return true
-      const hay = `${l.fullName} ${l.phone} ${l.parentPhone ?? ''}`.toLowerCase()
-      return hay.includes(q)
+      return leadMatchesClientSearch(l, q, counselorDirectoryLabelById)
     })
   }, [
     leads,
@@ -481,7 +648,10 @@ export function CounselorDashboard() {
     scoreByLeadId,
     myDayFilter,
     regionFilter,
+    schoolFilter,
+    majorFilter,
     counselorFilterUid,
+    counselorDirectoryLabelById,
     dateAxis,
     dateFrom,
     dateTo,
@@ -664,29 +834,35 @@ export function CounselorDashboard() {
           </VietMyAccentHeading>
           <div className="mt-2 space-y-1 text-base leading-snug text-slate-600">
             <p>
-              Bộ lọc khu vực / ngày / TVV (mở rộng dưới ô tìm) quyết định hồ sơ nào vào các cột CRM.
+              Bộ lọc khu vực / trường / ngành / ngày / TVV (mở rộng dưới ô tìm) quyết định hồ sơ nào vào các cột CRM.
             </p>
             <p>
-              Ô tìm kiếm chỉ thu hẹp thêm theo tên hoặc SĐT; kéo thả thẻ để đổi giai đoạn — đồng bộ Firestore.
+              Ô tìm kiếm quét <strong>tên, SĐT, tỉnh, trường THPT, ngành, nguồn, ghi chú…</strong> (giống Quản lý hồ sơ). Mỗi
+              cột hiển thị <strong>{KANBAN_PAGE_SIZE} thẻ/trang</strong> — lật trang ở cuối cột. Kéo thả để đổi giai đoạn
+              — đồng bộ Firestore.
             </p>
             {profile ? (
               <p className="text-sm text-slate-500">
                 {USER_ROLE_LABELS[profile.role]} — {filtered.length}/{leads.length} sau lọc
-                {hasMore ? ' · chưa tải hết danh sách' : ''}
+                {totalLeadCount != null ? (
+                  <>
+                    {' '}
+                    · tối đa <span className="font-medium text-slate-700">{totalLeadCount}</span> trong phạm vi quyền
+                    (đã tải {leads.length})
+                  </>
+                ) : null}
+                .{' '}
+                <Link
+                  to="/leads"
+                  className="font-medium text-amber-800 underline decoration-amber-300/80 underline-offset-2 hover:text-amber-950"
+                >
+                  Mở Quản lý hồ sơ
+                </Link>{' '}
+                để bảng phân trang đầy đủ và xuất.
               </p>
             ) : null}
           </div>
         </div>
-        {hasMore ? (
-          <button
-            type="button"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-            className="shrink-0 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-50"
-          >
-            {loadingMore ? 'Đang tải…' : `Tải thêm (${LEADS_PAGE_SIZE} hồ sơ)`}
-          </button>
-        ) : null}
       </header>
 
       <section className="app-card-glass overflow-hidden p-3 shadow-md md:p-4">
@@ -702,7 +878,7 @@ export function CounselorDashboard() {
                     value={needle}
                     onChange={(e) => setNeedle(e.target.value)}
                     onFocus={() => setFiltersExpanded(true)}
-                    placeholder="Tên hoặc SĐT…"
+                    placeholder="Tên, SĐT, tỉnh, trường, ngành…"
                     className="w-full rounded-xl border border-slate-200/95 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
                   />
                 </div>
@@ -714,7 +890,7 @@ export function CounselorDashboard() {
                 aria-expanded={filtersExpanded}
               >
                 <Filter className="h-3.5 w-3.5 text-amber-700" strokeWidth={2} />
-                Lọc khu vực · ngày · TVV
+                Lọc khu vực · trường · ngành · ngày · TVV
                 <ChevronDown
                   className={[
                     'h-3.5 w-3.5 text-slate-500 transition-transform',
@@ -725,7 +901,7 @@ export function CounselorDashboard() {
               </button>
             </div>
             {filtersExpanded ? (
-              <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <label className="block text-xs font-medium text-slate-600">
                   Khu vực
                   <select
@@ -737,6 +913,36 @@ export function CounselorDashboard() {
                     {regionOptions.map((r) => (
                       <option key={r} value={r}>
                         {r}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-medium text-slate-600">
+                  Trường THPT
+                  <select
+                    value={schoolFilter}
+                    onChange={(e) => setSchoolFilter(e.target.value === 'ALL' ? 'ALL' : e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  >
+                    <option value="ALL">Tất cả trường</option>
+                    {schoolOptions.slice(0, 80).map((sc) => (
+                      <option key={sc} value={sc}>
+                        {sc.length > 48 ? `${sc.slice(0, 48)}…` : sc}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-medium text-slate-600">
+                  Ngành / cấp (educationLevel)
+                  <select
+                    value={majorFilter}
+                    onChange={(e) => setMajorFilter(e.target.value === 'ALL' ? 'ALL' : e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  >
+                    <option value="ALL">Tất cả ngành</option>
+                    {majorOptions.slice(0, 80).map((m) => (
+                      <option key={m} value={m}>
+                        {m.length > 48 ? `${m.slice(0, 48)}…` : m}
                       </option>
                     ))}
                   </select>
@@ -793,6 +999,8 @@ export function CounselorDashboard() {
                     type="button"
                     onClick={() => {
                       setRegionFilter('ALL')
+                      setSchoolFilter('ALL')
+                      setMajorFilter('ALL')
                       setDateAxis('updated')
                       setDateFrom('')
                       setDateTo('')
@@ -827,6 +1035,7 @@ export function CounselorDashboard() {
                 <option value="HOT">Chỉ HOT</option>
                 <option value="WARM">Chỉ WARM</option>
                 <option value="COLD">Chỉ COLD</option>
+                <option value="LOSS">Chỉ LOSS</option>
               </select>
             </div>
           </div>
@@ -874,6 +1083,17 @@ export function CounselorDashboard() {
         </div>
       ) : null}
 
+      {scopeFetchTruncated ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm">
+          Pipeline chỉ tải tối đa <strong>{MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
+          quyền — có thể còn trên server. Dùng{' '}
+          <Link to="/leads" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
+            Quản lý hồ sơ
+          </Link>{' '}
+          để xem toàn bộ nếu được phép.
+        </div>
+      ) : null}
+
       {!isFirebaseConfigured() || !db ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-base text-amber-950 shadow-sm">
           Cấu hình Firebase để dùng pipeline.
@@ -890,26 +1110,18 @@ export function CounselorDashboard() {
           ))}
         </div>
       ) : (
-        <DndContext sensors={sensors} onDragEnd={(e) => void onDragEnd(e)}>
-          <div className="scroll-touch flex w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-4 pt-1 sm:gap-3 md:gap-3">
-            {LEAD_COUNSELOR_STATUS_ORDER.map((status) => (
-              <KanbanColumn key={status} status={status} count={byStatus.get(status)?.length ?? 0}>
-                {(byStatus.get(status) ?? []).map((lead) => (
-                  <KanbanLeadCard
-                    key={lead.id}
-                    lead={lead}
-                    priorityTag={scoreByLeadId.get(lead.id)?.priorityTag ?? lead.priorityTag}
-                    onToast={pushToast}
-                    canWrite={canWrite}
-                    canInteract={canInteract}
-                    selected={selectedIds.has(lead.id)}
-                    onToggleSelect={toggleSelectId}
-                  />
-                ))}
-              </KanbanColumn>
-            ))}
-          </div>
-        </DndContext>
+        <CounselorPipelineBoard
+          key={pipelineFilterSig}
+          byStatus={byStatus}
+          scoreByLeadId={scoreByLeadId}
+          sensors={sensors}
+          onDragEnd={onDragEnd}
+          pushToast={pushToast}
+          canWrite={canWrite}
+          canInteract={canInteract}
+          selectedIds={selectedIds}
+          toggleSelectId={toggleSelectId}
+        />
       )}
 
       {canBulkWrite && selectedIds.size > 0 ? (

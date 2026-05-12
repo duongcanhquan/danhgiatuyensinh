@@ -17,7 +17,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { LEADS_PAGE_SIZE, useLeads } from '../hooks/useLeads'
+import { useAdminDashboardAggregates } from '../hooks/useAdminDashboardAggregates'
+import { useAuth } from '../hooks/useAuth'
+import { useLeads } from '../hooks/useLeads'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
@@ -73,7 +75,10 @@ function formatMonth(d: Date): string {
 }
 
 export function DashboardView() {
-  const { leads, loading, loadingMore, hasMore, loadMore, error } = useLeads()
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'admin'
+  const { leads, loading, error, totalLeadCount, totalLeadCountError, totalPages, currentPage } = useLeads()
+  const adminAgg = useAdminDashboardAggregates(isAdmin)
   const {
     scoringProfiles,
     profilesLoading,
@@ -83,16 +88,29 @@ export function DashboardView() {
     scoreByLeadId,
   } = useLeadScoring(leads)
 
+  const adminChartsReady = Boolean(isAdmin && adminAgg.data)
+  const adminChartsFailed = Boolean(isAdmin && adminAgg.error && !adminAgg.data)
+  const chartsBusy = isAdmin ? !adminChartsReady && !adminChartsFailed : loading
+
   const yieldGauge = useMemo(() => {
+    if (adminChartsReady) return adminAgg.data!.yieldGauge
+    if (isAdmin && adminChartsFailed) {
+      return [{ name: 'Tỷ lệ nhập học', value: 0, fill: '#c9a227' }]
+    }
+    if (isAdmin) {
+      return [{ name: 'Tỷ lệ nhập học', value: 0, fill: '#c9a227' }]
+    }
     const committed = leads.filter((l) =>
       ['DEPOSIT_PAID', 'ENROLLED', 'SUMMER_MELT'].includes(l.status),
     ).length
     const enrolled = leads.filter((l) => l.status === 'ENROLLED').length
     const pct = committed ? Math.round((enrolled / committed) * 1000) / 10 : 0
     return [{ name: 'Tỷ lệ nhập học', value: Math.min(100, pct), fill: '#c9a227' }]
-  }, [leads])
+  }, [adminChartsReady, adminChartsFailed, adminAgg.data, isAdmin, leads])
 
   const summerMeltSeries = useMemo(() => {
+    if (adminChartsReady) return adminAgg.data!.summerMeltSeries
+    if (isAdmin && !adminChartsReady) return []
     const years = new Set<number>()
     for (const l of leads) years.add(l.updatedAt.toDate().getFullYear())
     if (!years.size) years.add(new Date().getFullYear())
@@ -110,9 +128,15 @@ export function DashboardView() {
       }
     }
     return list.slice(-12)
-  }, [leads])
+  }, [adminChartsReady, adminAgg.data, leads, isAdmin])
 
   const cohortStack = useMemo(() => {
+    if (adminChartsReady) return adminAgg.data!.cohortStack
+    if (isAdmin && !adminChartsReady) {
+      const row: Record<string, string | number> = { monthLabel: '—' }
+      for (const p of PIPELINE_STACK) row[p] = 0
+      return [row]
+    }
     const map = new Map<string, Partial<Record<LeadPipelineStatus, number>>>()
     for (const l of leads) {
       const d = monthStart(l.importedAt ?? l.createdAt)
@@ -133,9 +157,19 @@ export function DashboardView() {
       }
       return out
     })
-  }, [leads])
+  }, [adminChartsReady, adminAgg.data, leads, isAdmin])
 
   const pieData = useMemo(() => {
+    if (adminChartsReady) {
+      const tags = adminAgg.data!.tags
+      return (['HOT', 'WARM', 'COLD', 'LOSS'] as const).map((name) => ({
+        name,
+        value: tags[name],
+      }))
+    }
+    if (isAdmin && !adminChartsReady) {
+      return (['HOT', 'WARM', 'COLD', 'LOSS'] as const).map((name) => ({ name, value: 0 }))
+    }
     const counts: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
     if (activeScoringProfile) {
       for (const l of leads) {
@@ -149,7 +183,7 @@ export function DashboardView() {
       name,
       value: counts[name],
     }))
-  }, [leads, activeScoringProfile, scoreByLeadId])
+  }, [adminChartsReady, adminAgg.data, leads, activeScoringProfile, scoreByLeadId, isAdmin])
 
   const tagCountMap = useMemo(() => {
     const m = new Map<string, number>()
@@ -173,18 +207,24 @@ export function DashboardView() {
           Báo cáo tuyển sinh chuyên sâu
         </VietMyAccentHeading>
         <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-600">
-          Biểu đồ dựa trên các hồ sơ đã tải (pagination Firestore, tối đa {LEADS_PAGE_SIZE} mỗi lần «Tải thêm»).
+          {isAdmin ? (
+            <>
+              Báo cáo admin tổng hợp <strong className="font-semibold text-slate-800">toàn bộ hồ sơ</strong> trong hệ
+              thống (đếm trực tiếp trên Firestore). Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong>{' '}
+              là tổng document; các biểu đồ pipeline, nhãn HOT/WARM/COLD/LOSS, tỷ lệ nhập học và hủy phút chót theo{' '}
+              <strong className="font-semibold text-slate-800">dữ liệu đã lưu</strong> trên từng hồ sơ (không giới hạn
+              30/trang). Profile chấm điểm bên dưới dùng để đồng bộ màn hình quản lý; phân bổ nhãn ở đây theo trường{' '}
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-[13px] text-slate-800">priorityTag</code> trên
+              hồ sơ.
+            </>
+          ) : (
+            <>
+              Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong> dùng đếm Firestore (đúng phạm vi
+              quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Quản lý hồ
+              sơ nếu cần xem thêm bản ghi cho phân tích cục bộ.
+            </>
+          )}
         </p>
-        {hasMore ? (
-          <button
-            type="button"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-            className="relative mt-3 rounded-xl border border-amber-400/80 bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:from-amber-600 hover:to-amber-700 disabled:opacity-50"
-          >
-            {loadingMore ? 'Đang tải…' : `Tải thêm hồ sơ (${LEADS_PAGE_SIZE})`}
-          </button>
-        ) : null}
       </header>
 
       {error ? (
@@ -192,33 +232,60 @@ export function DashboardView() {
           {error}
         </div>
       ) : null}
+      {totalLeadCountError && !error ? (
+        <div className="relative rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-950 shadow-sm">
+          Không lấy được tổng hồ sơ từ Firestore ({totalLeadCountError}). Số «Tổng hồ sơ» tạm theo danh sách đã tải.
+        </div>
+      ) : null}
+      {isAdmin && adminAgg.error && !error ? (
+        <div className="relative rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-900 shadow-sm">
+          Không tải được thống kê toàn hệ thống: {adminAgg.error}
+        </div>
+      ) : null}
 
       <section className="relative">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-600">
-          KPI &amp; nhãn (theo hồ sơ đã tải)
+          {isAdmin
+            ? 'KPI & nhãn — tổng hợp toàn bộ hồ sơ (admin, theo dữ liệu lưu trên Firestore)'
+            : 'KPI & nhãn — tổng hồ sơ theo hệ thống; HOT/WARM/COLD theo hồ sơ đã tải'}
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
           <DashboardKpiTile
-            label="Tổng lead"
-            value={loading ? '…' : leads.length}
+            label="Tổng hồ sơ"
+            value={
+              loading && totalLeadCount === null
+                ? '…'
+                : totalLeadCount !== null
+                  ? totalLeadCount
+                  : leads.length
+            }
             valueClass="text-slate-900"
             shellClass="border-l-4 border-l-slate-500 bg-white/95"
+            hint={
+              isAdmin
+                ? undefined
+                : totalPages > 1 && totalLeadCount !== null
+                  ? `Trang ${currentPage}/${totalPages} · ${leads.length} bản ghi trên trang`
+                  : totalPages > 1
+                    ? `Trang ${currentPage}/${totalPages} — dùng Quản lý hồ sơ để lật trang`
+                    : undefined
+            }
           />
           <DashboardKpiTile
             label="Lead HOT"
-            value={loading ? '…' : (tagCountMap.get('HOT') ?? 0)}
+            value={chartsBusy ? '…' : (tagCountMap.get('HOT') ?? 0)}
             valueClass="text-orange-600"
             shellClass="border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-white"
           />
           <DashboardKpiTile
             label="Lead WARM"
-            value={loading ? '…' : (tagCountMap.get('WARM') ?? 0)}
+            value={chartsBusy ? '…' : (tagCountMap.get('WARM') ?? 0)}
             valueClass="text-amber-700"
             shellClass="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white"
           />
           <DashboardKpiTile
             label="Lead COLD"
-            value={loading ? '…' : (tagCountMap.get('COLD') ?? 0)}
+            value={chartsBusy ? '…' : (tagCountMap.get('COLD') ?? 0)}
             valueClass="text-sky-700"
             shellClass="border-l-4 border-l-sky-500 bg-gradient-to-br from-sky-50 to-white"
           />
@@ -249,9 +316,13 @@ export function DashboardView() {
                 </span>
               </div>
               <p className="mt-1 truncate text-xs leading-tight text-slate-600" title={activeScoringProfile?.description}>
-                {activeScoringProfile
-                  ? `Biểu đồ nhãn dùng ngưỡng HOT/WARM của «${activeScoringProfile.profileName}».`
-                  : 'Chọn profile để đồng bộ nhãn với bảng quản lý hồ sơ.'}
+                {isAdmin
+                  ? activeScoringProfile
+                    ? `Admin: biểu đồ nhãn dùng priorityTag đã lưu. Profile «${activeScoringProfile.profileName}» đồng bộ màn Quản lý hồ sơ.`
+                    : 'Admin: chọn profile để đồng bộ với màn Quản lý hồ sơ.'
+                  : activeScoringProfile
+                    ? `Biểu đồ nhãn dùng ngưỡng HOT/WARM của «${activeScoringProfile.profileName}».`
+                    : 'Chọn profile để đồng bộ nhãn với bảng quản lý hồ sơ.'}
               </p>
             </div>
           </div>
@@ -261,7 +332,11 @@ export function DashboardView() {
       <section className="relative grid gap-5 lg:grid-cols-3">
         <GlassChartCard
           title="Tỷ lệ nhập học"
-          subtitle="Nhập học / (đã cọc + nhập học + hủy phút chót) — theo CRM"
+          subtitle={
+            isAdmin
+              ? 'Nhập học / (đã cọc + nhập học + hủy phút chót) — đếm trên toàn bộ hồ sơ'
+              : 'Nhập học / (đã cọc + nhập học + hủy phút chót) — theo CRM'
+          }
           className="lg:col-span-1"
           accent="amber"
         >
@@ -287,7 +362,9 @@ export function DashboardView() {
               </RadialBarChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-8 text-center">
-              <p className="text-3xl font-bold tabular-nums text-amber-800">{loading ? '…' : `${yieldGauge[0]?.value ?? 0}%`}</p>
+              <p className="text-3xl font-bold tabular-nums text-amber-800">
+                {chartsBusy ? '…' : `${yieldGauge[0]?.value ?? 0}%`}
+              </p>
               <p className="text-xs uppercase tracking-wide text-slate-600">trên nhóm đã cam kết</p>
             </div>
           </div>
@@ -295,7 +372,11 @@ export function DashboardView() {
 
         <GlassChartCard
           title="Hủy phút chót (theo tháng cập nhật)"
-          subtitle="Số hồ sơ chuyển sang giai đoạn hủy phút chót — thống kê tháng 6–8"
+          subtitle={
+            isAdmin
+              ? 'Số hồ sơ status «Hủy phút chót» theo tháng updatedAt — 12 tháng gần nhất, toàn hệ thống'
+              : 'Số hồ sơ chuyển sang giai đoạn hủy phút chót — thống kê tháng 6–8 (theo hồ sơ đã tải)'
+          }
           className="lg:col-span-2"
           accent="teal"
         >
@@ -328,8 +409,12 @@ export function DashboardView() {
 
       <section className="relative">
         <GlassChartCard
-          title="Pipeline theo tháng tiếp cận"
-          subtitle="Xếp chồng theo giai đoạn pipeline hiện tại"
+          title={isAdmin ? 'Pipeline (toàn hệ thống)' : 'Pipeline theo tháng tiếp cận'}
+          subtitle={
+            isAdmin
+              ? 'Phân bổ theo pipelineStatus đang lưu trên từng hồ sơ (một cột tổng)'
+              : 'Xếp chồng theo giai đoạn pipeline hiện tại (theo hồ sơ đã tải)'
+          }
           className="min-h-[320px]"
           accent="indigo"
         >
@@ -356,7 +441,15 @@ export function DashboardView() {
       </section>
 
       <section className="relative grid gap-5 lg:grid-cols-2">
-        <GlassChartCard title="Phân bổ nhãn ưu tiên" accent="rose">
+        <GlassChartCard
+          title="Phân bổ nhãn ưu tiên"
+          subtitle={
+            isAdmin
+              ? 'Theo trường priorityTag trên Firestore (toàn bộ hồ sơ)'
+              : undefined
+          }
+          accent="rose"
+        >
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
@@ -379,7 +472,11 @@ export function DashboardView() {
           </ResponsiveContainer>
         </GlassChartCard>
 
-        <GlassChartCard title="Pipeline (tổng hợp nhanh)" accent="slate">
+        <GlassChartCard
+          title="Pipeline (tổng hợp nhanh)"
+          subtitle={isAdmin ? 'Đếm theo pipelineStatus — toàn bộ hồ sơ' : 'Theo hồ sơ đã tải'}
+          accent="slate"
+        >
           <ul className="flex flex-wrap gap-2 text-base">
             {PIPELINE_STACK.map((k) => (
               <li
@@ -387,12 +484,18 @@ export function DashboardView() {
                 className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-800 shadow-sm"
               >
                 <span style={{ color: PIPELINE_NEON[k] }}>{PIPELINE_LABEL[k]}:</span>{' '}
-                {loading ? '…' : leads.filter((l) => l.pipelineStatus === k).length}
+                {chartsBusy
+                  ? '…'
+                  : adminChartsReady
+                    ? adminAgg.data!.pipeline[k]
+                    : leads.filter((l) => l.pipelineStatus === k).length}
               </li>
             ))}
           </ul>
           <p className="mt-4 text-sm leading-relaxed text-slate-600">
-            Giai đoạn CRM trên hồ sơ (Kanban) là nguồn cho các chỉ số nhập học và hủy phút chót ở trên.
+            {isAdmin
+              ? 'Các số pipeline khớp biểu đồ xếp chồng; trường nguồn là pipelineStatus trên mỗi document lead.'
+              : 'Giai đoạn CRM trên hồ sơ (Kanban) là nguồn cho các chỉ số nhập học và hủy phút chót ở trên (theo tập đã tải).'}
           </p>
         </GlassChartCard>
       </section>
@@ -427,11 +530,13 @@ function DashboardKpiTile({
   value,
   valueClass,
   shellClass = 'border-l-4 border-l-slate-400 bg-white/95',
+  hint,
 }: {
   label: string
   value: number | string
   valueClass: string
   shellClass?: string
+  hint?: string
 }) {
   return (
     <div
@@ -439,6 +544,7 @@ function DashboardKpiTile({
     >
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">{label}</p>
       <p className={`mt-1 text-3xl font-bold tabular-nums leading-none md:text-4xl ${valueClass}`}>{value}</p>
+      {hint ? <p className="mt-1.5 text-[10px] leading-snug text-slate-500">{hint}</p> : null}
     </div>
   )
 }

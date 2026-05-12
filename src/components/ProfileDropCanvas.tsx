@@ -202,7 +202,13 @@ function RuleConfigurationCard({
                     onChange={(e) => {
                       const v = e.target.value
                       onPatchRow(ri, {
-                        value: r.condition === 'IN_LIST' ? v.split(',').map((s) => s.trim()) : v,
+                        value:
+                          r.condition === 'IN_LIST'
+                            ? v
+                                .split(',')
+                                .map((s) => s)
+                                .filter((s) => s.trim().length > 0)
+                            : v,
                       })
                     }}
                     className="mt-0.5 w-full rounded-md border border-sky-200/80 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-40"
