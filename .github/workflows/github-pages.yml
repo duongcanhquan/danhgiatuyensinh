@@ -1,10 +1,10 @@
 # Triển khai lên GitHub Pages khi push nhánh main
 #
-# Bắt buộc: Settings → Pages → Build and deployment → Source: GitHub Actions
+# Bắt buộc: Settings → Pages → Build and deployment → Source: «GitHub Actions»
 # (Nếu vẫn chọn «Deploy from a branch» thì job deploy từ Actions thường thất bại.)
 #
-# Lần đầu: môi trường «github-pages» có thể cần bấm Approve deployment (repo/org settings).
-# Job «deploy» báo đỏ nếu chưa bật Pages nguồn «GitHub Actions», hoặc chưa duyệt deployment / thiếu quyền pages:write.
+# Job «deploy» có thể cần Approve môi trường «github-pages» (repo/org).
+# Build không dùng actions/configure-pages (hay 404/403 khi Pages chưa khởi tạo). Base Vite = /<tên-repo>/.
 name: Deploy GitHub Pages
 
 on:
@@ -26,11 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Bước chuẩn của GitHub (starter Pages): đăng ký Pages + lấy base_path cho build.
-      - name: Configure GitHub Pages
-        id: pages
-        uses: actions/configure-pages@v5
 
       - uses: actions/setup-node@v4
         with:
@@ -64,8 +59,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Trùng base với GitHub Pages (tránh lệch khi đổi tên repo / fork).
-          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
+          # Project site: https://<user>.github.io/<repo>/ → base phải là /<repo>/
+          VITE_BASE: /${{ github.event.repository.name }}/
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
