@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FirebaseError } from 'firebase/app'
 import {
   addDoc,
@@ -977,6 +977,25 @@ function MasterEntriesEditor({
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+  /** Tránh ghi đè khi snapshot Firestore chưa kịp về sau lần Thêm trước (race với prop `entries`). */
+  const [localEntries, setLocalEntries] = useState<MasterDataEntry[]>(entries)
+  /** Sau khi persist thành công: chỉ đồng bộ từ `entries` khi snapshot khớp bản đã ghi (tránh prop cũ ghi đè UI). */
+  const pendingServerMatch = useRef<MasterDataEntry[] | null>(null)
+
+  /** Snapshot đã chứa đủ các mục vừa ghi (cho phép snapshot dài hơn nếu có chỉnh đồng thời). */
+  function snapshotIncludesWrite(want: MasterDataEntry[], snap: MasterDataEntry[]): boolean {
+    return want.every((w) => snap.some((e) => e.id === w.id && e.label === w.label))
+  }
+
+  useEffect(() => {
+    if (busy) return
+    if (pendingServerMatch.current) {
+      const want = pendingServerMatch.current
+      if (!snapshotIncludesWrite(want, entries)) return
+      pendingServerMatch.current = null
+    }
+    setLocalEntries(entries)
+  }, [entries, catalogId, busy])
 
   const persist = async (next: MasterDataEntry[]): Promise<boolean> => {
     if (!db || disabled) return false
@@ -1004,22 +1023,33 @@ function MasterEntriesEditor({
   const addItem = async () => {
     const label = input.trim()
     if (!label || !db || disabled) return
-    const id = label
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{M}/gu, '')
-      .replace(/\s+/g, '-')
-      .slice(0, 120)
-    if (entries.some((e) => e.label.toLowerCase() === label.toLowerCase())) {
+    if (localEntries.some((e) => e.label.toLowerCase() === label.toLowerCase())) {
       setLocalError('Mục này đã có trong danh sách (không phân biệt hoa thường).')
       return
     }
-    const ok = await persist([...entries, { id: id || crypto.randomUUID(), label, isActive: true }])
-    if (ok) setInput('')
+    const newEntry: MasterDataEntry = { id: crypto.randomUUID(), label, isActive: true }
+    const next = [...localEntries, newEntry]
+    setLocalEntries(next)
+    const ok = await persist(next)
+    if (ok) {
+      pendingServerMatch.current = next
+      setInput('')
+    } else {
+      pendingServerMatch.current = null
+      setLocalEntries(entries)
+    }
   }
 
   const removeItem = async (id: string) => {
-    await persist(entries.filter((x) => x.id !== id))
+    const next = localEntries.filter((x) => x.id !== id)
+    setLocalEntries(next)
+    const ok = await persist(next)
+    if (ok) {
+      pendingServerMatch.current = next
+    } else {
+      pendingServerMatch.current = null
+      setLocalEntries(entries)
+    }
   }
 
   return (
@@ -1065,7 +1095,7 @@ function MasterEntriesEditor({
         </p>
       ) : null}
       <div className="mt-3 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
-        {entries.map((x) => (
+        {localEntries.map((x) => (
           <span
             key={x.id}
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800"
@@ -1082,7 +1112,7 @@ function MasterEntriesEditor({
             </button>
           </span>
         ))}
-        {!entries.length ? (
+        {!localEntries.length ? (
           <span className="text-base text-slate-600">Chưa có mục.</span>
         ) : null}
       </div>

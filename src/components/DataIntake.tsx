@@ -37,6 +37,8 @@ const ROUTING_ASSIGNMENT_SAMPLE = 500
 const IN_QUERY_CHUNK = 30
 /** Số truy vấn `in` chạy song song (Firestore cho tối đa 30 giá trị/`in`). */
 const EXISTING_HASH_QUERY_CONCURRENCY = 24
+/** Tính SHA theo lô — tránh khóa UI vài giây với file hàng nghìn dòng. */
+const HASH_COMPUTE_CHUNK = 2500
 
 function yieldToMain(): Promise<void> {
   return new Promise((resolve) => {
@@ -104,7 +106,7 @@ async function fetchExistingIdsByHash(
     }
     waveIndex += 1
     onWaveDone?.(waveIndex, waveCount)
-    await yieldToMain()
+    if (waveIndex % 4 === 0) await yieldToMain()
   }
   return map
 }
@@ -234,13 +236,21 @@ export function DataIntake() {
         const uploaderName = profile.displayName?.trim() || profile.email || uploadedBy
 
         setBanner(`Đang tính mã từng dòng (${rows.length.toLocaleString('vi-VN')} dòng)…`)
-        await yieldToMain()
 
-        const hashRows = rows.map((row, index) => ({
-          index,
-          row,
-          hash: computeLeadUniqueHash(row),
-        }))
+        const hashRows: { index: number; row: Partial<ExcelLeadRow>; hash: string }[] = []
+        for (let i = 0; i < rows.length; i += HASH_COMPUTE_CHUNK) {
+          const end = Math.min(i + HASH_COMPUTE_CHUNK, rows.length)
+          for (let j = i; j < end; j++) {
+            const row = rows[j]
+            hashRows.push({ index: j, row, hash: computeLeadUniqueHash(row) })
+          }
+          if (end < rows.length) {
+            setBanner(
+              `Đang tính mã… ${end.toLocaleString('vi-VN')} / ${rows.length.toLocaleString('vi-VN')} dòng`,
+            )
+            await yieldToMain()
+          }
+        }
 
         const firstIndexByHash = new Map<string, number>()
         const prepared: PreparedRow[] = hashRows.map(({ index, row, hash }) => {
