@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { motion, AnimatePresence } from 'motion/react'
-import { Maximize2, X, ChevronsRight } from 'lucide-react'
+import { CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
 import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { useScoringProfiles } from '../hooks/useScoringProfiles'
@@ -135,117 +135,125 @@ function ProfileEditorPanel({
     }
   }, [db, draft, canEdit, isDefaultProfile, setBusy, onDeleted])
 
+  const defaultProfileTitle =
+    'Chỉ một profile mặc định. Khi lưu, hệ thống gỡ cờ ở profile khác — dùng import Excel và khi lead chưa chọn profile.'
+  const thresholdExplainTitle =
+    'Điểm ≥ HOT → HOT; từ WARM đến dưới HOT → WARM; từ 0 đến dưới WARM → COLD; < 0 → LOSS. Nếu WARM ≥ HOT, hệ thống tự chỉnh WARM = HOT − 1.'
+
   return (
     <div
       className={[
-        'space-y-5',
+        'space-y-1.5',
         workspaceLayout ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block text-sm font-medium text-slate-700">
-          Tên profile
-          <input
-            value={draft.profileName}
-            disabled={!canEdit}
-            onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
-            placeholder="Nhập tên profile"
-            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none ring-amber-400/25 focus:ring-2 disabled:opacity-50"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-3 text-sm text-slate-800 md:pt-3">
-          <span className="flex items-center gap-2 font-medium">
+      <div className="rounded-md border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white p-1.5 shadow-sm">
+        <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-1">
+          <label className="min-w-0 flex-1 text-[10px] font-medium leading-none text-slate-700 sm:min-w-[8rem] sm:max-w-[14rem]">
+            Tên
+            <input
+              value={draft.profileName}
+              disabled={!canEdit}
+              onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
+              placeholder="Tên profile"
+              className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
+            />
+          </label>
+          <label
+            className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded border border-slate-200/80 bg-white px-1.5 text-[10px] font-medium leading-none text-slate-800 sm:mb-0"
+            title={defaultProfileTitle}
+          >
             <input
               type="checkbox"
               checked={Boolean(draft.isDefaultForImport)}
               disabled={!canEdit}
               onChange={(e) => setDraft({ ...draft, isDefaultForImport: e.target.checked })}
-              className="h-4 w-4 shrink-0 rounded border-slate-300 bg-white accent-amber-600"
+              className="h-3 w-3 shrink-0 rounded border-slate-300 bg-white accent-amber-600"
             />
-            <span>Set as Default Profile</span>
-          </span>
-          <span className="pl-6 text-xs leading-snug text-slate-600">
-            Chỉ một profile được đánh dấu mặc định. Khi lưu, hệ thống gỡ cờ mặc định ở các profile khác — dùng cho
-            import Excel và dropdown lead khi chưa chọn profile.
-          </span>
-        </label>
-      </div>
-      <label className="block text-sm font-medium text-slate-700">
-        Mô tả
-        <textarea
-          value={draft.description}
-          disabled={!canEdit}
-          onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-          rows={2}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none ring-amber-400/25 focus:ring-2 disabled:opacity-50"
-        />
-      </label>
-
-      <div className="grid gap-4 rounded-xl border border-slate-200 bg-gradient-to-br from-amber-50/50 to-white p-4 md:grid-cols-2">
-        <label className="text-sm font-medium text-slate-700">
-          Ngưỡng HOT (điểm ≥)
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={draft.thresholds.hotMinScore}
+            <span className="whitespace-nowrap">Mặc định</span>
+          </label>
+          <div className="flex flex-wrap items-end gap-1">
+            <label className="w-11 text-[10px] font-medium leading-none text-slate-700">
+              HOT
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={draft.thresholds.hotMinScore}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    thresholds: { ...draft.thresholds, hotMinScore: Number(e.target.value) },
+                  })
+                }
+                className="mt-0.5 h-7 w-full rounded border border-amber-200/80 bg-white px-1 text-xs tabular-nums text-slate-900 disabled:opacity-50"
+              />
+            </label>
+            <label className="w-11 text-[10px] font-medium leading-none text-slate-700">
+              WARM
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={draft.thresholds.warmMinScore}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    thresholds: { ...draft.thresholds, warmMinScore: Number(e.target.value) },
+                  })
+                }
+                className="mt-0.5 h-7 w-full rounded border border-amber-200/80 bg-white px-1 text-xs tabular-nums text-slate-900 disabled:opacity-50"
+              />
+            </label>
+            <button
+              type="button"
+              className="mb-0.5 flex h-7 items-end pb-0.5 text-slate-400 hover:text-slate-600"
+              title={thresholdExplainTitle}
+              aria-label={thresholdExplainTitle}
+            >
+              <CircleHelp className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            </button>
+          </div>
+        </div>
+        <label className="mt-1 block text-[10px] font-medium leading-none text-slate-700">
+          Mô tả
+          <textarea
+            value={draft.description}
             disabled={!canEdit}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                thresholds: { ...draft.thresholds, hotMinScore: Number(e.target.value) },
-              })
-            }
-            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 disabled:opacity-50"
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            rows={1}
+            className="mt-0.5 max-h-12 min-h-[1.75rem] w-full resize-y rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] leading-snug text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
           />
         </label>
-        <label className="text-sm font-medium text-slate-700">
-          Ngưỡng WARM (điểm ≥)
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={draft.thresholds.warmMinScore}
-            disabled={!canEdit}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                thresholds: { ...draft.thresholds, warmMinScore: Number(e.target.value) },
-              })
-            }
-            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 disabled:opacity-50"
-          />
-        </label>
-        <p className="md:col-span-2 text-xs text-slate-600">
-          Áp dụng cho <strong>mọi profile</strong> (kể cả mặc định): điểm ≥ ngưỡng HOT → HOT; từ ngưỡng WARM đến dưới HOT →
-          WARM; từ 0 đến dưới WARM → COLD; &lt; 0 → LOSS. Nếu WARM ≥ HOT, hệ thống tự chỉnh WARM = HOT − 1.
-        </p>
       </div>
 
       <div
         className={[
-          'border-t border-slate-200 pt-5',
+          'border-t border-slate-200 pt-1.5',
           workspaceLayout ? 'flex min-h-0 flex-1 flex-col' : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        <p className="text-sm font-semibold text-slate-800">Scoring Profile Builder</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
-          Kéo mẫu từ thư viện (trái) → <strong>canvas</strong> bên phải; <strong>cộng dồn</strong> dòng khớp. Thu gọn thư
-          viện khi cần chỉnh nhiều khối.
+        <p className="text-[10px] font-semibold leading-tight text-slate-800">
+          Builder —{' '}
+          <span className="font-normal text-slate-600">
+            kéo mẫu trái → canvas; cộng dồn dòng; thu gọn thư viện khi cần.
+          </span>
         </p>
         <div
           className={[
-            'mt-3 grid min-h-0 flex-1 gap-3',
+            'mt-1.5 grid min-h-0 flex-1 gap-2',
             canEdit && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEdit ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
-            workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[360px]',
+            workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[220px]',
           ].join(' ')}
         >
           {canEdit && ruleLibraryCollapsed ? (
-            <div className="flex min-h-[14rem] w-full flex-col items-center gap-2 self-stretch rounded-xl border border-amber-200/90 bg-gradient-to-b from-amber-50 via-white to-slate-50 py-3 shadow-sm">
+            <div className="flex min-h-[10rem] w-full flex-col items-center gap-1.5 self-stretch rounded-lg border border-amber-200/90 bg-gradient-to-b from-amber-50 via-white to-slate-50 py-2 shadow-sm">
               <button
                 type="button"
                 onClick={() => setRuleLibraryCollapsed(false)}
@@ -277,12 +285,12 @@ function ProfileEditorPanel({
       </div>
 
       {canEdit ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1.5">
           <button
             type="button"
             disabled={busy}
             onClick={() => void saveProfile()}
-            className="rounded-xl border border-emerald-600 bg-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50"
+            className="rounded-md border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
             title={undefined}
           >
             {busy ? 'Đang lưu…' : 'Lưu profile'}
@@ -292,13 +300,13 @@ function ProfileEditorPanel({
               type="button"
               disabled={busy}
               onClick={() => void deleteProfile()}
-              className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 shadow-sm hover:bg-rose-100 disabled:opacity-50"
+              className="rounded-md border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-800 shadow-sm hover:bg-rose-100 disabled:opacity-50"
             >
               Xóa profile
             </button>
           ) : (
-            <p className="text-xs text-slate-500">
-              Profile mặc định không thể xóa — có thể chỉnh sửa và chọn profile khác làm mặc định rồi xóa nếu cần.
+            <p className="max-w-md text-[10px] leading-snug text-slate-500">
+              Profile mặc định không xóa được — đặt profile khác làm mặc định rồi xóa nếu cần.
             </p>
           )}
         </div>
@@ -380,35 +388,35 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
           'flex min-h-0 flex-col border-slate-200/80',
           workspaceFullscreen
             ? 'h-full min-h-0 flex-1 overflow-hidden rounded-2xl border bg-white p-4 shadow-sm md:p-5'
-            : 'rounded-[22px] border bg-white/95 p-5 shadow-sm md:p-7',
+            : 'rounded-[22px] border bg-white/95 p-3 shadow-sm md:p-4',
         ].join(' ')}
       >
-        <div className="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4 md:pb-5">
+        <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-slate-200 pb-2 md:pb-3">
           <div className="min-w-0">
-            <VietMyAccentHeading as="h2" tone="onLight" size="lg">
+            <VietMyAccentHeading as="h2" tone="onLight" size="md">
               Bộ chấm điểm (Profiles)
             </VietMyAccentHeading>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-700 md:text-base">
-              Chọn profile ở **thanh ngay dưới**; bấm «Toàn màn» để kéo giãn vùng builder.
+            <p className="mt-0.5 max-w-2xl text-xs leading-snug text-slate-600">
+              Chọn profile dưới đây; «Toàn màn» để kéo giãn builder.
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {workspaceFullscreen ? (
               <button
                 type="button"
                 onClick={() => setWorkspaceFullscreen(false)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
               >
-                <X className="h-4 w-4 shrink-0" aria-hidden />
+                <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Đóng (Esc)
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setWorkspaceFullscreen(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
               >
-                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Toàn màn
               </button>
             )}
@@ -417,9 +425,9 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 type="button"
                 disabled={busy}
                 onClick={() => void createProfile()}
-                className="rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                className="rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
               >
-                + Tạo profile mới
+                + Tạo profile
               </button>
             ) : null}
           </div>
@@ -452,64 +460,61 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
 
         <div
           className={[
-            'mt-6 flex min-h-0 flex-1 flex-col gap-4',
-            workspaceFullscreen ? 'min-h-0 overflow-hidden' : 'min-h-[480px]',
+            'mt-2 flex min-h-0 flex-1 flex-col gap-1.5',
+            workspaceFullscreen ? 'min-h-0 overflow-hidden' : 'min-h-[240px]',
           ].join(' ')}
         >
-          {/* Danh sách profile gọn trong cùng cột nội dung — cuộn ngang khi nhiều */}
-          <div className="shrink-0 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-inner md:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Chọn profile</p>
-              {!loading && profiles.length > 4 ? (
-                <span className="text-[10px] text-slate-500">Cuộn ngang để xem thêm</span>
-              ) : null}
-            </div>
-            <div className="scroll-touch mt-2 flex gap-2 overflow-x-auto overflow-y-hidden pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5">
+          <div className="flex shrink-0 items-stretch gap-1.5 rounded-lg border border-slate-200 bg-white/90 p-1 shadow-inner">
+            <p className="flex w-[4.5rem] shrink-0 items-center justify-center rounded border border-slate-100 bg-slate-50 px-0.5 text-center text-[8px] font-bold uppercase leading-tight tracking-tight text-slate-600">
+              Chọn profile
+            </p>
+            <div className="scroll-touch flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden py-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1">
               {loading ? (
-                <p className="shrink-0 py-2 text-sm text-slate-600">Đang tải…</p>
+                <p className="shrink-0 self-center text-[10px] text-slate-600">Đang tải…</p>
               ) : !profiles.length ? (
-                <p className="min-w-0 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  Chưa có profile. Bấm «Tạo profile mới» ở trên.
+                <p className="min-w-0 shrink-0 self-center rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-700">
+                  Chưa có profile — bấm «Tạo profile».
                 </p>
               ) : (
                 <AnimatePresence initial={false} mode="popLayout">
-                  {profiles.map((p) => (
+                  {profiles.map((p) => {
+                    const meta = `${(p.ruleBlocks?.length ?? 0) || p.rules.length} · ${p.thresholds.hotMinScore}/${p.thresholds.warmMinScore}`
+                    const title = [p.profileName.trim() || '—', p.description?.trim() || '—', meta].join(' · ')
+                    return (
                     <motion.button
                       key={p.id}
                       type="button"
                       layout
-                      initial={{ opacity: 0, y: 6 }}
+                      initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      title={title}
                       onClick={() => selectProfile(p)}
                       className={[
-                        'shrink-0 rounded-xl border px-3 py-2.5 text-left transition-all duration-300 md:min-w-[10.5rem] md:max-w-[14rem]',
+                        'flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded border px-1.5 text-left transition-all duration-200',
                         p.id === effectiveSelectedId
-                          ? 'border-amber-400 bg-amber-50 shadow-md ring-2 ring-amber-200/80'
+                          ? 'border-amber-400 bg-amber-50 shadow-sm ring-1 ring-amber-200/80'
                           : 'border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50/40',
                       ].join(' ')}
                     >
-                      <div className="flex items-start justify-between gap-1.5">
-                        <p className="min-w-0 max-w-[11rem] truncate text-sm font-semibold leading-snug text-slate-900">
-                          {p.profileName.trim() || '—'}
-                        </p>
-                        {p.isDefaultForImport ? (
-                          <span
-                            className="shrink-0 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white ring-1 ring-amber-200/70"
-                            title="Profile mặc định toàn hệ thống"
-                          >
-                            DEF
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-600">{p.description || '—'}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        {(p.ruleBlocks?.length ?? 0) || p.rules.length} khối · HOT {p.thresholds.hotMinScore} · WARM{' '}
-                        {p.thresholds.warmMinScore}
-                      </p>
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-none text-slate-900">
+                        {p.profileName.trim() || '—'}
+                      </span>
+                      {p.isDefaultForImport ? (
+                        <span
+                          className="shrink-0 rounded bg-amber-500 px-0.5 text-[7px] font-extrabold uppercase text-white"
+                          title="Mặc định"
+                        >
+                          D
+                        </span>
+                      ) : null}
+                      <span className="shrink-0 font-mono text-[9px] tabular-nums leading-none text-slate-500">
+                        {meta}
+                      </span>
                     </motion.button>
-                  ))}
+                    )
+                  })}
                 </AnimatePresence>
               )}
             </div>
@@ -517,7 +522,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
 
           <div
             className={[
-              'flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50/40 via-white to-amber-50/30 p-5 shadow-inner md:p-6',
+              'flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-gradient-to-br from-sky-50/40 via-white to-amber-50/30 p-2 shadow-inner md:p-2',
               workspaceFullscreen ? 'min-h-0 overflow-hidden' : '',
             ].join(' ')}
           >
