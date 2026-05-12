@@ -231,15 +231,13 @@ function ProfileEditorPanel({
           .join(' ')}
       >
         <p className="text-sm font-semibold text-slate-800">Scoring Profile Builder</p>
-        <p className="mt-1 text-xs text-slate-600">
-          Kéo mẫu từ thư viện, gán điểm ±, lưu — profile xuất hiện trong dropdown trên Bảng lead / Dashboard. Engine{' '}
-          <strong>cộng dồn</strong> mọi dòng khớp (có thể âm). Nhãn HOT/WARM/COLD/LOSS theo <strong>ngưỡng HOT/WARM</strong> bạn
-          nhập ở trên (mỗi profile riêng, kể cả mặc định).
+        <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
+          Kéo mẫu từ cột trái → canvas; <strong>cộng dồn</strong> dòng khớp · nhãn theo ngưỡng ở form trên.
         </p>
         <div
           className={[
-            'mt-4 grid gap-4 xl:grid-cols-[minmax(240px,280px)_1fr] xl:items-stretch',
-            workspaceLayout ? 'min-h-0 flex-1 xl:min-h-0' : 'min-h-[460px]',
+            'mt-3 grid gap-3 lg:grid-cols-[minmax(152px,188px)_1fr] lg:items-stretch xl:grid-cols-[minmax(168px,200px)_1fr]',
+            workspaceLayout ? 'min-h-0 flex-1 lg:min-h-0' : 'min-h-[360px]',
           ].join(' ')}
         >
           {canEdit ? <RuleLibrarySidebar canEdit={canEdit} fillHeight={Boolean(workspaceLayout)} /> : null}

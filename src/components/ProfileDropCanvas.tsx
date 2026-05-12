@@ -24,13 +24,6 @@ const ALLOCATION_OPTIONS: { value: ScoringRuleAllocationKind; label: string }[] 
 
 const REORDER_MIME = 'text/x-vietmy-block-index'
 
-/** Màu chữ theo dấu điểm (cộng dồn không giới hạn, có thể âm). */
-function signedPointsClass(n: number): string {
-  if (n > 0) return 'text-emerald-400'
-  if (n < 0) return 'text-rose-400'
-  return 'text-slate-300'
-}
-
 function formatSignedPoints(n: number): string {
   if (!Number.isFinite(n)) return '0'
   if (n > 0) return `+${n}`
@@ -53,16 +46,13 @@ function allocationPreviewPoints(block: ScoringRuleBlock, r: ScoringRuleConditio
   return p
 }
 
-/** Header canvas: không còn thanh “ngân sách 100 điểm”. */
+/** Header canvas — một dòng để nhường chiều cao cho khối kéo thả. */
 function CumulativeScoringCanvasHeader() {
   return (
-    <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 shadow-[0_0_22px_rgba(56,189,248,0.12)] ring-1 ring-sky-400/25 backdrop-blur-xl">
-      <p className="text-xs font-bold uppercase tracking-[0.26em] text-slate-300">Chấm điểm tích lũy</p>
-      <p className="mt-2 text-sm leading-relaxed text-slate-200">
-        Mỗi dòng điều kiện khớp được <span className="font-semibold text-sky-200">cộng hoặc trừ</span> điểm theo giá trị bạn nhập
-        (vd. <span className={signedPointsClass(35)}>{formatSignedPoints(35)}</span>,{' '}
-        <span className={signedPointsClass(-50)}>{formatSignedPoints(-50)}</span>) — <strong>không trần 100</strong>. Nhãn
-        HOT/WARM/COLD/LOSS theo <strong>ngưỡng trong từng profile</strong> (mặc định 80 / 50 nếu không đặt).
+    <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200/90 bg-white/95 px-2.5 py-2 shadow-sm backdrop-blur-sm">
+      <p className="text-[11px] font-semibold leading-snug text-slate-700">
+        Canvas · <span className="text-slate-600">cộng dồn ± theo dòng khớp</span> · nhãn HOT/WARM theo ngưỡng profile ở
+        form trên
       </p>
     </header>
   )
@@ -98,42 +88,42 @@ function RuleConfigurationCard({
       layout
       onDragOver={onDragOver}
       onDrop={(e) => onDropOnCard(e, index)}
-      className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-md"
+      className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-2.5 shadow-sm"
     >
-      <div className="flex flex-wrap items-start gap-3 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap items-start gap-2 border-b border-slate-200 pb-2">
         <button
           type="button"
           draggable={canEdit}
           onDragStart={(e) => onDragStartReorder(e, index)}
-          className="mt-1 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
+          className="mt-0.5 shrink-0 rounded-md border border-slate-200 bg-white p-1 text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
           disabled={!canEdit}
           aria-label="Kéo để sắp xếp khối"
         >
-          <GripVertical className="h-4 w-4" />
+          <GripVertical className="h-3.5 w-3.5" />
         </button>
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
-            {RULE_CATEGORY_LABELS[block.category]} · Khối #{index + 1}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+            {RULE_CATEGORY_LABELS[block.category]} · #{index + 1}
           </p>
           <input
             value={block.label}
             disabled={!canEdit}
             onChange={(e) => onPatch({ label: e.target.value })}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/35 disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/40 disabled:opacity-50"
             placeholder="Nhãn khối"
           />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block text-xs text-slate-600">
-              Trường lead (targetField)
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            <label className="block text-[10px] text-slate-600">
+              Trường lead
               <input
                 value={String(block.targetField)}
                 disabled={!canEdit}
                 onChange={(e) => onPatch({ targetField: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
+                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
               />
             </label>
-            <label className="block text-xs text-slate-600">
-              Max weight (cơ sở cho % trên khối; ≥ 0)
+            <label className="block text-[10px] text-slate-600">
+              Max weight (≥ 0)
               <input
                 type="number"
                 min={0}
@@ -141,7 +131,7 @@ function RuleConfigurationCard({
                 value={block.maxWeight}
                 disabled={!canEdit}
                 onChange={(e) => onPatch({ maxWeight: Math.max(0, Number(e.target.value) || 0) })}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
+                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
               />
             </label>
           </div>
@@ -150,26 +140,26 @@ function RuleConfigurationCard({
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"
+            className="shrink-0 rounded-md border border-rose-200 bg-rose-50 p-1.5 text-rose-700 hover:bg-rose-100"
             aria-label="Xóa khối"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         ) : null}
       </div>
 
-      <div className="mt-3 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-slate-700">
-            Điều kiện trong khối — <span className="font-bold text-violet-800">cộng dồn</span> mọi dòng khớp
+      <div className="mt-2 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-1.5">
+          <p className="text-[10px] font-semibold text-slate-700">
+            Điều kiện <span className="font-bold text-violet-800">cộng dồn</span>
           </p>
           {canEdit ? (
             <button
               type="button"
               onClick={onAddRow}
-              className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 hover:bg-violet-100"
+              className="rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-900 hover:bg-violet-100"
             >
-              + Thêm điều kiện
+              + Dòng
             </button>
           ) : null}
         </div>
@@ -177,15 +167,15 @@ function RuleConfigurationCard({
           const previewPts = allocationPreviewPoints(block, r)
           const allocNum = Number(r.allocationValue)
           const allocInputClass =
-            'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm tabular-nums disabled:opacity-50 ' +
+            'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs tabular-nums disabled:opacity-50 ' +
             signedPointsOnLight(allocNum)
           return (
           <div
             key={r.id}
-            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+            className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm"
           >
-            <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-              <label className="text-xs text-slate-600">
+            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-12 lg:items-end lg:gap-x-2">
+              <label className="text-[10px] text-slate-600 lg:col-span-2">
                 Điều kiện
                 <select
                   value={r.condition}
@@ -193,7 +183,7 @@ function RuleConfigurationCard({
                   onChange={(e) =>
                     onPatchRow(ri, { condition: e.target.value as ProfileScoringCondition })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
+                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
                 >
                   {CONDITION_OPTIONS.map((c) => (
                     <option key={c.value} value={c.value}>
@@ -202,7 +192,7 @@ function RuleConfigurationCard({
                   ))}
                 </select>
               </label>
-              <label className="text-xs text-slate-600 md:col-span-2 lg:col-span-2">
+              <label className="text-[10px] text-slate-600 lg:col-span-4">
                 Giá trị
                 <input
                   value={Array.isArray(r.value) ? r.value.join(', ') : String(r.value)}
@@ -213,18 +203,18 @@ function RuleConfigurationCard({
                       value: r.condition === 'IN_LIST' ? v.split(',').map((s) => s.trim()) : v,
                     })
                   }}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-40"
+                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-40"
                 />
               </label>
-              <label className="text-xs text-slate-600">
-                Cách phân bổ
+              <label className="text-[10px] text-slate-600 lg:col-span-2">
+                Phân bổ
                 <select
                   value={r.allocationKind}
                   disabled={!canEdit}
                   onChange={(e) =>
                     onPatchRow(ri, { allocationKind: e.target.value as ScoringRuleAllocationKind })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
+                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
                 >
                   {ALLOCATION_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -233,10 +223,8 @@ function RuleConfigurationCard({
                   ))}
                 </select>
               </label>
-              <label className="text-xs text-slate-600">
-                {r.allocationKind === 'percent_of_max'
-                  ? 'Phần trăm trên Max weight (%, có thể âm)'
-                  : 'Điểm nếu khớp (+ cộng / − trừ)'}
+              <label className="text-[10px] text-slate-600 lg:col-span-2">
+                {r.allocationKind === 'percent_of_max' ? '% hoặc ±' : 'Điểm ±'}
                 <input
                   type="number"
                   step={1}
@@ -246,18 +234,14 @@ function RuleConfigurationCard({
                   className={allocInputClass}
                 />
               </label>
-              <div className="flex flex-col justify-end text-xs text-slate-600">
+              <div className="flex flex-col justify-end gap-0.5 text-[10px] text-slate-600 lg:col-span-2">
                 {r.allocationKind === 'percent_of_max' ? (
-                  <span>
+                  <span className="leading-tight">
                     ≈{' '}
-                    <span className={signedPointsOnLight(previewPts)}>
-                      {formatSignedPoints(previewPts)}
-                    </span>{' '}
-                    điểm nếu khớp (Max weight × % / 100)
+                    <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
                   </span>
                 ) : (
-                  <span>
-                    Khi khớp:{' '}
+                  <span className="leading-tight">
                     <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
                   </span>
                 )}
@@ -265,9 +249,9 @@ function RuleConfigurationCard({
                   <button
                     type="button"
                     onClick={() => onRemoveRow(ri)}
-                    className="mt-2 self-start text-xs text-rose-700 hover:underline"
+                    className="self-start text-[10px] text-rose-700 hover:underline"
                   >
-                    Xóa điều kiện
+                    Xóa dòng
                   </button>
                 ) : null}
               </div>
@@ -393,7 +377,7 @@ export function ProfileDropCanvas({
     <div
       className={[
         'flex flex-col',
-        workspaceLayout ? 'min-h-0 flex-1' : 'min-h-[420px]',
+        workspaceLayout ? 'min-h-0 flex-1' : 'min-h-[320px]',
       ].join(' ')}
     >
       <CumulativeScoringCanvasHeader />
@@ -402,16 +386,15 @@ export function ProfileDropCanvas({
         onDragOver={onDragOverAllow}
         onDrop={onDropCanvas}
         className={[
-          'relative space-y-3 overflow-y-auto rounded-2xl border border-dashed border-sky-300/80 bg-gradient-to-b from-sky-50/50 to-white p-4 pb-8',
+          'relative space-y-2 overflow-y-auto rounded-xl border border-dashed border-sky-300/70 bg-gradient-to-b from-sky-50/40 to-white p-3 pb-6',
           workspaceLayout ? 'min-h-0 flex-1' : 'flex-1',
         ].join(' ')}
       >
         {blocks.length === 0 ? (
-          <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-center">
-            <p className="text-sm font-medium text-slate-800">Canvas trống</p>
-            <p className="max-w-sm text-xs text-slate-600">
-              Kéo mẫu từ thư viện bên trái và thả vào đây. Max weight chỉ là gợi ý cho % trên khối; engine cộng dồn
-              mọi dòng khớp (điểm có thể âm).
+          <div className="flex min-h-[120px] flex-col items-center justify-center gap-1.5 text-center">
+            <p className="text-xs font-medium text-slate-800">Canvas trống</p>
+            <p className="max-w-md text-[10px] leading-snug text-slate-600">
+              Kéo mẫu từ cột «Thư viện» thả vào đây. Sắp xếp khối: kéo biểu tượng ⋮⋮ ở đầu từng thẻ.
             </p>
           </div>
         ) : null}
