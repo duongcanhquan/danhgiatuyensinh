@@ -81,6 +81,10 @@ export function parseWorkbookToRows(file: ArrayBuffer): Partial<ExcelLeadRow>[] 
     cellStyles: false,
     cellDates: false,
     dense: true,
+    /** Bỏ định dạng HTML / NF / chuỗi hiển thị — parse nhanh hơn với sheet lớn. */
+    cellHTML: false,
+    cellNF: false,
+    cellText: false,
   })
   const names = wb.SheetNames
   const preferred =
@@ -90,7 +94,11 @@ export function parseWorkbookToRows(file: ArrayBuffer): Partial<ExcelLeadRow>[] 
   const sheetName = preferred
   if (!sheetName) return []
   const sheet = wb.Sheets[sheetName]
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: '',
+    /** Giá trị thô — ít xử lý định dạng, mapSheetRow vẫn String(hóa). */
+    raw: true,
+  })
   return json.map((row) => mapSheetRow(row))
 }
 

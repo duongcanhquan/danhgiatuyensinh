@@ -35,8 +35,15 @@ const BATCH_SIZE = 500
 const ROUTING_ASSIGNMENT_SAMPLE = 500
 /** Firestore `in` tối đa 30 giá trị; chunk lớn hơn = ít round-trip hơn. */
 const IN_QUERY_CHUNK = 30
-/** Số truy vấn `in` chạy song song (tránh chặn UI quá lâu khi file lớn). */
-const EXISTING_HASH_QUERY_CONCURRENCY = 12
+/** Số truy vấn `in` chạy song song (Firestore cho tối đa 30 giá trị/`in`). */
+const EXISTING_HASH_QUERY_CONCURRENCY = 24
+
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve())
+    else setTimeout(resolve, 0)
+  })
+}
 
 type PreparedRow = {
   index: number
@@ -75,10 +82,13 @@ function omitUndefined<T extends Record<string, unknown>>(o: T): Record<string, 
 async function fetchExistingIdsByHash(
   db: NonNullable<ReturnType<typeof getFirestoreDb>>,
   hashes: string[],
+  onWaveDone?: (waveIndex: number, waveCount: number) => void,
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   const uniq = [...new Set(hashes)].filter(Boolean)
   const parts = chunkArray(uniq, IN_QUERY_CHUNK)
+  const waveCount = Math.max(1, Math.ceil(parts.length / EXISTING_HASH_QUERY_CONCURRENCY))
+  let waveIndex = 0
   for (let i = 0; i < parts.length; i += EXISTING_HASH_QUERY_CONCURRENCY) {
     const group = parts.slice(i, i + EXISTING_HASH_QUERY_CONCURRENCY)
     const snaps = await Promise.all(
@@ -92,6 +102,9 @@ async function fetchExistingIdsByHash(
         if (h && !map.has(String(h))) map.set(String(h), d.id)
       })
     }
+    waveIndex += 1
+    onWaveDone?.(waveIndex, waveCount)
+    await yieldToMain()
   }
   return map
 }
@@ -197,13 +210,14 @@ export function DataIntake() {
         return
       }
       setBusy(true)
-      setBanner('Đang đọc file và kiểm tra trùng lặp…')
+      setBanner('Đang đọc file Excel…')
       setPreview(null)
       try {
         const buf = await file.arrayBuffer()
+        await yieldToMain()
         const rows = parseWorkbookToRows(buf)
         if (!rows.length) {
-          setBanner('Không tìm thấy dữ liệu trong sheet đầu tiên.')
+          setBanner('Không tìm thấy dữ liệu trong sheet «Hồ sơ» / «Leads» hoặc sheet đầu tiên.')
           setBusy(false)
           return
         }
@@ -218,6 +232,9 @@ export function DataIntake() {
         const uploadBatchId = crypto.randomUUID()
         const uploadedBy = profile.id
         const uploaderName = profile.displayName?.trim() || profile.email || uploadedBy
+
+        setBanner(`Đang tính mã từng dòng (${rows.length.toLocaleString('vi-VN')} dòng)…`)
+        await yieldToMain()
 
         const hashRows = rows.map((row, index) => ({
           index,
@@ -234,7 +251,18 @@ export function DataIntake() {
         })
 
         const hashesForQuery = prepared.filter((p) => !p.inFileDuplicate).map((p) => p.hash)
-        const existingByHash = await fetchExistingIdsByHash(db, hashesForQuery)
+        const uniqQueryCount = new Set(hashesForQuery).size
+        const queryParts = Math.max(1, Math.ceil(uniqQueryCount / IN_QUERY_CHUNK))
+        const waveTotal = Math.max(1, Math.ceil(queryParts / EXISTING_HASH_QUERY_CONCURRENCY))
+        setBanner(
+          `Đang kiểm tra trùng trên hệ thống (${uniqQueryCount.toLocaleString('vi-VN')} mã, ~${waveTotal} nhóm truy vấn)…`,
+        )
+
+        const existingByHash = await fetchExistingIdsByHash(db, hashesForQuery, (wave, waves) => {
+          setBanner(
+            `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
+          )
+        })
         for (const p of prepared) {
           if (!p.inFileDuplicate) {
             const id = existingByHash.get(p.hash)
@@ -407,15 +435,10 @@ export function DataIntake() {
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-8 md:py-12">
       <div className="mx-auto w-full space-y-5 text-center">
-        <header className="space-y-2">
+        <header>
           <VietMyAccentHeading as="h1" tone="onLight" size="lg" className="block text-center">
             Nhập liệu thông minh
           </VietMyAccentHeading>
-          <p className="text-left text-sm leading-relaxed text-slate-600 sm:text-center">
-            Tải mẫu → điền sheet «Hồ sơ» → <strong>tải lên</strong> file .xlsx. Chỉ dòng <strong>mới</strong> được ghi;
-            «Người phụ trách» khớp TVV/Admin thì gán đúng người — không khớp thì gán Admin chờ điều phối trong «Quản lý
-            hồ sơ».
-          </p>
         </header>
 
         {!canIntake ? (
