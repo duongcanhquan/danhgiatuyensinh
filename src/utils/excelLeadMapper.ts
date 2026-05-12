@@ -2,21 +2,30 @@ import * as XLSX from 'xlsx'
 import type { Lead, LeadCounselorStatus, PriorityTag } from '../types'
 import { coerceLeadCounselorStatus, counselorStatusToPipeline } from './leadIdentity'
 
-/** Map tiêu đề cột Excel (tiếng Việt) → khóa parser — so khớp sau chuẩn hoá. */
+/** Map tiêu đề cột Excel (sau chuẩn hoá) → khóa parser. Giữ alias cũ để file mẫu cũ vẫn đọc được. */
 const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'ma kh': 'customerId',
   'ma khach hang': 'customerId',
   'ten khach hang': 'fullName',
+  'ten sinh vien': 'fullName',
   'dien thoai': 'phone',
   'dien thoai nguoi lien he chinh': 'parentPhone',
+  'dt nguoi lien he': 'parentPhone',
+  'dien thoai nguoi lien he': 'parentPhone',
   'nguon khach hang': 'source',
+  nguon: 'source',
   'he dao tao': 'educationLevel',
   'nguoi phu trach': 'assignedToRaw',
   'tinh trang': 'statusRaw',
   'mo ta': 'description',
+  'ghi chu them': 'description',
+  'ghi chu': 'description',
   'truong hoc': 'highSchool',
-  'lop': 'gradeClass',
+  lop: 'gradeClass',
   'tinh thanh pho': 'province',
+  'tinh /thanh pho': 'province',
+  'tinh / thanh pho': 'province',
+  'tinh/thanh pho': 'province',
   'dia chi': 'address',
 }
 
@@ -174,40 +183,42 @@ export function buildLeadFirestorePayload(
 }
 
 export function downloadStandardIntakeTemplate(): void {
-  /** Hàng 1 đúng mẫu VietMy: A–G, cột H–J để trống (giữ layout), K–P. Parser vẫn đọc theo tên cột, không phụ thuộc vị trí. */
+  /** Hàng 1 mẫu VietMy: 13 cột A–M theo thứ tự cố định. Parser vẫn đọc theo tên cột, không phụ thuộc vị trí. */
   const headers = [
-    'Tên khách hàng',
+    'Tên sinh viên',
     'Điện thoại',
-    'Nguồn khách hàng',
+    'Nguồn',
     'Hệ đào tạo',
     'Người phụ trách',
     'Tình trạng',
-    'Mô tả',
-    '',
-    '',
-    '',
+    'Ghi Chú thêm',
     'Trường học',
     'Lớp',
-    'Tỉnh/thành phố',
+    'Tỉnh /Thành Phố',
     'Địa chỉ',
-    'Điện thoại người liên hệ chính',
+    'ĐT Người liên hệ',
     'Mã KH',
   ]
   const ws = XLSX.utils.aoa_to_sheet([headers])
-  ws['!cols'] = headers.map((h) => ({ wch: h ? 22 : 4 }))
+  ws['!cols'] = headers.map(() => ({ wch: 22 }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Hồ sơ')
 
   const instructions: string[][] = [
     ['VietMy Admissions OS — mẫu nhập hồ sơ'],
     [''],
-    ['1. Giữ nguyên hàng tiêu đề (dòng 1) và thứ tự cột như sheet «Hồ sơ». Có thể dùng sheet tên «Leads».'],
+    [
+      '1. Giữ nguyên hàng tiêu đề (dòng 1): 13 cột A–M — Tên sinh viên, Điện thoại, Nguồn, Hệ đào tạo, Người phụ trách, Tình trạng, Ghi Chú thêm, Trường học, Lớp, Tỉnh /Thành Phố, Địa chỉ, ĐT Người liên hệ, Mã KH. Có thể dùng sheet tên «Leads».',
+    ],
     [
       '2. «Người phụ trách»: ghi tên hiển thị (như trên hệ thống đăng nhập) hoặc email đăng nhập — khớp danh bạ TVV; có thể thêm UID nếu cần.',
     ],
     ['   Khuyến nghị: ưu tiên tên hiển thị hoặc email; nếu hai TVV trùng tên thì bắt buộc dùng email.'],
     ['3. «Tình trạng»: Mới, Quan tâm / đang tư vấn, Đã cọc, Nhập học, … (hệ thống chuẩn hoá về Kanban).'],
     ['4. Điểm chấm & nhãn HOT/WARM/COLD/LOSS do engine tính sau upload.'],
+    [
+      '5. Khi tải lên: chỉ các dòng mới được ghi. Trùng trong file hoặc đã tồn tại trên hệ thống (cùng fingerprint) bị từ chối — không ghi đè bản cũ.',
+    ],
     [''],
     ['© VietMy'],
   ]

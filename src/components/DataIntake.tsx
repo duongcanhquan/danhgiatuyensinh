@@ -36,8 +36,6 @@ const BATCH_SIZE = 500
 const ROUTING_ASSIGNMENT_SAMPLE = 500
 const IN_QUERY_CHUNK = 25
 
-type ImportStrategy = 'skip_dupes' | 'update_dupes'
-
 type PreparedRow = {
   index: number
   row: Partial<ExcelLeadRow>
@@ -128,7 +126,6 @@ export function DataIntake() {
   const [banner, setBanner] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
-  const [strategy, setStrategy] = useState<ImportStrategy>('skip_dupes')
 
   const masterBuckets = useMemo(
     () => ({ regionLabels, highSchoolLabels, majorLabels }),
@@ -141,11 +138,13 @@ export function DataIntake() {
     if (!preview) return null
     const { prepared } = preview
     const total = prepared.length
-    const inFileDup = prepared.filter((p) => p.inFileDuplicate).length
-    const withDbHit = prepared.filter((p) => p.existingId && !p.inFileDuplicate).length
-    const fresh = prepared.filter((p) => !p.inFileDuplicate && !p.existingId).length
-    const dupTotal = total - fresh
-    return { total, fresh, dupTotal, inFileDup, withDbHit }
+    /** Dòng sau bản đầu tiên cùng fingerprint trong file — không nhập. */
+    const rejectedInFile = prepared.filter((p) => p.inFileDuplicate).length
+    /** Đã tồn tại trên Firestore (cùng fingerprint) — không nhập, không ghi đè. */
+    const rejectedOnDb = prepared.filter((p) => p.existingId && !p.inFileDuplicate).length
+    const acceptedNew = prepared.filter((p) => !p.inFileDuplicate && !p.existingId).length
+    const rejectedTotal = rejectedInFile + rejectedOnDb
+    return { total, acceptedNew, rejectedInFile, rejectedOnDb, rejectedTotal }
   }, [preview])
 
   const runParseAndPreview = useCallback(
@@ -215,7 +214,6 @@ export function DataIntake() {
         }
 
         setPreview({ fileName: file.name, prepared, uploadBatchId, uploadedBy, uploaderName })
-        setStrategy('skip_dupes')
         setBanner(null)
       } catch (e) {
         console.error(e)
@@ -247,10 +245,18 @@ export function DataIntake() {
       const ownership = { uploadedBy, uploaderName, uploadBatchId }
 
       const toCreate: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
-      const toUpdate: { id: string; patch: Record<string, unknown> }[] = []
+      let rejectedInFile = 0
+      let rejectedOnDb = 0
 
       for (const pr of prepared) {
-        if (pr.inFileDuplicate) continue
+        if (pr.inFileDuplicate) {
+          rejectedInFile += 1
+          continue
+        }
+        if (pr.existingId) {
+          rejectedOnDb += 1
+          continue
+        }
 
         const record = {
           customerId: pr.row.customerId,
@@ -278,34 +284,18 @@ export function DataIntake() {
         })
         const now = Timestamp.now()
 
-        if (pr.existingId) {
-          if (strategy !== 'update_dupes') continue
-          const { status, nextFollowUpDate, ...mergeRest } = base
-          void status
-          void nextFollowUpDate
-          toUpdate.push({
-            id: pr.existingId,
-            patch: omitUndefined({
-              ...mergeRest,
-              uniqueHash: pr.hash,
-              updatedAt: now,
-              lastTouchedAt: now,
-            } as Record<string, unknown>),
-          })
-        } else {
-          const ref = doc(collection(db, FS_COLLECTIONS.leads))
-          toCreate.push({
-            ref,
-            data: omitUndefined({
-              ...base,
-              uploadedAt: now,
-              importedAt: now,
-              createdAt: now,
-              updatedAt: now,
-              lastTouchedAt: now,
-            } as Record<string, unknown>) as Record<string, unknown>,
-          })
-        }
+        const ref = doc(collection(db, FS_COLLECTIONS.leads))
+        toCreate.push({
+          ref,
+          data: omitUndefined({
+            ...base,
+            uploadedAt: now,
+            importedAt: now,
+            createdAt: now,
+            updatedAt: now,
+            lastTouchedAt: now,
+          } as Record<string, unknown>) as Record<string, unknown>,
+        })
       }
 
       for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
@@ -316,15 +306,10 @@ export function DataIntake() {
         await batch.commit()
       }
 
-      for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
-        const batch = writeBatch(db)
-        for (const u of toUpdate.slice(i, i + BATCH_SIZE)) {
-          batch.update(doc(db, FS_COLLECTIONS.leads, u.id), u.patch)
-        }
-        await batch.commit()
-      }
-
-      const msg = `Hoàn tất: ${toCreate.length} hồ sơ mới, ${toUpdate.length} bản ghi cập nhật (mã lô ${uploadBatchId.slice(0, 8)}…).`
+      const msg =
+        toCreate.length > 0
+          ? `Đã nhập ${toCreate.length} hồ sơ mới (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.`
+          : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
       setPreview(null)
     } catch (e) {
@@ -333,7 +318,7 @@ export function DataIntake() {
     } finally {
       setBusy(false)
     }
-  }, [preview, db, profile, profiles, masterBuckets, counselors, strategy])
+  }, [preview, db, profile, profiles, masterBuckets, counselors])
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault()
@@ -359,8 +344,9 @@ export function DataIntake() {
           Nhập liệu thông minh
         </VietMyAccentHeading>
         <p className="mt-1 text-base text-slate-600">
-          Tải mẫu chuẩn → điền dữ liệu → kéo thả .xlsx. Hệ thống phát hiện trùng theo SĐT (hoặc Họ tên + Ngày
-          sinh/Tuổi) trước khi ghi Firestore.
+          Tải mẫu chuẩn → điền dữ liệu → kéo thả .xlsx. Chỉ các dòng <strong>mới</strong> (chưa tồn tại, không trùng
+          trong file) mới được ghi; trùng trong file hoặc đã có trên hệ thống sẽ bị <strong>từ chối</strong> và báo
+          số lượng.
         </p>
       </header>
 
@@ -394,7 +380,7 @@ export function DataIntake() {
           <p className="text-sm font-semibold text-slate-900">Danh bạ tư vấn (đối chiếu cột «Người phụ trách»)</p>
           <p className="mt-1 text-sm leading-relaxed text-slate-600">
             Cột «Người phụ trách» trong file phải trùng <strong>tên hiển thị</strong> hoặc <strong>email đăng nhập</strong> như
-            dưới (mẫu tải về có đúng thứ tự tiêu đề A–G, cột H–J trống, K–P). Nếu hai TVV trùng tên, dùng email.
+            dưới (mẫu tải về có đúng thứ tự 13 tiêu đề cột A–M như sheet «Hồ sơ»). Nếu hai TVV trùng tên, dùng email.
           </p>
           <ul className="mt-3 max-h-52 list-none space-y-1 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm text-slate-800">
             {counselorsSorted.map((c) => (
@@ -435,7 +421,8 @@ export function DataIntake() {
         <FileSpreadsheet className="mb-3 h-10 w-10 text-amber-600" strokeWidth={1.25} />
         <p className="text-base font-semibold text-slate-900">Thả file .xlsx vào đây</p>
         <p className="mt-2 max-w-md text-sm text-slate-600">
-          Dùng sheet «Hồ sơ» trong mẫu; gộp trùng theo SĐT học sinh / phụ huynh, hoặc fingerprint khi thiếu SĐT.
+          Dùng sheet «Hồ sơ» trong mẫu. Trùng trong file (cùng fingerprint) hoặc đã có trên DB → không nhập, chỉ báo
+          số lượng.
         </p>
         {busy && !preview ? <p className="mt-4 text-sm text-emerald-700">Đang xử lý — vui lòng chờ…</p> : null}
       </div>
@@ -449,18 +436,19 @@ export function DataIntake() {
                 {preview.fileName}
               </h2>
               <p className="mt-2 text-base text-slate-600">
-                Tìm thấy <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng.{' '}
-                <span className="font-medium text-emerald-700">{previewStats.fresh} mới</span>
-                {previewStats.dupTotal > 0 ? (
+                Tìm thấy <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng —{' '}
+                <span className="font-medium text-emerald-700">{previewStats.acceptedNew} sẽ được nhập</span>
+                {previewStats.rejectedTotal > 0 ? (
                   <>
-                    . <span className="font-medium text-amber-800">{previewStats.dupTotal} trùng / đã tồn tại</span>
+                    ; <span className="font-medium text-rose-800">{previewStats.rejectedTotal} từ chối</span> (
+                    {previewStats.rejectedInFile} trùng trong file, {previewStats.rejectedOnDb} đã có trên hệ thống)
                   </>
                 ) : null}
                 .
               </p>
-              {previewStats.inFileDup > 0 ? (
-                <p className="mt-1 text-sm text-slate-500">
-                  {previewStats.inFileDup} dòng trùng trong file — chỉ giữ bản đầu tiên cho mỗi fingerprint.
+              {previewStats.rejectedInFile > 0 ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  Trùng trong file: các dòng sau trùng fingerprint với dòng đầu tiên — không nhập.
                 </p>
               ) : null}
             </div>
@@ -475,54 +463,34 @@ export function DataIntake() {
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-emerald-800">{previewStats.fresh}</p>
-              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Lead mới</p>
+              <p className="text-2xl font-bold text-emerald-800">{previewStats.acceptedNew}</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Dòng mới (nhập)</p>
             </div>
-            <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-violet-800">{previewStats.withDbHit}</p>
-              <p className="text-sm font-semibold uppercase tracking-wide text-violet-700">Đã có trên DB</p>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-center shadow-sm">
+              <p className="text-2xl font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-rose-700">Từ chối — đã có DB</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-slate-800">{previewStats.inFileDup}</p>
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">Trùng trong file</p>
+              <p className="text-2xl font-bold text-slate-800">{previewStats.rejectedInFile}</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">Từ chối — trùng file</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200/90 bg-white/80 p-4 shadow-inner">
-            <p className="text-sm font-medium text-slate-600">Trùng với dữ liệu hiện có</p>
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-800 shadow-sm transition hover:border-amber-300">
-                <input
-                  type="radio"
-                  name="dedupe-strat"
-                  checked={strategy === 'skip_dupes'}
-                  onChange={() => setStrategy('skip_dupes')}
-                  className="accent-amber-400"
-                />
-                Bỏ qua bản trùng (chỉ tạo hồ sơ mới)
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-800 shadow-sm transition hover:border-violet-300">
-                <input
-                  type="radio"
-                  name="dedupe-strat"
-                  checked={strategy === 'update_dupes'}
-                  onChange={() => setStrategy('update_dupes')}
-                  className="accent-violet-400"
-                />
-                Cập nhật bản ghi đã có (giữ trạng thái CRM &amp; lịch follow-up)
-              </label>
-            </div>
+          <div className="rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 shadow-inner">
+            <strong>Chính sách lọc:</strong> chỉ ghi các dòng chưa tồn tại trên hệ thống và không trùng lặp trong file.
+            Không cập nhật hay ghi đè bản ghi cũ.
           </div>
 
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || previewStats.acceptedNew === 0}
               onClick={() => void commitImport()}
+              title={previewStats.acceptedNew === 0 ? 'Không có dòng mới để nhập' : undefined}
               className="inline-flex items-center gap-2 rounded-2xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:brightness-105 disabled:opacity-40"
             >
               <Upload className="h-4 w-4" />
-              Xác nhận nhập
+              Xác nhận nhập ({previewStats.acceptedNew} mới)
             </button>
           </div>
         </div>

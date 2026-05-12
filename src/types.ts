@@ -195,13 +195,13 @@ export interface Lead {
   id: DocumentId
   /** Mã KH */
   customerId: string
-  /** Tên khách hàng */
+  /** Tên sinh viên (mẫu Excel); trường `fullName` */
   fullName: string
   /** Điện thoại */
   phone: string
-  /** Điện thoại người liên hệ chính */
+  /** ĐT người liên hệ (mẫu Excel) */
   parentPhone: string
-  /** Nguồn khách hàng (nhãn tự do từ Excel / CRM) */
+  /** Nguồn (mẫu Excel); nhãn tự do từ Excel / CRM */
   source: string
   /** Hệ đào tạo — Trưởng khoa lọc theo khớp nhãn ngành trong phạm vi `managedMajorIds` */
   educationLevel: string
@@ -209,13 +209,13 @@ export interface Lead {
   assignedTo: UserId | null
   /** Tình trạng — Kanban tư vấn (Firestore `status`) */
   status: LeadCounselorStatus
-  /** Mô tả / ghi chú tiến độ (có thể nối thêm theo thời gian) */
+  /** Ghi chú thêm / mô tả tiến độ (có thể nối thêm theo thời gian) */
   description: string
   /** Trường học */
   highSchool: string
   /** Lớp */
   gradeClass: string
-  /** Tỉnh/thành phố */
+  /** Tỉnh / thành phố */
   province: string
   /** Địa chỉ */
   address: string
