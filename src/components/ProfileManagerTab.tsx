@@ -365,7 +365,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
               Bộ chấm điểm (Profiles)
             </VietMyAccentHeading>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-700 md:text-base">
-              Mỗi profile là một “thấu kính” đánh giá cùng danh sách lead — điểm **tích lũy không trần 100**; nhãn HOT/WARM/COLD/LOSS theo **ngưỡng từng profile** (chỉnh trong form), mặc định 80/50.
+              Mỗi profile là một “thấu kính” đánh giá cùng danh sách lead — điểm **tích lũy không trần 100**; nhãn HOT/WARM/COLD/LOSS theo **ngưỡng từng profile** (chỉnh trong form), mặc định 80/50. Chọn profile ở **thanh ngay dưới**; bấm «Toàn màn» để kéo giãn vùng builder.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -428,20 +428,24 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
 
         <div
           className={[
-            'mt-6 grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(232px,280px)_1fr] lg:items-stretch',
-            workspaceFullscreen ? 'min-h-0' : 'min-h-[480px]',
+            'mt-6 flex min-h-0 flex-1 flex-col gap-4',
+            workspaceFullscreen ? 'min-h-0 overflow-hidden' : 'min-h-[480px]',
           ].join(' ')}
         >
-          <aside className="order-2 flex min-h-0 max-h-[min(52vh,420px)] flex-col rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-inner lg:order-1 lg:max-h-none">
-            <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">
-              Danh sách profile
-            </p>
-            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5">
+          {/* Danh sách profile gọn trong cùng cột nội dung — cuộn ngang khi nhiều */}
+          <div className="shrink-0 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-inner md:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Chọn profile</p>
+              {!loading && profiles.length > 4 ? (
+                <span className="text-[10px] text-slate-500">Cuộn ngang để xem thêm</span>
+              ) : null}
+            </div>
+            <div className="scroll-touch mt-2 flex gap-2 overflow-x-auto overflow-y-hidden pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5">
               {loading ? (
-                <p className="w-full text-sm text-slate-600">Đang tải…</p>
+                <p className="shrink-0 py-2 text-sm text-slate-600">Đang tải…</p>
               ) : !profiles.length ? (
-                <p className="w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  Chưa có profile. Bấm «Tạo profile mới» để bắt đầu.
+                <p className="min-w-0 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  Chưa có profile. Bấm «Tạo profile mới» ở trên.
                 </p>
               ) : (
                 <AnimatePresence initial={false} mode="popLayout">
@@ -456,28 +460,28 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                       transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                       onClick={() => selectProfile(p)}
                       className={[
-                        'w-full rounded-2xl border px-4 py-3 text-left transition-all duration-300',
+                        'shrink-0 rounded-xl border px-3 py-2.5 text-left transition-all duration-300 md:min-w-[10.5rem] md:max-w-[14rem]',
                         p.id === effectiveSelectedId
                           ? 'border-amber-400 bg-amber-50 shadow-md ring-2 ring-amber-200/80'
                           : 'border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50/40',
                       ].join(' ')}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="min-w-0 flex-1 font-semibold leading-snug text-slate-900">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <p className="min-w-0 max-w-[11rem] truncate text-sm font-semibold leading-snug text-slate-900">
                           {p.profileName.trim() || '—'}
                         </p>
                         {p.isDefaultForImport ? (
                           <span
-                            className="shrink-0 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-[0_0_14px_rgba(251,146,60,0.85),0_0_28px_rgba(249,115,22,0.35)] ring-2 ring-amber-200/70"
+                            className="shrink-0 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white ring-1 ring-amber-200/70"
                             title="Profile mặc định toàn hệ thống"
                           >
-                            DEFAULT
+                            DEF
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-0.5 line-clamp-2 text-xs text-slate-600">{p.description || '—'}</p>
-                      <p className="mt-2 text-xs text-slate-500">
-                        {(p.ruleBlocks?.length ?? 0) || p.rules.length} khối · HOT ≥ {p.thresholds.hotMinScore} · WARM ≥{' '}
+                      <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-600">{p.description || '—'}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        {(p.ruleBlocks?.length ?? 0) || p.rules.length} khối · HOT {p.thresholds.hotMinScore} · WARM{' '}
                         {p.thresholds.warmMinScore}
                       </p>
                     </motion.button>
@@ -485,15 +489,13 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 </AnimatePresence>
               )}
             </div>
-          </aside>
+          </div>
 
           <div
             className={[
-              'order-1 flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50/40 via-white to-amber-50/30 p-5 shadow-inner md:p-6 lg:order-2',
+              'flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50/40 via-white to-amber-50/30 p-5 shadow-inner md:p-6',
               workspaceFullscreen ? 'min-h-0 overflow-hidden' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
+            ].join(' ')}
           >
             {!selectedProfile ? (
               <p className="text-slate-600">Chưa có profile hoặc đang tải.</p>
