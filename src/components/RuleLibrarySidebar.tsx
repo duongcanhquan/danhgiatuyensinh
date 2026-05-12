@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { GripVertical } from 'lucide-react'
+import { ChevronsLeft, GripVertical } from 'lucide-react'
 import type { RuleCategory } from '../types'
 import { RULE_CATEGORY_LABELS, RULE_CATEGORIES } from '../types'
 import { getRuleLibraryTemplates, RULE_TEMPLATE_DRAG_MIME, type RuleLibraryTemplate } from '../utils/ruleLibrary'
@@ -15,10 +15,15 @@ const CATEGORY_BAND: Record<RuleCategory, string> = {
 export function RuleLibrarySidebar({
   canEdit,
   fillHeight,
+  showCollapseButton,
+  onCollapseRequest,
 }: {
   canEdit: boolean
   /** Khi true: sidebar kéo cao theo vùng làm việc (toàn màn / panel lớn). */
   fillHeight?: boolean
+  /** Nút thu gọn — nhường chỗ cho canvas. */
+  showCollapseButton?: boolean
+  onCollapseRequest?: () => void
 }) {
   const byCategory = useMemo(() => {
     const m = new Map<RuleCategory, RuleLibraryTemplate[]>()
@@ -32,15 +37,30 @@ export function RuleLibrarySidebar({
   return (
     <aside
       className={[
-        'flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm',
-        fillHeight ? 'h-full min-h-0 max-h-none' : 'max-h-[min(52vh,340px)] lg:max-h-[min(58vh,380px)]',
+        'flex min-h-0 w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm',
+        fillHeight
+          ? 'h-full min-h-0 flex-1 max-h-none'
+          : 'min-h-[min(52vh,360px)] max-h-[min(78vh,640px)] lg:min-h-[min(56vh,400px)] lg:max-h-[min(82vh,680px)]',
       ].join(' ')}
     >
-      <div className="shrink-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Thư viện</p>
-        <p className="mt-0.5 text-[10px] leading-snug text-slate-600">
-          Kéo mẫu thả lên canvas. <span className="font-medium text-slate-800">Max weight</span> dùng cho % trên khối.
-        </p>
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200/90 pb-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-900">Thư viện quy tắc</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-slate-600">
+            Kéo mẫu sang <span className="font-semibold text-slate-800">canvas bên phải</span>. Max weight cho % trên
+            khối.
+          </p>
+        </div>
+        {showCollapseButton && onCollapseRequest ? (
+          <button
+            type="button"
+            onClick={onCollapseRequest}
+            title="Thu gọn thư viện — mở rộng canvas"
+            className="shrink-0 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-900"
+          >
+            <ChevronsLeft className="h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
         {RULE_CATEGORIES.map((cat) => {

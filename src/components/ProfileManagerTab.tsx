@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { motion, AnimatePresence } from 'motion/react'
-import { Maximize2, X } from 'lucide-react'
+import { Maximize2, X, ChevronsRight } from 'lucide-react'
 import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { useScoringProfiles } from '../hooks/useScoringProfiles'
@@ -61,6 +61,8 @@ function ProfileEditorPanel({
   workspaceLayout?: boolean
 }) {
   const [draft, setDraft] = useState(() => cloneProfile(profile))
+  /** Thu gọn cột thư viện — canvas rộng hơn; mặc định mở để dễ kéo mẫu. */
+  const [ruleLibraryCollapsed, setRuleLibraryCollapsed] = useState(false)
   const isDefaultProfile = Boolean(profile.isDefaultForImport)
 
   const saveProfile = useCallback(async () => {
@@ -232,15 +234,39 @@ function ProfileEditorPanel({
       >
         <p className="text-sm font-semibold text-slate-800">Scoring Profile Builder</p>
         <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
-          Kéo mẫu từ cột trái → canvas; <strong>cộng dồn</strong> dòng khớp · nhãn theo ngưỡng ở form trên.
+          Kéo mẫu từ thư viện (trái) → <strong>canvas</strong> bên phải; <strong>cộng dồn</strong> dòng khớp. Thu gọn thư
+          viện khi cần chỉnh nhiều khối.
         </p>
         <div
           className={[
-            'mt-3 grid gap-3 lg:grid-cols-[minmax(152px,188px)_1fr] lg:items-stretch xl:grid-cols-[minmax(168px,200px)_1fr]',
-            workspaceLayout ? 'min-h-0 flex-1 lg:min-h-0' : 'min-h-[360px]',
+            'mt-3 grid min-h-0 flex-1 gap-3',
+            canEdit && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEdit ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
+            workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[360px]',
           ].join(' ')}
         >
-          {canEdit ? <RuleLibrarySidebar canEdit={canEdit} fillHeight={Boolean(workspaceLayout)} /> : null}
+          {canEdit && ruleLibraryCollapsed ? (
+            <div className="flex min-h-[14rem] w-full flex-col items-center gap-2 self-stretch rounded-xl border border-amber-200/90 bg-gradient-to-b from-amber-50 via-white to-slate-50 py-3 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setRuleLibraryCollapsed(false)}
+                title="Mở thư viện quy tắc"
+                className="rounded-lg border border-amber-400 bg-white p-2 text-amber-950 shadow-sm transition hover:bg-amber-100"
+              >
+                <ChevronsRight className="h-4 w-4" aria-hidden />
+              </button>
+              <span className="select-none text-center text-[9px] font-bold uppercase leading-tight tracking-widest text-slate-600 [writing-mode:vertical-rl]">
+                Mở thư viện
+              </span>
+            </div>
+          ) : null}
+          {canEdit && !ruleLibraryCollapsed ? (
+            <RuleLibrarySidebar
+              canEdit={canEdit}
+              fillHeight={Boolean(workspaceLayout)}
+              showCollapseButton
+              onCollapseRequest={() => setRuleLibraryCollapsed(true)}
+            />
+          ) : null}
           <ProfileDropCanvas
             blocks={draft.ruleBlocks ?? []}
             onChange={(blocks) => setDraft((d) => ({ ...d, ruleBlocks: blocks }))}
@@ -363,7 +389,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
               Bộ chấm điểm (Profiles)
             </VietMyAccentHeading>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-700 md:text-base">
-              Mỗi profile là một “thấu kính” đánh giá cùng danh sách lead — điểm **tích lũy không trần 100**; nhãn HOT/WARM/COLD/LOSS theo **ngưỡng từng profile** (chỉnh trong form), mặc định 80/50. Chọn profile ở **thanh ngay dưới**; bấm «Toàn màn» để kéo giãn vùng builder.
+              Chọn profile ở **thanh ngay dưới**; bấm «Toàn màn» để kéo giãn vùng builder.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">

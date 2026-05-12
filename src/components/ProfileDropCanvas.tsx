@@ -51,8 +51,8 @@ function CumulativeScoringCanvasHeader() {
   return (
     <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200/90 bg-white/95 px-2.5 py-2 shadow-sm backdrop-blur-sm">
       <p className="text-[11px] font-semibold leading-snug text-slate-700">
-        Canvas · <span className="text-slate-600">cộng dồn ± theo dòng khớp</span> · nhãn HOT/WARM theo ngưỡng profile ở
-        form trên
+        Canvas bên phải · <span className="text-slate-600">mỗi dòng: trái = điều kiện, phải = điểm &amp; phân bổ</span> ·
+        cộng dồn ± theo dòng khớp
       </p>
     </header>
   )
@@ -167,93 +167,99 @@ function RuleConfigurationCard({
           const previewPts = allocationPreviewPoints(block, r)
           const allocNum = Number(r.allocationValue)
           const allocInputClass =
-            'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs tabular-nums disabled:opacity-50 ' +
+            'mt-0.5 w-full rounded-md border border-amber-200/80 bg-white px-2 py-1.5 text-xs tabular-nums disabled:opacity-50 ' +
             signedPointsOnLight(allocNum)
           return (
           <div
             key={r.id}
-            className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm"
+            className="rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm ring-1 ring-slate-100/80"
           >
-            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-12 lg:items-end lg:gap-x-2">
-              <label className="text-[10px] text-slate-600 lg:col-span-2">
-                Điều kiện
-                <select
-                  value={r.condition}
-                  disabled={!canEdit}
-                  onChange={(e) =>
-                    onPatchRow(ri, { condition: e.target.value as ProfileScoringCondition })
-                  }
-                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
-                >
-                  {CONDITION_OPTIONS.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-[10px] text-slate-600 lg:col-span-4">
-                Giá trị
-                <input
-                  value={Array.isArray(r.value) ? r.value.join(', ') : String(r.value)}
-                  disabled={!canEdit || r.condition === 'IS_NOT_EMPTY'}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    onPatchRow(ri, {
-                      value: r.condition === 'IN_LIST' ? v.split(',').map((s) => s.trim()) : v,
-                    })
-                  }}
-                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-40"
-                />
-              </label>
-              <label className="text-[10px] text-slate-600 lg:col-span-2">
-                Phân bổ
-                <select
-                  value={r.allocationKind}
-                  disabled={!canEdit}
-                  onChange={(e) =>
-                    onPatchRow(ri, { allocationKind: e.target.value as ScoringRuleAllocationKind })
-                  }
-                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
-                >
-                  {ALLOCATION_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-[10px] text-slate-600 lg:col-span-2">
-                {r.allocationKind === 'percent_of_max' ? '% hoặc ±' : 'Điểm ±'}
-                <input
-                  type="number"
-                  step={1}
-                  value={r.allocationValue}
-                  disabled={!canEdit}
-                  onChange={(e) => onPatchRow(ri, { allocationValue: Number(e.target.value) })}
-                  className={allocInputClass}
-                />
-              </label>
-              <div className="flex flex-col justify-end gap-0.5 text-[10px] text-slate-600 lg:col-span-2">
-                {r.allocationKind === 'percent_of_max' ? (
-                  <span className="leading-tight">
-                    ≈{' '}
-                    <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
-                  </span>
-                ) : (
-                  <span className="leading-tight">
-                    <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
-                  </span>
-                )}
-                {canEdit && block.rows.length > 1 ? (
-                  <button
-                    type="button"
-                    onClick={() => onRemoveRow(ri)}
-                    className="self-start text-[10px] text-rose-700 hover:underline"
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:items-stretch">
+              <div className="flex min-h-0 flex-col gap-1.5 rounded-lg border border-sky-200/90 bg-sky-50/50 p-2">
+                <p className="text-[9px] font-bold uppercase tracking-wide text-sky-900">1 · Điều kiện &amp; giá trị</p>
+                <label className="text-[10px] text-slate-600">
+                  Điều kiện
+                  <select
+                    value={r.condition}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      onPatchRow(ri, { condition: e.target.value as ProfileScoringCondition })
+                    }
+                    className="mt-0.5 w-full rounded-md border border-sky-200/80 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
                   >
-                    Xóa dòng
-                  </button>
-                ) : null}
+                    {CONDITION_OPTIONS.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[10px] text-slate-600">
+                  Giá trị
+                  <input
+                    value={Array.isArray(r.value) ? r.value.join(', ') : String(r.value)}
+                    disabled={!canEdit || r.condition === 'IS_NOT_EMPTY'}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      onPatchRow(ri, {
+                        value: r.condition === 'IN_LIST' ? v.split(',').map((s) => s.trim()) : v,
+                      })
+                    }}
+                    className="mt-0.5 w-full rounded-md border border-sky-200/80 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-40"
+                  />
+                </label>
+              </div>
+              <div className="flex min-h-0 flex-col gap-1.5 rounded-lg border border-amber-200/90 bg-amber-50/40 p-2">
+                <p className="text-[9px] font-bold uppercase tracking-wide text-amber-950">2 · Điểm &amp; phân bổ</p>
+                <label className="text-[10px] text-slate-600">
+                  Phân bổ
+                  <select
+                    value={r.allocationKind}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      onPatchRow(ri, { allocationKind: e.target.value as ScoringRuleAllocationKind })
+                    }
+                    className="mt-0.5 w-full rounded-md border border-amber-200/80 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
+                  >
+                    {ALLOCATION_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[10px] text-slate-600">
+                  {r.allocationKind === 'percent_of_max' ? '% hoặc ±' : 'Điểm ±'}
+                  <input
+                    type="number"
+                    step={1}
+                    value={r.allocationValue}
+                    disabled={!canEdit}
+                    onChange={(e) => onPatchRow(ri, { allocationValue: Number(e.target.value) })}
+                    className={allocInputClass}
+                  />
+                </label>
+                <div className="mt-auto flex flex-col gap-1 text-[10px] text-slate-600">
+                  {r.allocationKind === 'percent_of_max' ? (
+                    <span className="leading-tight">
+                      ≈{' '}
+                      <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
+                    </span>
+                  ) : (
+                    <span className="leading-tight">
+                      <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
+                    </span>
+                  )}
+                  {canEdit && block.rows.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveRow(ri)}
+                      className="self-start rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-rose-700 hover:bg-rose-50"
+                    >
+                      Xóa dòng
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -386,7 +392,7 @@ export function ProfileDropCanvas({
         onDragOver={onDragOverAllow}
         onDrop={onDropCanvas}
         className={[
-          'relative space-y-2 overflow-y-auto rounded-xl border border-dashed border-sky-300/70 bg-gradient-to-b from-sky-50/40 to-white p-3 pb-6',
+          'relative space-y-2 overflow-y-auto rounded-xl border-2 border-dashed border-sky-400/80 bg-gradient-to-b from-sky-50/60 to-white p-3 pb-6 shadow-inner ring-1 ring-sky-200/50',
           workspaceLayout ? 'min-h-0 flex-1' : 'flex-1',
         ].join(' ')}
       >
@@ -394,7 +400,8 @@ export function ProfileDropCanvas({
           <div className="flex min-h-[120px] flex-col items-center justify-center gap-1.5 text-center">
             <p className="text-xs font-medium text-slate-800">Canvas trống</p>
             <p className="max-w-md text-[10px] leading-snug text-slate-600">
-              Kéo mẫu từ cột «Thư viện» thả vào đây. Sắp xếp khối: kéo biểu tượng ⋮⋮ ở đầu từng thẻ.
+              Kéo mẫu từ <strong>thư viện bên trái</strong> thả vào vùng viền nét đứt này. Sắp xếp khối: kéo ⋮⋮ ở đầu mỗi
+              thẻ.
             </p>
           </div>
         ) : null}
