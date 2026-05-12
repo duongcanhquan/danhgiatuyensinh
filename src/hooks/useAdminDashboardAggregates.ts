@@ -91,26 +91,37 @@ export function useAdminDashboardAggregates(enabled: boolean) {
 
         const summerMeltSeries: { month: string; melt: number }[] = []
         const now = new Date()
-        for (let i = 11; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-          const y = d.getFullYear()
-          const m = d.getMonth()
-          const start = Timestamp.fromDate(new Date(y, m, 1))
-          const end = Timestamp.fromDate(new Date(y, m + 1, 1))
-          const melt = (
-            await getCountFromServer(
-              query(
-                col,
-                where('status', '==', 'SUMMER_MELT'),
-                where('updatedAt', '>=', start),
-                where('updatedAt', '<', end),
-              ),
-            )
-          ).data().count
-          summerMeltSeries.push({
-            month: d.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' }),
-            melt,
-          })
+        try {
+          for (let i = 11; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+            const y = d.getFullYear()
+            const m = d.getMonth()
+            const start = Timestamp.fromDate(new Date(y, m, 1))
+            const end = Timestamp.fromDate(new Date(y, m + 1, 1))
+            const melt = (
+              await getCountFromServer(
+                query(
+                  col,
+                  where('status', '==', 'SUMMER_MELT'),
+                  where('updatedAt', '>=', start),
+                  where('updatedAt', '<', end),
+                ),
+              )
+            ).data().count
+            summerMeltSeries.push({
+              month: d.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' }),
+              melt,
+            })
+          }
+        } catch (e) {
+          console.warn('[admin aggregates] summer melt monthly counts skipped', e)
+          for (let i = 11; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+            summerMeltSeries.push({
+              month: d.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' }),
+              melt: 0,
+            })
+          }
         }
 
         const row: Record<string, string | number> = { monthLabel: 'Toàn hệ thống' }
