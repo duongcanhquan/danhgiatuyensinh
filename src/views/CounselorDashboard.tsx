@@ -377,7 +377,7 @@ export function CounselorDashboard() {
   const { profile, can } = useAuth()
   const { leads, loading, loadingMore, hasMore, loadMore, error } = useLeads()
   const { scoreByLeadId, activeScoringProfile } = useLeadScoring(leads)
-  const { counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
+  const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
 
   const [needle, setNeedle] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
@@ -412,6 +412,17 @@ export function CounselorDashboard() {
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(canWrite || showBulkReassign)
+
+  const reassignPickList = useMemo(() => {
+    const base = counselorUsers
+    if (!isElevatedLeadScope) return base
+    const extras = directoryUsers.filter(
+      (u) => u.isActive && u.role === 'admin' && !base.some((c) => c.id === u.id),
+    )
+    return [...base, ...extras].sort((a, b) =>
+      formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
+    )
+  }, [counselorUsers, directoryUsers, isElevatedLeadScope])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -526,8 +537,8 @@ export function CounselorDashboard() {
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
       const targetLabel =
-        counselorUsers.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
-        counselorUsers.find((c) => c.id === bulkReassignUid)?.email ||
+        reassignPickList.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
+        reassignPickList.find((c) => c.id === bulkReassignUid)?.email ||
         bulkReassignUid
       for (const id of selectedIds) {
         const prev = leads.find((x) => x.id === id)
@@ -559,7 +570,7 @@ export function CounselorDashboard() {
     bulkReassignUid,
     selectedIds,
     leads,
-    counselorUsers,
+    reassignPickList,
     pushToast,
     isElevatedLeadScope,
     canPeerReassignLeads,
@@ -906,8 +917,8 @@ export function CounselorDashboard() {
           count={selectedIds.size}
           onClear={() => setSelectedIds(new Set())}
           onReassign={() => {
-            const others = counselorUsers.filter((c) => c.id !== profile?.id)
-            setBulkReassignUid(others[0]?.id ?? counselorUsers[0]?.id ?? '')
+            const others = reassignPickList.filter((c) => c.id !== profile?.id)
+            setBulkReassignUid(others[0]?.id ?? reassignPickList[0]?.id ?? '')
             setBulkModal('reassign')
           }}
           onBulkStatus={() => {
@@ -938,14 +949,14 @@ export function CounselorDashboard() {
               ) : null}
             </p>
             <label className="mt-4 block text-xs font-medium text-slate-600">
-              Tư vấn viên
+              Phụ trách (TVV / Admin)
               <select
                 value={bulkReassignUid}
                 onChange={(e) => setBulkReassignUid(e.target.value)}
                 disabled={counselorsLoading}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-violet-200"
               >
-                {counselorUsers.map((c) => (
+                {reassignPickList.map((c) => (
                   <option key={c.id} value={c.id} className="bg-white">
                     {formatStaffDirectoryLabel(c)}
                   </option>

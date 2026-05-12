@@ -19,7 +19,7 @@ export function ProtectedRoute() {
   if (status === 'unknown') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-600">
-        <div className="app-glass-panel rounded-2xl px-8 py-6 text-sm shadow-lg">Đang xác thực…</div>
+        <div className="app-glass-panel rounded-2xl px-8 py-6 text-sm shadow-lg">Hệ thống đang đăng nhập…</div>
       </div>
     )
   }
@@ -32,13 +32,7 @@ export function ProtectedRoute() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 text-slate-600">
         <div className="app-glass-panel max-w-md rounded-2xl px-8 py-6 text-center text-sm shadow-lg">
-          <p className="font-medium text-slate-800">Đang tải hồ sơ người dùng…</p>
-          <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            Đang đồng bộ tài khoản với Firestore. Thường chỉ vài giây. Nếu quá khoảng 22 giây vẫn không vào được, màn
-            hình tiếp theo sẽ hướng dẫn — hay gặp nhất là Rules Firestore chặn ghi <code className="text-xs">users</code> hoặc
-            trên Vercel thiếu biến giống file <code className="text-xs">.env</code> trên máy (kể cả tên database nếu không
-            dùng mặc định).
-          </p>
+          <p className="font-medium text-slate-800">Hệ thống đang đăng nhập…</p>
         </div>
       </div>
     )

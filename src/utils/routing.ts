@@ -1,5 +1,12 @@
 import type { Lead, UserId, VietMyUserProfile } from '../types'
 
+/** Chọn một UID quản trị (ổn định theo email) để gán lead chờ điều phối khi import không khớp TVV. */
+export function pickPrimaryAdminUid(users: readonly VietMyUserProfile[]): UserId | null {
+  const admins = users.filter((u) => u.role === 'admin' && u.isActive)
+  if (!admins.length) return null
+  return [...admins].sort((a, b) => a.email.localeCompare(b.email, 'vi'))[0]!.id
+}
+
 /**
  * Gán counselor theo tải (số lead đang phụ trách) — MVP, không cần index phức tạp.
  */

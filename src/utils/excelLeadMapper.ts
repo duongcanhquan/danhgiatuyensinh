@@ -211,13 +211,13 @@ export function downloadStandardIntakeTemplate(): void {
       '1. Giữ nguyên hàng tiêu đề (dòng 1): 13 cột A–M — Tên sinh viên, Điện thoại, Nguồn, Hệ đào tạo, Người phụ trách, Tình trạng, Ghi Chú thêm, Trường học, Lớp, Tỉnh /Thành Phố, Địa chỉ, ĐT Người liên hệ, Mã KH. Có thể dùng sheet tên «Leads».',
     ],
     [
-      '2. «Người phụ trách»: ghi tên hiển thị (như trên hệ thống đăng nhập) hoặc email đăng nhập — khớp danh bạ TVV; có thể thêm UID nếu cần.',
+      '2. «Người phụ trách» = tư vấn viên: ghi tên hiển thị hoặc email đăng nhập (khớp TVV hoặc Admin trong hệ thống). Khớp → lead gán thẳng cho người đó; không khớp → hệ thống gán tạm Admin để sau này điều chuyển.',
     ],
-    ['   Khuyến nghị: ưu tiên tên hiển thị hoặc email; nếu hai TVV trùng tên thì bắt buộc dùng email.'],
+    ['   Khuyến nghị: ưu tiên email nếu hai TVV trùng tên sau khi bỏ dấu.'],
     ['3. «Tình trạng»: Mới, Quan tâm / đang tư vấn, Đã cọc, Nhập học, … (hệ thống chuẩn hoá về Kanban).'],
     ['4. Điểm chấm & nhãn HOT/WARM/COLD/LOSS do engine tính sau upload.'],
     [
-      '5. Khi tải lên: chỉ các dòng mới được ghi. Trùng trong file hoặc đã tồn tại trên hệ thống (cùng fingerprint) bị từ chối — không ghi đè bản cũ.',
+      '5. Khi tải lên: chỉ các dòng mới được ghi. Trùng trong file hoặc đã tồn tại trên hệ thống (cùng fingerprint) bị từ chối — không ghi đè bản cũ. Lead gán Admin chờ điều phối: dùng «Quản lý hồ sơ» (chọn nhiều dòng + «Giao việc hàng loạt» hoặc form chi tiết) để chuyển TVV.',
     ],
     [''],
     ['© VietMy'],

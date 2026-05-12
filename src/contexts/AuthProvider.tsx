@@ -54,7 +54,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-/** Tránh treo vô hạn ở «Đang tải hồ sơ…» khi Firestore/Rules/mạng không phản hồi. */
+/** Tránh treo vô hạn ở màn «Hệ thống đang đăng nhập…» khi Firestore/Rules/mạng không phản hồi. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = window.setTimeout(() => {

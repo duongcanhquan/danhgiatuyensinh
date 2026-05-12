@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type DragEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Download, FileSpreadsheet, Upload } from 'lucide-react'
 import {
   collection,
@@ -19,15 +19,14 @@ import {
   type ExcelLeadRow,
 } from '../utils/excelLeadMapper'
 import { evaluateLead } from '../utils/scoring'
-import { countAssignments, pickCounselorByLowestLoad } from '../utils/routing'
+import { countAssignments, pickCounselorByLowestLoad, pickPrimaryAdminUid } from '../utils/routing'
 import { computeLeadUniqueHash } from '../utils/leadIdentity'
-import { FS_COLLECTIONS } from '../types'
+import { FS_COLLECTIONS, type VietMyUserProfile } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { pickProfileForImport, useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useAuth } from '../hooks/useAuth'
-import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
 
 /** Giới hạn Firestore mỗi batch commit. */
@@ -50,6 +49,10 @@ type ImportPreview = {
   uploadBatchId: string
   uploadedBy: string
   uploaderName: string
+}
+
+function activeStaffForExcelAssignMatch(users: VietMyUserProfile[]) {
+  return users.filter((u) => u.isActive && (u.role === 'counselor' || u.role === 'admin'))
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -112,20 +115,18 @@ export function DataIntake() {
   const { profile, can } = useAuth()
   const { profiles } = useScoringProfiles()
   const { regionLabels, highSchoolLabels, majorLabels } = useMasterData()
-  const { counselors } = useCounselorDirectory()
+  const { counselors, users: directoryUsers } = useCounselorDirectory()
 
-  const counselorsSorted = useMemo(
-    () =>
-      [...counselors].sort((a, b) =>
-        formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
-      ),
-    [counselors],
+  const matchStaffForImport = useMemo(
+    () => activeStaffForExcelAssignMatch(directoryUsers),
+    [directoryUsers],
   )
 
   const [dragOver, setDragOver] = useState(false)
   const [banner, setBanner] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const masterBuckets = useMemo(
     () => ({ regionLabels, highSchoolLabels, majorLabels }),
@@ -144,8 +145,28 @@ export function DataIntake() {
     const rejectedOnDb = prepared.filter((p) => p.existingId && !p.inFileDuplicate).length
     const acceptedNew = prepared.filter((p) => !p.inFileDuplicate && !p.existingId).length
     const rejectedTotal = rejectedInFile + rejectedOnDb
-    return { total, acceptedNew, rejectedInFile, rejectedOnDb, rejectedTotal }
-  }, [preview])
+    let assignMatched = 0
+    let assignUnresolvedRaw = 0
+    let assignEmptyRouted = 0
+    for (const p of prepared) {
+      if (p.inFileDuplicate || p.existingId) continue
+      const raw = (p.row.assignedToRaw ?? '').trim()
+      const from = raw ? resolveAssignedCounselorUid(raw, matchStaffForImport) : null
+      if (from) assignMatched += 1
+      else if (raw) assignUnresolvedRaw += 1
+      else assignEmptyRouted += 1
+    }
+    return {
+      total,
+      acceptedNew,
+      rejectedInFile,
+      rejectedOnDb,
+      rejectedTotal,
+      assignMatched,
+      assignUnresolvedRaw,
+      assignEmptyRouted,
+    }
+  }, [preview, matchStaffForImport])
 
   const runParseAndPreview = useCallback(
     async (file: File) => {
@@ -243,10 +264,12 @@ export function DataIntake() {
       const counts = await fetchAssignmentCountsForImport(db)
       const { prepared, uploadBatchId, uploadedBy, uploaderName } = preview
       const ownership = { uploadedBy, uploaderName, uploadBatchId }
+      const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (profile.role === 'admin' ? profile.id : null)
 
       const toCreate: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
       let rejectedInFile = 0
       let rejectedOnDb = 0
+      let importAssignUnresolved = 0
 
       for (const pr of prepared) {
         if (pr.inFileDuplicate) {
@@ -258,28 +281,49 @@ export function DataIntake() {
           continue
         }
 
-        const record = {
-          customerId: pr.row.customerId,
-          fullName: pr.row.fullName,
-          phone: pr.row.phone,
-          parentPhone: pr.row.parentPhone,
-          source: pr.row.source,
-          educationLevel: pr.row.educationLevel,
-          province: pr.row.province,
-          highSchool: pr.row.highSchool,
-          gradeClass: pr.row.gradeClass,
-          address: pr.row.address,
-          description: pr.row.description,
-        } as Record<string, unknown>
-        const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets)
+        const rawAssign = (pr.row.assignedToRaw ?? '').trim()
+        const fromExcel = rawAssign
+          ? resolveAssignedCounselorUid(rawAssign, matchStaffForImport)
+          : null
 
-        const fromExcel = resolveAssignedCounselorUid(pr.row.assignedToRaw, counselors)
-        const counselorId = fromExcel ?? pickCounselorByLowestLoad(counselors, counts)
+        let rowForPayload: Partial<ExcelLeadRow> = pr.row
+        let counselorId: string | null = null
+        if (fromExcel) {
+          counselorId = fromExcel
+        } else if (rawAssign) {
+          importAssignUnresolved += 1
+          counselorId = adminPoolUid ?? pickCounselorByLowestLoad(counselors, counts)
+          const tag = adminPoolUid
+            ? `[Import] «Người phụ trách» («${rawAssign}») không khớp TVV/Admin trong hệ thống — gán Admin chờ điều phối.\n`
+            : `[Import] «Người phụ trách» («${rawAssign}») không khớp; chưa có tài khoản Admin hoạt động — gán TVV theo tải.\n`
+          rowForPayload = {
+            ...pr.row,
+            description: `${tag}${pr.row.description ?? ''}`.trim(),
+          }
+        } else {
+          counselorId = pickCounselorByLowestLoad(counselors, counts)
+        }
+
         if (counselorId) {
           counts.set(counselorId, (counts.get(counselorId) ?? 0) + 1)
         }
 
-        const base = buildLeadFirestorePayload(pr.row, calculatedScore, priorityTag, counselorId, ownership, {
+        const record = {
+          customerId: rowForPayload.customerId,
+          fullName: rowForPayload.fullName,
+          phone: rowForPayload.phone,
+          parentPhone: rowForPayload.parentPhone,
+          source: rowForPayload.source,
+          educationLevel: rowForPayload.educationLevel,
+          province: rowForPayload.province,
+          highSchool: rowForPayload.highSchool,
+          gradeClass: rowForPayload.gradeClass,
+          address: rowForPayload.address,
+          description: rowForPayload.description,
+        } as Record<string, unknown>
+        const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets)
+
+        const base = buildLeadFirestorePayload(rowForPayload, calculatedScore, priorityTag, counselorId, ownership, {
           uniqueHash: pr.hash,
         })
         const now = Timestamp.now()
@@ -308,7 +352,11 @@ export function DataIntake() {
 
       const msg =
         toCreate.length > 0
-          ? `Đã nhập ${toCreate.length} hồ sơ mới (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.`
+          ? `Đã nhập ${toCreate.length} hồ sơ mới (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.${
+              importAssignUnresolved > 0
+                ? ` Trong đó ${importAssignUnresolved} dòng có «Người phụ trách» không khớp danh bạ — đã gán Admin chờ điều phối (hoặc TVV theo tải nếu chưa có Admin); xem ghi chú mô tả trên từng lead.`
+                : ''
+            }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
       setPreview(null)
@@ -318,7 +366,7 @@ export function DataIntake() {
     } finally {
       setBusy(false)
     }
-  }, [preview, db, profile, profiles, masterBuckets, counselors])
+  }, [preview, db, profile, profiles, masterBuckets, counselors, directoryUsers, matchStaffForImport])
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault()
@@ -337,170 +385,183 @@ export function DataIntake() {
     }
   }
 
+  const onPickFile = () => {
+    if (!db || busy || !canIntake) return
+    fileInputRef.current?.click()
+  }
+
+  const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (f) void runParseAndPreview(f)
+    e.target.value = ''
+  }
+
   return (
-    <div className="w-full max-w-none space-y-8">
-      <header>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-          Nhập liệu thông minh
-        </VietMyAccentHeading>
-        <p className="mt-1 text-base text-slate-600">
-          Tải mẫu chuẩn → điền dữ liệu → kéo thả .xlsx. Chỉ các dòng <strong>mới</strong> (chưa tồn tại, không trùng
-          trong file) mới được ghi; trùng trong file hoặc đã có trên hệ thống sẽ bị <strong>từ chối</strong> và báo
-          số lượng.
-        </p>
-      </header>
-
-      {!canIntake ? (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-base text-amber-950 shadow-sm backdrop-blur-xl">
-          Chỉ tài khoản có quyền <code className="rounded bg-amber-100 px-1 text-amber-900">data:intake</code> (thường là Admin) mới nhập được
-          dữ liệu.
-        </div>
-      ) : null}
-
-      {!configured || !db ? (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-base text-amber-950 shadow-sm backdrop-blur-xl">
-          Cấu hình Firebase trong .env trước khi tải dữ liệu.
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={onDownloadTemplate}
-          disabled={!canIntake}
-          className="inline-flex items-center gap-2 rounded-2xl border border-amber-400 bg-gradient-to-r from-amber-50/95 to-stone-50/90 px-5 py-3 text-base font-semibold text-amber-900 shadow-md backdrop-blur-xl transition hover:border-amber-500 hover:shadow-lg disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" aria-hidden />
-          Tải mẫu Excel chuẩn
-        </button>
-      </div>
-
-      {canIntake && counselors.length > 0 ? (
-        <aside className="app-card-glass rounded-2xl border border-slate-200/90 bg-white/90 p-5 shadow-inner">
-          <p className="text-sm font-semibold text-slate-900">Danh bạ tư vấn (đối chiếu cột «Người phụ trách»)</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-600">
-            Cột «Người phụ trách» trong file phải trùng <strong>tên hiển thị</strong> hoặc <strong>email đăng nhập</strong> như
-            dưới (mẫu tải về có đúng thứ tự 13 tiêu đề cột A–M như sheet «Hồ sơ»). Nếu hai TVV trùng tên, dùng email.
+    <div className="mx-auto w-full max-w-lg px-4 py-8 md:py-12">
+      <div className="mx-auto w-full space-y-5 text-center">
+        <header className="space-y-2">
+          <VietMyAccentHeading as="h1" tone="onLight" size="lg" className="block text-center">
+            Nhập liệu thông minh
+          </VietMyAccentHeading>
+          <p className="text-left text-sm leading-relaxed text-slate-600 sm:text-center">
+            Tải mẫu → điền sheet «Hồ sơ» → <strong>tải lên</strong> file .xlsx. Chỉ dòng <strong>mới</strong> được ghi;
+            «Người phụ trách» khớp TVV/Admin thì gán đúng người — không khớp thì gán Admin chờ điều phối trong «Quản lý
+            hồ sơ».
           </p>
-          <ul className="mt-3 max-h-52 list-none space-y-1 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm text-slate-800">
-            {counselorsSorted.map((c) => (
-              <li key={c.id} className="rounded-lg px-2 py-1.5 font-medium leading-snug hover:bg-white">
-                {formatStaffDirectoryLabel(c)}
-              </li>
-            ))}
-          </ul>
-        </aside>
-      ) : null}
+        </header>
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragOver(true)
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        className={[
-          'app-card-glass relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed px-6 py-12 text-center transition-all duration-300',
-          dragOver
-            ? 'border-emerald-400 bg-emerald-50/90 shadow-lg shadow-emerald-500/15'
-            : 'border-slate-300/90 hover:border-amber-300 hover:bg-amber-50/30',
-          !canIntake ? 'pointer-events-none opacity-50' : '',
-        ].join(' ')}
-      >
-        <input
-          type="file"
-          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className="absolute inset-0 cursor-pointer opacity-0"
-          disabled={!db || busy || !canIntake}
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void runParseAndPreview(f)
-            e.target.value = ''
-          }}
-        />
-        <FileSpreadsheet className="mb-3 h-10 w-10 text-amber-600" strokeWidth={1.25} />
-        <p className="text-base font-semibold text-slate-900">Thả file .xlsx vào đây</p>
-        <p className="mt-2 max-w-md text-sm text-slate-600">
-          Dùng sheet «Hồ sơ» trong mẫu. Trùng trong file (cùng fingerprint) hoặc đã có trên DB → không nhập, chỉ báo
-          số lượng.
-        </p>
-        {busy && !preview ? <p className="mt-4 text-sm text-emerald-700">Đang xử lý — vui lòng chờ…</p> : null}
-      </div>
+        {!canIntake ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-sm text-amber-950 shadow-sm">
+            Cần quyền <code className="rounded bg-amber-100 px-1 text-xs text-amber-900">data:intake</code> (thường là
+            Admin).
+          </div>
+        ) : null}
 
-      {preview && previewStats ? (
-        <div className="app-card-glass space-y-5 p-6 shadow-lg md:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="app-page-kicker">Xác nhận nhập</p>
-              <h2 className="font-display mt-1 text-lg font-semibold normal-case tracking-normal text-slate-900 md:text-xl">
-                {preview.fileName}
-              </h2>
-              <p className="mt-2 text-base text-slate-600">
-                Tìm thấy <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng —{' '}
-                <span className="font-medium text-emerald-700">{previewStats.acceptedNew} sẽ được nhập</span>
-                {previewStats.rejectedTotal > 0 ? (
-                  <>
-                    ; <span className="font-medium text-rose-800">{previewStats.rejectedTotal} từ chối</span> (
-                    {previewStats.rejectedInFile} trùng trong file, {previewStats.rejectedOnDb} đã có trên hệ thống)
-                  </>
-                ) : null}
-                .
-              </p>
-              {previewStats.rejectedInFile > 0 ? (
-                <p className="mt-1 text-sm text-slate-600">
-                  Trùng trong file: các dòng sau trùng fingerprint với dòng đầu tiên — không nhập.
+        {!configured || !db ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-sm text-amber-950 shadow-sm">
+            Cấu hình Firebase trong .env trước khi nhập.
+          </div>
+        ) : null}
+
+        <div className="app-card-glass rounded-2xl border border-slate-200/90 bg-white/95 p-5 shadow-lg shadow-slate-900/5 md:p-6">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="sr-only"
+            disabled={!db || busy || !canIntake}
+            aria-hidden
+            onChange={onFileInputChange}
+          />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center sm:gap-3">
+            <button
+              type="button"
+              onClick={onDownloadTemplate}
+              disabled={!canIntake}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400 bg-gradient-to-r from-amber-50 to-stone-50 px-4 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:border-amber-500 hover:shadow disabled:opacity-40"
+            >
+              <Download className="h-4 w-4 shrink-0" aria-hidden />
+              Tải mẫu Excel
+            </button>
+            <button
+              type="button"
+              onClick={onPickFile}
+              disabled={!db || busy || !canIntake}
+              aria-label="Chọn file Excel .xlsx để tải lên"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-40"
+            >
+              <Upload className="h-4 w-4 shrink-0" aria-hidden />
+              Tải lên file .xlsx
+            </button>
+          </div>
+
+          <div
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            className={[
+              'mt-4 flex min-h-[120px] cursor-default flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
+              dragOver
+                ? 'border-emerald-400 bg-emerald-50/90'
+                : 'border-slate-200 bg-slate-50/50 hover:border-amber-300/80 hover:bg-amber-50/40',
+              !canIntake ? 'pointer-events-none opacity-50' : '',
+            ].join(' ')}
+          >
+            <FileSpreadsheet className="mb-2 h-8 w-8 text-amber-600" strokeWidth={1.25} aria-hidden />
+            <p className="text-sm font-medium text-slate-800">Hoặc kéo thả file vào đây</p>
+            <p className="mt-1 max-w-xs text-xs text-slate-500">
+              Sheet «Hồ sơ». Trùng trong file / đã có trên hệ thống → không nhập.
+            </p>
+            {busy && !preview ? (
+              <p className="mt-2 text-xs font-medium text-emerald-700">Đang xử lý…</p>
+            ) : null}
+          </div>
+        </div>
+
+        {preview && previewStats ? (
+          <div className="app-card-glass space-y-4 rounded-2xl border border-slate-200/90 bg-white/95 p-5 text-left shadow-md md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="app-page-kicker text-xs">Xác nhận nhập</p>
+                <h2 className="font-display mt-0.5 truncate text-base font-semibold text-slate-900 md:text-lg">
+                  {preview.fileName}
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng —{' '}
+                  <span className="font-medium text-emerald-700">{previewStats.acceptedNew} nhập mới</span>
+                  {previewStats.rejectedTotal > 0 ? (
+                    <>
+                      {' '}
+                      · <span className="font-medium text-rose-800">{previewStats.rejectedTotal} từ chối</span> (
+                      {previewStats.rejectedInFile} trùng file, {previewStats.rejectedOnDb} đã có DB)
+                    </>
+                  ) : null}
                 </p>
-              ) : null}
+                {previewStats.rejectedInFile > 0 ? (
+                  <p className="mt-1 text-xs text-slate-500">Trùng file: giữ bản đầu tiên cùng fingerprint.</p>
+                ) : null}
+                {previewStats.acceptedNew > 0 ? (
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                    <span className="font-semibold text-slate-800">Phân công:</span> {previewStats.assignMatched} khớp
+                    cột «Người phụ trách»; {previewStats.assignUnresolvedRaw} không khớp → Admin (hoặc theo tải);{' '}
+                    {previewStats.assignEmptyRouted} để trống → chia tải TVV.
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={cancelPreview}
+                className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={cancelPreview}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              Hủy
-            </button>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-emerald-800">{previewStats.acceptedNew}</p>
-              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Dòng mới (nhập)</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-center">
+                <p className="text-lg font-bold text-emerald-800">{previewStats.acceptedNew}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Mới</p>
+              </div>
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2.5 text-center">
+                <p className="text-lg font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Trùng DB</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-center">
+                <p className="text-lg font-bold text-slate-800">{previewStats.rejectedInFile}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">Trùng file</p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
-              <p className="text-sm font-semibold uppercase tracking-wide text-rose-700">Từ chối — đã có DB</p>
+
+            <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
+              Chỉ ghi dòng mới, không ghi đè. «Người phụ trách»: khớp → gán đúng; không khớp → Admin / ghi chú — điều
+              chuyển sau tại «Quản lý hồ sơ».
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-slate-800">{previewStats.rejectedInFile}</p>
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">Từ chối — trùng file</p>
+
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                disabled={busy || previewStats.acceptedNew === 0}
+                onClick={() => void commitImport()}
+                title={previewStats.acceptedNew === 0 ? 'Không có dòng mới để nhập' : undefined}
+                className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
+              >
+                <Upload className="h-4 w-4 shrink-0" aria-hidden />
+                Xác nhận nhập ({previewStats.acceptedNew})
+              </button>
             </div>
           </div>
+        ) : null}
 
-          <div className="rounded-2xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 shadow-inner">
-            <strong>Chính sách lọc:</strong> chỉ ghi các dòng chưa tồn tại trên hệ thống và không trùng lặp trong file.
-            Không cập nhật hay ghi đè bản ghi cũ.
+        {banner ? (
+          <div className="rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2.5 text-left text-sm text-slate-800 shadow-sm">
+            {banner}
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              disabled={busy || previewStats.acceptedNew === 0}
-              onClick={() => void commitImport()}
-              title={previewStats.acceptedNew === 0 ? 'Không có dòng mới để nhập' : undefined}
-              className="inline-flex items-center gap-2 rounded-2xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:brightness-105 disabled:opacity-40"
-            >
-              <Upload className="h-4 w-4" />
-              Xác nhận nhập ({previewStats.acceptedNew} mới)
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {banner ? (
-        <div className="rounded-2xl border border-slate-200/90 bg-white/90 px-4 py-3 text-base text-slate-800 shadow-md backdrop-blur-xl">
-          {banner}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   )
 }
