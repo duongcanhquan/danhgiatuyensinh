@@ -14,6 +14,7 @@ export function defaultPermissionsForRole(role: UserRole): readonly Permission[]
       return [
         'leads:read:self_assigned',
         'leads:write:self_assigned',
+        'leads:reassign:peer',
         'interactions:create:self_assigned',
         'dashboard:counselor',
         'ai:use',

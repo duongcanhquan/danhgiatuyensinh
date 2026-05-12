@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type DragEvent } from 'react'
+import { useCallback, type DragEvent } from 'react'
 import { motion } from 'motion/react'
 import { GripVertical, Trash2 } from 'lucide-react'
 import type {
@@ -9,7 +9,6 @@ import type {
 } from '../types'
 import { RULE_CATEGORY_LABELS } from '../types'
 import { createBlockFromTemplateKey, RULE_TEMPLATE_DRAG_MIME } from '../utils/ruleLibrary'
-import { sumBlockMaxWeights } from '../utils/scoring'
 
 const CONDITION_OPTIONS: { value: ProfileScoringCondition; label: string }[] = [
   { value: 'EQUALS', label: 'EQUALS' },
@@ -25,74 +24,46 @@ const ALLOCATION_OPTIONS: { value: ScoringRuleAllocationKind; label: string }[] 
 
 const REORDER_MIME = 'text/x-vietmy-block-index'
 
-function budgetTone(assigned: number): 'under' | 'perfect' | 'over' {
-  if (assigned > 100) return 'over'
-  if (assigned === 100) return 'perfect'
-  return 'under'
+/** Màu chữ theo dấu điểm (cộng dồn không giới hạn, có thể âm). */
+function signedPointsClass(n: number): string {
+  if (n > 0) return 'text-emerald-400'
+  if (n < 0) return 'text-rose-400'
+  return 'text-slate-300'
 }
 
-function PointBudgetHeader({ assigned }: { assigned: number }) {
-  const tone = budgetTone(assigned)
-  const fillWidthPct = assigned >= 100 ? 100 : Math.max(0, Math.min(100, assigned))
+function formatSignedPoints(n: number): string {
+  if (!Number.isFinite(n)) return '0'
+  if (n > 0) return `+${n}`
+  return String(n)
+}
 
-  const ring =
-    tone === 'over'
-      ? 'shadow-[0_0_32px_rgba(244,63,94,0.45)] ring-2 ring-rose-400/50'
-      : tone === 'perfect'
-        ? 'shadow-[0_0_28px_rgba(52,211,153,0.45)] ring-2 ring-emerald-400/45'
-        : 'shadow-[0_0_20px_rgba(251,191,36,0.25)] ring-1 ring-amber-400/30'
+/** Nền sáng trong thẻ rule (xanh / đỏ / trung tính). */
+function signedPointsOnLight(n: number): string {
+  if (!Number.isFinite(n)) return 'text-slate-700'
+  if (n > 0) return 'font-semibold text-emerald-600'
+  if (n < 0) return 'font-semibold text-rose-600'
+  return 'text-slate-700'
+}
 
-  const fillClass =
-    tone === 'over'
-      ? 'bg-gradient-to-r from-rose-500 via-red-500 to-rose-600'
-      : tone === 'perfect'
-        ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400'
-        : 'bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500'
+function allocationPreviewPoints(block: ScoringRuleBlock, r: ScoringRuleConditionRow): number {
+  const cap = Math.max(0, Number(block.maxWeight) || 0)
+  const p = Number(r.allocationValue)
+  if (!Number.isFinite(p)) return 0
+  if (r.allocationKind === 'percent_of_max') return Math.round((cap * p) / 100)
+  return p
+}
 
+/** Header canvas: không còn thanh “ngân sách 100 điểm”. */
+function CumulativeScoringCanvasHeader() {
   return (
-    <header
-      className={`sticky top-0 z-30 mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm ${ring}`}
-    >
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.26em] text-slate-600">
-            Ngân sách 100 điểm
-          </p>
-          <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900">
-            {assigned}
-            <span className="text-base font-medium text-slate-500"> / 100</span>
-            <span className="ml-2 text-xs font-normal text-slate-600">tổng Max weight các khối</span>
-          </p>
-        </div>
-        <p
-          className={`text-xs font-medium ${
-            tone === 'over'
-              ? 'text-rose-700'
-              : tone === 'perfect'
-                ? 'text-emerald-700'
-                : 'text-amber-800'
-          }`}
-        >
-          {tone === 'over'
-            ? 'Vượt ngân sách — không thể lưu profile'
-            : tone === 'perfect'
-              ? 'Hoàn hảo — phân bổ đủ 100 điểm'
-              : 'Chưa đủ 100 — còn room cho khối mới'}
-        </p>
-      </div>
-      <div className="mt-4 h-3 overflow-hidden rounded-full border border-slate-200 bg-slate-100 shadow-inner">
-        <motion.div
-          layout
-          className={`h-full rounded-full ${fillClass}`}
-          style={{ width: `${fillWidthPct}%` }}
-          transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        />
-      </div>
-      {assigned > 100 ? (
-        <p className="mt-2 text-xs text-rose-700">
-          Giảm Max weight ở một hoặc nhiều khối để tổng ≤ 100.
-        </p>
-      ) : null}
+    <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 shadow-[0_0_22px_rgba(56,189,248,0.12)] ring-1 ring-sky-400/25 backdrop-blur-xl">
+      <p className="text-xs font-bold uppercase tracking-[0.26em] text-slate-300">Chấm điểm tích lũy</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-200">
+        Mỗi dòng điều kiện khớp được <span className="font-semibold text-sky-200">cộng hoặc trừ</span> điểm theo giá trị bạn nhập
+        (vd. <span className={signedPointsClass(35)}>{formatSignedPoints(35)}</span>,{' '}
+        <span className={signedPointsClass(-50)}>{formatSignedPoints(-50)}</span>) — <strong>không trần 100</strong>. Nhãn
+        HOT/WARM/COLD/LOSS theo <strong>ngưỡng trong từng profile</strong> (mặc định 80 / 50 nếu không đặt).
+      </p>
     </header>
   )
 }
@@ -162,14 +133,14 @@ function RuleConfigurationCard({
               />
             </label>
             <label className="block text-xs text-slate-600">
-              Max weight (điểm dự trữ khối)
+              Max weight (cơ sở cho % trên khối; ≥ 0)
               <input
                 type="number"
                 min={0}
-                max={100}
+                step={1}
                 value={block.maxWeight}
                 disabled={!canEdit}
-                onChange={(e) => onPatch({ maxWeight: Number(e.target.value) })}
+                onChange={(e) => onPatch({ maxWeight: Math.max(0, Number(e.target.value) || 0) })}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
               />
             </label>
@@ -189,7 +160,9 @@ function RuleConfigurationCard({
 
       <div className="mt-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-slate-700">Điều kiện trong khối (first match wins)</p>
+          <p className="text-xs font-semibold text-slate-700">
+            Điều kiện trong khối — <span className="font-bold text-violet-800">cộng dồn</span> mọi dòng khớp
+          </p>
           {canEdit ? (
             <button
               type="button"
@@ -200,7 +173,13 @@ function RuleConfigurationCard({
             </button>
           ) : null}
         </div>
-        {block.rows.map((r, ri) => (
+        {block.rows.map((r, ri) => {
+          const previewPts = allocationPreviewPoints(block, r)
+          const allocNum = Number(r.allocationValue)
+          const allocInputClass =
+            'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm tabular-nums disabled:opacity-50 ' +
+            signedPointsOnLight(allocNum)
+          return (
           <div
             key={r.id}
             className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
@@ -255,28 +234,31 @@ function RuleConfigurationCard({
                 </select>
               </label>
               <label className="text-xs text-slate-600">
-                {r.allocationKind === 'percent_of_max' ? 'Phần trăm (0–100)' : 'Điểm nếu khớp'}
+                {r.allocationKind === 'percent_of_max'
+                  ? 'Phần trăm trên Max weight (%, có thể âm)'
+                  : 'Điểm nếu khớp (+ cộng / − trừ)'}
                 <input
                   type="number"
+                  step={1}
                   value={r.allocationValue}
                   disabled={!canEdit}
                   onChange={(e) => onPatchRow(ri, { allocationValue: Number(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
+                  className={allocInputClass}
                 />
               </label>
               <div className="flex flex-col justify-end text-xs text-slate-600">
                 {r.allocationKind === 'percent_of_max' ? (
                   <span>
                     ≈{' '}
-                    <span className="font-medium text-amber-800">
-                      {Math.round((block.maxWeight * Math.min(100, Math.max(0, r.allocationValue))) / 100)}
+                    <span className={signedPointsOnLight(previewPts)}>
+                      {formatSignedPoints(previewPts)}
                     </span>{' '}
-                    điểm nếu khớp (trước cap khối)
+                    điểm nếu khớp (Max weight × % / 100)
                   </span>
                 ) : (
                   <span>
-                    Tối đa trong khối:{' '}
-                    <span className="font-medium text-slate-800">{block.maxWeight}</span>
+                    Khi khớp:{' '}
+                    <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
                   </span>
                 )}
                 {canEdit && block.rows.length > 1 ? (
@@ -291,7 +273,8 @@ function RuleConfigurationCard({
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
         {!block.rows.length ? (
           <p className="text-xs text-slate-500">Chưa có điều kiện — thêm ít nhất một dòng.</p>
         ) : null}
@@ -312,8 +295,6 @@ export function ProfileDropCanvas({
   /** Bố cục cao linh hoạt (toàn màn) — canvas kéo giãn theo chiều dọc. */
   workspaceLayout?: boolean
 }) {
-  const assigned = useMemo(() => sumBlockMaxWeights(blocks), [blocks])
-
   const patchBlock = useCallback(
     (i: number, patch: Partial<ScoringRuleBlock>) => {
       onChange(blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)))
@@ -415,7 +396,7 @@ export function ProfileDropCanvas({
         workspaceLayout ? 'min-h-0 flex-1' : 'min-h-[420px]',
       ].join(' ')}
     >
-      <PointBudgetHeader assigned={assigned} />
+      <CumulativeScoringCanvasHeader />
 
       <div
         onDragOver={onDragOverAllow}
@@ -429,8 +410,8 @@ export function ProfileDropCanvas({
           <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-center">
             <p className="text-sm font-medium text-slate-800">Canvas trống</p>
             <p className="max-w-sm text-xs text-slate-600">
-              Kéo mẫu từ thư viện bên trái và thả vào đây. Mỗi khối có Max weight; tổng Max weight toàn profile
-              phải ≤ 100 để có thể lưu.
+              Kéo mẫu từ thư viện bên trái và thả vào đây. Max weight chỉ là gợi ý cho % trên khối; engine cộng dồn
+              mọi dòng khớp (điểm có thể âm).
             </p>
           </div>
         ) : null}

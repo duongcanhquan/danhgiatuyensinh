@@ -35,7 +35,8 @@ export function useLeadScoring(leads: Lead[]) {
     if (scoringProfileId && scoringProfiles.some((p) => p.id === scoringProfileId)) {
       return scoringProfileId
     }
-    return scoringProfiles[0].id
+    const globalDefault = scoringProfiles.find((p) => p.isDefaultForImport)
+    return (globalDefault ?? scoringProfiles[0]).id
   }, [scoringProfiles, scoringProfileId])
 
   const activeScoringProfile = useMemo((): ScoringProfile | null => {

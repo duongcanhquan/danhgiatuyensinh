@@ -1,104 +1,40 @@
 import * as XLSX from 'xlsx'
-import type { FinancialStatus, Lead, LeadCounselorStatus, PriorityTag, SchoolType } from '../types'
+import type { Lead, LeadCounselorStatus, PriorityTag } from '../types'
+import { coerceLeadCounselorStatus, counselorStatusToPipeline } from './leadIdentity'
 
+/** Map tiêu đề cột Excel (tiếng Việt) → khóa parser — so khớp sau chuẩn hoá. */
 const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
-  'ho ten': 'fullName',
-  'ho va ten': 'fullName',
-  'họ và tên': 'fullName',
-  fullname: 'fullName',
-  name: 'fullName',
-  'tên': 'fullName',
-  'sđt': 'phone',
-  'so dien thoai': 'phone',
-  phone: 'phone',
-  'điện thoại': 'phone',
-  email: 'email',
-  mail: 'email',
-  'sdt phu huynh': 'parentPhone',
-  'sđt phụ huynh': 'parentPhone',
-  parentphone: 'parentPhone',
-  'nganh': 'majorInterest',
-  'ngành': 'majorInterest',
-  major: 'majorInterest',
-  majorinterest: 'majorInterest',
-  'tỉnh': 'region',
-  'tinh': 'region',
-  'tỉnh/tp': 'region',
-  'tinh thanh pho': 'region',
-  'tinh/tp': 'region',
-  province: 'region',
-  'quan huyen ha noi': 'hanoiArea',
-  'quan/huyen (hn)': 'hanoiArea',
-  'khu vuc ha noi': 'hanoiArea',
-  'khu vực hà nội': 'hanoiArea',
-  hanoiarea: 'hanoiArea',
-  'quan/huyen (ha noi)': 'hanoiArea',
-  'du dinh': 'studyIntention',
-  'dự định': 'studyIntention',
-  studyintention: 'studyIntention',
-  'hinh thuc dao tao': 'studyIntention',
-  'truong': 'highSchoolName',
-  'trường': 'highSchoolName',
-  school: 'highSchoolName',
-  schoolname: 'highSchoolName',
-  highschool: 'highSchoolName',
-  'hoc luc': 'academicLevel',
-  'học lực': 'academicLevel',
-  academicperformance: 'academicLevel',
-  academiclevel: 'academicLevel',
-  'loai truong': 'schoolTypeRaw',
-  schooltype: 'schoolTypeRaw',
-  'tai chinh': 'financialStatusRaw',
-  financial: 'financialStatusRaw',
-  'gioi tinh': 'gender',
-  gender: 'gender',
-  'nguyện vọng': 'aspirations',
-  'nguyen vong': 'aspirations',
-  aspirations: 'aspirations',
-  'sở thích': 'hobbies',
-  'so thich': 'hobbies',
-  hobbies: 'hobbies',
-  'ghi chú đi trường': 'fieldTripNotes',
-  'ghi chu di truong': 'fieldTripNotes',
-  fieldtripnotes: 'fieldTripNotes',
-  'nguồn lead': 'leadSource',
-  'nguon lead': 'leadSource',
-  'nguồn tiếp nhận': 'leadSource',
-  'nguon tiep nhan': 'leadSource',
-  leadsource: 'leadSource',
-  'ngay sinh': 'dateOfBirth',
-  'ngày sinh': 'dateOfBirth',
-  dob: 'dateOfBirth',
-  dateofbirth: 'dateOfBirth',
-  birthday: 'dateOfBirth',
-  tuoi: 'age',
-  'tuổi': 'age',
-  age: 'age',
+  'ma kh': 'customerId',
+  'ma khach hang': 'customerId',
+  'ten khach hang': 'fullName',
+  'dien thoai': 'phone',
+  'dien thoai nguoi lien he chinh': 'parentPhone',
+  'nguon khach hang': 'source',
+  'he dao tao': 'educationLevel',
+  'nguoi phu trach': 'assignedToRaw',
+  'tinh trang': 'statusRaw',
+  'mo ta': 'description',
+  'truong hoc': 'highSchool',
+  'lop': 'gradeClass',
+  'tinh thanh pho': 'province',
+  'dia chi': 'address',
 }
 
 export type ExcelLeadRow = {
+  customerId: string
   fullName: string
   phone: string
-  email: string
   parentPhone: string
-  majorInterest: string
-  region: string
-  /** Quận / huyện khi tỉnh là Hà Nội */
-  hanoiArea: string
-  highSchoolName: string
-  academicLevel: string
-  /** Dự định: Cao đẳng, Trung cấp, Du học… */
-  studyIntention: string
-  schoolTypeRaw: string
-  financialStatusRaw: string
-  gender?: string
-  aspirations?: string
-  hobbies?: string
-  fieldTripNotes?: string
-  leadSource?: string
-  /** DD/MM/YYYY or ISO — dùng fingerprint khi không có SĐT */
-  dateOfBirth?: string
-  age?: string
+  source: string
+  educationLevel: string
+  /** Tên hiển thị (đăng nhập) hoặc email đăng nhập / UID — khớp `users` khi import. */
+  assignedToRaw: string
+  statusRaw: string
+  description: string
+  highSchool: string
+  gradeClass: string
+  province: string
+  address: string
 }
 
 function normalizeHeader(h: string): string {
@@ -111,7 +47,6 @@ function normalizeHeader(h: string): string {
     .replace(/\s+/g, ' ')
 }
 
-/** Chuẩn hoá tên sheet (hỗ trợ «Leads» / «Hồ sơ» / «Hồ_sơ»). */
 function normalizeSheetTabName(name: string): string {
   return normalizeHeader(name).replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -145,23 +80,6 @@ export function parseWorkbookToRows(file: ArrayBuffer): Partial<ExcelLeadRow>[] 
   return json.map((row) => mapSheetRow(row))
 }
 
-function parseSchoolType(raw: string | undefined): SchoolType {
-  const n = normalizeHeader(raw ?? '')
-  if (n.includes('private') || n.includes('tu')) return 'PRIVATE'
-  if (n.includes('international') || n.includes('quoc te')) return 'INTERNATIONAL'
-  if (n.includes('public') || n.includes('cong')) return 'PUBLIC'
-  return 'UNKNOWN'
-}
-
-function parseFinancial(raw: string | undefined): FinancialStatus {
-  const n = normalizeHeader(raw ?? '')
-  if (n.includes('install') || n.includes('tra gop')) return 'INSTALLMENT'
-  if (n.includes('scholar') || n.includes('hoc bong')) return 'SCHOLARSHIP_SEEKING'
-  if (n.includes('aid') || n.includes('ho tro')) return 'FINANCIAL_AID'
-  if (n.includes('full')) return 'FULL_PAY'
-  return 'UNKNOWN'
-}
-
 export type LeadIntakeOwnershipMeta = {
   uploadedBy: string
   uploaderName: string
@@ -173,7 +91,48 @@ export type LeadIntakeIdentityMeta = {
   counselorStatus?: LeadCounselorStatus
 }
 
-/** Dữ liệu ghi Firestore (không gồm id, createdAt, updatedAt — thêm ở bước intake). */
+/** Chuẩn hóa để so khớp tên (bỏ dấu, gộp khoảng trắng) — dùng cho cột «Người phụ trách» vs `displayName`. */
+export function normalizeStaffMatchKey(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+}
+
+/**
+ * Gán UID từ cột «Người phụ trách» (ưu tiên: UID → email đăng nhập → tên hiển thị đăng nhập khớp tuyệt đối → tên sau chuẩn hóa).
+ * Nếu nhiều TVV trùng tên sau chuẩn hóa, chọn bản ghi có email nhỏ nhất (ổn định) — nên phân biệt bằng email trong Excel.
+ */
+export function resolveAssignedCounselorUid(
+  raw: string | undefined,
+  counselors: { id: string; email: string; displayName: string }[],
+): string | null {
+  const t = (raw ?? '').trim()
+  if (!t) return null
+  const lower = t.toLowerCase()
+  const byId = counselors.find((c) => c.id === t)
+  if (byId) return byId.id
+  const byEmail = counselors.find((c) => c.email.toLowerCase().trim() === lower)
+  if (byEmail) return byEmail.id
+
+  const exactName = counselors.filter((c) => (c.displayName || '').trim().toLowerCase() === lower)
+  if (exactName.length === 1) return exactName[0].id
+  if (exactName.length > 1) {
+    return [...exactName].sort((a, b) => a.email.localeCompare(b.email))[0].id
+  }
+
+  const nk = normalizeStaffMatchKey(t)
+  if (!nk) return null
+  const normMatches = counselors.filter((c) => normalizeStaffMatchKey(c.displayName || '') === nk)
+  if (normMatches.length === 0) return null
+  if (normMatches.length === 1) return normMatches[0].id
+  return [...normMatches].sort((a, b) => a.email.localeCompare(b.email))[0].id
+}
+
+/** Payload Firestore khi tạo/cập nhật từ intake (không gồm id, createdAt, updatedAt). */
 export function buildLeadFirestorePayload(
   row: Partial<ExcelLeadRow>,
   calculatedScore: number,
@@ -181,35 +140,29 @@ export function buildLeadFirestorePayload(
   assignedCounselorId: string | null,
   ownership?: LeadIntakeOwnershipMeta,
   identity?: LeadIntakeIdentityMeta,
-): Omit<Lead, 'id' | 'createdAt' | 'updatedAt'> {
+): Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'uploadedAt'> {
   const assignee = assignedCounselorId
+  const status = identity?.counselorStatus ?? coerceLeadCounselorStatus(row.statusRaw ?? '')
+  const pipelineStatus = counselorStatusToPipeline(status)
   return {
+    customerId: row.customerId ?? '',
     fullName: row.fullName ?? '',
     phone: row.phone ?? '',
-    email: row.email || undefined,
-    parentPhone: row.parentPhone || undefined,
-    majorInterest: row.majorInterest ?? '',
-    academicLevel: row.academicLevel || undefined,
-    studyIntention: row.studyIntention?.trim() || undefined,
-    region: row.region ?? '',
-    hanoiArea: row.hanoiArea?.trim() || undefined,
-    highSchoolName: row.highSchoolName || undefined,
-    schoolType: parseSchoolType(row.schoolTypeRaw),
-    financialStatus: parseFinancial(row.financialStatusRaw),
+    parentPhone: row.parentPhone ?? '',
+    source: row.source ?? '',
+    educationLevel: row.educationLevel ?? '',
+    assignedTo: assignee,
+    assignedCounselorId: assignee,
+    status,
+    pipelineStatus,
+    description: row.description ?? '',
+    highSchool: row.highSchool ?? '',
+    gradeClass: row.gradeClass ?? '',
+    province: row.province ?? '',
+    address: row.address ?? '',
     calculatedScore,
     priorityTag,
-    assignedCounselorId: assignee,
-    assignedTo: assignee,
-    gender: row.gender?.trim() || undefined,
-    aspirations: row.aspirations?.trim() || undefined,
-    hobbies: row.hobbies?.trim() || undefined,
-    fieldTripNotes: row.fieldTripNotes?.trim() || undefined,
-    leadSource: row.leadSource?.trim() || undefined,
-    pipelineStatus: 'NEW',
-    status: identity?.counselorStatus ?? 'NEW',
-    nextFollowUpDate: null,
     uniqueHash: identity?.uniqueHash ?? '',
-    source: 'EXCEL',
     ...(ownership
       ? {
           uploadedBy: ownership.uploadedBy,
@@ -220,51 +173,46 @@ export function buildLeadFirestorePayload(
   }
 }
 
-/** Mẫu Excel chuẩn + sheet hướng dẫn (tải về máy người dùng). */
 export function downloadStandardIntakeTemplate(): void {
+  /** Hàng 1 đúng mẫu VietMy: A–G, cột H–J để trống (giữ layout), K–P. Parser vẫn đọc theo tên cột, không phụ thuộc vị trí. */
   const headers = [
-    'Họ Tên',
-    'SĐT',
-    'Email',
-    'SĐT Phụ huynh',
-    'Ngành quan tâm',
-    'Tỉnh/Thành phố',
-    'Quận/Huyện (Hà Nội)',
-    'Trường THPT',
-    'Học lực',
-    'Dự định',
-    'Loại trường',
-    'Tài chính',
-    'Giới tính',
-    'Ngày sinh',
-    'Tuổi',
-    'Nguyện vọng',
-    'Sở thích',
-    'Ghi chú đi trường',
-    'Nguồn tiếp nhận',
+    'Tên khách hàng',
+    'Điện thoại',
+    'Nguồn khách hàng',
+    'Hệ đào tạo',
+    'Người phụ trách',
+    'Tình trạng',
+    'Mô tả',
+    '',
+    '',
+    '',
+    'Trường học',
+    'Lớp',
+    'Tỉnh/thành phố',
+    'Địa chỉ',
+    'Điện thoại người liên hệ chính',
+    'Mã KH',
   ]
   const ws = XLSX.utils.aoa_to_sheet([headers])
-  ws['!cols'] = headers.map(() => ({ wch: 18 }))
+  ws['!cols'] = headers.map((h) => ({ wch: h ? 22 : 4 }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Hồ sơ')
 
   const instructions: string[][] = [
-    ['VietMy — Hệ thống tuyển sinh: hướng dẫn nhập liệu'],
+    ['VietMy Admissions OS — mẫu nhập hồ sơ'],
     [''],
-    ['1. Chỉnh sửa trên sheet «Hồ sơ» (hoặc sheet tên «Leads» trong file cũ), giữ nguyên hàng tiêu đề (dòng 1).'],
-    ['2. Cột bắt buộc tối thiểu: Họ Tên, SĐT, Tỉnh/Thành phố, Ngành quan tâm (khuyến nghị).'],
-    ['2a. Quận/Huyện (Hà Nội): điền khi Tỉnh/Thành phố là Hà Nội; danh mục chỉnh trong Cấu hình dữ liệu.'],
-    ['2b. Dự định: Cao đẳng, Trung cấp, Phổ thông cao đẳng, Du học… — khớp danh mục «Dự định» trong Cấu hình.'],
-    ['2b. Ngày sinh / Tuổi: khuyến nghị khi thiếu SĐT — dùng để tạo fingerprint trùng lặp.'],
-    ['3. Loại trường: gõ PUBLIC, PRIVATE, INTERNATIONAL hoặc để trống (UNKNOWN).'],
-    ['4. Tài chính: FULL_PAY, INSTALLMENT, SCHOLARSHIP_SEEKING, FINANCIAL_AID hoặc để trống.'],
-    ['5. Nguyện vọng / Sở thích / Ghi chú đi trường: văn bản tự do; hệ thống dùng cho scoring nâng cao.'],
-    ['6. Sau khi tải lên, hệ thống gắn UID & tên người upload và mã batch tự động.'],
+    ['1. Giữ nguyên hàng tiêu đề (dòng 1) và thứ tự cột như sheet «Hồ sơ». Có thể dùng sheet tên «Leads».'],
+    [
+      '2. «Người phụ trách»: ghi tên hiển thị (như trên hệ thống đăng nhập) hoặc email đăng nhập — khớp danh bạ TVV; có thể thêm UID nếu cần.',
+    ],
+    ['   Khuyến nghị: ưu tiên tên hiển thị hoặc email; nếu hai TVV trùng tên thì bắt buộc dùng email.'],
+    ['3. «Tình trạng»: Mới, Quan tâm / đang tư vấn, Đã cọc, Nhập học, … (hệ thống chuẩn hoá về Kanban).'],
+    ['4. Điểm chấm & nhãn HOT/WARM/COLD/LOSS do engine tính sau upload.'],
     [''],
-    ['© VietMy — mẫu chuẩn hoá'],
+    ['© VietMy'],
   ]
   const ws2 = XLSX.utils.aoa_to_sheet(instructions)
-  ws2['!cols'] = [{ wch: 72 }]
+  ws2['!cols'] = [{ wch: 80 }]
   XLSX.utils.book_append_sheet(wb, ws2, 'Hướng dẫn')
 
   XLSX.writeFile(wb, 'VietMy_Mau_nhap_ho_so.xlsx')

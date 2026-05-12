@@ -49,7 +49,7 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 /**
- * Dedupe fingerprint: primary phone (student → parent); else normalized name + DOB/age.
+ * Dedupe fingerprint: primary phone (student → parent); else normalized name + customer id + education.
  */
 export async function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): Promise<string> {
   const phoneKey = normalizePhoneKey(row.phone ?? '', row.parentPhone)
@@ -58,10 +58,10 @@ export async function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): Promise
     basis = `phone:${phoneKey}`
   } else {
     const n = normIdentity(row.fullName ?? '')
-    const dob = normIdentity(row.dateOfBirth ?? '')
-    const age = normIdentity(row.age ?? '')
-    const major = normIdentity(row.majorInterest ?? '')
-    basis = `identity:${n}|dob:${dob}|age:${age}|m:${major}`
+    const cid = normIdentity(row.customerId ?? '')
+    const edu = normIdentity(row.educationLevel ?? '')
+    const grade = normIdentity(row.gradeClass ?? '')
+    basis = `identity:${n}|kh:${cid}|edu:${edu}|lop:${grade}`
   }
   return sha256Hex(basis)
 }

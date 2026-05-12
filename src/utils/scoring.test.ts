@@ -3,23 +3,24 @@ import type { ScoringProfile } from '../types'
 import { evaluateLead, scoreToPriorityTag, sumBlockMaxWeights } from './scoring'
 
 describe('scoreToPriorityTag', () => {
-  it('maps thresholds to HOT / WARM / COLD', () => {
+  it('maps fixed thresholds to HOT / WARM / COLD / LOSS', () => {
     expect(scoreToPriorityTag(90, { hot: 80, warm: 50 })).toBe('HOT')
     expect(scoreToPriorityTag(60, { hot: 80, warm: 50 })).toBe('WARM')
     expect(scoreToPriorityTag(40, { hot: 80, warm: 50 })).toBe('COLD')
+    expect(scoreToPriorityTag(-1, { hot: 80, warm: 50 })).toBe('LOSS')
   })
 })
 
 describe('evaluateLead', () => {
-  it('uses ruleBlocks when present', () => {
+  it('sums all matching rows in a block (cumulative)', () => {
     const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
       rules: [],
       ruleBlocks: [
         {
           id: 'b1',
           category: 'demographics',
-          label: 'region',
-          targetField: 'region',
+          label: 'province',
+          targetField: 'province',
           maxWeight: 100,
           rows: [
             {
@@ -27,15 +28,22 @@ describe('evaluateLead', () => {
               condition: 'EQUALS',
               value: 'Hà Nội',
               allocationKind: 'absolute',
-              allocationValue: 85,
+              allocationValue: 40,
+            },
+            {
+              id: 'r2',
+              condition: 'CONTAINS',
+              value: 'Nội',
+              allocationKind: 'absolute',
+              allocationValue: 50,
             },
           ],
         },
       ],
       thresholds: { hotMinScore: 80, warmMinScore: 50 },
     }
-    const r = evaluateLead({ region: 'Hà Nội' }, profile)
-    expect(r.calculatedScore).toBe(85)
+    const r = evaluateLead({ province: 'Hà Nội' }, profile)
+    expect(r.calculatedScore).toBe(90)
     expect(r.priorityTag).toBe('HOT')
   })
 
@@ -44,7 +52,7 @@ describe('evaluateLead', () => {
       rules: [
         {
           id: 'x',
-          targetField: 'region',
+          targetField: 'province',
           condition: 'CONTAINS',
           value: 'Nội',
           points: 70,
@@ -53,9 +61,87 @@ describe('evaluateLead', () => {
       ruleBlocks: [],
       thresholds: { hotMinScore: 80, warmMinScore: 50 },
     }
-    const r = evaluateLead({ region: 'Hà Nội' }, profile)
+    const r = evaluateLead({ province: 'Hà Nội' }, profile)
     expect(r.calculatedScore).toBe(70)
     expect(r.priorityTag).toBe('WARM')
+  })
+
+  it('allows negative cumulative score → LOSS', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [
+        {
+          id: 'n',
+          targetField: 'province',
+          condition: 'IS_NOT_EMPTY',
+          value: '',
+          points: -40,
+        },
+      ],
+      ruleBlocks: [],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const r = evaluateLead({ province: 'HN' }, profile)
+    expect(r.calculatedScore).toBe(-40)
+    expect(r.priorityTag).toBe('LOSS')
+  })
+
+  it('allows negative percent_of_max row points', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'demographics',
+          label: 'test',
+          targetField: 'province',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'EQUALS',
+              value: 'HN',
+              allocationKind: 'percent_of_max',
+              allocationValue: -30,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const r = evaluateLead({ province: 'HN' }, profile)
+    expect(r.calculatedScore).toBe(-30)
+    expect(r.priorityTag).toBe('LOSS')
+  })
+
+  it('uses profile thresholds for HOT/WARM when set', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'demographics',
+          label: 'x',
+          targetField: 'province',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'EQUALS',
+              value: 'HN',
+              allocationKind: 'absolute',
+              allocationValue: 85,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 90, warmMinScore: 60 },
+    }
+    const r = evaluateLead({ province: 'HN' }, profile)
+    expect(r.calculatedScore).toBe(85)
+    expect(r.priorityTag).toBe('WARM')
+    const hot = evaluateLead({ province: 'HN' }, { ...profile, ruleBlocks: profile.ruleBlocks!.map((b) => ({ ...b, rows: [{ ...b.rows[0]!, allocationValue: 95 }] })) })
+    expect(hot.calculatedScore).toBe(95)
+    expect(hot.priorityTag).toBe('HOT')
   })
 
   it('returns safe defaults when nothing matches', () => {

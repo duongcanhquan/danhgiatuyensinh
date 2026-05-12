@@ -27,6 +27,7 @@ const TAG_COLORS: Record<PriorityTag, string> = {
   HOT: '#f87171',
   WARM: '#fbbf24',
   COLD: '#60a5fa',
+  LOSS: '#64748b',
 }
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
@@ -74,7 +75,7 @@ export function AnalyticsAdvancedView() {
   }, [leads])
 
   const tagDistribution = useMemo(() => {
-    const counts: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0 }
+    const counts: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
     if (activeScoringProfile) {
       for (const l of leads) {
         const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
@@ -83,7 +84,7 @@ export function AnalyticsAdvancedView() {
     } else {
       for (const l of leads) counts[l.priorityTag]++
     }
-    return (['HOT', 'WARM', 'COLD'] as const).map((name) => ({
+    return (['HOT', 'WARM', 'COLD', 'LOSS'] as const).map((name) => ({
       name,
       value: counts[name],
       fill: TAG_COLORS[name],

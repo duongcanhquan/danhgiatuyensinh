@@ -14,11 +14,11 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import type { Lead, Permission, VietMyUserProfile } from '../types'
+import type { Lead, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
-import { hasPermission } from '../auth/permissions'
+import { useMasterData } from './useMasterData'
 import {
   coerceLeadCounselorStatus,
   counselorStatusToPipeline,
@@ -27,24 +27,6 @@ import {
 
 /** Một trang realtime / cursor — giới hạn đọc Firestore mỗi lần. */
 export const LEADS_PAGE_SIZE = 50
-
-function asSchoolType(v: unknown): Lead['schoolType'] {
-  const s = String(v ?? '').toUpperCase()
-  if (s === 'PUBLIC' || s === 'PRIVATE' || s === 'INTERNATIONAL' || s === 'UNKNOWN') return s
-  return 'UNKNOWN'
-}
-
-function asFinancial(v: unknown): Lead['financialStatus'] {
-  const s = String(v ?? '').toUpperCase()
-  const allowed: Lead['financialStatus'][] = [
-    'FULL_PAY',
-    'INSTALLMENT',
-    'SCHOLARSHIP_SEEKING',
-    'FINANCIAL_AID',
-    'UNKNOWN',
-  ]
-  return (allowed.includes(s as Lead['financialStatus']) ? s : 'UNKNOWN') as Lead['financialStatus']
-}
 
 const PIPELINE_KEYS = new Set<string>([
   'NEW',
@@ -76,13 +58,42 @@ function mapLegacyPipeline(v: unknown): Lead['pipelineStatus'] {
   return map[s] ?? 'NEW'
 }
 
+function normPriorityTag(v: unknown): Lead['priorityTag'] {
+  const s = String(v ?? '').toUpperCase()
+  if (s === 'HOT' || s === 'WARM' || s === 'COLD' || s === 'LOSS') return s
+  return 'COLD'
+}
+
 function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
   try {
-    const region = String(data.region ?? data.province ?? '')
-    const majorInterest = String(data.majorInterest ?? data.academicPerformance ?? '')
-    const highSchoolName = String(data.highSchoolName ?? data.schoolName ?? '')
-    const calculatedScore = Number(data.calculatedScore ?? data.finalScore ?? 0)
-    const priorityTag = (data.priorityTag ?? data.tag ?? 'COLD') as Lead['priorityTag']
+    const legacyAssigned =
+      data.assignedCounselorId === null || data.assignedCounselorId === undefined
+        ? null
+        : String(data.assignedCounselorId)
+    const assignedToRaw = data.assignedTo
+    const assignedTo =
+      assignedToRaw === null || assignedToRaw === undefined || assignedToRaw === ''
+        ? legacyAssigned
+        : String(assignedToRaw)
+
+    const province = String(data.province ?? data.region ?? '')
+    const educationLevel = String(
+      data.educationLevel ?? data.majorInterest ?? data.studyIntention ?? data.academicLevel ?? '',
+    )
+    const highSchool = String(data.highSchool ?? data.highSchoolName ?? data.schoolName ?? '')
+    const customerId = String(data.customerId ?? '')
+    const fullName = String(data.fullName ?? '')
+    const phone = String(data.phone ?? '')
+    const parentPhone = String(data.parentPhone ?? '')
+    const source = String(data.source ?? data.leadSource ?? '')
+    let description = String(data.description ?? '')
+    if (!description.trim()) {
+      const bits = [data.aspirations, data.hobbies, data.fieldTripNotes].filter(Boolean).map(String)
+      description = bits.join('\n---\n')
+    }
+    const gradeClass = String(data.gradeClass ?? '')
+    const address = String(data.address ?? '')
+
     const statusRaw = String(data.status ?? '').trim()
     const coercedCounselor = statusRaw ? coerceLeadCounselorStatus(statusRaw) : null
     let pipelineStatus: Lead['pipelineStatus']
@@ -95,6 +106,10 @@ function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       pipelineStatus = mapLegacyPipeline(data.status)
     }
     const status: Lead['status'] = coercedCounselor ?? pipelineToCounselorStatus(pipelineStatus)
+
+    const calculatedScore = Number(data.calculatedScore ?? data.finalScore ?? 0)
+    const priorityTag = normPriorityTag(data.priorityTag ?? data.tag)
+
     const mlWinProbability =
       data.mlWinProbability !== undefined && data.mlWinProbability !== null
         ? Math.max(0, Math.min(100, Math.round(Number(data.mlWinProbability))))
@@ -108,152 +123,172 @@ function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       nextRaw && typeof nextRaw === 'object' && 'toMillis' in (nextRaw as object)
         ? (nextRaw as Timestamp)
         : null
+
     const uniqueHash = String(data.uniqueHash ?? '')
     const now = Timestamp.now()
     const createdAt = (data.createdAt as Timestamp) ?? (data.importedAt as Timestamp) ?? now
     const updatedAt = (data.updatedAt as Timestamp) ?? createdAt
-    const assignedCounselorId =
-      data.assignedCounselorId === null || data.assignedCounselorId === undefined
-        ? null
-        : String(data.assignedCounselorId)
-    const assignedToRaw = data.assignedTo
-    const assignedTo =
-      assignedToRaw === null || assignedToRaw === undefined || assignedToRaw === ''
-        ? assignedCounselorId
-        : String(assignedToRaw)
+    const importedAt = data.importedAt as Timestamp | undefined
+    const uploadedAt = (data.uploadedAt as Timestamp) ?? importedAt ?? createdAt
 
     return {
       id,
-      fullName: String(data.fullName ?? ''),
-      phone: String(data.phone ?? ''),
-      email: data.email !== undefined ? String(data.email) : undefined,
-      parentPhone: data.parentPhone !== undefined ? String(data.parentPhone) : undefined,
-      majorInterest,
-      majorInterestId: data.majorInterestId ? String(data.majorInterestId) : undefined,
-      academicLevel: data.academicLevel !== undefined ? String(data.academicLevel) : undefined,
-      studyIntention: data.studyIntention !== undefined ? String(data.studyIntention) : undefined,
-      studyIntentionId: data.studyIntentionId ? String(data.studyIntentionId) : undefined,
-      region,
-      regionId: data.regionId ? String(data.regionId) : undefined,
-      hanoiArea: data.hanoiArea !== undefined ? String(data.hanoiArea) : undefined,
-      hanoiAreaId: data.hanoiAreaId ? String(data.hanoiAreaId) : undefined,
-      province: data.province !== undefined ? String(data.province) : undefined,
-      gender: data.gender !== undefined ? String(data.gender) : undefined,
-      highSchoolName: highSchoolName || undefined,
-      highSchoolId: data.highSchoolId ? String(data.highSchoolId) : undefined,
-      schoolType: asSchoolType(data.schoolType),
-      financialStatus: asFinancial(data.financialStatus),
+      customerId,
+      fullName,
+      phone,
+      parentPhone,
+      source,
+      educationLevel,
+      assignedTo,
+      assignedCounselorId: legacyAssigned ?? undefined,
+      status,
+      description,
+      highSchool,
+      gradeClass,
+      province,
+      address,
       calculatedScore,
       priorityTag,
-      assignedCounselorId,
-      assignedTo,
+      uploadedAt,
+      updatedAt,
+      pipelineStatus,
+      uniqueHash,
+      createdAt,
       uploadedBy: data.uploadedBy !== undefined && data.uploadedBy !== null ? String(data.uploadedBy) : undefined,
       uploaderName: data.uploaderName !== undefined ? String(data.uploaderName) : undefined,
       uploadBatchId: data.uploadBatchId !== undefined ? String(data.uploadBatchId) : undefined,
-      pipelineStatus,
-      status,
-      mlWinProbability,
-      mlExplanation,
-      nextFollowUpDate,
-      uniqueHash,
-      source: data.source as Lead['source'],
-      leadSource: data.leadSource !== undefined ? String(data.leadSource) : undefined,
-      aspirations: data.aspirations !== undefined ? String(data.aspirations) : undefined,
-      hobbies: data.hobbies !== undefined ? String(data.hobbies) : undefined,
-      fieldTripNotes: data.fieldTripNotes !== undefined ? String(data.fieldTripNotes) : undefined,
-      aiSentimentScore:
-        data.aiSentimentScore !== undefined && data.aiSentimentScore !== null
-          ? Number(data.aiSentimentScore)
-          : undefined,
-      importedAt: data.importedAt as Timestamp | undefined,
-      createdAt,
-      updatedAt,
+      importedAt,
       lastTouchedAt:
         data.lastTouchedAt && typeof data.lastTouchedAt === 'object' && 'toMillis' in (data.lastTouchedAt as object)
           ? (data.lastTouchedAt as Timestamp)
           : undefined,
       routingMeta: data.routingMeta as Lead['routingMeta'],
-      // aiInsights: chỉ tải trong chi tiết qua sub-collection `aiInsightTasks` (xem useLeadAiInsightTasks).
+      mlWinProbability,
+      mlExplanation,
+      nextFollowUpDate,
+      aiSentimentScore:
+        data.aiSentimentScore !== undefined && data.aiSentimentScore !== null
+          ? Number(data.aiSentimentScore)
+          : undefined,
     }
   } catch {
     return null
   }
 }
 
-function filterByPermissions(
-  leads: Lead[],
-  perms: readonly Permission[],
-  profile: VietMyUserProfile | null,
-): Lead[] {
-  if (!profile) return []
-  if (hasPermission(perms, 'leads:read:global')) return leads
-  if (hasPermission(perms, 'leads:read:self_assigned')) {
-    return leads.filter((l) => l.assignedCounselorId === profile.id)
-  }
-  if (hasPermission(perms, 'leads:read:profession_scope')) {
-    const team = profile.managedCounselorIds ?? []
-    if (!team.length) return []
-    return leads.filter((l) => Boolean(l.assignedCounselorId && team.includes(l.assignedCounselorId)))
-  }
-  if (hasPermission(perms, 'leads:read:department_scope')) {
-    const majors = profile.managedMajorIds ?? []
-    if (!majors.length) return []
-    return leads.filter((l) => Boolean(l.majorInterestId && majors.includes(l.majorInterestId)))
-  }
-  return []
+function impossibleUid(): string {
+  return '__no_match__'
 }
 
-/** Admin / Trưởng khoa / Trưởng ngành — xem toàn bộ lead (query không giới hạn). */
-function isElevatedLeadViewer(profile: VietMyUserProfile): boolean {
-  return (
-    profile.role === 'admin' ||
-    profile.role === 'head_of_department' ||
-    profile.role === 'head_of_profession'
-  )
-}
-
-/** Counselor — chỉ lead do chính họ upload (`uploadedBy`). */
-function isCounselorOwnDataScope(profile: VietMyUserProfile): boolean {
-  return profile.role === 'counselor'
-}
-
-function firstPageQuery(firestore: Firestore, profile: VietMyUserProfile) {
+function firstPageQuery(firestore: Firestore, profile: VietMyUserProfile, hoDLabels: string[]) {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  if (isCounselorOwnDataScope(profile)) {
+  const ob = orderBy('updatedAt', 'desc')
+  const lim = limit(LEADS_PAGE_SIZE)
+
+  if (profile.role === 'admin') {
+    return query(col, ob, lim)
+  }
+
+  if (profile.role === 'counselor') {
     return query(
       col,
-      or(where('assignedCounselorId', '==', profile.id), where('uploadedBy', '==', profile.id)),
-      orderBy('updatedAt', 'desc'),
-      limit(LEADS_PAGE_SIZE),
+      or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id)),
+      ob,
+      lim,
     )
   }
-  return query(col, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+
+  if (profile.role === 'head_of_profession') {
+    const team = (profile.managedCounselorIds ?? []).filter(Boolean)
+    if (!team.length) {
+      return query(col, where('assignedTo', '==', impossibleUid()), ob, lim)
+    }
+    const chunk = team.slice(0, 30)
+    return query(
+      col,
+      or(where('assignedTo', 'in', chunk), where('assignedCounselorId', 'in', chunk)),
+      ob,
+      lim,
+    )
+  }
+
+  if (profile.role === 'head_of_department') {
+    const chunk = hoDLabels.filter(Boolean).slice(0, 30)
+    if (!chunk.length) {
+      return query(col, where('educationLevel', '==', impossibleUid()), ob, lim)
+    }
+    return query(col, where('educationLevel', 'in', chunk), ob, lim)
+  }
+
+  return query(col, ob, lim)
 }
 
 function pageAfterQuery(
   firestore: NonNullable<ReturnType<typeof getFirestoreDb>>,
   profile: VietMyUserProfile,
   cursor: QueryDocumentSnapshot<DocumentData>,
+  hoDLabels: string[],
 ) {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  if (isCounselorOwnDataScope(profile)) {
+  const ob = orderBy('updatedAt', 'desc')
+  const lim = limit(LEADS_PAGE_SIZE)
+  const after = startAfter(cursor)
+
+  if (profile.role === 'admin') {
+    return query(col, ob, after, lim)
+  }
+
+  if (profile.role === 'counselor') {
     return query(
       col,
-      or(where('assignedCounselorId', '==', profile.id), where('uploadedBy', '==', profile.id)),
-      orderBy('updatedAt', 'desc'),
-      startAfter(cursor),
-      limit(LEADS_PAGE_SIZE),
+      or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id)),
+      ob,
+      after,
+      lim,
     )
   }
-  return query(col, orderBy('updatedAt', 'desc'), startAfter(cursor), limit(LEADS_PAGE_SIZE))
+
+  if (profile.role === 'head_of_profession') {
+    const team = (profile.managedCounselorIds ?? []).filter(Boolean)
+    if (!team.length) {
+      return query(col, where('assignedTo', '==', impossibleUid()), ob, after, lim)
+    }
+    const chunk = team.slice(0, 30)
+    return query(
+      col,
+      or(where('assignedTo', 'in', chunk), where('assignedCounselorId', 'in', chunk)),
+      ob,
+      after,
+      lim,
+    )
+  }
+
+  if (profile.role === 'head_of_department') {
+    const chunk = hoDLabels.filter(Boolean).slice(0, 30)
+    if (!chunk.length) {
+      return query(col, where('educationLevel', '==', impossibleUid()), ob, after, lim)
+    }
+    return query(col, where('educationLevel', 'in', chunk), ob, after, lim)
+  }
+
+  return query(col, ob, after, lim)
 }
 
 /**
- * Real-time trang đầu `leads` (tối đa {@link LEADS_PAGE_SIZE} bản ghi) + RBAC.
- * Các trang sau: `loadMore()` (getDocs + cursor) để giữ đọc có giới hạn.
+ * Real-time trang đầu `leads` + RBAC (query theo vai trò).
  */
 export function useLeads() {
-  const { profile, permissions } = useAuth()
+  const { profile } = useAuth()
+  const { byKind } = useMasterData()
+
+  const hoDQueryLabels = useMemo(() => {
+    const ids = profile?.managedMajorIds ?? []
+    if (!ids.length) return [] as string[]
+    const idSet = new Set(ids)
+    const majors = byKind.majors ?? []
+    return majors.filter((m) => idSet.has(m.id)).map((m) => m.label.trim()).filter(Boolean)
+  }, [profile?.managedMajorIds, byKind.majors])
+
   const [livePage, setLivePage] = useState<Lead[]>([])
   const [olderLeads, setOlderLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
@@ -274,10 +309,20 @@ export function useLeads() {
 
   const leads = useMemo(() => {
     if (!profile) return []
-    if (isCounselorOwnDataScope(profile)) return raw
-    if (isElevatedLeadViewer(profile) || hasPermission(permissions, 'leads:read:global')) return raw
-    return filterByPermissions(raw, permissions, profile)
-  }, [raw, profile, permissions])
+    const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
+    if (profile.role === 'head_of_department' && labelSet.size) {
+      return raw.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
+    }
+    if (profile.role === 'head_of_profession') {
+      const team = new Set(profile.managedCounselorIds ?? [])
+      if (!team.size) return []
+      return raw.filter((l) => {
+        const u = l.assignedTo ?? l.assignedCounselorId
+        return Boolean(u && team.has(u))
+      })
+    }
+    return raw
+  }, [raw, profile, hoDQueryLabels])
 
   useEffect(() => {
     livePageTailRef.current = null
@@ -307,7 +352,7 @@ export function useLeads() {
       return
     }
 
-    const q = firstPageQuery(firestore, profile)
+    const q = firstPageQuery(firestore, profile, hoDQueryLabels)
 
     const unsub = onSnapshot(
       q,
@@ -335,7 +380,7 @@ export function useLeads() {
       },
     )
     return () => unsub()
-  }, [configured, profile])
+  }, [configured, profile, hoDQueryLabels])
 
   const loadMore = useCallback(async () => {
     const firestore = getFirestoreDb()
@@ -344,7 +389,7 @@ export function useLeads() {
     if (!cursor) return
     setLoadingMore(true)
     try {
-      const snap = await getDocs(pageAfterQuery(firestore, profile, cursor))
+      const snap = await getDocs(pageAfterQuery(firestore, profile, cursor, hoDQueryLabels))
       if (!snap.docs.length) {
         setHasMore(false)
         return
@@ -369,7 +414,7 @@ export function useLeads() {
     } finally {
       setLoadingMore(false)
     }
-  }, [profile, loadingMore])
+  }, [profile, loadingMore, hoDQueryLabels])
 
   return {
     leads,

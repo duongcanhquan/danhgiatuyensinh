@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Download, Info as InfoIcon, Sparkles, Wand2 } from 'lucide-react'
@@ -46,6 +46,8 @@ import { useAuditLogs } from '../hooks/useAuditLogs'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { counselorStatusToPipeline } from '../utils/leadIdentity'
+import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
@@ -58,7 +60,7 @@ const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
   ARCHIVED: 'Lưu trữ',
 }
 
-const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD']
+const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
 const EVALUATION_TAGS = [
   'Tích cực',
@@ -130,8 +132,8 @@ export function LeadManagement() {
     | 'none'
     | 'fullName'
     | 'phone'
-    | 'majorInterest'
-    | 'region'
+    | 'educationLevel'
+    | 'province'
     | 'score'
     | 'mlWin'
     | 'priorityTag'
@@ -161,7 +163,7 @@ export function LeadManagement() {
   const schoolOptions = useMemo(() => {
     const s = new Set<string>()
     for (const l of leads) {
-      const n = (l.highSchoolName ?? '').trim()
+      const n = (l.highSchool ?? '').trim()
       if (n) s.add(n)
     }
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
@@ -170,16 +172,15 @@ export function LeadManagement() {
   const regionOptionsAdmin = useMemo(() => {
     const s = new Set<string>()
     for (const l of leads) {
-      if (l.region.trim()) s.add(l.region.trim())
-      if (l.province?.trim()) s.add(l.province.trim())
+      if (l.province.trim()) s.add(l.province.trim())
     }
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [leads])
 
-  const counselorDisplayNameById = useMemo(() => {
+  const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
     for (const c of counselorUsers) {
-      m.set(c.id, (c.displayName?.trim() || c.email || c.id).trim())
+      m.set(c.id, formatStaffDirectoryLabel(c))
     }
     return m
   }, [counselorUsers])
@@ -192,9 +193,8 @@ export function LeadManagement() {
     }
     if (adminRegions.length) {
       xs = xs.filter((l) => {
-        const r = l.region.trim()
-        const p = (l.province ?? '').trim()
-        return adminRegions.some((reg) => reg === r || (p && reg === p))
+        const r = l.province.trim()
+        return adminRegions.some((reg) => reg === r)
       })
     }
     if (adminTags.length) {
@@ -207,7 +207,7 @@ export function LeadManagement() {
     }
     if (adminSchools.length) {
       xs = xs.filter((l) => {
-        const sc = (l.highSchoolName ?? '').trim()
+        const sc = (l.highSchool ?? '').trim()
         return Boolean(sc && adminSchools.includes(sc))
       })
     }
@@ -255,13 +255,15 @@ export function LeadManagement() {
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkBusy, setBulkBusy] = useState(false)
 
-  const showBulkReassign = isElevatedForAdminFilters(profile?.role)
+  const isElevatedLeadScope = isElevatedForAdminFilters(profile?.role)
+  const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
+  const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
 
   const regions = useMemo(() => {
     const s = new Set<string>()
     for (const l of leadsAfterAdmin) {
-      if (l.region.trim()) s.add(l.region.trim())
+      if (l.province.trim()) s.add(l.province.trim())
     }
     return [...s].sort()
   }, [leadsAfterAdmin])
@@ -269,7 +271,7 @@ export function LeadManagement() {
   const majors = useMemo(() => {
     const s = new Set<string>()
     for (const l of leadsAfterAdmin) {
-      if (l.majorInterest.trim()) s.add(l.majorInterest.trim())
+      if (l.educationLevel.trim()) s.add(l.educationLevel.trim())
     }
     return [...s].sort()
   }, [leadsAfterAdmin])
@@ -282,24 +284,26 @@ export function LeadManagement() {
       if (tagFilter !== 'ALL' && displayTag !== tagFilter) return false
       if (statusFilter !== 'ALL' && l.pipelineStatus !== statusFilter) return false
       if (crmStatusFilter !== 'ALL' && l.status !== crmStatusFilter) return false
-      if (regionFilter !== 'ALL' && l.region.trim() !== regionFilter) return false
-      if (majorFilter !== 'ALL' && l.majorInterest.trim() !== majorFilter) return false
+      if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
+      if (majorFilter !== 'ALL' && l.educationLevel.trim() !== majorFilter) return false
       if (urlQuery) {
         const q = urlQuery
         const name = (l.fullName ?? '').toLowerCase()
         const phone = (l.phone ?? '').toLowerCase()
-        const email = (l.email ?? '').toLowerCase()
+        const email = (l.customerId ?? '').toLowerCase()
         const parent = (l.parentPhone ?? '').toLowerCase()
-        const major = (l.majorInterest ?? '').toLowerCase()
-        const reg = (l.region ?? '').toLowerCase()
-        const prov = (l.province ?? '').toLowerCase()
-        const school = (l.highSchoolName ?? '').toLowerCase()
+        const major = (l.educationLevel ?? '').toLowerCase()
+        const reg = (l.province ?? '').toLowerCase()
+        const school = (l.highSchool ?? '').toLowerCase()
+        const addr = (l.address ?? '').toLowerCase()
+        const src = (l.source ?? '').toLowerCase()
+        const desc = (l.description ?? '').toLowerCase()
         const uid = l.assignedTo ?? l.assignedCounselorId
-        const tv = uid ? (counselorDisplayNameById.get(uid) ?? '').toLowerCase() : ''
+        const tv = uid ? (counselorDirectoryLabelById.get(uid) ?? '').toLowerCase() : ''
         const uploadLbl = l.uploadedBy
-          ? (counselorDisplayNameById.get(l.uploadedBy) ?? (l.uploaderName ?? '')).toLowerCase()
+          ? (counselorDirectoryLabelById.get(l.uploadedBy) ?? (l.uploaderName ?? '')).toLowerCase()
           : (l.uploaderName ?? '').toLowerCase()
-        const hay = `${name} ${phone} ${email} ${parent} ${major} ${reg} ${prov} ${school} ${tv} ${uploadLbl}`
+        const hay = `${name} ${phone} ${email} ${parent} ${major} ${reg} ${school} ${addr} ${src} ${desc} ${tv} ${uploadLbl}`
         if (!hay.includes(q)) return false
       }
       return true
@@ -314,7 +318,7 @@ export function LeadManagement() {
     activeScoringProfile,
     scoreByLeadId,
     urlQuery,
-    counselorDisplayNameById,
+    counselorDirectoryLabelById,
   ])
 
   const sortedFiltered = useMemo(() => {
@@ -334,10 +338,10 @@ export function LeadManagement() {
           return (a.fullName || '').localeCompare(b.fullName || '', 'vi') * dir
         case 'phone':
           return (a.phone || '').localeCompare(b.phone || '', 'vi') * dir
-        case 'majorInterest':
-          return (a.majorInterest || '').localeCompare(b.majorInterest || '', 'vi') * dir
-        case 'region':
-          return (a.region || '').localeCompare(b.region || '', 'vi') * dir
+        case 'educationLevel':
+          return (a.educationLevel || '').localeCompare(b.educationLevel || '', 'vi') * dir
+        case 'province':
+          return (a.province || '').localeCompare(b.province || '', 'vi') * dir
         case 'score':
           return (scoreOf(a) - scoreOf(b)) * dir
         case 'mlWin':
@@ -357,6 +361,7 @@ export function LeadManagement() {
     let hot = 0
     let warm = 0
     let cold = 0
+    let loss = 0
     for (const l of sortedFiltered) {
       const tag = activeScoringProfile
         ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
@@ -364,8 +369,9 @@ export function LeadManagement() {
       if (tag === 'HOT') hot++
       else if (tag === 'WARM') warm++
       else if (tag === 'COLD') cold++
+      else if (tag === 'LOSS') loss++
     }
-    return { hot, warm, cold }
+    return { hot, warm, cold, loss }
   }, [sortedFiltered, activeScoringProfile, scoreByLeadId])
 
   const toggleSort = (k: typeof sortKey) => {
@@ -434,9 +440,25 @@ export function LeadManagement() {
 
   const applyBulkReassign = useCallback(async () => {
     if (!db || !profile || !bulkReassignUid || !selectedIds.size) return
+    if (!isElevatedLeadScope && canPeerReassignLeads) {
+      for (const id of selectedIds) {
+        const row = leads.find((x) => x.id === id)
+        const owner = row?.assignedTo ?? row?.assignedCounselorId
+        if (owner !== profile.id) {
+          window.alert(
+            'Chỉ có thể «Giao việc hàng loạt» cho các hồ sơ đang gán cho bạn. Bỏ chọn hồ sơ của đồng nghiệp hoặc liên hệ Admin/Trưởng.',
+          )
+          return
+        }
+      }
+    }
     setBulkBusy(true)
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
+      const targetLabel =
+        counselorUsers.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
+        counselorUsers.find((c) => c.id === bulkReassignUid)?.email ||
+        bulkReassignUid
       for (const id of selectedIds) {
         const ref = doc(db, FS_COLLECTIONS.leads, id)
         const prev = leads.find((x) => x.id === id)
@@ -448,7 +470,7 @@ export function LeadManagement() {
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt → ${counselorUsers.find((c) => c.id === bulkReassignUid)?.displayName ?? bulkReassignUid}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
+          description: `Phân công hàng loạt → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -460,7 +482,16 @@ export function LeadManagement() {
     } finally {
       setBulkBusy(false)
     }
-  }, [db, profile, bulkReassignUid, selectedIds, leads, counselorUsers])
+  }, [
+    db,
+    profile,
+    bulkReassignUid,
+    selectedIds,
+    leads,
+    counselorUsers,
+    isElevatedLeadScope,
+    canPeerReassignLeads,
+  ])
 
   const applyBulkCrmStatus = useCallback(async () => {
     if (!db || !profile || !selectedIds.size) return
@@ -472,6 +503,7 @@ export function LeadManagement() {
         const ref = doc(db, FS_COLLECTIONS.leads, id)
         await updateDoc(ref, {
           status: bulkCrmStatus,
+          pipelineStatus: counselorStatusToPipeline(bulkCrmStatus),
           ...leadTouchPatch(),
         })
         await commitAuditLog(db, {
@@ -603,9 +635,9 @@ export function LeadManagement() {
                             ? 'border-violet-400 bg-violet-100 text-violet-950 shadow-sm'
                             : 'border-slate-200 bg-white/90 text-slate-700 hover:border-violet-200',
                         ].join(' ')}
-                        title={c.email}
+                        title={formatStaffDirectoryLabel(c)}
                       >
-                        {c.displayName || c.email || c.id}
+                        {formatStaffDirectoryLabel(c)}
                       </button>
                     )
                   })
@@ -832,7 +864,7 @@ export function LeadManagement() {
           />
           <FilterSelect
             compact
-            label="Ngành"
+            label="Hệ đào tạo"
             value={majorFilter}
             onChange={setMajorFilter}
             options={[
@@ -883,6 +915,7 @@ export function LeadManagement() {
             <span className="text-rose-700">HOT {listStats.hot}</span>
             <span className="text-amber-800">WARM {listStats.warm}</span>
             <span className="text-slate-500">COLD {listStats.cold}</span>
+            <span className="text-slate-600">LOSS {listStats.loss}</span>
           </div>
           {hasMore ? (
             <button
@@ -937,11 +970,11 @@ export function LeadManagement() {
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
-                    onClick={() => toggleSort('majorInterest')}
+                    onClick={() => toggleSort('educationLevel')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Ngành
-                    {sortKey === 'majorInterest' ? (
+                    Hệ đào tạo
+                    {sortKey === 'educationLevel' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
                   </button>
@@ -949,11 +982,11 @@ export function LeadManagement() {
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
-                    onClick={() => toggleSort('region')}
+                    onClick={() => toggleSort('province')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Vùng
-                    {sortKey === 'region' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
+                    Tỉnh / TP
+                    {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
                 <th className="px-4 py-3 font-medium">
@@ -1059,8 +1092,8 @@ export function LeadManagement() {
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">{l.fullName || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{l.phone || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{l.majorInterest || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{l.region || '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{l.educationLevel || '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
                   <td className="px-4 py-3 font-medium text-violet-700 transition-colors duration-300">{displayScore}</td>
                   <td className="px-1 py-2 text-center" title={ml.mlExplanation}>
                     <MlWinGauge value={ml.mlWinProbability} />
@@ -1076,9 +1109,9 @@ export function LeadManagement() {
                   </td>
                   <td
                     className="max-w-[9rem] truncate px-2 py-3 text-xs text-slate-600"
-                    title={formatAssignedCounselorLabel(l, counselorDisplayNameById)}
+                    title={formatAssignedCounselorLabel(l, counselorDirectoryLabelById)}
                   >
-                    {formatAssignedCounselorLabel(l, counselorDisplayNameById)}
+                    {formatAssignedCounselorLabel(l, counselorDirectoryLabelById)}
                   </td>
                 </motion.tr>
                 )
@@ -1093,7 +1126,8 @@ export function LeadManagement() {
           count={selectedIds.size}
           onClear={() => setSelectedIds(new Set())}
           onReassign={() => {
-            setBulkReassignUid(counselorUsers[0]?.id ?? '')
+            const others = counselorUsers.filter((c) => c.id !== profile?.id)
+            setBulkReassignUid(others[0]?.id ?? counselorUsers[0]?.id ?? '')
             setBulkModal('reassign')
           }}
           onBulkStatus={() => {
@@ -1115,7 +1149,14 @@ export function LeadManagement() {
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
-            <p className="mt-1 text-sm text-slate-600">Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.
+              {!isElevatedLeadScope && canPeerReassignLeads ? (
+                <span className="mt-1 block font-medium text-amber-800">
+                  Bạn chỉ có thể chuyển các hồ sơ đang gán cho chính bạn sang đồng nghiệp (theo quyền TVV).
+                </span>
+              ) : null}
+            </p>
             <label className="mt-4 block text-sm font-medium text-slate-700">
               Tư vấn viên
               <select
@@ -1126,7 +1167,7 @@ export function LeadManagement() {
               >
                 {counselorUsers.map((c) => (
                   <option key={c.id} value={c.id} className="bg-white">
-                    {c.displayName || c.email} ({c.role})
+                    {formatStaffDirectoryLabel(c)}
                   </option>
                 ))}
               </select>
@@ -1216,6 +1257,7 @@ export function LeadManagement() {
             counselorUsers={counselorUsers}
             counselorsLoading={counselorsLoading}
             canReassignLead={showBulkReassign}
+            reassignElevated={isElevatedLeadScope}
             reserveRightRail
             dynamicAssistantSlot={
               <ConsultingAssistantPanel
@@ -1456,24 +1498,176 @@ function formatAiRunAt(runAt: unknown): string {
   return ''
 }
 
+function CounselorLeadProgressForm({
+  lead,
+  db,
+  onUpdated,
+}: {
+  lead: Lead
+  db: NonNullable<ReturnType<typeof getFirestoreDb>>
+  onUpdated: (patch: Partial<Lead>) => void
+}) {
+  const { profile, can } = useAuth()
+  const [crmStatus, setCrmStatus] = useState<LeadCounselorStatus>(() => lead.status)
+  const [noteLine, setNoteLine] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setCrmStatus(lead.status)
+  }, [lead.id, lead.status])
+
+  const canEdit =
+    profile?.role === 'admin' ||
+    (Boolean(can('leads:write:self_assigned')) &&
+      (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
+
+  if (!canEdit) return null
+
+  const save = async () => {
+    if (!profile) return
+    const statusChanged = crmStatus !== lead.status
+    const note = noteLine.trim()
+    if (!statusChanged && !note) {
+      setMsg('Không có thay đổi.')
+      return
+    }
+    setBusy(true)
+    setMsg(null)
+    try {
+      const touch = leadTouchPatch()
+      const performer = profile.displayName?.trim() || profile.email || profile.id
+      const stamp = new Date().toLocaleString('vi-VN')
+      const append = note ? `\n\n[${stamp}] ${performer}:\n${note}` : ''
+      const nextDesc = note ? `${lead.description ?? ''}${append}`.trim() : lead.description
+      const patch: Record<string, unknown> = { ...touch }
+      if (statusChanged) {
+        patch.status = crmStatus
+        patch.pipelineStatus = counselorStatusToPipeline(crmStatus)
+      }
+      if (note) patch.description = nextDesc
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
+      if (statusChanged) {
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'STATUS_CHANGE',
+          description: `CRM/Kanban: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[crmStatus]}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+      if (note) {
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'NOTE_ADDED',
+          description: `Mô tả (nối ghi chú): ${note.slice(0, 280)}${note.length > 280 ? '…' : ''}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+      onUpdated({
+        ...(statusChanged ? { status: crmStatus, pipelineStatus: counselorStatusToPipeline(crmStatus) } : {}),
+        ...(note ? { description: nextDesc } : {}),
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      })
+      setNoteLine('')
+      setMsg('Đã lưu lên Firestore.')
+    } catch (e) {
+      console.error(e)
+      setMsg('Không lưu được — kiểm tra quyền.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-white/12 bg-gradient-to-br from-slate-950/55 via-indigo-950/35 to-slate-950/50 p-4 shadow-2xl shadow-black/30 ring-1 ring-amber-400/20 backdrop-blur-xl">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200/80">Tiến độ tư vấn</p>
+      <p className="mt-1 text-sm text-slate-300/90">
+        Chọn tình trạng CRM, thêm ghi chú (tùy), rồi bấm lưu — có thể chỉ đổi CRM, chỉ thêm ghi chú, hoặc cả hai. Mọi
+        thay đổi ghi vào Firestore và nhật ký kiểm tra.
+      </p>
+      <label className="mt-4 block text-sm font-medium text-slate-200">
+        Tình trạng (CRM)
+        <select
+          value={crmStatus}
+          onChange={(e) => setCrmStatus(e.target.value as LeadCounselorStatus)}
+          className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/[0.07] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/25"
+        >
+          {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
+            <option key={s} value={s} className="bg-slate-900 text-slate-100">
+              {LEAD_COUNSELOR_STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mt-3 block text-sm font-medium text-slate-200">
+        Ghi chú nối thêm vào «Mô tả»
+        <textarea
+          value={noteLine}
+          onChange={(e) => setNoteLine(e.target.value)}
+          rows={3}
+          placeholder="VD: Đã gọi phụ huynh, hẹn campus tour…"
+          className="mt-1.5 w-full resize-y rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-500/20"
+        />
+      </label>
+      {msg ? <p className="mt-2 text-sm text-amber-100/90">{msg}</p> : null}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void save()}
+        className="mt-4 w-full rounded-xl border border-amber-400/40 bg-gradient-to-r from-amber-500/90 via-amber-400/85 to-amber-600/90 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-950/30 transition hover:brightness-110 disabled:opacity-50"
+      >
+        {busy ? 'Đang lưu…' : 'Lưu lên Firestore'}
+      </button>
+    </section>
+  )
+}
+
 function LeadCrmQuickBlock({
   lead,
   db,
   counselorUsers,
   counselorsLoading,
+  reassignElevated,
   onUpdated,
 }: {
   lead: Lead
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
   counselorUsers: VietMyUserProfile[]
   counselorsLoading: boolean
+  /** Admin / Trưởng khoa / Trưởng ngành: mọi TVV + có thể bỏ gán. TVV chỉ đổi trong phạm vi quyền đồng nghiệp. */
+  reassignElevated: boolean
   onUpdated: (patch: Partial<Lead>) => void
 }) {
-  const { profile } = useAuth()
+  const { profile, can } = useAuth()
+  const peerMode = !reassignElevated && can('leads:reassign:peer')
+  const mine = (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id
+  const assignableCounselors = useMemo(() => {
+    if (!peerMode || !profile?.id) return counselorUsers
+    const me = counselorUsers.find((c) => c.id === profile.id)
+    const others = counselorUsers.filter((c) => c.id !== profile.id)
+    return me ? [me, ...others] : others
+  }, [counselorUsers, peerMode, profile?.id])
+
   const [crmAssignUid, setCrmAssignUid] = useState(() => lead.assignedTo ?? lead.assignedCounselorId ?? '')
   const [crmKanbanStatus, setCrmKanbanStatus] = useState<LeadCounselorStatus>(() => lead.status)
   const [crmBusy, setCrmBusy] = useState(false)
   const [crmMsg, setCrmMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setCrmAssignUid(lead.assignedTo ?? lead.assignedCounselorId ?? '')
+    setCrmKanbanStatus(lead.status)
+  }, [lead.id, lead.assignedTo, lead.assignedCounselorId, lead.status])
+
+  const labelForUid = (uid: string | null) => {
+    if (!uid) return '—'
+    const u = counselorUsers.find((c) => c.id === uid)
+    return u ? formatStaffDirectoryLabel(u) : uid
+  }
+
+  if (peerMode && !mine) return null
 
   const save = async () => {
     if (!profile) return
@@ -1486,6 +1680,10 @@ function LeadCrmQuickBlock({
       setCrmMsg('Không có thay đổi.')
       return
     }
+    if (peerMode && !nextUid) {
+      setCrmMsg('Không thể bỏ gán — chọn đồng nghiệp nhận hồ sơ hoặc liên hệ Admin.')
+      return
+    }
     setCrmBusy(true)
     setCrmMsg(null)
     try {
@@ -1494,6 +1692,7 @@ function LeadCrmQuickBlock({
         assignedCounselorId: nextUid,
         assignedTo: nextUid,
         status: crmKanbanStatus,
+        pipelineStatus: counselorStatusToPipeline(crmKanbanStatus),
         ...touch,
       })
       const performer = profile.displayName?.trim() || profile.email || profile.id
@@ -1501,7 +1700,7 @@ function LeadCrmQuickBlock({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'REASSIGNMENT',
-          description: `Cập nhật phân công: ${prevAssign ?? '—'} → ${nextUid ?? '—'}`,
+          description: `Cập nhật phân công: ${labelForUid(prevAssign)} → ${labelForUid(nextUid)}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -1519,6 +1718,7 @@ function LeadCrmQuickBlock({
         assignedCounselorId: nextUid,
         assignedTo: nextUid,
         status: crmKanbanStatus,
+        pipelineStatus: counselorStatusToPipeline(crmKanbanStatus),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
@@ -1535,7 +1735,9 @@ function LeadCrmQuickBlock({
     <section className="rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm">
       <h3 className="app-section-heading">Phân công &amp; CRM</h3>
       <p className="mt-0.5 text-sm leading-snug text-slate-600">
-        Gán tư vấn viên và giai đoạn Kanban — lưu trực tiếp, có ghi nhật ký thao tác.
+        {peerMode
+          ? 'Chuyển hồ sơ của bạn cho đồng nghiệp (danh sách: tên hiển thị · email). Không thể bỏ gán trống — chọn người nhận.'
+          : 'Gán tư vấn viên và giai đoạn Kanban — lưu trực tiếp, có ghi nhật ký thao tác (tên · email trong danh sách).'}
       </p>
       <label className="mt-2 block text-sm font-medium text-slate-700">
         Tư vấn viên
@@ -1545,10 +1747,10 @@ function LeadCrmQuickBlock({
           disabled={counselorsLoading}
           className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-50"
         >
-          <option value="">— Chưa gán —</option>
-          {counselorUsers.map((c) => (
+          {reassignElevated ? <option value="">— Chưa gán —</option> : null}
+          {assignableCounselors.map((c) => (
             <option key={c.id} value={c.id} className="bg-white">
-              {c.displayName || c.email || c.id}
+              {formatStaffDirectoryLabel(c)}
             </option>
           ))}
         </select>
@@ -1588,6 +1790,7 @@ function LeadDetailPanel({
   counselorUsers,
   counselorsLoading,
   canReassignLead,
+  reassignElevated,
   onClose,
   onUpdated,
   reserveRightRail,
@@ -1600,8 +1803,10 @@ function LeadDetailPanel({
   institutionalRagBlock: string
   counselorUsers: VietMyUserProfile[]
   counselorsLoading: boolean
-  /** Admin / trưởng: chỉnh TVV + CRM Kanban nhanh */
+  /** Có hiển thị khối phân công nhanh (Admin/Trưởng hoặc TVV có quyền chuyển đồng nghiệp). */
   canReassignLead: boolean
+  /** Admin / Trưởng khoa / Trưởng ngành: toàn quyền gán; TVV: chỉ chuyển trong team với quyền peer. */
+  reassignElevated: boolean
   onClose: () => void
   onUpdated: (patch: Partial<Lead>) => void
   /** Bố trí chỗ cho rail trợ lý kịch bản (desktop) */
@@ -1880,14 +2085,14 @@ function LeadDetailPanel({
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-2">
           <div className="scroll-touch min-h-0 space-y-6 overflow-y-auto overscroll-contain border-b border-slate-200/80 p-5 lg:border-b-0 lg:border-r">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <Info label="Ngành quan tâm" value={lead.majorInterest} />
-              <Info label="Vùng / tỉnh" value={lead.region} />
-              <Info label="Khu vực HN (quận / huyện)" value={lead.hanoiArea ?? ''} />
-              <Info label="THPT" value={lead.highSchoolName ?? ''} />
-              <Info label="Loại trường" value={lead.schoolType} />
-              <Info label="Tài chính" value={lead.financialStatus} />
-              <Info label="Học lực" value={lead.academicLevel ?? ''} />
-              <Info label="Dự định" value={lead.studyIntention ?? ''} />
+              <Info label="Mã KH" value={lead.customerId} />
+              <Info label="Nguồn KH" value={lead.source} />
+              <Info label="Hệ đào tạo" value={lead.educationLevel} />
+              <Info label="Tỉnh / TP" value={lead.province} />
+              <Info label="Địa chỉ" value={lead.address} />
+              <Info label="Trường học" value={lead.highSchool} />
+              <Info label="Lớp" value={lead.gradeClass} />
+              <Info label="Mô tả" value={lead.description} />
               <Info
                 label="Điểm (profile đang chọn)"
                 value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
@@ -1900,6 +2105,15 @@ function LeadDetailPanel({
               </div>
             </div>
 
+            {db ? (
+              <CounselorLeadProgressForm
+                key={`cprog-${lead.id}`}
+                lead={lead}
+                db={db}
+                onUpdated={onUpdated}
+              />
+            ) : null}
+
             {canReassignLead && db ? (
               <LeadCrmQuickBlock
                 key={`${lead.id}-${lead.updatedAt.toMillis()}`}
@@ -1907,6 +2121,7 @@ function LeadDetailPanel({
                 db={db}
                 counselorUsers={counselorUsers}
                 counselorsLoading={counselorsLoading}
+                reassignElevated={reassignElevated}
                 onUpdated={onUpdated}
               />
             ) : null}

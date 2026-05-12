@@ -15,6 +15,7 @@ import {
   buildLeadFirestorePayload,
   downloadStandardIntakeTemplate,
   parseWorkbookToRows,
+  resolveAssignedCounselorUid,
   type ExcelLeadRow,
 } from '../utils/excelLeadMapper'
 import { evaluateLead } from '../utils/scoring'
@@ -26,6 +27,7 @@ import { pickProfileForImport, useScoringProfiles } from '../hooks/useScoringPro
 import { useMasterData } from '../hooks/useMasterData'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useAuth } from '../hooks/useAuth'
+import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
 
 /** Giới hạn Firestore mỗi batch commit. */
@@ -96,10 +98,12 @@ async function fetchAssignmentCountsForImport(
   snap.forEach((d) => {
     const data = d.data()
     const id =
-      data.assignedCounselorId === null || data.assignedCounselorId === undefined
-        ? null
-        : String(data.assignedCounselorId)
-    minimal.push({ assignedCounselorId: id })
+      data.assignedTo === null || data.assignedTo === undefined || data.assignedTo === ''
+        ? data.assignedCounselorId === null || data.assignedCounselorId === undefined
+          ? null
+          : String(data.assignedCounselorId)
+        : String(data.assignedTo)
+    minimal.push({ assignedCounselorId: id }) // legacy field name; mirror of assignedTo
   })
   return countAssignments(minimal)
 }
@@ -111,6 +115,14 @@ export function DataIntake() {
   const { profiles } = useScoringProfiles()
   const { regionLabels, highSchoolLabels, majorLabels } = useMasterData()
   const { counselors } = useCounselorDirectory()
+
+  const counselorsSorted = useMemo(
+    () =>
+      [...counselors].sort((a, b) =>
+        formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
+      ),
+    [counselors],
+  )
 
   const [dragOver, setDragOver] = useState(false)
   const [banner, setBanner] = useState<string | null>(null)
@@ -241,14 +253,22 @@ export function DataIntake() {
         if (pr.inFileDuplicate) continue
 
         const record = {
-          ...pr.row,
-          region: pr.row.region,
-          majorInterest: pr.row.majorInterest,
-          highSchoolName: pr.row.highSchoolName,
-          academicLevel: pr.row.academicLevel,
+          customerId: pr.row.customerId,
+          fullName: pr.row.fullName,
+          phone: pr.row.phone,
+          parentPhone: pr.row.parentPhone,
+          source: pr.row.source,
+          educationLevel: pr.row.educationLevel,
+          province: pr.row.province,
+          highSchool: pr.row.highSchool,
+          gradeClass: pr.row.gradeClass,
+          address: pr.row.address,
+          description: pr.row.description,
         } as Record<string, unknown>
         const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets)
-        const counselorId = pickCounselorByLowestLoad(counselors, counts)
+
+        const fromExcel = resolveAssignedCounselorUid(pr.row.assignedToRaw, counselors)
+        const counselorId = fromExcel ?? pickCounselorByLowestLoad(counselors, counts)
         if (counselorId) {
           counts.set(counselorId, (counts.get(counselorId) ?? 0) + 1)
         }
@@ -260,10 +280,9 @@ export function DataIntake() {
 
         if (pr.existingId) {
           if (strategy !== 'update_dupes') continue
-          const { status, nextFollowUpDate, pipelineStatus, ...mergeRest } = base
+          const { status, nextFollowUpDate, ...mergeRest } = base
           void status
           void nextFollowUpDate
-          void pipelineStatus
           toUpdate.push({
             id: pr.existingId,
             patch: omitUndefined({
@@ -279,6 +298,7 @@ export function DataIntake() {
             ref,
             data: omitUndefined({
               ...base,
+              uploadedAt: now,
               importedAt: now,
               createdAt: now,
               updatedAt: now,
@@ -368,6 +388,23 @@ export function DataIntake() {
           Tải mẫu Excel chuẩn
         </button>
       </div>
+
+      {canIntake && counselors.length > 0 ? (
+        <aside className="app-card-glass rounded-2xl border border-slate-200/90 bg-white/90 p-5 shadow-inner">
+          <p className="text-sm font-semibold text-slate-900">Danh bạ tư vấn (đối chiếu cột «Người phụ trách»)</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            Cột «Người phụ trách» trong file phải trùng <strong>tên hiển thị</strong> hoặc <strong>email đăng nhập</strong> như
+            dưới (mẫu tải về có đúng thứ tự tiêu đề A–G, cột H–J trống, K–P). Nếu hai TVV trùng tên, dùng email.
+          </p>
+          <ul className="mt-3 max-h-52 list-none space-y-1 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm text-slate-800">
+            {counselorsSorted.map((c) => (
+              <li key={c.id} className="rounded-lg px-2 py-1.5 font-medium leading-snug hover:bg-white">
+                {formatStaffDirectoryLabel(c)}
+              </li>
+            ))}
+          </ul>
+        </aside>
+      ) : null}
 
       <div
         onDragOver={(e) => {

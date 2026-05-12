@@ -18,7 +18,7 @@ import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
-import { evaluateLead } from '../utils/scoring'
+import { evaluateLead, resolveTagBands } from '../utils/scoring'
 import {
   isReservedCatalogSlug,
   masterDataEntriesForFirestore,
@@ -126,8 +126,9 @@ export function SettingsView() {
         return
       }
       const { calculatedScore, priorityTag } = evaluateLead(data, profile, masterBuckets)
+      const { hot, warm } = resolveTagBands(profile.thresholds)
       setDemoResult(
-        `Bộ chấm điểm «${profile.profileName}» — Điểm: ${calculatedScore}/100 — Nhãn: ${priorityTag} (HOT từ ${profile.thresholds.hotMinScore}, WARM từ ${profile.thresholds.warmMinScore})`,
+        `Bộ chấm điểm «${profile.profileName}» — Điểm: ${calculatedScore} (tích lũy) — Nhãn: ${priorityTag} (theo profile: HOT≥${hot}, WARM ${warm}–${hot - 1}, COLD 0–${warm - 1}, LOSS &lt;0)`,
       )
     } catch {
       setDemoResult('JSON không hợp lệ.')

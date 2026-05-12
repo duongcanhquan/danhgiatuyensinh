@@ -16,37 +16,29 @@ export function computeMockMlWinProbability(lead: Lead): { mlWinProbability: num
     score += 10
     reasons.push('SĐT hợp lệ')
   }
-  if (lead.email?.trim()) {
+  if (lead.customerId?.trim()) {
     score += 5
-    reasons.push('email')
+    reasons.push('mã KH')
   }
   if (lead.parentPhone?.trim()) {
     score += 4
     reasons.push('SĐT phụ huynh')
   }
-  if (lead.region?.trim()) {
+  if (lead.province?.trim()) {
     score += 6
-    reasons.push('vùng/tỉnh')
+    reasons.push('tỉnh/TP')
   }
-  if (lead.majorInterest?.trim()) {
+  if (lead.educationLevel?.trim()) {
     score += 8
-    reasons.push('ngành quan tâm')
+    reasons.push('hệ đào tạo')
   }
-  if (lead.highSchoolName?.trim()) {
+  if (lead.highSchool?.trim()) {
     score += 7
-    reasons.push('trường THPT')
+    reasons.push('trường học')
   }
-  if (lead.studyIntention?.trim()) {
+  if (lead.address?.trim()) {
     score += 4
-    reasons.push('dự định học')
-  }
-  if (lead.financialStatus && lead.financialStatus !== 'UNKNOWN') {
-    score += 4
-    reasons.push('nhóm tài chính')
-  }
-  if (lead.academicLevel?.trim()) {
-    score += 4
-    reasons.push('học lực')
+    reasons.push('địa chỉ')
   }
 
   const mlWinProbability = Math.max(5, Math.min(96, Math.round(score)))

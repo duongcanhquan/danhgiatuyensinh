@@ -37,6 +37,8 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { counselorStatusToPipeline } from '../utils/leadIdentity'
+import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { exportSelectedEvaluatedLeadsToXlsx } from '../utils/exportEvaluatedLeads'
 import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
@@ -56,6 +58,7 @@ const TAG_BADGE: Record<PriorityTag, string> = {
   HOT: 'bg-rose-100 text-rose-900 ring-1 ring-rose-300/80',
   WARM: 'bg-amber-100 text-amber-900 ring-1 ring-amber-300/80',
   COLD: 'bg-sky-100 text-sky-900 ring-1 ring-sky-300/80',
+  LOSS: 'bg-slate-700 text-slate-200 ring-1 ring-slate-500/70',
 }
 
 type Toast = { id: string; text: string }
@@ -405,7 +408,9 @@ export function CounselorDashboard() {
   const canBoard = can('dashboard:counselor')
   const canWrite = can('leads:write:self_assigned')
   const canInteract = can('interactions:create:self_assigned')
-  const showBulkReassign = isElevatedForBulk(profile?.role)
+  const isElevatedLeadScope = isElevatedForBulk(profile?.role)
+  const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
+  const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(canWrite || showBulkReassign)
 
   const sensors = useSensors(
@@ -429,7 +434,7 @@ export function CounselorDashboard() {
   const regionOptions = useMemo(() => {
     const s = new Set<string>()
     for (const l of leads) {
-      const r = l.region?.trim()
+      const r = l.province?.trim()
       if (r) s.add(r)
     }
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
@@ -438,7 +443,7 @@ export function CounselorDashboard() {
   const filtered = useMemo(() => {
     const q = needle.trim().toLowerCase()
     return leads.filter((l) => {
-      if (regionFilter !== 'ALL' && l.region.trim() !== regionFilter) return false
+      if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
       if (counselorFilterUid === '__UNASSIGNED__') {
         if (effectiveAssigneeUid(l)) return false
       } else if (counselorFilterUid) {
@@ -507,9 +512,23 @@ export function CounselorDashboard() {
 
   const applyBulkReassign = useCallback(async () => {
     if (!db || !profile || !bulkReassignUid || !selectedIds.size) return
+    if (!isElevatedLeadScope && canPeerReassignLeads) {
+      for (const id of selectedIds) {
+        const row = leads.find((x) => x.id === id)
+        const owner = row?.assignedTo ?? row?.assignedCounselorId
+        if (owner !== profile.id) {
+          pushToast('Chỉ chuyển được hồ sơ đang gán cho bạn.')
+          return
+        }
+      }
+    }
     setBulkBusy(true)
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
+      const targetLabel =
+        counselorUsers.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
+        counselorUsers.find((c) => c.id === bulkReassignUid)?.email ||
+        bulkReassignUid
       for (const id of selectedIds) {
         const prev = leads.find((x) => x.id === id)
         await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
@@ -520,7 +539,7 @@ export function CounselorDashboard() {
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt → ${counselorUsers.find((c) => c.id === bulkReassignUid)?.displayName ?? bulkReassignUid}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
+          description: `Phân công hàng loạt → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -534,7 +553,17 @@ export function CounselorDashboard() {
     } finally {
       setBulkBusy(false)
     }
-  }, [db, profile, bulkReassignUid, selectedIds, leads, counselorUsers, pushToast])
+  }, [
+    db,
+    profile,
+    bulkReassignUid,
+    selectedIds,
+    leads,
+    counselorUsers,
+    pushToast,
+    isElevatedLeadScope,
+    canPeerReassignLeads,
+  ])
 
   const applyBulkCrmStatus = useCallback(async () => {
     if (!db || !profile || !selectedIds.size) return
@@ -545,6 +574,7 @@ export function CounselorDashboard() {
         const prev = leads.find((x) => x.id === id)
         await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
           status: bulkCrmStatus,
+          pipelineStatus: counselorStatusToPipeline(bulkCrmStatus),
           ...leadTouchPatch(),
         })
         await commitAuditLog(db, {
@@ -585,6 +615,7 @@ export function CounselorDashboard() {
       const touch = leadTouchPatch()
       await updateDoc(doc(db, FS_COLLECTIONS.leads, leadId), {
         status: next,
+        pipelineStatus: counselorStatusToPipeline(next),
         ...touch,
       })
       const performer = profile.displayName?.trim() || profile.email || profile.id
@@ -875,7 +906,8 @@ export function CounselorDashboard() {
           count={selectedIds.size}
           onClear={() => setSelectedIds(new Set())}
           onReassign={() => {
-            setBulkReassignUid(counselorUsers[0]?.id ?? '')
+            const others = counselorUsers.filter((c) => c.id !== profile?.id)
+            setBulkReassignUid(others[0]?.id ?? counselorUsers[0]?.id ?? '')
             setBulkModal('reassign')
           }}
           onBulkStatus={() => {
@@ -897,7 +929,14 @@ export function CounselorDashboard() {
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
-            <p className="mt-1 text-sm text-slate-600">{selectedIds.size} hồ sơ đã chọn.</p>
+            <p className="mt-1 text-sm text-slate-600">
+              {selectedIds.size} hồ sơ đã chọn.
+              {!isElevatedLeadScope && canPeerReassignLeads ? (
+                <span className="mt-1 block font-medium text-amber-800">
+                  Chỉ áp dụng cho hồ sơ đang gán cho bạn.
+                </span>
+              ) : null}
+            </p>
             <label className="mt-4 block text-xs font-medium text-slate-600">
               Tư vấn viên
               <select
@@ -908,7 +947,7 @@ export function CounselorDashboard() {
               >
                 {counselorUsers.map((c) => (
                   <option key={c.id} value={c.id} className="bg-white">
-                    {c.displayName || c.email}
+                    {formatStaffDirectoryLabel(c)}
                   </option>
                 ))}
               </select>

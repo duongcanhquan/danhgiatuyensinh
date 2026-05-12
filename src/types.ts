@@ -95,6 +95,8 @@ export const PERMISSIONS = [
   'leads:read:department_scope',
   'leads:read:global',
   'leads:write:self_assigned',
+  /** TVV: chuyển hồ sơ đang gán cho mình sang TVV khác (cần Firestore Rules cho phép ghi `assignedTo`). */
+  'leads:reassign:peer',
   'interactions:create:self_assigned',
   'interactions:read:profession_scope',
   'interactions:read:department_scope',
@@ -122,7 +124,8 @@ export type RolePermissionMatrix = Record<UserRole, readonly Permission[]>
 // Leads
 // -----------------------------------------------------------------------------
 
-export type PriorityTag = 'HOT' | 'WARM' | 'COLD'
+/** Nhãn ưu tiên — gán theo điểm tích lũy và ngưỡng HOT/WARM trong từng bộ profile (COLD 0…warm−1, LOSS &lt;0). */
+export type PriorityTag = 'HOT' | 'WARM' | 'COLD' | 'LOSS'
 
 export type LeadPipelineStatus =
   | 'NEW'
@@ -186,83 +189,60 @@ export type FinancialStatus =
 
 /**
  * Canonical Lead — collection `leads/{leadId}`
- * (`calculatedScore` is persisted; routing/scoring engine may recompute on import or rule change.)
+ * Schema aligned to VietMy Excel intake columns + persistence / analytics system fields.
  */
 export interface Lead {
   id: DocumentId
-  // Identity & contact
+  /** Mã KH */
+  customerId: string
+  /** Tên khách hàng */
   fullName: string
+  /** Điện thoại */
   phone: string
-  email?: string
-  parentPhone?: string
-  // Academic / intent
-  /** Human-readable major intent; link to MasterData `majors` via `majorInterestId` when available */
-  majorInterest: string
-  majorInterestId?: DocumentId
-  academicLevel?: string
-  /** Dự định hình thức đào tạo (Cao đẳng, Trung cấp, Du học…) — đồng bộ với masterData `study_intentions` */
-  studyIntention?: string
-  studyIntentionId?: DocumentId
-  // Geography & school context
-  region: string
-  regionId?: DocumentId
-  /** Quận / huyện khi `region` là Hà Nội — đồng bộ với masterData `hanoi_areas` */
-  hanoiArea?: string
-  hanoiAreaId?: DocumentId
-  highSchoolName?: string
-  highSchoolId?: DocumentId
-  schoolType: SchoolType
-  financialStatus: FinancialStatus
-  // Scoring & routing
+  /** Điện thoại người liên hệ chính */
+  parentPhone: string
+  /** Nguồn khách hàng (nhãn tự do từ Excel / CRM) */
+  source: string
+  /** Hệ đào tạo — Trưởng khoa lọc theo khớp nhãn ngành trong phạm vi `managedMajorIds` */
+  educationLevel: string
+  /** Người phụ trách — Firebase Auth UID (RBAC biên Counselor) */
+  assignedTo: UserId | null
+  /** Tình trạng — Kanban tư vấn (Firestore `status`) */
+  status: LeadCounselorStatus
+  /** Mô tả / ghi chú tiến độ (có thể nối thêm theo thời gian) */
+  description: string
+  /** Trường học */
+  highSchool: string
+  /** Lớp */
+  gradeClass: string
+  /** Tỉnh/thành phố */
+  province: string
+  /** Địa chỉ */
+  address: string
+
+  // --- System / analytics (not Excel columns) ---
   calculatedScore: number
   priorityTag: PriorityTag
-  /** Counselor ownership — RBAC boundary for Counselor role */
-  assignedCounselorId: UserId | null
-  /**
-   * Active assignee (counselor UID); có thể chuyển sau. Khi nhập Excel thường trùng `assignedCounselorId`.
-   */
-  assignedTo?: UserId | null
-  /** Auth UID người đã upload / nhập lead (Excel, form, …) */
-  uploadedBy?: UserId
-  /** Tên hiển thị người upload (snapshot tại thời điểm import) */
-  uploaderName?: string
-  /** Nhóm các lead cùng một phiên upload file */
-  uploadBatchId?: string
-  pipelineStatus: LeadPipelineStatus
-  /** Counselor Kanban / CRM stage (Firestore field `status`). */
-  status: LeadCounselorStatus
-  /**
-   * Predictive win probability (0–100). MVP: optional; UI may mock from completeness when absent.
-   * Future: Cloud ML / Vertex batch scores.
-   */
-  mlWinProbability?: number
-  /** Human-readable rationale for `mlWinProbability` (ML or heuristic). */
-  mlExplanation?: string
-  /** Next scheduled follow-up (counselor workload). */
-  nextFollowUpDate?: Timestamp | null
-  /** Stable dedupe key (phone-based or name+DOB/age fingerprint). */
-  uniqueHash: string
-  // Meta
-  source?: 'EXCEL' | 'CSV' | 'WEB_FORM' | 'PARTNER_API' | 'MANUAL'
-  /** Campaign / channel label (e.g. Online Form, Offline Event) — distinct from technical `source` */
-  leadSource?: string
-  importedAt?: Timestamp
-  createdAt: Timestamp
+  /** Thời điểm upload / import (ưu tiên hiển thị vòng đời lead) */
+  uploadedAt: Timestamp
   updatedAt: Timestamp
-  /** Last meaningful counselor/system touch (call, note, status, AI, …) — SLA & “My Day”. */
+  /** Phễu tuyển sinh — suy ra từ `status` + dữ liệu legacy khi đọc Firestore */
+  pipelineStatus: LeadPipelineStatus
+  /** Dedupe fingerprint */
+  uniqueHash: string
+  createdAt: Timestamp
+  /** @deprecated Ghi song song khi import để tương thích query cũ; ưu tiên `assignedTo` */
+  assignedCounselorId?: UserId | null
+  uploadedBy?: UserId
+  uploaderName?: string
+  uploadBatchId?: string
+  importedAt?: Timestamp
   lastTouchedAt?: Timestamp
-  /** Engine diagnostics: why score, why routed (optional) */
   routingMeta?: LeadRoutingMeta
-  // Demographics (extended)
-  gender?: string
-  province?: string
-  // Psychographics & qualitative CRM fields
-  aspirations?: string
-  hobbies?: string
-  fieldTripNotes?: string
-  /** Normalized AI sentiment 0–1 or 0–100 depending on pipeline; stored as number */
+  mlWinProbability?: number
+  mlExplanation?: string
+  nextFollowUpDate?: Timestamp | null
   aiSentimentScore?: number
-  /** Kết quả phân tích theo từng `AITask.id` (JSON từ LLM + metadata). */
   aiInsights?: Record<string, unknown>
 }
 
@@ -319,7 +299,8 @@ export const SCORING_ALLOCATION_KINDS = ['absolute', 'percent_of_max'] as const
 export type ScoringRuleAllocationKind = (typeof SCORING_ALLOCATION_KINDS)[number]
 
 /**
- * One branch inside a block (evaluated top‑down; first match wins, then capped by `maxWeight`).
+ * One branch inside a block — **all matching rows contribute** (cumulative); điểm có thể âm.
+ * `maxWeight` chỉ còn ý nghĩa gợi ý UI / tỷ lệ phần trăm khi `allocationKind === 'percent_of_max'`.
  */
 export interface ScoringRuleConditionRow {
   id: DocumentId
@@ -334,7 +315,7 @@ export interface ScoringRuleConditionRow {
 }
 
 /**
- * A weighted “bucket” on the 100‑point budget canvas (`sum(maxWeight)` across blocks).
+ * A weighted block — engine **tổng hợp mọi dòng khớp** (không giới hạn tổng 100 điểm toàn profile).
  */
 export interface ScoringRuleBlock {
   id: DocumentId
@@ -360,9 +341,9 @@ export interface ScoringRule {
 }
 
 export interface ScoringProfileThresholds {
-  /** Điểm tối thiểu để gán nhãn HOT (thang 0–100) */
+  /** Điểm tối thiểu để nhãn HOT (mặc định 80 nếu không hợp lệ). */
   hotMinScore: number
-  /** Điểm tối thiểu để gán nhãn WARM; dưới ngưỡng này là COLD */
+  /** Điểm tối thiểu để nhãn WARM; luôn &lt; HOT sau khi chuẩn hóa. */
   warmMinScore: number
 }
 
@@ -380,7 +361,7 @@ export interface ScoringProfile {
    */
   ruleBlocks?: ScoringRuleBlock[]
   thresholds: ScoringProfileThresholds
-  /** Profile dùng khi nhập Excel nếu không chọn tay */
+  /** Profile mặc định toàn cục (import + màn hình khi chưa chọn tay) */
   isDefaultForImport?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -497,8 +478,15 @@ export interface AITask {
  * Logical fields playbooks can match against (extend freely; engine should allow unknown fields with safe fallbacks).
  */
 export type PlaybookConditionField =
-  | 'region'
   | 'province'
+  | 'region'
+  | 'educationLevel'
+  | 'source'
+  | 'highSchool'
+  | 'gradeClass'
+  | 'address'
+  | 'customerId'
+  | 'description'
   | 'hanoiArea'
   | 'major'
   | 'majorInterest'

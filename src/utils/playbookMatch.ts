@@ -6,23 +6,39 @@ function norm(s: string): string {
 
 function leadFieldValue(lead: Lead, field: string): string {
   switch (field) {
-    case 'region':
-      return lead.region
     case 'province':
-      return lead.province ?? ''
+      return lead.province
+    case 'region':
+      return lead.province
+    case 'educationLevel':
+      return lead.educationLevel
+    case 'source':
+      return lead.source
+    case 'highSchool':
+      return lead.highSchool
+    case 'highSchoolName':
+      return lead.highSchool
+    case 'gradeClass':
+      return lead.gradeClass
+    case 'address':
+      return lead.address
+    case 'customerId':
+      return lead.customerId
+    case 'description':
+      return lead.description
     case 'hanoiArea':
-      return lead.hanoiArea ?? ''
+      return ''
     case 'major':
     case 'majorInterest':
-      return lead.majorInterest
+      return lead.educationLevel
     case 'schoolType':
-      return lead.schoolType
+      return ''
     case 'financialStatus':
-      return lead.financialStatus
+      return ''
     case 'academicLevel':
-      return lead.academicLevel ?? ''
+      return lead.educationLevel
     case 'studyIntention':
-      return lead.studyIntention ?? ''
+      return lead.educationLevel
     case 'priorityTag':
       return lead.priorityTag
     case 'pipelineStatus':
