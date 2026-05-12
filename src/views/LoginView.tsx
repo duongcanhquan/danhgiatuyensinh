@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { useAuth } from '../hooks/useAuth'
-import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
+import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
 
 const VIDEO_SRC =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260429_114316_1c7889ad-2885-410e-b493-98119fee0ddb.mp4'
@@ -62,13 +62,58 @@ export function LoginView() {
 
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
   if (!hasAuth) {
+    const missing = getFirebaseMissingKeys()
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-100 px-6 text-slate-700">
-        <div className="app-glass-panel max-w-md rounded-3xl p-8 text-center shadow-xl">
-          <p className="text-sm">Chưa cấu hình Firebase Auth trong .env</p>
-          <Link to="/" className="mt-4 inline-block text-sm font-medium text-emerald-700 underline-offset-4 hover:underline">
-            Về trang chủ
-          </Link>
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-100 px-4 py-10 text-slate-800">
+        <div className="app-glass-panel w-full max-w-lg rounded-3xl p-6 text-left shadow-xl sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">Chưa cấu hình Firebase</p>
+          <h1 className="mt-2 text-xl font-bold text-slate-900">Không thể đăng nhập</h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            App cần đủ 6 biến <code className="rounded bg-slate-200/90 px-1 text-xs">VITE_FIREBASE_*</code> trong file{' '}
+            <strong className="text-slate-900">.env</strong> (sao chép từ{' '}
+            <code className="rounded bg-slate-200/90 px-1 text-xs">.env.example</code>
+            ), rồi <strong className="text-slate-900">tắt và chạy lại</strong> <code className="text-xs">npm run dev</code> — Vite chỉ
+            đọc .env khi khởi động.
+          </p>
+          {missing.length ? (
+            <div className="mt-4 rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">Thiếu hoặc rỗng:</p>
+              <ul className="mt-2 list-inside list-disc font-mono text-xs text-amber-950">
+                {missing.map((k) => (
+                  <li key={k}>{k}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <ol className="mt-4 list-inside list-decimal space-y-2 text-sm text-slate-600">
+            <li>
+              Firebase Console → Project settings → <strong>Your apps</strong> (Web) → copy config vào{' '}
+              <code className="text-xs">.env</code>.
+            </li>
+            <li>
+              Authentication → Sign-in method → bật <strong>Email/Password</strong>.
+            </li>
+            <li>
+              Google Cloud (cùng project) → APIs → bật <strong>Identity Toolkit API</strong> (tránh lỗi{' '}
+              <code className="text-xs">auth/configuration-not-found</code>).
+            </li>
+            <li>
+              Tạo user email trong Authentication; Firestore document <code className="text-xs">users/{'{'}uid{'}'}</code> theo
+              Rules của bạn (hoặc chạy <code className="text-xs">npm run seed:super-admin</code> như trong{' '}
+              <code className="text-xs">.env.example</code>).
+            </li>
+          </ol>
+          <p className="mt-4 text-xs text-slate-500">
+            Deploy (Vercel / GitHub Actions): thêm cùng tên biến trong Environment secrets — không commit <code className="text-xs">.env</code>.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              to="/"
+              className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+            >
+              Về trang chủ
+            </Link>
+          </div>
         </div>
       </div>
     )
