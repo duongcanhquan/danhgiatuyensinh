@@ -47,6 +47,61 @@ describe('evaluateLead', () => {
     expect(r.priorityTag).toBe('HOT')
   })
 
+  it('CONTAINS: nhiều từ khóa cách bởi dấu phẩy — khớp nếu chứa bất kỳ từ nào', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'demographics',
+          label: 'province',
+          targetField: 'province',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'CONTAINS',
+              value: 'đà nẵng, hà nội, huế',
+              allocationKind: 'absolute',
+              allocationValue: 25,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ province: 'Quận Đống Đa, Hà Nội' }, profile).calculatedScore).toBe(25)
+    expect(evaluateLead({ province: 'Đà Nẵng city' }, profile).calculatedScore).toBe(25)
+    expect(evaluateLead({ province: 'Khánh Hòa' }, profile).calculatedScore).toBe(0)
+  })
+
+  it('CONTAINS: từ khóa không dấu vẫn khớp lead có dấu (chuẩn hóa bỏ dấu)', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'demographics',
+          label: 'province',
+          targetField: 'province',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'CONTAINS',
+              value: 'ha noi, da nang',
+              allocationKind: 'absolute',
+              allocationValue: 10,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ province: 'TP. Hà Nội' }, profile).calculatedScore).toBe(10)
+    expect(evaluateLead({ province: 'Đà Nẵng city' }, profile).calculatedScore).toBe(10)
+  })
+
   it('falls back to flat rules when no blocks', () => {
     const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
       rules: [

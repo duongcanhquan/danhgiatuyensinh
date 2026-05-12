@@ -208,6 +208,13 @@ function RuleConfigurationCard({
                     className="mt-0.5 w-full rounded-md border border-sky-200/80 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-40"
                   />
                 </label>
+                {r.condition === 'CONTAINS' ? (
+                  <p className="text-[9px] leading-snug text-slate-600">
+                    Nhiều từ khóa <strong>cách nhau bởi dấu phẩy</strong> — khớp nếu trường lead chứa{' '}
+                    <strong>bất kỳ</strong> từ nào. So khớp <strong>không phân biệt hoa thường và dấu</strong> (ví dụ{' '}
+                    <span className="font-mono text-slate-700">ha noi</span> khớp «Hà Nội»).
+                  </p>
+                ) : null}
               </div>
               <div className="flex min-h-0 flex-col gap-1.5 rounded-lg border border-amber-200/90 bg-amber-50/40 p-2">
                 <p className="text-[9px] font-bold uppercase tracking-wide text-amber-950">2 · Điểm &amp; phân bổ</p>

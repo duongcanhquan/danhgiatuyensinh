@@ -54,8 +54,18 @@ export type MasterDataBuckets = {
   majorLabels: string[]
 }
 
+/**
+ * Chuẩn hóa để so khớp điều kiện: thường, bỏ dấu (Hà Nội ≡ ha noi), gom khoảng trắng.
+ * Dùng cho EQUALS / CONTAINS / IN_LIST và nội dung trường lead.
+ */
 function norm(s: string): string {
-  return s.trim().toLowerCase()
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
 }
 
 function getFieldValue(leadData: Record<string, unknown>, targetField: string): string {
@@ -76,8 +86,14 @@ function ruleMatches(leadData: Record<string, unknown>, rule: ScoringRule): bool
     return fieldVal === val
   }
   if (condition === 'CONTAINS') {
-    const val = norm(String(rule.value))
-    return val.length > 0 && fieldVal.includes(val)
+    const raw = String(rule.value)
+    /** Nhiều từ khóa: cách nhau bởi dấu phẩy — khớp nếu trường chứa bất kỳ từ nào (trim, không phân biệt hoa thường). */
+    const parts = raw
+      .split(',')
+      .map((p) => norm(p))
+      .filter((p) => p.length > 0)
+    if (parts.length === 0) return false
+    return parts.some((val) => fieldVal.includes(val))
   }
   if (condition === 'IN_LIST') {
     const list = Array.isArray(rule.value) ? rule.value : [String(rule.value)]
