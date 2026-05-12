@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
+import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
 
@@ -164,16 +165,16 @@ export function LoginView() {
           transition={{ duration: 0.7, ease: 'easeOut' }}
           className="liquid-glass mx-auto w-full max-w-sm rounded-2xl p-6 text-white shadow-2xl shadow-black/40 md:p-8"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-amber-200/75 md:text-xs">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-200/75">
             VietMy Admissions
           </p>
-          <h1 className="font-display mt-2 text-3xl font-semibold uppercase leading-tight tracking-wide text-white md:text-[2.1rem]">
+          <VietMyAccentHeading as="h1" tone="onDark" size="xl" className="mt-2 block">
             Đăng nhập
-          </h1>
+          </VietMyAccentHeading>
           <p className="mt-2 text-sm leading-relaxed text-white/55">Hệ thống tuyển sinh &amp; đánh giá hồ sơ</p>
 
           <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4">
-            <label className="block text-[11px] font-medium uppercase tracking-[0.14em] text-amber-100/45">
+            <label className="block text-xs font-medium uppercase tracking-[0.14em] text-amber-100/45">
               Email
               <input
                 type="email"
@@ -181,11 +182,11 @@ export function LoginView() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="mt-2 w-full rounded-xl border border-white/18 bg-white/[0.07] px-3 py-3 text-[15px] text-white outline-none ring-0 placeholder:text-white/30 focus:border-amber-300/40 focus:ring-2 focus:ring-amber-400/25"
+                className="mt-2 w-full rounded-xl border border-white/18 bg-white/[0.07] px-3 py-3 text-base text-white outline-none ring-0 placeholder:text-white/30 focus:border-amber-300/40 focus:ring-2 focus:ring-amber-400/25"
                 placeholder="ten@caodangvietmy.edu.vn"
               />
             </label>
-            <label className="block text-[11px] font-medium uppercase tracking-[0.14em] text-amber-100/45">
+            <label className="block text-xs font-medium uppercase tracking-[0.14em] text-amber-100/45">
               Mật khẩu
               <input
                 type="password"
@@ -193,7 +194,7 @@ export function LoginView() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="mt-2 w-full rounded-xl border border-white/18 bg-white/[0.07] px-3 py-3 text-[15px] text-white outline-none focus:border-amber-300/40 focus:ring-2 focus:ring-amber-400/25"
+                className="mt-2 w-full rounded-xl border border-white/18 bg-white/[0.07] px-3 py-3 text-base text-white outline-none focus:border-amber-300/40 focus:ring-2 focus:ring-amber-400/25"
               />
             </label>
             {error ? (
@@ -202,7 +203,7 @@ export function LoginView() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 py-3 text-[15px] font-semibold text-slate-950 shadow-lg shadow-amber-950/25 ring-1 ring-amber-50/50 transition hover:brightness-105 disabled:opacity-50"
+              className="w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-amber-950/25 ring-1 ring-amber-50/50 transition hover:brightness-105 disabled:opacity-50"
             >
               {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
             </button>

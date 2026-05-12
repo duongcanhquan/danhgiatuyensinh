@@ -58,7 +58,7 @@ export function Layout() {
     [
       compact
         ? 'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition'
-        : 'flex min-h-[3.25rem] min-w-0 w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2.5 text-center text-[11px] font-medium leading-tight transition sm:min-h-14 sm:px-1.5 sm:text-xs md:text-[13px]',
+        : 'flex min-h-[3.25rem] min-w-0 w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2.5 text-center text-xs font-medium leading-tight transition sm:min-h-14 sm:px-1.5 md:text-sm',
       isActive
         ? compact
           ? 'bg-amber-500/20 text-amber-50 ring-1 ring-amber-400/40'
@@ -88,7 +88,7 @@ export function Layout() {
                 <p className="font-display truncate text-base font-semibold leading-tight tracking-tight text-amber-100/95 sm:text-lg">
                   VietMy
                 </p>
-                <p className="truncate text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-200/55 sm:text-[10px]">
+                <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/55 sm:text-xs">
                   Admissions
                 </p>
               </div>
@@ -97,11 +97,11 @@ export function Layout() {
             <div className="hidden min-w-0 items-center gap-2 md:flex md:max-w-[min(24rem,28vw)] lg:max-w-xs">
               <div className="truncate rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-1.5 text-right shadow-inner">
                 <p className="truncate text-sm font-semibold text-amber-50">{profile?.displayName ?? 'Khách'}</p>
-                <p className="truncate text-[11px] font-medium text-amber-200/65">
+                <p className="truncate text-xs font-medium text-amber-200/65">
                   {profile ? USER_ROLE_LABELS[profile.role] : '—'}
                 </p>
                 {!firebaseUser && import.meta.env.DEV ? (
-                  <p className="truncate text-[10px] font-medium text-amber-300/75">Bản thử</p>
+                  <p className="truncate text-xs font-medium text-amber-300/75">Bản thử</p>
                 ) : null}
               </div>
               {showSignOut ? (
@@ -199,7 +199,7 @@ export function Layout() {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#e8ecf2]">
           <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col px-0 py-0">
-            <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-[0.98rem] font-normal leading-relaxed text-slate-900 sm:px-3 sm:py-2.5 md:px-4 md:py-3 md:text-[1.03rem] md:leading-relaxed">
+            <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-base font-normal leading-relaxed text-slate-900 sm:px-3 sm:py-2.5 md:px-4 md:py-3 md:leading-relaxed">
               <Outlet />
             </div>
           </main>

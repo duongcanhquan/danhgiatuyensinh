@@ -134,9 +134,9 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
             >
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-900">{d.title}</p>
-                <p className="mt-0.5 text-[11px] uppercase tracking-wide text-amber-800">{d.type}</p>
+                <p className="mt-0.5 text-xs uppercase tracking-wide text-amber-800">{d.type}</p>
                 <p className="mt-1 line-clamp-3 text-xs text-slate-600">{d.content}</p>
-                <p className="mt-1 text-[10px] text-slate-400">
+                <p className="mt-1 text-xs text-slate-400">
                   {d.uploadedAt.toDate?.().toLocaleString?.('vi-VN') ?? ''}
                 </p>
               </div>

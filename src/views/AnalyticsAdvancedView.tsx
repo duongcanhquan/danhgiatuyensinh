@@ -18,6 +18,7 @@ import { LEADS_PAGE_SIZE, useLeads } from '../hooks/useLeads'
 import { useAuth } from '../hooks/useAuth'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
+import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const glassTooltip =
   'rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-lg backdrop-blur-xl'
@@ -132,9 +133,9 @@ export function AnalyticsAdvancedView() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold uppercase tracking-wide text-slate-900 md:text-3xl">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Phân tích nâng cao
-        </h1>
+        </VietMyAccentHeading>
         <p className="mt-1 text-base text-slate-600">
           Funnel tuyển sinh, phân bổ HOT/WARM/COLD (theo bộ chấm điểm đang chọn trên Bảng điều khiển), và xu hướng chỉ
           số cảm xúc AI 30 ngày — chỉ tính trên hồ sơ đã tải (Firestore pagination).
@@ -159,11 +160,11 @@ export function AnalyticsAdvancedView() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="app-card-glass p-5 transition-all duration-300">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Hồ sơ (phạm vi)</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Hồ sơ (phạm vi)</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{loading ? '…' : leads.length}</p>
         </div>
         <div className="app-card-glass p-5 transition-all duration-300">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Bộ chấm điểm</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Bộ chấm điểm</p>
           <p className="mt-1 truncate text-lg font-semibold text-emerald-800">
             {activeScoringProfile?.profileName ?? '— (chọn trên Bảng điều khiển)'}
           </p>
@@ -179,7 +180,7 @@ export function AnalyticsAdvancedView() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="app-card-glass p-5 md:p-6">
-          <h2 className="mb-1 text-base font-semibold uppercase tracking-wide text-slate-900">Funnel tuyển sinh</h2>
+          <h2 className="app-section-heading mb-1">Funnel tuyển sinh</h2>
           <p className="mb-4 text-sm text-slate-600">Thu hẹp theo giai đoạn pipeline (monotonic).</p>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -203,9 +204,7 @@ export function AnalyticsAdvancedView() {
         </section>
 
         <section className="app-card-glass p-5 md:p-6">
-          <h2 className="mb-4 text-base font-semibold uppercase tracking-wide text-slate-900">
-            Phân bổ nhãn (HOT / WARM / COLD)
-          </h2>
+          <h2 className="app-section-heading mb-4">Phân bổ nhãn (HOT / WARM / COLD)</h2>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tagDistribution} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -234,9 +233,7 @@ export function AnalyticsAdvancedView() {
         </section>
 
         <section className="app-card-glass p-5 md:p-6 lg:col-span-2">
-          <h2 className="mb-1 text-base font-semibold uppercase tracking-wide text-slate-900">
-            Điểm cảm xúc AI — 30 ngày (trung bình)
-          </h2>
+          <h2 className="app-section-heading mb-1">Điểm cảm xúc AI — 30 ngày (trung bình)</h2>
           <p className="mb-4 text-sm text-slate-600">Theo ngày cập nhật hồ sơ; ô trống = chưa có dữ liệu.</p>
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">

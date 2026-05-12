@@ -40,6 +40,7 @@ import { leadTouchPatch } from '../utils/leadTouch'
 import { exportSelectedEvaluatedLeadsToXlsx } from '../utils/exportEvaluatedLeads'
 import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
+import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const COL_SURFACE: Record<LeadCounselorStatus, string> = {
   NEW: 'border-amber-200/90 bg-gradient-to-b from-amber-50/95 via-white/85 to-white/45',
@@ -152,7 +153,7 @@ function KanbanColumn({
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
           {LEAD_COUNSELOR_STATUS_LABELS[status]}
         </h3>
-        <span className="rounded-full border border-slate-200/90 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-sm">
+        <span className="rounded-full border border-slate-200/90 bg-white/90 px-2 py-0.5 text-xs font-medium text-slate-700 shadow-sm">
           {count}
         </span>
       </div>
@@ -323,12 +324,12 @@ function KanbanLeadCard({
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-900">{lead.fullName || '—'}</p>
-          <p className="truncate text-[11px] text-slate-600">{lead.phone || lead.parentPhone || '—'}</p>
+          <p className="truncate text-xs text-slate-600">{lead.phone || lead.parentPhone || '—'}</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${TAG_BADGE[priorityTag]}`}>
+            <span className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${TAG_BADGE[priorityTag]}`}>
               {priorityTag}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
               <CalendarClock className="h-3 w-3" />
               {formatFollowUp(lead.nextFollowUpDate)}
             </span>
@@ -616,10 +617,10 @@ export function CounselorDashboard() {
 
       <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
-          <h1 className="text-2xl font-semibold uppercase tracking-wide text-slate-900 md:text-3xl">
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
             Pipeline tư vấn
-          </h1>
-          <div className="mt-2 space-y-1 text-sm leading-snug text-slate-600">
+          </VietMyAccentHeading>
+          <div className="mt-2 space-y-1 text-base leading-snug text-slate-600">
             <p>
               Bộ lọc khu vực / ngày / TVV (mở rộng dưới ô tìm) quyết định hồ sơ nào vào các cột CRM.
             </p>
@@ -627,7 +628,7 @@ export function CounselorDashboard() {
               Ô tìm kiếm chỉ thu hẹp thêm theo tên hoặc SĐT; kéo thả thẻ để đổi giai đoạn — đồng bộ Firestore.
             </p>
             {profile ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-sm text-slate-500">
                 {USER_ROLE_LABELS[profile.role]} — {filtered.length}/{leads.length} sau lọc
                 {hasMore ? ' · chưa tải hết danh sách' : ''}
               </p>
@@ -650,7 +651,7 @@ export function CounselorDashboard() {
         <div className="grid gap-3 md:grid-cols-3 md:items-end md:gap-4">
           <div className="min-w-0 md:col-span-2">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <label className="min-w-0 flex-1 text-[11px] font-medium text-slate-600">
+              <label className="min-w-0 flex-1 text-xs font-medium text-slate-600">
                 Tìm kiếm hồ sơ
                 <div className="relative mt-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -683,7 +684,7 @@ export function CounselorDashboard() {
             </div>
             {filtersExpanded ? (
               <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="block text-[11px] font-medium text-slate-600">
+                <label className="block text-xs font-medium text-slate-600">
                   Khu vực
                   <select
                     value={regionFilter}
@@ -698,7 +699,7 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-[11px] font-medium text-slate-600">
+                <label className="block text-xs font-medium text-slate-600">
                   Thời điểm theo
                   <select
                     value={dateAxis}
@@ -710,7 +711,7 @@ export function CounselorDashboard() {
                     <option value="followup">Ngày follow-up đã hẹn</option>
                   </select>
                 </label>
-                <label className="block text-[11px] font-medium text-slate-600">
+                <label className="block text-xs font-medium text-slate-600">
                   Từ ngày
                   <input
                     type="date"
@@ -719,7 +720,7 @@ export function CounselorDashboard() {
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   />
                 </label>
-                <label className="block text-[11px] font-medium text-slate-600">
+                <label className="block text-xs font-medium text-slate-600">
                   Đến ngày
                   <input
                     type="date"
@@ -728,7 +729,7 @@ export function CounselorDashboard() {
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   />
                 </label>
-                <label className="block text-[11px] font-medium text-slate-600 sm:col-span-2 lg:col-span-2">
+                <label className="block text-xs font-medium text-slate-600 sm:col-span-2 lg:col-span-2">
                   Tư vấn viên phụ trách
                   <select
                     value={counselorFilterUid}
@@ -764,7 +765,7 @@ export function CounselorDashboard() {
             ) : null}
           </div>
           <div className="flex min-w-0 flex-col gap-2 md:col-span-1">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200/95 bg-white/90 px-2.5 py-2 text-[11px] font-medium text-slate-800 shadow-sm transition hover:border-amber-300">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200/95 bg-white/90 px-2.5 py-2 text-xs font-medium text-slate-800 shadow-sm transition hover:border-amber-300">
               <input
                 type="checkbox"
                 checked={dueOnly}
@@ -790,7 +791,7 @@ export function CounselorDashboard() {
         </div>
 
         <div className="mt-3 border-t border-slate-200/80 pt-3">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
             <Flame className="h-3.5 w-3.5 text-amber-400" aria-hidden />
             Việc ưu tiên trong ngày
           </p>
@@ -895,7 +896,7 @@ export function CounselorDashboard() {
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="text-base font-semibold uppercase tracking-wide text-slate-900">Giao việc hàng loạt</h3>
+            <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">{selectedIds.size} hồ sơ đã chọn.</p>
             <label className="mt-4 block text-xs font-medium text-slate-600">
               Tư vấn viên
@@ -943,7 +944,7 @@ export function CounselorDashboard() {
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="text-base font-semibold uppercase tracking-wide text-slate-900">Đổi giai đoạn CRM</h3>
+            <h3 className="app-section-heading">Đổi giai đoạn CRM</h3>
             <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
             <select
               value={bulkCrmStatus}

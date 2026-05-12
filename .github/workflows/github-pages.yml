@@ -1,10 +1,15 @@
 # Triển khai lên GitHub Pages khi push nhánh main
-# Bật Pages: Settings → Pages → Build and deployment → Source: GitHub Actions
+#
+# Bắt buộc: Settings → Pages → Build and deployment → Source: GitHub Actions
+# (Nếu vẫn chọn «Deploy from a branch» thì job deploy từ Actions thường thất bại.)
+#
+# Lần đầu: môi trường «github-pages» có thể cần bấm Approve deployment (repo/org settings).
 name: Deploy GitHub Pages
 
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,11 +25,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Bước chuẩn của GitHub (starter Pages): đăng ký Pages + lấy base_path cho build.
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
+
       - run: npm ci
+
       - name: Kiểm tra secrets Firebase (Actions)
         run: |
           miss=""
@@ -44,10 +57,12 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
       - name: Build
         run: npm run build
         env:
-          # Repository secrets: Settings → Secrets and variables → Actions (giá trị copy từ .env local)
+          # Trùng base với GitHub Pages (tránh lệch khi đổi tên repo / fork).
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
@@ -58,6 +73,7 @@ jobs:
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
           VITE_FIREBASE_FIRESTORE_DATABASE_ID: ${{ secrets.VITE_FIREBASE_FIRESTORE_DATABASE_ID }}
           VITE_SUPER_ADMIN_EMAIL: ${{ secrets.VITE_SUPER_ADMIN_EMAIL }}
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -65,9 +81,12 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

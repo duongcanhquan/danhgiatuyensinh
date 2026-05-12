@@ -51,26 +51,26 @@ function PointBudgetHeader({ assigned }: { assigned: number }) {
 
   return (
     <header
-      className={`sticky top-0 z-30 mb-4 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-4 backdrop-blur-xl ${ring}`}
+      className={`sticky top-0 z-30 mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm ${ring}`}
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-slate-400">
+          <p className="text-xs font-bold uppercase tracking-[0.26em] text-slate-600">
             Ngân sách 100 điểm
           </p>
-          <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+          <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900">
             {assigned}
             <span className="text-base font-medium text-slate-500"> / 100</span>
-            <span className="ml-2 text-xs font-normal text-slate-500">tổng Max weight các khối</span>
+            <span className="ml-2 text-xs font-normal text-slate-600">tổng Max weight các khối</span>
           </p>
         </div>
         <p
           className={`text-xs font-medium ${
             tone === 'over'
-              ? 'text-rose-300'
+              ? 'text-rose-700'
               : tone === 'perfect'
-                ? 'text-emerald-300'
-                : 'text-amber-200'
+                ? 'text-emerald-700'
+                : 'text-amber-800'
           }`}
         >
           {tone === 'over'
@@ -80,7 +80,7 @@ function PointBudgetHeader({ assigned }: { assigned: number }) {
               : 'Chưa đủ 100 — còn room cho khối mới'}
         </p>
       </div>
-      <div className="mt-4 h-3 overflow-hidden rounded-full border border-white/10 bg-slate-900/90 shadow-inner">
+      <div className="mt-4 h-3 overflow-hidden rounded-full border border-slate-200 bg-slate-100 shadow-inner">
         <motion.div
           layout
           className={`h-full rounded-full ${fillClass}`}
@@ -89,7 +89,7 @@ function PointBudgetHeader({ assigned }: { assigned: number }) {
         />
       </div>
       {assigned > 100 ? (
-        <p className="mt-2 text-[11px] text-rose-300/90">
+        <p className="mt-2 text-xs text-rose-700">
           Giảm Max weight ở một hoặc nhiều khối để tổng ≤ 100.
         </p>
       ) : null}
@@ -127,41 +127,41 @@ function RuleConfigurationCard({
       layout
       onDragOver={onDragOver}
       onDrop={(e) => onDropOnCard(e, index)}
-      className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-slate-950/60 p-4 shadow-lg backdrop-blur-md"
+      className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-md"
     >
-      <div className="flex flex-wrap items-start gap-3 border-b border-white/10 pb-3">
+      <div className="flex flex-wrap items-start gap-3 border-b border-slate-200 pb-3">
         <button
           type="button"
           draggable={canEdit}
           onDragStart={(e) => onDragStartReorder(e, index)}
-          className="mt-1 rounded-lg border border-white/10 p-1.5 text-slate-400 hover:bg-white/5 hover:text-amber-200 disabled:opacity-30"
+          className="mt-1 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
           disabled={!canEdit}
           aria-label="Kéo để sắp xếp khối"
         >
           <GripVertical className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             {RULE_CATEGORY_LABELS[block.category]} · Khối #{index + 1}
           </p>
           <input
             value={block.label}
             disabled={!canEdit}
             onChange={(e) => onPatch({ label: e.target.value })}
-            className="w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-amber-400/30 disabled:opacity-50"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/35 disabled:opacity-50"
             placeholder="Nhãn khối"
           />
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block text-xs text-slate-400">
+            <label className="block text-xs text-slate-600">
               Trường lead (targetField)
               <input
                 value={String(block.targetField)}
                 disabled={!canEdit}
                 onChange={(e) => onPatch({ targetField: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/80 px-2 py-2 text-sm text-white disabled:opacity-50"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
               />
             </label>
-            <label className="block text-xs text-slate-400">
+            <label className="block text-xs text-slate-600">
               Max weight (điểm dự trữ khối)
               <input
                 type="number"
@@ -170,7 +170,7 @@ function RuleConfigurationCard({
                 value={block.maxWeight}
                 disabled={!canEdit}
                 onChange={(e) => onPatch({ maxWeight: Number(e.target.value) })}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/80 px-2 py-2 text-sm text-white disabled:opacity-50"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
               />
             </label>
           </div>
@@ -179,7 +179,7 @@ function RuleConfigurationCard({
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-lg border border-rose-400/30 p-2 text-rose-300 hover:bg-rose-500/15"
+            className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"
             aria-label="Xóa khối"
           >
             <Trash2 className="h-4 w-4" />
@@ -189,12 +189,12 @@ function RuleConfigurationCard({
 
       <div className="mt-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-slate-300">Điều kiện trong khối (first match wins)</p>
+          <p className="text-xs font-semibold text-slate-700">Điều kiện trong khối (first match wins)</p>
           {canEdit ? (
             <button
               type="button"
               onClick={onAddRow}
-              className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-1.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-500/25"
+              className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 hover:bg-violet-100"
             >
               + Thêm điều kiện
             </button>
@@ -203,10 +203,10 @@ function RuleConfigurationCard({
         {block.rows.map((r, ri) => (
           <div
             key={r.id}
-            className="rounded-xl border border-white/10 bg-slate-950/40 p-3"
+            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
           >
             <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-              <label className="text-[11px] text-slate-500">
+              <label className="text-xs text-slate-600">
                 Điều kiện
                 <select
                   value={r.condition}
@@ -214,7 +214,7 @@ function RuleConfigurationCard({
                   onChange={(e) =>
                     onPatchRow(ri, { condition: e.target.value as ProfileScoringCondition })
                   }
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-sm text-white disabled:opacity-50"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
                 >
                   {CONDITION_OPTIONS.map((c) => (
                     <option key={c.value} value={c.value}>
@@ -223,7 +223,7 @@ function RuleConfigurationCard({
                   ))}
                 </select>
               </label>
-              <label className="text-[11px] text-slate-500 md:col-span-2 lg:col-span-2">
+              <label className="text-xs text-slate-600 md:col-span-2 lg:col-span-2">
                 Giá trị
                 <input
                   value={Array.isArray(r.value) ? r.value.join(', ') : String(r.value)}
@@ -234,10 +234,10 @@ function RuleConfigurationCard({
                       value: r.condition === 'IN_LIST' ? v.split(',').map((s) => s.trim()) : v,
                     })
                   }}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-sm text-white disabled:opacity-40"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-40"
                 />
               </label>
-              <label className="text-[11px] text-slate-500">
+              <label className="text-xs text-slate-600">
                 Cách phân bổ
                 <select
                   value={r.allocationKind}
@@ -245,7 +245,7 @@ function RuleConfigurationCard({
                   onChange={(e) =>
                     onPatchRow(ri, { allocationKind: e.target.value as ScoringRuleAllocationKind })
                   }
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-sm text-white disabled:opacity-50"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
                 >
                   {ALLOCATION_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -254,21 +254,21 @@ function RuleConfigurationCard({
                   ))}
                 </select>
               </label>
-              <label className="text-[11px] text-slate-500">
+              <label className="text-xs text-slate-600">
                 {r.allocationKind === 'percent_of_max' ? 'Phần trăm (0–100)' : 'Điểm nếu khớp'}
                 <input
                   type="number"
                   value={r.allocationValue}
                   disabled={!canEdit}
                   onChange={(e) => onPatchRow(ri, { allocationValue: Number(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-sm text-white disabled:opacity-50"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 disabled:opacity-50"
                 />
               </label>
-              <div className="flex flex-col justify-end text-[11px] text-slate-500">
+              <div className="flex flex-col justify-end text-xs text-slate-600">
                 {r.allocationKind === 'percent_of_max' ? (
                   <span>
                     ≈{' '}
-                    <span className="font-medium text-amber-200/90">
+                    <span className="font-medium text-amber-800">
                       {Math.round((block.maxWeight * Math.min(100, Math.max(0, r.allocationValue))) / 100)}
                     </span>{' '}
                     điểm nếu khớp (trước cap khối)
@@ -276,14 +276,14 @@ function RuleConfigurationCard({
                 ) : (
                   <span>
                     Tối đa trong khối:{' '}
-                    <span className="font-medium text-slate-200">{block.maxWeight}</span>
+                    <span className="font-medium text-slate-800">{block.maxWeight}</span>
                   </span>
                 )}
                 {canEdit && block.rows.length > 1 ? (
                   <button
                     type="button"
                     onClick={() => onRemoveRow(ri)}
-                    className="mt-2 self-start text-[11px] text-rose-300 hover:underline"
+                    className="mt-2 self-start text-xs text-rose-700 hover:underline"
                   >
                     Xóa điều kiện
                   </button>
@@ -421,14 +421,14 @@ export function ProfileDropCanvas({
         onDragOver={onDragOverAllow}
         onDrop={onDropCanvas}
         className={[
-          'relative space-y-3 overflow-y-auto rounded-2xl border border-dashed border-white/15 bg-slate-950/30 p-4 pb-8 backdrop-blur-sm',
+          'relative space-y-3 overflow-y-auto rounded-2xl border border-dashed border-sky-300/80 bg-gradient-to-b from-sky-50/50 to-white p-4 pb-8',
           workspaceLayout ? 'min-h-0 flex-1' : 'flex-1',
         ].join(' ')}
       >
         {blocks.length === 0 ? (
           <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-center">
-            <p className="text-sm font-medium text-slate-300">Canvas trống</p>
-            <p className="max-w-sm text-xs text-slate-500">
+            <p className="text-sm font-medium text-slate-800">Canvas trống</p>
+            <p className="max-w-sm text-xs text-slate-600">
               Kéo mẫu từ thư viện bên trái và thả vào đây. Mỗi khối có Max weight; tổng Max weight toàn profile
               phải ≤ 100 để có thể lưu.
             </p>

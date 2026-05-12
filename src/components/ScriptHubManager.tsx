@@ -340,7 +340,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
         <div className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/40 backdrop-blur-md">
           <table className="min-w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
                 <th className="px-3 py-2 font-medium">Tiêu đề</th>
                 <th className="px-3 py-2 font-medium">Danh mục</th>
                 <th className="px-3 py-2 font-medium">Điều kiện</th>
@@ -489,12 +489,12 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                   <button
                     type="button"
                     onClick={() => setConditionRows((r) => [...r, newConditionRow()])}
-                    className="text-[11px] font-medium text-amber-200 hover:underline"
+                    className="text-xs font-medium text-amber-200 hover:underline"
                   >
                     + Điều kiện
                   </button>
                 </div>
-                <p className="mt-1 text-[10px] text-slate-600">IN / NOT IN: nhiều giá trị cách nhau bởi dấu phẩy.</p>
+                <p className="mt-1 text-xs text-slate-600">IN / NOT IN: nhiều giá trị cách nhau bởi dấu phẩy.</p>
                 <ul className="mt-2 space-y-2">
                   {conditionRows.map((row) => (
                     <li key={row.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
@@ -542,7 +542,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                           type="button"
                           disabled={conditionRows.length <= 1}
                           onClick={() => setConditionRows((xs) => xs.filter((x) => x.id !== row.id))}
-                          className="text-[11px] text-rose-300 hover:text-rose-200 disabled:opacity-30"
+                          className="text-xs text-rose-300 hover:text-rose-200 disabled:opacity-30"
                         >
                           Xóa dòng
                         </button>

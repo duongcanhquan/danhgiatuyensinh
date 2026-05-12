@@ -35,8 +35,8 @@ export function ProtectedRoute() {
           <p className="font-medium text-slate-800">Đang tải hồ sơ người dùng…</p>
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
             Đang đồng bộ tài khoản với Firestore. Thường chỉ vài giây. Nếu quá khoảng 22 giây vẫn không vào được, màn
-            hình tiếp theo sẽ hướng dẫn — hay gặp nhất là Rules Firestore chặn ghi <code className="text-[11px]">users</code> hoặc
-            trên Vercel thiếu biến giống file <code className="text-[11px]">.env</code> trên máy (kể cả tên database nếu không
+            hình tiếp theo sẽ hướng dẫn — hay gặp nhất là Rules Firestore chặn ghi <code className="text-xs">users</code> hoặc
+            trên Vercel thiếu biến giống file <code className="text-xs">.env</code> trên máy (kể cả tên database nếu không
             dùng mặc định).
           </p>
         </div>

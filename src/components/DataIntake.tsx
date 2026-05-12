@@ -26,6 +26,7 @@ import { pickProfileForImport, useScoringProfiles } from '../hooks/useScoringPro
 import { useMasterData } from '../hooks/useMasterData'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useAuth } from '../hooks/useAuth'
+import { VietMyAccentHeading } from './VietMyAccentHeading'
 
 /** Giới hạn Firestore mỗi batch commit. */
 const BATCH_SIZE = 500
@@ -334,9 +335,9 @@ export function DataIntake() {
   return (
     <div className="w-full max-w-none space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold uppercase tracking-wide text-slate-900 md:text-3xl">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Nhập liệu thông minh
-        </h1>
+        </VietMyAccentHeading>
         <p className="mt-1 text-base text-slate-600">
           Tải mẫu chuẩn → điền dữ liệu → kéo thả .xlsx. Hệ thống phát hiện trùng theo SĐT (hoặc Họ tên + Ngày
           sinh/Tuổi) trước khi ghi Firestore.
@@ -406,8 +407,10 @@ export function DataIntake() {
         <div className="app-card-glass space-y-5 p-6 shadow-lg md:p-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Xác nhận nhập</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">{preview.fileName}</h2>
+              <p className="app-page-kicker">Xác nhận nhập</p>
+              <h2 className="font-display mt-1 text-lg font-semibold normal-case tracking-normal text-slate-900 md:text-xl">
+                {preview.fileName}
+              </h2>
               <p className="mt-2 text-base text-slate-600">
                 Tìm thấy <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng.{' '}
                 <span className="font-medium text-emerald-700">{previewStats.fresh} mới</span>
@@ -419,7 +422,7 @@ export function DataIntake() {
                 .
               </p>
               {previewStats.inFileDup > 0 ? (
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-sm text-slate-500">
                   {previewStats.inFileDup} dòng trùng trong file — chỉ giữ bản đầu tiên cho mỗi fingerprint.
                 </p>
               ) : null}
@@ -436,15 +439,15 @@ export function DataIntake() {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center shadow-sm">
               <p className="text-2xl font-bold text-emerald-800">{previewStats.fresh}</p>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">Lead mới</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Lead mới</p>
             </div>
             <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-center shadow-sm">
               <p className="text-2xl font-bold text-violet-800">{previewStats.withDbHit}</p>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-violet-700">Đã có trên DB</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-violet-700">Đã có trên DB</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center shadow-sm">
               <p className="text-2xl font-bold text-slate-800">{previewStats.inFileDup}</p>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-600">Trùng trong file</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">Trùng trong file</p>
             </div>
           </div>
 

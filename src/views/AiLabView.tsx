@@ -43,20 +43,21 @@ export function AiLabView() {
   return (
     <div className="w-full max-w-none space-y-6">
       <header>
-        <VietMyAccentHeading as="h1" tone="onLight" size="lg" className="block">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Phòng thử AI
         </VietMyAccentHeading>
-        <p className="mt-1 max-w-2xl text-base leading-relaxed text-slate-700">
-          Đây là chỗ <strong className="text-slate-900">hỏi thử</strong> AI qua đường dẫn API do kỹ thuật cấu hình
-          cho môi trường chạy app (thường qua máy chủ trung gian để bảo vệ khóa). Còn{' '}
-          <strong className="text-slate-900">phân tích từng hồ sơ</strong> trong CRM thì vào{' '}
-          <strong className="text-slate-900">Cấu hình dữ liệu → Tích hợp LLM</strong> để chọn Gemini hoặc ChatGPT
-          lưu trên trình duyệt — hai luồng không giống nhau.
-        </p>
+        <div className="mt-1 max-w-2xl space-y-1 text-sm leading-relaxed text-slate-700 md:text-base">
+          <p>
+            <strong className="text-slate-900">Cách dùng:</strong> nhập nội dung dưới đây rồi bấm <strong className="text-slate-900">Gửi tới AI</strong> để nhận câu trả lời (API do kỹ thuật cấu hình cho app).
+          </p>
+          <p>
+            <strong className="text-slate-900">Trong CRM:</strong> để bật AI khi mở hồ sơ, vào <strong className="text-slate-900">Cấu hình dữ liệu → Tích hợp LLM</strong>, chọn Gemini hoặc ChatGPT rồi lưu trên trình duyệt.
+          </p>
+        </div>
       </header>
 
       <div className="app-glass-panel rounded-2xl p-6 shadow-lg">
-        <label className="text-xs font-medium text-slate-600">
+        <label className="text-sm font-medium text-slate-700">
           Câu hỏi / ngữ cảnh tuyển sinh
           <textarea
             value={input}

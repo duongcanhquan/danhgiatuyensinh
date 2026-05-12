@@ -160,7 +160,7 @@ export const LEAD_COUNSELOR_STATUS_LABELS: Record<LeadCounselorStatus, string> =
   INTERESTED: 'Quan tâm / đang tư vấn',
   DEPOSIT_PAID: 'Đã cọc',
   ENROLLED: 'Nhập học',
-  SUMMER_MELT: 'Hủy phút chót (summer melt)',
+  SUMMER_MELT: 'Hủy phút chót',
   DEAD: 'Không tiềm năng / đóng',
 }
 

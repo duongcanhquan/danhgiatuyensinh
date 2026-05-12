@@ -90,7 +90,7 @@ export function LeadAuditTimeline({
               <div className="relative z-10 flex shrink-0 flex-col items-center pt-1">
                 <span
                   className={[
-                    'flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-gradient-to-br from-white to-sky-50 text-[10px] font-bold uppercase tracking-tight text-slate-800 ring-2',
+                    'flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-gradient-to-br from-white to-sky-50 text-xs font-bold uppercase tracking-tight text-slate-800 ring-2',
                     glow,
                   ].join(' ')}
                 >
@@ -104,7 +104,7 @@ export function LeadAuditTimeline({
                   </span>
                   <span>{formatTs(log)}</span>
                   {idx === 0 ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-900">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900">
                       Mới nhất
                     </span>
                   ) : null}
@@ -113,7 +113,7 @@ export function LeadAuditTimeline({
                 <p className="mt-2 text-xs text-slate-600">
                   <span className="text-slate-500">Thực hiện:</span>{' '}
                   <span className="font-medium text-slate-900">{log.performedByName}</span>
-                  <span className="ml-1 font-mono text-[10px] text-slate-600">({log.performedBy.slice(0, 8)}…)</span>
+                  <span className="ml-1 font-mono text-xs text-slate-600">({log.performedBy.slice(0, 8)}…)</span>
                 </p>
               </div>
             </li>

@@ -38,7 +38,7 @@ export function MlWinGauge({ value }: { value: number }) {
           className="transition-[stroke-dashoffset] duration-500 ease-out"
         />
       </svg>
-      <span className="pointer-events-none absolute text-[8px] font-bold tabular-nums text-violet-950">{v}</span>
+      <span className="pointer-events-none absolute text-xs font-bold tabular-nums text-violet-950">{v}</span>
     </div>
   )
 }

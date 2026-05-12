@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { USER_ROLE_LABELS, type UserRole } from '../types'
+import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const ROLES: UserRole[] = ['counselor', 'head_of_profession', 'head_of_department', 'admin']
 
@@ -47,13 +48,15 @@ export function StaffManagementView() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold uppercase tracking-wide text-slate-900">Quản lý nhân sự</h1>
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+          Quản lý nhân sự
+        </VietMyAccentHeading>
       </header>
 
       <div className="grid gap-8 lg:grid-cols-2">
         <form onSubmit={(e) => void submit(e)} className="app-glass-panel rounded-2xl p-6 shadow-lg">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-900">Thêm nhân viên</h2>
-          <label className="mt-4 block text-xs font-medium text-slate-600">
+          <h2 className="app-section-heading">Thêm nhân viên</h2>
+          <label className="mt-4 block text-sm font-medium text-slate-700">
             Email đăng nhập
             <input
               type="email"
@@ -63,7 +66,7 @@ export function StaffManagementView() {
               className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
             />
           </label>
-          <label className="mt-3 block text-xs font-medium text-slate-600">
+          <label className="mt-3 block text-sm font-medium text-slate-700">
             Mật khẩu ban đầu
             <input
               type="password"
@@ -74,7 +77,7 @@ export function StaffManagementView() {
               className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
             />
           </label>
-          <label className="mt-3 block text-xs font-medium text-slate-600">
+          <label className="mt-3 block text-sm font-medium text-slate-700">
             Họ tên hiển thị
             <input
               value={displayName}
@@ -82,7 +85,7 @@ export function StaffManagementView() {
               className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
             />
           </label>
-          <label className="mt-3 block text-xs font-medium text-slate-600">
+          <label className="mt-3 block text-sm font-medium text-slate-700">
             Vai trò
             <select
               value={role}
@@ -108,8 +111,8 @@ export function StaffManagementView() {
         </form>
 
         <div className="app-glass-panel rounded-2xl p-6 shadow-lg">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-900">Danh sách users</h2>
-          {loading ? <p className="mt-3 text-xs text-slate-500">Đang tải…</p> : null}
+          <h2 className="app-section-heading">Danh sách users</h2>
+          {loading ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p> : null}
           <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto text-sm">
             {users.map((u) => (
               <li
@@ -117,7 +120,7 @@ export function StaffManagementView() {
                 className="flex justify-between gap-2 rounded-lg border border-slate-200/70 bg-white/60 px-3 py-2"
               >
                 <span className="text-slate-800">{u.displayName || u.email}</span>
-                <span className="text-xs font-medium text-violet-700">{USER_ROLE_LABELS[u.role]}</span>
+                <span className="text-sm font-medium text-violet-700">{USER_ROLE_LABELS[u.role]}</span>
               </li>
             ))}
           </ul>

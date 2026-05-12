@@ -30,6 +30,7 @@ import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
+import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 type SettingsTabId = 'master' | 'scoring' | 'consulting' | 'knowledge' | 'llm'
 
@@ -240,9 +241,9 @@ export function SettingsView() {
   return (
     <div className="space-y-4 text-slate-800 md:space-y-5">
       <header>
-        <h1 className="font-display text-3xl font-semibold uppercase tracking-wide text-slate-900 md:text-[2.35rem]">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Cấu hình dữ liệu
-        </h1>
+        </VietMyAccentHeading>
       </header>
 
       {!configured || !db ? (
@@ -302,7 +303,7 @@ export function SettingsView() {
               .filter(Boolean)
               .join(' ')}
           >
-            <h2 id="tab-master" className="text-lg font-bold uppercase tracking-wide text-slate-900 md:text-xl">
+            <h2 id="tab-master" className="app-section-heading md:text-xl">
               Danh mục dùng chung
             </h2>
             <button
@@ -331,11 +332,6 @@ export function SettingsView() {
                 : 'mt-4 space-y-4 md:mt-5 md:space-y-5'
             }
           >
-            <p className="text-sm text-slate-600 md:text-base">
-              Danh sách nhóm danh mục do Firestore quản lý (<code className="text-xs">{MASTER_DATA_REGISTRY_DOC_ID}</code>
-              ) — đổi <strong>tên hiển thị</strong>, <strong>thứ tự</strong> (không đổi mã), thêm hoặc gỡ <strong>loại danh
-              mục</strong>; trong mỗi loại vẫn thêm / xóa từng mục như trước.
-            </p>
             {authStatus === 'authenticated' && firebaseUser && !profile ? (
               <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-base text-rose-900">
                 Đã đăng nhập nhưng chưa tải được hồ sơ trên Firestore (<code className="text-sm">users/{'{uid}'}</code>
@@ -399,7 +395,7 @@ export function SettingsView() {
           </h2>
           <ProfileManagerTab db={db} />
           <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
-            <h3 className="text-lg font-bold uppercase tracking-wide text-slate-900 md:text-xl">
+            <h3 className="app-section-heading md:text-xl">
               Thử nghiệm chấm điểm (JSON)
             </h3>
             <p className="mt-2 text-sm text-slate-600 md:text-base">
@@ -446,7 +442,7 @@ export function SettingsView() {
               .filter(Boolean)
               .join(' ')}
           >
-            <h2 id="tab-consulting" className="text-lg font-bold uppercase tracking-wide text-slate-900 md:text-xl">
+            <h2 id="tab-consulting" className="app-section-heading md:text-xl">
               Playbook &amp; kịch bản tư vấn
             </h2>
             <button
@@ -477,7 +473,7 @@ export function SettingsView() {
           >
             <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-2xl backdrop-blur-xl md:p-8">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-base font-bold uppercase tracking-wide text-slate-900 md:text-lg">
+                <h3 className="app-section-heading">
                   Danh sách playbook
                 </h3>
                 {pbLoading ? <span className="text-sm text-slate-500">Đang tải…</span> : null}
@@ -563,7 +559,7 @@ export function SettingsView() {
               .filter(Boolean)
               .join(' ')}
           >
-            <h2 id="tab-llm" className="text-lg font-bold uppercase tracking-wide text-slate-900 md:text-xl">
+            <h2 id="tab-llm" className="app-section-heading md:text-xl">
               LLM &amp; tác vụ AI
             </h2>
             <button
@@ -641,7 +637,7 @@ function MasterCatalogRegistryEditor({
         copy.splice(insertAt, 0, row)
         const next = withSequentialOrders(copy)
         await persistMasterRegistryCatalogs(db, next)
-        setMsg('Đã cập nhật thứ tự danh mục trên _registry.')
+        setMsg('Đã cập nhật thứ tự danh mục.')
       } catch (e) {
         console.error(e)
         setMsg(firestoreWriteErrorMessage(e))
@@ -688,8 +684,8 @@ function MasterCatalogRegistryEditor({
         className="flex w-full items-start justify-between gap-3 rounded-xl text-left transition-colors hover:bg-slate-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80 md:items-center"
       >
         <div className="min-w-0">
-          <h3 className="text-base font-bold uppercase tracking-wide text-slate-900 md:text-lg">
-            Thứ tự &amp; tên danh mục (document _registry)
+          <h3 className="app-section-heading">
+            Thứ tự và tên nhóm danh mục
           </h3>
           <p className="mt-0.5 text-xs text-slate-500">
             {registryExpanded ? 'Bấm để thu gọn' : 'Bấm để mở — kéo thả / mũi tên đổi thứ tự, sửa tên danh mục'}
@@ -915,13 +911,9 @@ function AddMasterCatalogForm({
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-lg backdrop-blur-xl md:p-6">
-      <h3 className="text-base font-bold uppercase tracking-wide text-slate-900 md:text-lg">
+      <h3 className="app-section-heading">
         Thêm loại danh mục mới
       </h3>
-      <p className="mt-1 text-sm text-slate-600">
-        Mã dùng làm id Firestore (chữ thường, số, gạch dưới). Ví dụ: <code className="text-xs">nguon_lead</code>,{' '}
-        <code className="text-xs">cap_hoc</code>.
-      </p>
       <div className="mt-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
         <label className="min-w-[12rem] flex-1 text-sm font-medium text-slate-700">
           Mã (slug)
@@ -1033,7 +1025,7 @@ function MasterEntriesEditor({
     <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-6">
       <div className="mb-3 flex items-start justify-between gap-3 pr-24">
         <div>
-          <h3 className="text-lg font-bold uppercase tracking-wide text-slate-900">{title}</h3>
+          <h3 className="app-section-heading md:text-xl">{title}</h3>
           <p className="mt-0.5 font-mono text-xs text-slate-500">{catalogId}</p>
         </div>
         {loading ? <span className="shrink-0 text-sm text-slate-500">Đang tải…</span> : null}

@@ -150,9 +150,9 @@ export function ConsultingAssistantPanel({
           >
             <MlWinGauge value={ml.mlWinProbability} />
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900">Win probability</p>
-              <p className="truncate text-[11px] font-semibold text-slate-800">{ml.mlWinProbability}%</p>
-              <p className="text-[9px] text-violet-800/80">Hover: ML reasoning</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Win probability</p>
+              <p className="truncate text-xs font-semibold text-slate-800">{ml.mlWinProbability}%</p>
+              <p className="text-xs text-violet-800/80">Hover: ML reasoning</p>
             </div>
           </div>
         </div>
@@ -182,7 +182,7 @@ export function ConsultingAssistantPanel({
                 {flow.map((step, stepIndex) => (
                   <li key={step.category} className="relative">
                     <div className="absolute -left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-amber-300 bg-white shadow-md shadow-amber-500/15">
-                      <span className="text-[10px] font-bold text-amber-800">{stepIndex + 1}</span>
+                      <span className="text-xs font-bold text-amber-800">{stepIndex + 1}</span>
                     </div>
                     <div className="flex items-center gap-2 pl-1">
                       <StepIcon category={step.category} />

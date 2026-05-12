@@ -228,7 +228,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                 >
                   <span>
                     <span className="font-semibold text-rose-50/95">{t.name}</span>
-                    <span className="mt-0.5 block text-[10px] text-slate-500">{t.targetFields.join(', ')}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{t.targetFields.join(', ')}</span>
                   </span>
                   {canEdit ? (
                     <button

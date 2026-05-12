@@ -502,9 +502,9 @@ export function LeadManagement() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold uppercase tracking-wide text-slate-950 md:text-3xl">
-            <span className="text-red-600">Quản lý</span> <span className="text-slate-950">hồ sơ</span>
-          </h1>
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+            Quản lý hồ sơ
+          </VietMyAccentHeading>
         </div>
         {!configured || !db ? (
           <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-xs text-amber-900">
@@ -524,7 +524,7 @@ export function LeadManagement() {
           <summary className="cursor-pointer list-none px-4 py-3 md:px-5 [&::-webkit-details-marker]:hidden">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-900">
                   Admin
                 </span>
                 <span className="text-sm font-semibold text-slate-800">Lọc theo ngày, TVV, người tải, vùng…</span>
@@ -543,7 +543,7 @@ export function LeadManagement() {
                   setAdminDateTo('')
                   setAdminDateField('created')
                 }}
-                className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+                className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
               >
                 Xóa lọc admin
               </button>
@@ -551,7 +551,7 @@ export function LeadManagement() {
           </summary>
           <div className="border-t border-slate-200/80 px-4 pb-4 pt-2 md:px-5 md:pb-5">
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/60 bg-white/40 p-3">
-              <label className="flex flex-col text-[11px] font-medium text-slate-600">
+              <label className="flex flex-col text-xs font-medium text-slate-600">
                 Mốc thời gian
                 <select
                   value={adminDateField}
@@ -563,7 +563,7 @@ export function LeadManagement() {
                   <option value="imported">Ngày nhập (import)</option>
                 </select>
               </label>
-              <label className="flex flex-col text-[11px] font-medium text-slate-600">
+              <label className="flex flex-col text-xs font-medium text-slate-600">
                 Từ ngày
                 <input
                   type="date"
@@ -572,7 +572,7 @@ export function LeadManagement() {
                   className="mt-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-200"
                 />
               </label>
-              <label className="flex flex-col text-[11px] font-medium text-slate-600">
+              <label className="flex flex-col text-xs font-medium text-slate-600">
                 Đến ngày
                 <input
                   type="date"
@@ -583,7 +583,7 @@ export function LeadManagement() {
               </label>
             </div>
             <div className="mt-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tư vấn viên được gán</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tư vấn viên được gán</p>
               <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto pr-1">
                 {counselorUsers.length ? (
                   counselorUsers.map((c) => {
@@ -598,7 +598,7 @@ export function LeadManagement() {
                           )
                         }
                         className={[
-                          'max-w-[11rem] truncate rounded-full border px-2.5 py-1 text-[11px] transition',
+                          'max-w-[11rem] truncate rounded-full border px-2.5 py-1 text-xs transition',
                           on
                             ? 'border-violet-400 bg-violet-100 text-violet-950 shadow-sm'
                             : 'border-slate-200 bg-white/90 text-slate-700 hover:border-violet-200',
@@ -618,7 +618,7 @@ export function LeadManagement() {
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Người tải</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Người tải</p>
                 <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
                   {uploaderOptions.length ? (
                     uploaderOptions.map(([uid, label]) => {
@@ -633,7 +633,7 @@ export function LeadManagement() {
                             )
                           }
                           className={[
-                            'max-w-[10rem] truncate rounded-full border px-2 py-1 text-[11px] transition',
+                            'max-w-[10rem] truncate rounded-full border px-2 py-1 text-xs transition',
                             on
                               ? 'border-amber-400 bg-amber-100 text-amber-900'
                               : 'border-slate-200 bg-white/90 text-slate-700 hover:border-amber-200',
@@ -649,7 +649,7 @@ export function LeadManagement() {
                 </div>
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Vùng / tỉnh</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Vùng / tỉnh</p>
                 <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
                   {regionOptionsAdmin.map((reg) => {
                     const on = adminRegions.includes(reg)
@@ -663,7 +663,7 @@ export function LeadManagement() {
                           )
                         }
                         className={[
-                          'max-w-[8rem] truncate rounded-full border px-2 py-1 text-[11px] transition',
+                          'max-w-[8rem] truncate rounded-full border px-2 py-1 text-xs transition',
                           on
                             ? 'border-fuchsia-400 bg-fuchsia-100 text-fuchsia-900'
                             : 'border-slate-200 bg-white/90 text-slate-600 hover:border-fuchsia-200',
@@ -677,7 +677,7 @@ export function LeadManagement() {
                 </div>
               </div>
               <div className="min-w-0 sm:col-span-2 xl:col-span-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Nhãn (profile)</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Nhãn (profile)</p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {TAG_OPTIONS.map((tg) => {
                     const on = adminTags.includes(tg)
@@ -689,7 +689,7 @@ export function LeadManagement() {
                           setAdminTags((prev) => (prev.includes(tg) ? prev.filter((x) => x !== tg) : [...prev, tg]))
                         }
                         className={[
-                          'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition',
+                          'rounded-full border px-2.5 py-1 text-xs font-semibold transition',
                           on
                             ? 'border-amber-400 bg-amber-100 text-amber-900'
                             : 'border-slate-200 bg-white/90 text-slate-600 hover:border-amber-200',
@@ -702,7 +702,7 @@ export function LeadManagement() {
                 </div>
               </div>
               <div className="min-w-0 sm:col-span-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Trường THPT</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trường THPT</p>
                 <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
                   {schoolOptions.slice(0, 36).map((sc) => {
                     const on = adminSchools.includes(sc)
@@ -716,7 +716,7 @@ export function LeadManagement() {
                           )
                         }
                         className={[
-                          'max-w-[10rem] truncate rounded-full border px-2 py-1 text-[11px] transition',
+                          'max-w-[10rem] truncate rounded-full border px-2 py-1 text-xs transition',
                           on
                             ? 'border-emerald-400 bg-emerald-100 text-emerald-900'
                             : 'border-slate-200 bg-white/90 text-slate-600 hover:border-emerald-200',
@@ -728,7 +728,7 @@ export function LeadManagement() {
                     )
                   })}
                   {schoolOptions.length > 36 ? (
-                    <span className="self-center text-[10px] text-slate-500">+{schoolOptions.length - 36}…</span>
+                    <span className="self-center text-xs text-slate-500">+{schoolOptions.length - 36}…</span>
                   ) : null}
                 </div>
               </div>
@@ -740,7 +740,7 @@ export function LeadManagement() {
       <section className="app-card-glass p-3 shadow-md md:p-4">
         <div className="grid gap-3 md:grid-cols-3 md:items-end md:gap-4">
           <div className="flex min-w-0 flex-col gap-2 md:col-span-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Bộ chấm điểm
               <div className="relative mt-1">
                 <select
@@ -764,7 +764,7 @@ export function LeadManagement() {
               </div>
             </label>
             {activeScoringProfile ? (
-              <p className="line-clamp-2 text-[11px] leading-snug text-slate-500" title={activeScoringProfile.description}>
+              <p className="line-clamp-2 text-xs leading-snug text-slate-500" title={activeScoringProfile.description}>
                 <span className="font-medium text-slate-700">{activeScoringProfile.profileName}</span>
                 {activeScoringProfile.description ? ` — ${activeScoringProfile.description}` : null}
               </p>
@@ -774,7 +774,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={!activeScoringProfile}
                 onClick={() => setInspectProfileOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/95 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/95 bg-white/90 px-2.5 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
               >
                 <InfoIcon className="h-3.5 w-3.5" aria-hidden />
                 Chi tiết quy tắc
@@ -783,7 +783,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={!sortedFiltered.length}
                 onClick={handleExportEvaluated}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
               >
                 <Download className="h-3.5 w-3.5" aria-hidden />
                 Xuất Excel
@@ -791,8 +791,8 @@ export function LeadManagement() {
             </div>
           </div>
           <div className="min-w-0 md:col-span-2">
-            <label className="text-[11px] font-medium text-slate-600">
-              Tìm kiếm toàn trường <span className="text-slate-400">(?q=)</span> — tên, SĐT, email, TVV, trường…
+            <label className="text-xs font-medium text-slate-600">
+              Tìm kiếm
               <input
                 value={searchParams.get('q') ?? ''}
                 onChange={(e) => setUrlQuery(e.target.value)}
@@ -864,7 +864,7 @@ export function LeadManagement() {
             ]}
           />
         </div>
-        <div className="flex flex-col gap-2 rounded-lg border border-slate-200/70 bg-white/50 px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 rounded-lg border border-slate-200/70 bg-white/50 px-3 py-2 text-xs text-slate-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             <span>
               <span className="font-semibold text-slate-800">{leads.length}</span> hồ sơ đã tải
@@ -889,7 +889,7 @@ export function LeadManagement() {
               type="button"
               disabled={loadingMore}
               onClick={() => void loadMore()}
-              className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-50"
+              className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-50"
             >
               {loadingMore ? 'Đang tải…' : `Tải thêm (${LEADS_PAGE_SIZE} hồ sơ)`}
             </button>
@@ -969,11 +969,11 @@ export function LeadManagement() {
                       ) : null}
                     </span>
                     {activeScoringProfile ? (
-                      <span className="text-[10px] font-normal normal-case text-violet-700">theo profile</span>
+                      <span className="text-xs font-normal normal-case text-violet-700">theo profile</span>
                     ) : null}
                   </button>
                 </th>
-                <th className="w-14 px-1 py-3 text-center text-[11px] font-medium normal-case">
+                <th className="w-14 px-1 py-3 text-center text-xs font-medium normal-case">
                   <button
                     type="button"
                     onClick={() => toggleSort('mlWin')}
@@ -1010,8 +1010,8 @@ export function LeadManagement() {
                     ) : null}
                   </button>
                 </th>
-                <th className="max-w-[7rem] px-2 py-3 text-[11px] font-medium normal-case">CRM</th>
-                <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-[11px] font-medium normal-case">TVV</th>
+                <th className="max-w-[7rem] px-2 py-3 text-xs font-medium normal-case">CRM</th>
+                <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-xs font-medium normal-case">TVV</th>
               </tr>
             </thead>
             <tbody>
@@ -1071,11 +1071,11 @@ export function LeadManagement() {
                     </motion.span>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{PIPELINE_LABEL[l.pipelineStatus]}</td>
-                  <td className="max-w-[7rem] truncate px-2 py-3 text-[11px] text-slate-600" title={LEAD_COUNSELOR_STATUS_LABELS[l.status]}>
+                  <td className="max-w-[7rem] truncate px-2 py-3 text-xs text-slate-600" title={LEAD_COUNSELOR_STATUS_LABELS[l.status]}>
                     {LEAD_COUNSELOR_STATUS_LABELS[l.status]}
                   </td>
                   <td
-                    className="max-w-[9rem] truncate px-2 py-3 text-[11px] text-slate-600"
+                    className="max-w-[9rem] truncate px-2 py-3 text-xs text-slate-600"
                     title={formatAssignedCounselorLabel(l, counselorDisplayNameById)}
                   >
                     {formatAssignedCounselorLabel(l, counselorDisplayNameById)}
@@ -1114,9 +1114,9 @@ export function LeadManagement() {
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="text-base font-semibold uppercase tracking-wide text-slate-900">Giao việc hàng loạt</h3>
+            <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.</p>
-            <label className="mt-4 block text-xs font-medium text-slate-600">
+            <label className="mt-4 block text-sm font-medium text-slate-700">
               Tư vấn viên
               <select
                 value={bulkReassignUid}
@@ -1162,11 +1162,9 @@ export function LeadManagement() {
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="text-base font-semibold uppercase tracking-wide text-slate-900">
-              Đổi trạng thái CRM (Kanban)
-            </h3>
+            <h3 className="app-section-heading">Đổi trạng thái CRM (Kanban)</h3>
             <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
-            <label className="mt-4 block text-xs font-medium text-slate-600">
+            <label className="mt-4 block text-sm font-medium text-slate-700">
               Trạng thái mới
               <select
                 value={bulkCrmStatus}
@@ -1290,7 +1288,7 @@ function ScoringProfileInspectModal({
             {profile.description || 'Không có mô tả.'}
           </p>
 
-          <h3 className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Cấu hình quy tắc</h3>
+          <h3 className="app-section-heading mt-6">Cấu hình quy tắc</h3>
           {blocks.length ? (
             <ul className="mt-3 space-y-3">
               {blocks.map((b) => (
@@ -1304,8 +1302,8 @@ function ScoringProfileInspectModal({
                       ({RULE_CATEGORY_LABELS[b.category]} · max {b.maxWeight} điểm)
                     </span>
                   </p>
-                  <p className="mt-1 text-[11px] text-slate-500">Trường: {String(b.targetField)}</p>
-                  <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] text-slate-400">
+                  <p className="mt-1 text-xs text-slate-500">Trường: {String(b.targetField)}</p>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-400">
                     {b.rows.map((r) => (
                       <li key={r.id}>
                         {r.condition}{' '}
@@ -1357,7 +1355,7 @@ function FilterSelect({
     <label
       className={
         compact
-          ? 'flex min-w-0 flex-col text-[10px] font-semibold uppercase tracking-wide text-slate-500'
+          ? 'flex min-w-0 flex-col text-xs font-semibold uppercase tracking-wide text-slate-500'
           : 'flex flex-col text-xs font-medium text-slate-600'
       }
     >
@@ -1432,7 +1430,7 @@ function AiInsightsGrid({ data }: { data: Record<string, unknown> }) {
           key={k}
           className="rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-sm"
         >
-          <dt className="text-[10px] font-medium uppercase tracking-wider text-slate-400">{k}</dt>
+          <dt className="text-xs font-medium uppercase tracking-wider text-slate-400">{k}</dt>
           <dd className="mt-1 break-words">
             <AiOutputValue value={v} />
           </dd>
@@ -1535,11 +1533,11 @@ function LeadCrmQuickBlock({
 
   return (
     <section className="rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-900">Phân công &amp; CRM</h3>
-      <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
+      <h3 className="app-section-heading">Phân công &amp; CRM</h3>
+      <p className="mt-0.5 text-sm leading-snug text-slate-600">
         Gán tư vấn viên và giai đoạn Kanban — lưu trực tiếp, có ghi nhật ký thao tác.
       </p>
-      <label className="mt-2 block text-[11px] font-medium text-slate-600">
+      <label className="mt-2 block text-sm font-medium text-slate-700">
         Tư vấn viên
         <select
           value={crmAssignUid}
@@ -1555,7 +1553,7 @@ function LeadCrmQuickBlock({
           ))}
         </select>
       </label>
-      <label className="mt-2 block text-[11px] font-medium text-slate-600">
+      <label className="mt-2 block text-sm font-medium text-slate-700">
         Trạng thái CRM (Kanban)
         <select
           value={crmKanbanStatus}
@@ -1569,12 +1567,12 @@ function LeadCrmQuickBlock({
           ))}
         </select>
       </label>
-      {crmMsg ? <p className="mt-2 text-[11px] text-violet-900">{crmMsg}</p> : null}
+      {crmMsg ? <p className="mt-2 text-sm text-violet-900">{crmMsg}</p> : null}
       <button
         type="button"
         disabled={crmBusy}
         onClick={() => void save()}
-        className="mt-3 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
+        className="mt-3 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
       >
         {crmBusy ? 'Đang lưu…' : 'Lưu phân công &amp; CRM'}
       </button>
@@ -1830,8 +1828,10 @@ function LeadDetailPanel({
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-5">
           <div>
-            <p className="text-xs uppercase tracking-wider text-slate-500">Chi tiết hồ sơ</p>
-            <h2 className="text-lg font-semibold text-slate-900">{lead.fullName || 'Chưa rõ tên'}</h2>
+            <p className="app-page-kicker">Chi tiết hồ sơ</p>
+            <h2 className="font-display text-lg font-semibold normal-case tracking-normal text-slate-900 md:text-xl">
+              {lead.fullName || 'Chưa rõ tên'}
+            </h2>
             <p className="text-sm text-slate-600">{lead.phone}</p>
           </div>
           <button
@@ -1912,14 +1912,12 @@ function LeadDetailPanel({
             ) : null}
 
             <section className="rounded-2xl border border-slate-200/80 bg-white/50 p-4 shadow-inner">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">
-                Ghi chú và tương tác
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
+              <h3 className="app-section-heading">Ghi chú và tương tác</h3>
+              <p className="mt-1 text-sm text-slate-500">
                 Lưu trong Firestore (bộ sưu tập <code className="text-emerald-300">interactions</code>) — có thể bổ
                 sung phân tích cảm xúc AI sau.
               </p>
-              <label className="mt-3 block text-xs text-slate-600">
+              <label className="mt-3 block text-sm font-medium text-slate-600">
                 Ghi chú
                 <textarea
                   value={note}
@@ -1928,7 +1926,7 @@ function LeadDetailPanel({
                   className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/30"
                 />
               </label>
-              <label className="mt-3 block text-xs text-slate-600">
+              <label className="mt-3 block text-sm font-medium text-slate-600">
                 Nhãn đánh giá
                 <select
                   value={evalTag}
@@ -1968,13 +1966,13 @@ function LeadDetailPanel({
             </section>
 
             <section>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">Lịch sử</h3>
-              {intLoading ? <p className="mt-2 text-xs text-slate-500">Đang tải…</p> : null}
+              <h3 className="app-section-heading">Lịch sử</h3>
+              {intLoading ? <p className="mt-2 text-sm text-slate-500">Đang tải…</p> : null}
               <ul className="scroll-touch mt-3 max-h-48 space-y-2 overflow-y-auto overscroll-contain">
                 {interactions.map((it) => (
                   <li
                     key={it.id}
-                    className="rounded-xl border border-slate-200/70 bg-white/70 p-2 text-[11px] text-slate-600"
+                    className="rounded-xl border border-slate-200/70 bg-white/70 p-2 text-xs text-slate-600"
                   >
                     <p className="font-medium text-slate-800">
                       {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
@@ -1987,7 +1985,7 @@ function LeadDetailPanel({
                         AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
                       </p>
                     ) : null}
-                    <p className="mt-1 text-[10px] text-slate-500">
+                    <p className="mt-1 text-xs text-slate-500">
                       {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
                     </p>
                   </li>
@@ -2000,8 +1998,8 @@ function LeadDetailPanel({
           </div>
 
           <div className="scroll-touch min-h-0 overflow-y-auto overscroll-contain p-5">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">Playbook tư vấn</h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <h3 className="app-section-heading">Playbook tư vấn</h3>
+            <p className="mt-1 text-sm text-slate-500">
               Gợi ý chiến lược theo điều kiện hồ sơ (cấu hình trong mục Cài đặt).
             </p>
             <div className="mt-4 space-y-4">
@@ -2024,8 +2022,8 @@ function LeadDetailPanel({
                     <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
                     {pb.objectionHandling?.length ? (
                       <div className="mt-3 border-t border-slate-200/80 pt-2">
-                        <p className="text-[11px] font-medium text-amber-800">Phản đối dự kiến</p>
-                        <ul className="mt-1 list-inside list-decimal text-[11px] text-slate-600">
+                        <p className="text-xs font-medium text-amber-800">Phản đối dự kiến</p>
+                        <ul className="mt-1 list-inside list-decimal text-xs text-slate-600">
                           {pb.objectionHandling.map((x) => (
                             <li key={x}>{x}</li>
                           ))}
@@ -2042,7 +2040,7 @@ function LeadDetailPanel({
         </div>
           ) : (
             <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-5">
-              <p className="text-base font-semibold text-slate-900">Dòng thời gian nhật ký</p>
+              <h2 className="app-section-heading text-left normal-case">Dòng thời gian nhật ký</h2>
               <p className="mt-1 text-sm text-slate-600">
                 Lịch sử thao tác hệ thống — trạng thái, phân công, ghi chú, AI.
               </p>
@@ -2079,7 +2077,7 @@ function LeadDetailPanel({
                   <p className="mt-2 text-sm text-rose-700">{aiTasksErr}</p>
                 ) : null}
 
-                <label className="mt-3 block text-xs font-medium text-slate-600">
+                <label className="mt-3 block text-sm font-medium text-slate-600">
                   Tác vụ phân tích
                   <select
                     value={resolvedAiTaskId}
@@ -2104,7 +2102,7 @@ function LeadDetailPanel({
                 </label>
 
                 {storedAiInsight && formatAiRunAt(storedAiInsight.runAt) ? (
-                  <p className="mt-2 text-[10px] text-slate-500">
+                  <p className="mt-2 text-xs text-slate-500">
                     Lần chạy gần nhất: {formatAiRunAt(storedAiInsight.runAt)}
                   </p>
                 ) : null}
@@ -2128,7 +2126,7 @@ function LeadDetailPanel({
 
                 {aiRunning ? (
                   <div className="mt-4 space-y-2">
-                    <p className="text-[11px] text-slate-400">Đang suy luận…</p>
+                    <p className="text-xs text-slate-400">Đang suy luận…</p>
                     <div className="h-10 rounded-xl ai-skeleton-shimmer" />
                     <div
                       className="h-10 rounded-xl ai-skeleton-shimmer"
