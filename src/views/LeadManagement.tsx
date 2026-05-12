@@ -19,7 +19,7 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { LEADS_PAGE_SIZE, MAX_FULL_SCOPE_LEADS, MAX_LEAD_SEARCH_SCAN, useLeads, type LeadListServerFilters } from '../hooks/useLeads'
+import { LEADS_PAGE_SIZE, MAX_LEAD_SEARCH_SCAN, useLeads, type LeadListServerFilters } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
@@ -160,6 +160,12 @@ export function LeadManagement() {
 
   const leadServerFilters = useMemo((): LeadListServerFilters | undefined => {
     const o: LeadListServerFilters = {}
+    const scoreMinParsed =
+      scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
+    const scoreMaxParsed =
+      scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput)) ? null : Number(scoreMaxInput)
+    if (scoreMinParsed != null) o.scoreMin = scoreMinParsed
+    if (scoreMaxParsed != null) o.scoreMax = scoreMaxParsed
     if (statusFilter !== 'ALL') o.pipelineStatus = statusFilter as LeadPipelineStatus
     if (crmStatusFilter !== 'ALL') o.crmStatus = crmStatusFilter as LeadCounselorStatus
     if (tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
@@ -201,6 +207,8 @@ export function LeadManagement() {
     adminDateFrom,
     adminDateTo,
     adminDateField,
+    scoreMinInput,
+    scoreMaxInput,
   ])
 
   const {
@@ -215,12 +223,13 @@ export function LeadManagement() {
     searchHitTotal,
     scopeFetchTruncated,
     currentPage,
+    totalPages: firestoreTotalPages,
     setPage,
   } = useLeads({
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: 'fullScope',
+    dataMode: 'paged',
   })
 
   const {
@@ -382,17 +391,14 @@ export function LeadManagement() {
     return rows
   }, [filtered, sortKey, sortDir, activeScoringProfile, scoreByLeadId])
 
-  const displayTotalPages = Math.max(1, Math.ceil(sortedFiltered.length / LEADS_PAGE_SIZE))
+  /** Phân trang theo Firestore / bucket tìm kiếm — hook đã trả đúng một trang (≤30 dòng). */
+  const displayTotalPages = Math.max(1, firestoreTotalPages)
 
   useEffect(() => {
     if (currentPage > displayTotalPages) setPage(displayTotalPages)
   }, [currentPage, displayTotalPages, setPage])
 
-  const pagedRows = useMemo(
-    () =>
-      sortedFiltered.slice((currentPage - 1) * LEADS_PAGE_SIZE, currentPage * LEADS_PAGE_SIZE),
-    [sortedFiltered, currentPage],
-  )
+  const pagedRows = useMemo(() => sortedFiltered, [sortedFiltered])
 
   const listStats = useMemo(() => {
     if (scopeTagCounts) {
@@ -877,7 +883,7 @@ export function LeadManagement() {
                 className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
               >
                 <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Xuất Excel
+                Xuất Excel (trang hiện tại)
               </button>
               {can('data:intake') ? (
                 <Link
@@ -1024,8 +1030,7 @@ export function LeadManagement() {
             ) : null}
             {scopeFetchTruncated ? (
               <span className="text-amber-900" title="Giới hạn an toàn khi tải toàn bộ phạm vi">
-                Đã tải tối đa <span className="font-semibold">{MAX_FULL_SCOPE_LEADS}</span> hồ sơ — có thể còn trên
-                server.
+                Một phần dữ liệu có thể chưa được tải hết — kiểm tra chế độ danh sách hoặc bộ lọc.
               </span>
             ) : null}
             <span>
@@ -1038,13 +1043,14 @@ export function LeadManagement() {
               </span>
             ) : null}
             <span>
-              Sau lọc điểm (client): <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
+              Dòng trên trang (sau lọc điểm profile nếu có):{' '}
+              <span className="font-semibold text-slate-800">{sortedFiltered.length}</span>
               {sortedFiltered.length > 0 ? (
                 <>
                   {' '}
                   · Trang <span className="font-semibold text-slate-800">{currentPage}</span>/
-                  <span className="font-semibold text-slate-800">{displayTotalPages}</span> (hiển thị{' '}
-                  {LEADS_PAGE_SIZE}/trang sau lọc điểm)
+                  <span className="font-semibold text-slate-800">{displayTotalPages}</span> (Firestore / tìm kiếm, tối
+                  đa {LEADS_PAGE_SIZE} dòng/trang)
                 </>
               ) : null}
             </span>
@@ -1064,15 +1070,6 @@ export function LeadManagement() {
       ) : null}
 
       <div className="app-card-glass-strong overflow-hidden transition-all duration-300">
-        <p className="border-b border-slate-200/80 bg-amber-50/50 px-3 py-2 text-center text-[11px] leading-snug text-amber-950 sm:px-4 sm:text-xs">
-          <span className="font-semibold text-amber-900">Mẹo:</span> bấm vào <strong>một dòng hồ sơ</strong> để mở panel
-          chi tiết — xem đủ thông tin sinh viên, <strong>ghi chú &amp; lịch sử tương tác</strong>,{' '}
-          <strong>đánh giá / nhãn tương tác</strong>, playbook gợi ý, phân tích AI (nếu bật) và nhật ký thao tác hệ
-          thống. Hệ thống <strong>tải toàn bộ hồ sơ trong phạm vi lọc &amp; quyền</strong> (theo lô Firestore), rồi
-          phân trang <strong>{LEADS_PAGE_SIZE} dòng/trang</strong> trên máy bạn sau lọc điểm. Ô đầu dòng chỉ chọn hồ
-          sơ <strong>trên trang hiện tại</strong>. Ô tìm URL <code className="rounded bg-amber-100/80 px-1">?q=</code>{' '}
-          lọc trên toàn bộ tập đã tải (tối đa {MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')} hồ sơ).
-        </p>
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">

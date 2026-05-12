@@ -206,25 +206,13 @@ export function DashboardView() {
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
           Báo cáo tuyển sinh chuyên sâu
         </VietMyAccentHeading>
-        <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-600">
-          {isAdmin ? (
-            <>
-              Báo cáo admin tổng hợp <strong className="font-semibold text-slate-800">toàn bộ hồ sơ</strong> trong hệ
-              thống (đếm trực tiếp trên Firestore). Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong>{' '}
-              là tổng document; các biểu đồ pipeline, nhãn HOT/WARM/COLD/LOSS, tỷ lệ nhập học và hủy phút chót theo{' '}
-              <strong className="font-semibold text-slate-800">dữ liệu đã lưu</strong> trên từng hồ sơ (không giới hạn
-              30/trang). Profile chấm điểm bên dưới dùng để đồng bộ màn hình quản lý; phân bổ nhãn ở đây theo trường{' '}
-              <code className="rounded bg-slate-100 px-1 py-0.5 text-[13px] text-slate-800">priorityTag</code> trên
-              hồ sơ.
-            </>
-          ) : (
-            <>
-              Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong> dùng đếm Firestore (đúng phạm vi
-              quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Quản lý hồ
-              sơ nếu cần xem thêm bản ghi cho phân tích cục bộ.
-            </>
-          )}
-        </p>
+        {!isAdmin ? (
+          <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-600">
+            Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong> dùng đếm Firestore (đúng phạm vi
+            quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Quản lý hồ sơ
+            nếu cần xem thêm bản ghi cho phân tích cục bộ.
+          </p>
+        ) : null}
       </header>
 
       {error ? (

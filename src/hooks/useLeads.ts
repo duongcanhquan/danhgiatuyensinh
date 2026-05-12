@@ -32,8 +32,11 @@ import {
 /** Số hồ sơ mỗi trang Firestore / bảng. */
 export const LEADS_PAGE_SIZE = 30
 
-/** Quét tối đa khi có ô tìm (URL q) — lọc tiếp trên client (chế độ `paged`). */
-export const MAX_LEAD_SEARCH_SCAN = 2500
+/** Quét tối đa khi có ô tìm (URL q) — lọc tiếp trên client (chế độ `paged`). Giữ vừa phải để tìm nhanh. */
+export const MAX_LEAD_SEARCH_SCAN = 1200
+
+/** Một lần getDocs tối đa khi nhảy trang xa (thay cho nhiều vòng startAfter). */
+const MAX_LIST_BULK_FETCH = 3600
 
 /** Giới hạn an toàn khi `dataMode: 'fullScope'` — đọc toàn bộ phạm vi theo lô Firestore. */
 export const MAX_FULL_SCOPE_LEADS = 25_000
@@ -512,7 +515,7 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const pageToLoad = fkChanged ? 1 : currentPageRef.current
 
-    const runAggregations = async () => {
+    const fetchTotalOnly = async (): Promise<number | null> => {
       try {
         const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
         const total = (await getCountFromServer(base)).data().count
@@ -520,7 +523,20 @@ export function useLeads(opts?: UseLeadsOptions) {
         setTotalLeadCount(total)
         setTotalLeadCountError(null)
         totalRef.current = total
+        return total
+      } catch (e) {
+        console.error(e)
+        if (!cancelled) {
+          setTotalLeadCount(null)
+          setTotalLeadCountError(e instanceof Error ? e.message : 'Không đếm được tổng hồ sơ')
+          totalRef.current = null
+        }
+        return null
+      }
+    }
 
+    const fetchTagCountsOnly = async () => {
+      try {
         const tagEntries = await Promise.all(
           TAG_KEYS.map(async (t) => {
             const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, serverFilters, t)
@@ -528,7 +544,7 @@ export function useLeads(opts?: UseLeadsOptions) {
             return [t, n] as const
           }),
         )
-        if (cancelled) return null
+        if (cancelled) return
         if (serverFilters?.priorityTagsIn && serverFilters.priorityTagsIn.length > 1) {
           setScopeTagCounts(null)
         } else {
@@ -539,50 +555,84 @@ export function useLeads(opts?: UseLeadsOptions) {
             LOSS: tagEntries.find(([k]) => k === 'LOSS')?.[1] ?? 0,
           })
         }
-        return total
       } catch (e) {
         console.error(e)
-        if (!cancelled) {
-          setTotalLeadCount(null)
-          setTotalLeadCountError(e instanceof Error ? e.message : 'Không đếm được tổng hồ sơ')
-          setScopeTagCounts(null)
-          totalRef.current = null
-        }
-        return null
+        if (!cancelled) setScopeTagCounts(null)
       }
+    }
+
+    const runAggregations = async (): Promise<number | null> => {
+      const total = await fetchTotalOnly()
+      if (cancelled || total == null) return null
+      await fetchTagCountsOnly()
+      return total
     }
 
     const loadFirestorePage = async (page: number, total: number | null) => {
       const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
       const snaps = pageEndSnaps.current
-      for (let p = 1; p < page; p++) {
-        if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
-        const prevEnd = p === 1 ? null : snaps[p - 2] ?? null
+      const pg = Math.max(1, Math.floor(page))
+
+      const prev = pg <= 1 ? null : snaps[pg - 2]
+      const canSingleStep = pg === 1 || (prev !== undefined && prev !== null)
+
+      const fetchOnePage = async (after: QueryDocumentSnapshot<DocumentData> | null) => {
         const qy =
-          prevEnd === null
+          after === null
             ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-            : query(base(), orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE))
+            : query(base(), orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE))
         const snap = await getDocs(qy)
         if (cancelled) return
-        snaps[p - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
-        if (!snap.docs.length) break
+        const mapped: Lead[] = []
+        snap.forEach((d) => {
+          const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+          if (row) mapped.push(row)
+        })
+        mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels))
+        snaps[pg - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
       }
-      const startAfterSnap = page <= 1 ? null : snaps[page - 2] ?? null
-      const qy =
-        startAfterSnap === null
-          ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-          : query(base(), orderBy('updatedAt', 'desc'), startAfter(startAfterSnap), limit(LEADS_PAGE_SIZE))
-      const snap = await getDocs(qy)
-      if (cancelled) return
-      const mapped: Lead[] = []
-      snap.forEach((d) => {
-        const row = mapDoc(d.id, d.data() as Record<string, unknown>)
-        if (row) mapped.push(row)
-      })
-      mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels))
-      const last = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
-      snaps[page - 1] = last
+
+      if (canSingleStep) {
+        await fetchOnePage(pg <= 1 ? null : (prev as QueryDocumentSnapshot<DocumentData>))
+      } else if (pg * LEADS_PAGE_SIZE <= MAX_LIST_BULK_FETCH) {
+        const bulkLimit = pg * LEADS_PAGE_SIZE
+        const qy = query(base(), orderBy('updatedAt', 'desc'), limit(bulkLimit))
+        const snap = await getDocs(qy)
+        if (cancelled) return
+        const docs = snap.docs
+        for (let p = 1; p <= pg; p++) {
+          const endIdx = p * LEADS_PAGE_SIZE - 1
+          if (endIdx < docs.length) snaps[p - 1] = docs[endIdx]!
+          else if ((p - 1) * LEADS_PAGE_SIZE < docs.length) snaps[p - 1] = docs[docs.length - 1]!
+          else snaps[p - 1] = null
+        }
+        const startDocSlice = (pg - 1) * LEADS_PAGE_SIZE
+        const sliceDocs = docs.slice(startDocSlice, startDocSlice + LEADS_PAGE_SIZE)
+        const pageRows: Lead[] = []
+        sliceDocs.forEach((d) => {
+          const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+          if (row) pageRows.push(row)
+        })
+        pageRows.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels))
+      } else {
+        for (let p = 1; p < pg; p++) {
+          if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
+          const prevEnd = p === 1 ? null : snaps[p - 2] ?? null
+          const qy =
+            prevEnd === null
+              ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+              : query(base(), orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE))
+          const snap = await getDocs(qy)
+          if (cancelled) return
+          snaps[p - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
+          if (!snap.docs.length) break
+        }
+        const afterSnap = pg <= 1 ? null : (snaps[pg - 2] as QueryDocumentSnapshot<DocumentData> | null)
+        await fetchOnePage(afterSnap)
+      }
+
       const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
       setTotalPages(tp)
     }
@@ -707,26 +757,40 @@ export function useLeads(opts?: UseLeadsOptions) {
           return
         }
 
-        let total = totalRef.current
-        if (fkChanged || total == null) {
-          total = await runAggregations()
-          if (cancelled) return
-        }
-
         if (searchText) {
-          await loadSearchBucketAndSlice(pageToLoad, fkChanged)
-          if (cancelled) return
+          if (fkChanged || totalRef.current == null) {
+            await Promise.all([fetchTotalOnly(), loadSearchBucketAndSlice(pageToLoad, fkChanged)])
+            if (cancelled) return
+            void fetchTagCountsOnly()
+          } else {
+            await loadSearchBucketAndSlice(pageToLoad, false)
+          }
           setLoading(false)
           setLoadingPage(false)
           return
         }
 
-        const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
-        setTotalPages(tp)
-        const safePage = Math.min(Math.max(1, pageToLoad), tp)
-        if (safePage !== pageToLoad) setCurrentPageState(safePage)
-        await loadFirestorePage(safePage, total)
-        if (cancelled) return
+        let total = totalRef.current
+        if (fkChanged || total == null) {
+          const tentativePage = fkChanged ? 1 : Math.max(1, pageToLoad)
+          await Promise.all([fetchTotalOnly(), loadFirestorePage(tentativePage, null)])
+          if (cancelled) return
+          total = totalRef.current
+          const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
+          setTotalPages(tp)
+          const safePage = Math.min(Math.max(1, tentativePage), tp)
+          if (safePage !== tentativePage) {
+            setCurrentPageState(safePage)
+            await loadFirestorePage(safePage, total)
+          }
+          void fetchTagCountsOnly()
+        } else {
+          const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
+          setTotalPages(tp)
+          const safePage = Math.min(Math.max(1, pageToLoad), tp)
+          if (safePage !== pageToLoad) setCurrentPageState(safePage)
+          await loadFirestorePage(safePage, total)
+        }
         setLoading(false)
         setLoadingPage(false)
       } catch (e) {
