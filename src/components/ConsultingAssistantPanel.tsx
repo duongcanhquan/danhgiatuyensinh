@@ -83,7 +83,7 @@ function SnippetCard({
           <Link
             to={`/settings?editSnippet=${encodeURIComponent(snippet.id)}`}
             className="shrink-0 rounded-lg p-1 text-slate-500 transition hover:bg-amber-50 hover:text-amber-700"
-            title="Sửa đoạn kịch bản trong Cấu hình dữ liệu"
+            title="Sửa đoạn kịch bản trong Cài đặt"
           >
             <Pencil className="h-3.5 w-3.5" />
           </Link>

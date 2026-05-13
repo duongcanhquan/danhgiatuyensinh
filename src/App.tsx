@@ -6,10 +6,8 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { DataIntake } from './components/DataIntake'
 import { DashboardView } from './views/DashboardView'
 import { LeadManagement } from './views/LeadManagement'
-import { SettingsView } from './views/SettingsView'
 import { LoginView } from './views/LoginView'
-import { StaffManagementView } from './views/StaffManagementView'
-import { AiLabView } from './views/AiLabView'
+import { SettingsView } from './views/SettingsView'
 import { AnalyticsAdvancedView } from './views/AnalyticsAdvancedView'
 import { CounselorDashboard } from './views/CounselorDashboard'
 
@@ -31,8 +29,8 @@ export default function App() {
                 <Route path="counselor" element={<CounselorDashboard />} />
                 <Route path="import" element={<DataIntake />} />
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
-                <Route path="ai" element={<AiLabView />} />
-                <Route path="staff" element={<StaffManagementView />} />
+                <Route path="ai" element={<Navigate to="/settings?tab=ai_lab" replace />} />
+                <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
                 <Route path="settings" element={<SettingsView />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

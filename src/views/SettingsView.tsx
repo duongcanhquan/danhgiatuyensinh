@@ -31,8 +31,10 @@ import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { AiLabView } from '../views/AiLabView'
+import { StaffManagementView } from '../views/StaffManagementView'
 
-type SettingsTabId = 'master' | 'scoring' | 'consulting' | 'knowledge' | 'llm'
+type SettingsTabId = 'master' | 'scoring' | 'consulting' | 'knowledge' | 'llm' | 'ai_lab' | 'staff'
 
 async function persistMasterRegistryCatalogs(
   db: NonNullable<ReturnType<typeof getFirestoreDb>>,
@@ -65,7 +67,15 @@ function firestoreWriteErrorMessage(e: unknown): string {
 }
 
 function parseSettingsTab(raw: string | null): SettingsTabId | null {
-  if (raw === 'master' || raw === 'scoring' || raw === 'consulting' || raw === 'knowledge' || raw === 'llm')
+  if (
+    raw === 'master' ||
+    raw === 'scoring' ||
+    raw === 'consulting' ||
+    raw === 'knowledge' ||
+    raw === 'llm' ||
+    raw === 'ai_lab' ||
+    raw === 'staff'
+  )
     return raw
   return null
 }
@@ -138,6 +148,8 @@ export function SettingsView() {
   const canMaster = can('config:master_data')
   const canPlaybooks = can('config:playbooks')
   const canAiEngine = can('config:ai_engine')
+  const canAiLab = can('ai:use')
+  const canStaff = can('config:users')
 
   const removeMasterCatalog = async (c: MasterCatalogDefinition) => {
     if (!db || !canMaster) return
@@ -182,8 +194,10 @@ export function SettingsView() {
       base.push({ id: 'knowledge', label: 'Kho tri thức (RAG)', enabled: true })
       base.push({ id: 'llm', label: 'LLM', enabled: true })
     }
+    if (db && canAiLab) base.push({ id: 'ai_lab', label: 'Phòng thử AI', enabled: true })
+    if (db && canStaff) base.push({ id: 'staff', label: 'Quản lý nhân sự', enabled: true })
     return base
-  }, [db, canAiEngine])
+  }, [db, canAiEngine, canAiLab, canStaff])
 
   const tabParam = searchParams.get('tab')
   const editSnippetParam = searchParams.get('editSnippet')
@@ -243,7 +257,7 @@ export function SettingsView() {
     <div className="space-y-4 text-slate-800 md:space-y-5">
       <header>
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-          Cấu hình dữ liệu
+          Cài đặt
         </VietMyAccentHeading>
       </header>
 
@@ -591,6 +605,24 @@ export function SettingsView() {
           >
             <AISettingsTab db={db} />
           </div>
+        </div>
+      ) : null}
+
+      {db && activeTab === 'ai_lab' && canAiLab ? (
+        <div role="tabpanel" aria-labelledby="tab-ai-lab" className="space-y-4">
+          <h2 id="tab-ai-lab" className="sr-only">
+            Phòng thử AI
+          </h2>
+          <AiLabView embedded />
+        </div>
+      ) : null}
+
+      {db && activeTab === 'staff' && canStaff ? (
+        <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-4">
+          <h2 id="tab-staff" className="sr-only">
+            Quản lý nhân sự
+          </h2>
+          <StaffManagementView embedded />
         </div>
       ) : null}
     </div>

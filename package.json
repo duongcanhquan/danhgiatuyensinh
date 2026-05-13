@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "seed:super-admin": "node scripts/create-super-admin.mjs"
+    "seed:super-admin": "node scripts/create-super-admin.mjs",
+    "migrate:strip-import-description": "node scripts/strip-lead-import-description.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

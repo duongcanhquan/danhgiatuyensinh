@@ -204,12 +204,12 @@ export function DashboardView() {
       <header className="relative">
         <p className="app-page-kicker">VietMy Admissions OS</p>
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
-          Báo cáo tuyển sinh chuyên sâu
+          Tổng kết
         </VietMyAccentHeading>
         {!isAdmin ? (
           <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-600">
             Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong> dùng đếm Firestore (đúng phạm vi
-            quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Quản lý hồ sơ
+            quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Hồ sơ
             nếu cần xem thêm bản ghi cho phân tích cục bộ.
           </p>
         ) : null}
@@ -255,7 +255,7 @@ export function DashboardView() {
                 : totalPages > 1 && totalLeadCount !== null
                   ? `Trang ${currentPage}/${totalPages} · ${leads.length} bản ghi trên trang`
                   : totalPages > 1
-                    ? `Trang ${currentPage}/${totalPages} — dùng Quản lý hồ sơ để lật trang`
+                    ? `Trang ${currentPage}/${totalPages} — dùng Hồ sơ để lật trang`
                     : undefined
             }
           />
@@ -306,8 +306,8 @@ export function DashboardView() {
               <p className="mt-1 truncate text-xs leading-tight text-slate-600" title={activeScoringProfile?.description}>
                 {isAdmin
                   ? activeScoringProfile
-                    ? `Admin: biểu đồ nhãn dùng priorityTag đã lưu. Profile «${activeScoringProfile.profileName}» đồng bộ màn Quản lý hồ sơ.`
-                    : 'Admin: chọn profile để đồng bộ với màn Quản lý hồ sơ.'
+                    ? `Admin: biểu đồ nhãn dùng priorityTag đã lưu. Profile «${activeScoringProfile.profileName}» đồng bộ màn Hồ sơ.`
+                    : 'Admin: chọn profile để đồng bộ với màn Hồ sơ.'
                   : activeScoringProfile
                     ? `Biểu đồ nhãn dùng ngưỡng HOT/WARM của «${activeScoringProfile.profileName}».`
                     : 'Chọn profile để đồng bộ nhãn với bảng quản lý hồ sơ.'}

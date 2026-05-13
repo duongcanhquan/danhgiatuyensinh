@@ -10,9 +10,7 @@ import {
   LogOut,
   Menu,
   Settings2,
-  Sparkles,
   User,
-  UserPlus,
   Users,
   X,
 } from 'lucide-react'
@@ -27,18 +25,13 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean) {
   return !item.perm || can(item.perm)
 }
 
-const coreNav: NavDef[] = [
-  { to: '/', label: 'Bảng điều khiển', icon: LayoutDashboard },
-  { to: '/leads', label: 'Quản lý hồ sơ', icon: Users },
-  { to: '/counselor', label: 'Pipeline tư vấn', icon: LayoutGrid, perm: 'dashboard:counselor' },
-  { to: '/import', label: 'Nhập liệu Excel', icon: Database, perm: 'data:intake' },
-]
-
-const extraNav: NavDef[] = [
+const mainNav: NavDef[] = [
+  { to: '/', label: 'Tổng kết', icon: LayoutDashboard },
+  { to: '/leads', label: 'Hồ sơ', icon: Users },
+  { to: '/counselor', label: 'Tư Vấn', icon: LayoutGrid, perm: 'dashboard:counselor' },
   { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, perm: 'analytics:advanced' },
-  { to: '/ai', label: 'Phòng thử AI', icon: Sparkles, perm: 'ai:use' },
-  { to: '/staff', label: 'Quản lý nhân sự', icon: UserPlus, perm: 'config:users' },
-  { to: '/settings', label: 'Cấu hình dữ liệu', icon: Settings2 },
+  { to: '/import', label: 'Nhập liệu', icon: Database, perm: 'data:intake' },
+  { to: '/settings', label: 'Cài đặt', icon: Settings2 },
 ]
 
 export function Layout() {
@@ -52,7 +45,7 @@ export function Layout() {
     setMobileNavOpen(false)
   }, [location.pathname])
 
-  const navItems = [...coreNav.filter((item) => navAllowed(item, can)), ...extraNav.filter((item) => navAllowed(item, can))]
+  const navItems = mainNav.filter((item) => navAllowed(item, can))
 
   const navLinkClass = (isActive: boolean, compact: boolean) =>
     [

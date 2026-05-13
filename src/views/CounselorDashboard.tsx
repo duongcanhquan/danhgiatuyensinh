@@ -27,7 +27,6 @@ import {
   FS_COLLECTIONS,
   LEAD_COUNSELOR_STATUS_LABELS,
   LEAD_COUNSELOR_STATUS_ORDER,
-  USER_ROLE_LABELS,
 } from '../types'
 import { Link } from 'react-router-dom'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
@@ -489,7 +488,7 @@ export function CounselorDashboard() {
     return m
   }, [directoryUsers])
 
-  const { leads, loading, error, totalLeadCount, scopeFetchTruncated } = useLeads({
+  const { leads, loading, error, scopeFetchTruncated } = useLeads({
     dataMode: 'fullScope',
     directoryLabels: counselorDirectoryLabelById,
   })
@@ -830,38 +829,8 @@ export function CounselorDashboard() {
       <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Pipeline tư vấn
+            Tư Vấn
           </VietMyAccentHeading>
-          <div className="mt-2 space-y-1 text-base leading-snug text-slate-600">
-            <p>
-              Bộ lọc khu vực / trường / ngành / ngày / TVV (mở rộng dưới ô tìm) quyết định hồ sơ nào vào các cột CRM.
-            </p>
-            <p>
-              Ô tìm kiếm quét <strong>tên, SĐT, tỉnh, trường THPT, ngành, nguồn, ghi chú…</strong> (giống Quản lý hồ sơ). Mỗi
-              cột hiển thị <strong>{KANBAN_PAGE_SIZE} thẻ/trang</strong> — lật trang ở cuối cột. Kéo thả để đổi giai đoạn
-              — đồng bộ Firestore.
-            </p>
-            {profile ? (
-              <p className="text-sm text-slate-500">
-                {USER_ROLE_LABELS[profile.role]} — {filtered.length}/{leads.length} sau lọc
-                {totalLeadCount != null ? (
-                  <>
-                    {' '}
-                    · tối đa <span className="font-medium text-slate-700">{totalLeadCount}</span> trong phạm vi quyền
-                    (đã tải {leads.length})
-                  </>
-                ) : null}
-                .{' '}
-                <Link
-                  to="/leads"
-                  className="font-medium text-amber-800 underline decoration-amber-300/80 underline-offset-2 hover:text-amber-950"
-                >
-                  Mở Quản lý hồ sơ
-                </Link>{' '}
-                để bảng phân trang đầy đủ và xuất.
-              </p>
-            ) : null}
-          </div>
         </div>
       </header>
 
@@ -1088,7 +1057,7 @@ export function CounselorDashboard() {
           Pipeline chỉ tải tối đa <strong>{MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
           quyền — có thể còn trên server. Dùng{' '}
           <Link to="/leads" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
-            Quản lý hồ sơ
+            Hồ sơ
           </Link>{' '}
           để xem toàn bộ nếu được phép.
         </div>

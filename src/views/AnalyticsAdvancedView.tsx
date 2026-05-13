@@ -153,7 +153,7 @@ export function AnalyticsAdvancedView() {
           Phân tích nâng cao
         </VietMyAccentHeading>
         <p className="mt-1 text-base text-slate-600">
-          Funnel tuyển sinh, phân bổ HOT/WARM/COLD (theo bộ chấm điểm đang chọn trên Bảng điều khiển), và xu hướng
+          Funnel tuyển sinh, phân bổ HOT/WARM/COLD (theo bộ chấm điểm đang chọn trên Tổng kết), và xu hướng
           chỉ số cảm xúc AI 30 ngày. Dữ liệu biểu đồ lấy từ <strong>toàn bộ hồ sơ đã tải trong phạm vi quyền</strong>{' '}
           (tối đa {MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')} bản ghi). Bậc đầu phễu dùng tổng Firestore (phạm vi
           quyền); các bậc sau và biểu đồ khác theo tập đã tải.
@@ -192,7 +192,7 @@ export function AnalyticsAdvancedView() {
         <div className="app-card-glass p-5 transition-all duration-300">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Bộ chấm điểm</p>
           <p className="mt-1 truncate text-lg font-semibold text-emerald-800">
-            {activeScoringProfile?.profileName ?? '— (chọn trên Bảng điều khiển)'}
+            {activeScoringProfile?.profileName ?? '— (chọn trên Tổng kết)'}
           </p>
         </div>
         <div className="app-card-glass p-5 transition-all duration-300">

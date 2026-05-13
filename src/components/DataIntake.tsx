@@ -226,7 +226,7 @@ export function DataIntake() {
 
         const importProfile = pickProfileForImport(profiles)
         if (!importProfile) {
-          setBanner('Chưa có Scoring Profile — tạo trong Cấu hình dữ liệu trước khi nhập Excel.')
+          setBanner('Chưa có Scoring Profile — tạo trong Cài đặt (tab Chấm điểm) trước khi nhập Excel.')
           setBusy(false)
           return
         }
@@ -332,20 +332,12 @@ export function DataIntake() {
           ? resolveAssignedCounselorUid(rawAssign, matchStaffForImport)
           : null
 
-        let rowForPayload: Partial<ExcelLeadRow> = pr.row
         let counselorId: string | null = null
         if (fromExcel) {
           counselorId = fromExcel
         } else if (rawAssign) {
           importAssignUnresolved += 1
           counselorId = adminPoolUid ?? pickCounselorByLowestLoad(counselors, counts)
-          const tag = adminPoolUid
-            ? `[Import] «Người phụ trách» («${rawAssign}») không khớp TVV/Admin trong hệ thống — gán Admin chờ điều phối.\n`
-            : `[Import] «Người phụ trách» («${rawAssign}») không khớp; chưa có tài khoản Admin hoạt động — gán TVV theo tải.\n`
-          rowForPayload = {
-            ...pr.row,
-            description: `${tag}${pr.row.description ?? ''}`.trim(),
-          }
         } else {
           counselorId = pickCounselorByLowestLoad(counselors, counts)
         }
@@ -355,21 +347,21 @@ export function DataIntake() {
         }
 
         const record = {
-          customerId: rowForPayload.customerId,
-          fullName: rowForPayload.fullName,
-          phone: rowForPayload.phone,
-          parentPhone: rowForPayload.parentPhone,
-          source: rowForPayload.source,
-          educationLevel: rowForPayload.educationLevel,
-          province: rowForPayload.province,
-          highSchool: rowForPayload.highSchool,
-          gradeClass: rowForPayload.gradeClass,
-          address: rowForPayload.address,
-          description: rowForPayload.description,
+          customerId: pr.row.customerId,
+          fullName: pr.row.fullName,
+          phone: pr.row.phone,
+          parentPhone: pr.row.parentPhone,
+          source: pr.row.source,
+          educationLevel: pr.row.educationLevel,
+          province: pr.row.province,
+          highSchool: pr.row.highSchool,
+          gradeClass: pr.row.gradeClass,
+          address: pr.row.address,
+          description: pr.row.description,
         } as Record<string, unknown>
         const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets)
 
-        const base = buildLeadFirestorePayload(rowForPayload, calculatedScore, priorityTag, counselorId, ownership, {
+        const base = buildLeadFirestorePayload(pr.row, calculatedScore, priorityTag, counselorId, ownership, {
           uniqueHash: pr.hash,
         })
         const now = Timestamp.now()
@@ -400,7 +392,7 @@ export function DataIntake() {
         toCreate.length > 0
           ? `Đã nhập ${toCreate.length} hồ sơ mới (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.${
               importAssignUnresolved > 0
-                ? ` Trong đó ${importAssignUnresolved} dòng có «Người phụ trách» không khớp danh bạ — đã gán Admin chờ điều phối (hoặc TVV theo tải nếu chưa có Admin); xem ghi chú mô tả trên từng lead.`
+                ? ` Trong đó ${importAssignUnresolved} dòng có «Người phụ trách» không khớp danh bạ — đã gán Admin chờ điều phối (hoặc TVV theo tải nếu chưa có Admin).`
                 : ''
             }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
@@ -447,7 +439,7 @@ export function DataIntake() {
       <div className="mx-auto w-full space-y-5 text-center">
         <header>
           <VietMyAccentHeading as="h1" tone="onLight" size="lg" className="block text-center">
-            Nhập liệu thông minh
+            Nhập liệu
           </VietMyAccentHeading>
         </header>
 
@@ -579,7 +571,7 @@ export function DataIntake() {
 
             <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
               Chỉ ghi dòng mới, không ghi đè. «Người phụ trách»: khớp → gán đúng; không khớp → Admin / ghi chú — điều
-              chuyển sau tại «Quản lý hồ sơ».
+              chuyển sau tại «Hồ sơ».
             </div>
 
             <div className="flex justify-center pt-1">

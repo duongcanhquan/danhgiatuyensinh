@@ -6,7 +6,7 @@ import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const ROLES: UserRole[] = ['counselor', 'head_of_profession', 'head_of_department', 'admin']
 
-export function StaffManagementView() {
+export function StaffManagementView({ embedded = false }: { embedded?: boolean }) {
   const { can, createStaffAccount } = useAuth()
   const { users, loading } = useCounselorDirectory()
 
@@ -47,11 +47,13 @@ export function StaffManagementView() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-          Quản lý nhân sự
-        </VietMyAccentHeading>
-      </header>
+      {embedded ? null : (
+        <header>
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+            Quản lý nhân sự
+          </VietMyAccentHeading>
+        </header>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-2">
         <form onSubmit={(e) => void submit(e)} className="app-glass-panel rounded-2xl p-6 shadow-lg">

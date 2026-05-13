@@ -49,7 +49,7 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
 import { counselorStatusToPipeline } from '../utils/leadIdentity'
-import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
+import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
@@ -96,9 +96,20 @@ function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): stri
   return names.get(uid) ?? `${uid.slice(0, 8)}…`
 }
 
+/** Bỏ dòng nhật ký nhập `[Import]…` khỏi mô tả — chỉ dùng khi hiển thị, không sửa dữ liệu gốc. */
+function leadDescriptionForDisplay(raw: string | undefined): string {
+  if (!raw?.trim()) return ''
+  const kept = raw.split('\n').filter((line) => {
+    const t = line.trim()
+    return !(t && /^\[Import\]/i.test(t))
+  })
+  return kept.join('\n').replace(/^\s+|\s+$/g, '')
+}
+
 /** Rút gọn ghi chú / mô tả trên bảng — bản đầy đủ trong `title` ô hoặc trong panel chi tiết. */
-function formatDescPreview(raw: string, max = 52): string {
-  const t = raw.replace(/\s+/g, ' ').trim()
+function formatDescPreview(raw: string | undefined, max = 64): string {
+  const cleaned = leadDescriptionForDisplay(raw)
+  const t = cleaned.replace(/\s+/g, ' ').trim()
   if (!t) return '—'
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
@@ -155,6 +166,14 @@ export function LeadManagement() {
     const m = new Map<string, string>()
     for (const c of directoryUsers) {
       if (c.isActive) m.set(c.id, formatStaffDirectoryLabel(c))
+    }
+    return m
+  }, [directoryUsers])
+
+  const counselorDisplayNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of directoryUsers) {
+      if (c.isActive) m.set(c.id, formatStaffDisplayName(c))
     }
     return m
   }, [directoryUsers])
@@ -583,7 +602,7 @@ export function LeadManagement() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Quản lý hồ sơ
+            Hồ sơ
           </VietMyAccentHeading>
         </div>
         {!configured || !db ? (
@@ -1028,9 +1047,9 @@ export function LeadManagement() {
           </div>
         ) : null}
         <div className="scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain">
-          <table className="min-w-[1280px] w-full border-collapse text-left text-base">
+          <table className="min-w-[1280px] w-full border-collapse text-left text-sm sm:text-[15px]">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/85 backdrop-blur-xl">
-              <tr className="text-xs uppercase tracking-wide text-slate-600">
+              <tr className="text-xs font-medium uppercase tracking-wide text-slate-600 sm:text-sm">
                 <th className="w-10 px-2 py-3">
                   {canBulkWrite ? (
                     <input
@@ -1053,7 +1072,7 @@ export function LeadManagement() {
                     {sortKey === 'fullName' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[6.5rem] px-2 py-3 text-xs font-medium normal-case">Mã KH</th>
+                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">Mã KH</th>
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
@@ -1064,7 +1083,7 @@ export function LeadManagement() {
                     {sortKey === 'phone' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[6.5rem] px-2 py-3 text-xs font-medium normal-case">SĐT PH</th>
+                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">SĐT PH</th>
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
@@ -1087,7 +1106,7 @@ export function LeadManagement() {
                     {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[13rem] px-2 py-3 text-xs font-medium normal-case" title="Mô tả & ghi chú trên hồ sơ (rút gọn)">
+                <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chú / mô tả hồ sơ (ẩn dòng nhật ký nhập [Import])">
                   Ghi chú
                 </th>
                 <th className="px-4 py-3 font-medium">
@@ -1144,8 +1163,8 @@ export function LeadManagement() {
                     ) : null}
                   </button>
                 </th>
-                <th className="max-w-[7rem] px-2 py-3 text-xs font-medium normal-case">CRM</th>
-                <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-xs font-medium normal-case">TVV</th>
+                <th className="max-w-[7rem] px-2 py-3 text-sm font-medium normal-case">CRM</th>
+                <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-sm font-medium normal-case">TVV</th>
               </tr>
             </thead>
             <tbody>
@@ -1172,6 +1191,7 @@ export function LeadManagement() {
                 const displayScore = ev?.calculatedScore ?? l.calculatedScore
                 const displayTag = ev?.priorityTag ?? l.priorityTag
                 const ml = resolveMlWinDisplay(l)
+                const descForTable = leadDescriptionForDisplay(l.description)
                 return (
                 <motion.tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
@@ -1193,18 +1213,18 @@ export function LeadManagement() {
                     ) : null}
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">{l.fullName || '—'}</td>
-                  <td className="max-w-[6.5rem] truncate px-2 py-3 text-xs text-slate-600" title={l.customerId || undefined}>
+                  <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.customerId || undefined}>
                     {l.customerId || '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.phone || '—'}</td>
-                  <td className="max-w-[6.5rem] truncate px-2 py-3 text-xs text-slate-600" title={l.parentPhone || undefined}>
+                  <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.parentPhone || undefined}>
                     {l.parentPhone || '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.educationLevel || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
                   <td
-                    className="max-w-[13rem] truncate px-2 py-3 text-xs leading-snug text-slate-600"
-                    title={l.description?.trim() ? l.description : undefined}
+                    className="max-w-[13rem] truncate px-2 py-3 leading-snug text-slate-600"
+                    title={descForTable.trim() ? descForTable : undefined}
                   >
                     {formatDescPreview(l.description)}
                   </td>
@@ -1218,14 +1238,14 @@ export function LeadManagement() {
                     </motion.span>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{PIPELINE_LABEL[l.pipelineStatus]}</td>
-                  <td className="max-w-[7rem] truncate px-2 py-3 text-xs text-slate-600" title={LEAD_COUNSELOR_STATUS_LABELS[l.status]}>
+                  <td className="max-w-[7rem] truncate px-2 py-3 text-slate-600" title={LEAD_COUNSELOR_STATUS_LABELS[l.status]}>
                     {LEAD_COUNSELOR_STATUS_LABELS[l.status]}
                   </td>
                   <td
-                    className="max-w-[9rem] truncate px-2 py-3 text-xs text-slate-600"
-                    title={formatAssignedCounselorLabel(l, counselorDirectoryLabelById)}
+                    className="max-w-[9rem] truncate px-2 py-3 text-slate-600"
+                    title={formatAssignedCounselorLabel(l, counselorDisplayNameById)}
                   >
-                    {formatAssignedCounselorLabel(l, counselorDirectoryLabelById)}
+                    {formatAssignedCounselorLabel(l, counselorDisplayNameById)}
                   </td>
                 </motion.tr>
                 )
@@ -1776,7 +1796,7 @@ function LeadCrmQuickBlock({
   const labelForUid = (uid: string | null) => {
     if (!uid) return '—'
     const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-    return u ? formatStaffDirectoryLabel(u) : uid
+    return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
   }
 
   if (peerMode && !mine) return null
@@ -1966,7 +1986,7 @@ function LeadDetailPanel({
     const uid = lead.assignedTo ?? lead.assignedCounselorId
     if (!uid) return '—'
     const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-    return u ? formatStaffDirectoryLabel(u) : `${uid.slice(0, 8)}…`
+    return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
   }, [lead.assignedTo, lead.assignedCounselorId, pickListUsers, counselorUsers])
 
   const leadMl = useMemo(() => resolveMlWinDisplay(lead), [lead])
@@ -2087,7 +2107,7 @@ function LeadDetailPanel({
   const runAiLlmAnalysis = async () => {
     const config = loadAIConfigFromStorage()
     if (!config?.apiKey?.trim()) {
-      setAiErr('Chưa cấu hình Gemini hoặc ChatGPT: Cấu hình dữ liệu → Tích hợp LLM.')
+      setAiErr('Chưa cấu hình Gemini hoặc ChatGPT: Cài đặt → tab LLM.')
       return
     }
     if (!selectedAITask) {
@@ -2304,7 +2324,7 @@ function LeadDetailPanel({
         {detailTab === 'workspace' ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              <aside className="scroll-touch space-y-3 border-b border-slate-200/80 p-3 text-[12px] leading-snug sm:p-4 lg:col-span-3 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
+              <aside className="scroll-touch space-y-3 border-b border-slate-200/80 p-3 text-sm leading-snug sm:p-4 lg:col-span-3 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-2">
                   <Info label="Mã KH" value={lead.customerId} />
                   <Info label="Nguồn" value={lead.source} />
@@ -2316,9 +2336,9 @@ function LeadDetailPanel({
                   <Info label="Điện thoại SV" value={lead.phone} />
                   <Info label="ĐT người liên hệ" value={lead.parentPhone} />
                   <div className="col-span-2">
-                    <p className="text-[10px] text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
-                    <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-700">
-                      {lead.description?.trim() || '—'}
+                    <p className="text-xs text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
+                    <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-800">
+                      {leadDescriptionForDisplay(lead.description).trim() || '—'}
                     </p>
                   </div>
                   <Info
@@ -2449,10 +2469,6 @@ function LeadDetailPanel({
             <h2 className="text-left text-[11px] font-bold uppercase tracking-wider text-slate-700">
               Nhật ký thao tác
             </h2>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600">
-              Phân công, CRM, ghi chú hệ thống, AI. Lỗi index: link trong thông báo đỏ hoặc{' '}
-              <code className="rounded bg-white/80 px-0.5 text-[10px]">firebase deploy --only firestore:indexes</code>.
-            </p>
             <div className="mt-3 w-full">
               <LeadAuditTimeline
                 entries={auditEntries}
@@ -2612,8 +2628,7 @@ function LeadDetailPanel({
                 </div>
               ) : (
                 <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                  Chọn tác vụ và bấm chạy. API key lưu cục bộ (localStorage), cấu hình tại Cấu hình dữ liệu → Tích hợp
-                  LLM.
+                  Chọn tác vụ và bấm chạy. API key lưu cục bộ (localStorage), cấu hình tại Cài đặt → tab LLM.
                 </p>
               )}
             </div>
