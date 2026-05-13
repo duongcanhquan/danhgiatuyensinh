@@ -1,8 +1,9 @@
 import type { MouseEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Download, Info as InfoIcon, Sparkles, Upload, Wand2 } from 'lucide-react'
+import { Download, Info as InfoIcon, Sparkles, Upload, Wand2, X } from 'lucide-react'
 import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import type {
   Lead,
@@ -1354,46 +1355,39 @@ export function LeadManagement() {
         </>
       ) : null}
 
-      {selected ? (
-        <>
-          <LeadDetailPanel
-            key={selected.id}
-            lead={selected}
-            scoringPreview={
-              activeScoringProfile
-                ? scoreByLeadId.get(selected.id) ??
-                  evaluateLead(leadToEvaluationRecord(selected), activeScoringProfile)
-                : undefined
-            }
-            db={db}
-            institutionalRagBlock={institutionalRagBlock}
-            counselorUsers={counselorUsers}
-            pickListUsers={reassignPickList}
-            counselorsLoading={counselorsLoading}
-            canReassignLead={showBulkReassign}
-            reassignElevated={isElevatedLeadScope}
-            reserveRightRail
-            dynamicAssistantSlot={
-              <ConsultingAssistantPanel
-                variant="embedded"
-                lead={selected}
-                snippets={scriptSnippets}
-                loading={scriptSnippetsLoading}
-                error={scriptSnippetsErr}
-              />
-            }
-            onClose={() => setSelected(null)}
-            onUpdated={(patch) => setSelected({ ...selected, ...patch })}
-          />
-          <ConsultingAssistantPanel
-            variant="rail"
-            lead={selected}
-            snippets={scriptSnippets}
-            loading={scriptSnippetsLoading}
-            error={scriptSnippetsErr}
-          />
-        </>
-      ) : null}
+      {selected && typeof document !== 'undefined'
+        ? createPortal(
+            <LeadDetailPanel
+              key={selected.id}
+              lead={selected}
+              scoringPreview={
+                activeScoringProfile
+                  ? scoreByLeadId.get(selected.id) ??
+                    evaluateLead(leadToEvaluationRecord(selected), activeScoringProfile)
+                  : undefined
+              }
+              db={db}
+              institutionalRagBlock={institutionalRagBlock}
+              counselorUsers={counselorUsers}
+              pickListUsers={reassignPickList}
+              counselorsLoading={counselorsLoading}
+              canReassignLead={showBulkReassign}
+              reassignElevated={isElevatedLeadScope}
+              dynamicAssistantSlot={
+                <ConsultingAssistantPanel
+                  variant="embedded"
+                  lead={selected}
+                  snippets={scriptSnippets}
+                  loading={scriptSnippetsLoading}
+                  error={scriptSnippetsErr}
+                />
+              }
+              onClose={() => setSelected(null)}
+              onUpdated={(patch) => setSelected({ ...selected, ...patch })}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
@@ -1911,7 +1905,6 @@ function LeadDetailPanel({
   reassignElevated,
   onClose,
   onUpdated,
-  reserveRightRail,
   dynamicAssistantSlot,
 }: {
   lead: Lead
@@ -1928,9 +1921,7 @@ function LeadDetailPanel({
   reassignElevated: boolean
   onClose: () => void
   onUpdated: (patch: Partial<Lead>) => void
-  /** Bố trí chỗ cho rail trợ lý kịch bản (desktop) */
-  reserveRightRail?: boolean
-  /** Bản mobile: panel trợ lý nhúng dưới tiêu đề */
+  /** Trợ lý kịch bản (nhúng trong layout fullscreen). */
   dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can } = useAuth()
@@ -1948,6 +1939,14 @@ function LeadDetailPanel({
   const [detailTab, setDetailTab] = useState<'workspace' | 'audit'>('workspace')
   const { entries: auditEntries, loading: auditLoading, error: auditError, missingIndexUrl: auditIndexUrl } =
     useAuditLogs(lead.id)
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
 
   const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks()
   const notesAgg = useMemo(
@@ -2143,296 +2142,301 @@ function LeadDetailPanel({
     }
   }
 
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="Đóng panel"
-        className="fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <aside
-        className={`fixed inset-y-0 z-50 flex w-full flex-col border-l border-slate-200/80 app-glass-panel bg-white/80 shadow-2xl shadow-slate-400/25 backdrop-blur-2xl max-lg:right-0 max-lg:max-w-3xl ${
-          reserveRightRail
-            ? 'lg:right-96 lg:max-w-[min(48rem,calc(100vw-24rem))]'
-            : 'right-0 max-w-3xl'
-        }`}
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-5">
-          <div className="min-w-0 flex-1">
-            <p className="app-page-kicker">Chi tiết hồ sơ</p>
-            <h2 className="font-display text-lg font-semibold normal-case tracking-normal text-slate-900 md:text-xl">
-              {lead.fullName || 'Chưa rõ tên'}
-            </h2>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-              <span>
-                <span className="text-slate-500">SĐT:</span> {lead.phone || '—'}
-              </span>
-              <span>
-                <span className="text-slate-500">SĐT PH:</span> {lead.parentPhone || '—'}
-              </span>
-              <span>
-                <span className="text-slate-500">Mã KH:</span> {lead.customerId || '—'}
-              </span>
-              <span className="min-w-0 max-w-full truncate" title={lead.source || undefined}>
-                <span className="text-slate-500">Nguồn:</span> {lead.source || '—'}
-              </span>
-              <span>
-                <span className="text-slate-500">CRM:</span> {LEAD_COUNSELOR_STATUS_LABELS[lead.status]}
-              </span>
-              <span>
-                <span className="text-slate-500">Pipeline:</span> {PIPELINE_LABEL[lead.pipelineStatus]}
-              </span>
-              <span className="max-w-[14rem] truncate" title={assigneeHeaderLabel}>
-                <span className="text-slate-500">TVV:</span> {assigneeHeaderLabel}
-              </span>
+  const playbooksSection = (
+    <section className="space-y-3" aria-labelledby="lead-detail-playbooks">
+      <h3 id="lead-detail-playbooks" className="app-section-heading">
+        Playbook tư vấn
+      </h3>
+      <p className="text-sm text-slate-500">
+        Gợi ý chiến lược theo điều kiện hồ sơ (cấu hình trong mục Cài đặt).
+      </p>
+      <div className="space-y-4">
+        {matched.length ? (
+          matched.map((pb) => (
+            <div
+              key={pb.id}
+              className="rounded-2xl border border-amber-200/80 bg-amber-50/90 p-4 shadow-inner"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">{pb.title}</p>
+              {pb.keySellingPoints?.length ? (
+                <ul className="mt-2 list-inside list-disc text-xs text-slate-700">
+                  {pb.keySellingPoints.map((x) => (
+                    <li key={x}>{x}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
+              {pb.objectionHandling?.length ? (
+                <div className="mt-3 border-t border-slate-200/80 pt-2">
+                  <p className="text-xs font-medium text-amber-800">Phản đối dự kiến</p>
+                  <ul className="mt-1 list-inside list-decimal text-xs text-slate-600">
+                    {pb.objectionHandling.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-slate-500">
-              Tab <strong>Công việc &amp; tương tác</strong>: ghi chú mới, đánh giá, pipeline; khối{' '}
-              <strong>Lịch sử</strong> liệt kê note &amp; nhãn đã lưu. Tab <strong>Nhật ký thao tác</strong>: thay đổi CRM,
-              phân công, AI trên hệ thống.
-            </p>
+          ))
+        ) : (
+          <p className="text-xs text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
+        )}
+      </div>
+    </section>
+  )
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lead-detail-title"
+      className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
+    >
+      <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200/90 bg-white/95 px-4 py-4 shadow-sm sm:px-6 lg:px-8">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Chi tiết hồ sơ</p>
+          <h2
+            id="lead-detail-title"
+            className="font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl"
+          >
+            {lead.fullName || 'Chưa rõ tên'}
+          </h2>
+          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-500 sm:text-sm">
+            Tab <strong className="font-medium text-slate-700">Công việc &amp; tương tác</strong>: ghi chú, đánh giá,
+            playbook. Tab <strong className="font-medium text-slate-700">Nhật ký thao tác</strong>: phân công, CRM,
+            thao tác hệ thống và AI.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {[
+              { k: 'SĐT', v: lead.phone || '—' },
+              { k: 'SĐT PH', v: lead.parentPhone || '—' },
+              { k: 'Mã KH', v: lead.customerId || '—' },
+              { k: 'Nguồn', v: lead.source || '—', truncate: true },
+              { k: 'CRM', v: LEAD_COUNSELOR_STATUS_LABELS[lead.status] },
+              { k: 'Pipeline', v: PIPELINE_LABEL[lead.pipelineStatus] },
+              { k: 'TVV', v: assigneeHeaderLabel, truncate: true },
+            ].map((row) => (
+              <div
+                key={row.k}
+                className="flex min-w-0 items-baseline justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 shadow-sm sm:text-sm"
+                title={row.truncate ? row.v : undefined}
+              >
+                <span className="shrink-0 font-medium text-slate-500">{row.k}</span>
+                <span className={`min-w-0 text-right font-medium text-slate-900 ${row.truncate ? 'truncate' : ''}`}>
+                  {row.v}
+                </span>
+              </div>
+            ))}
           </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+        >
+          <X className="h-4 w-4" aria-hidden />
+          Đóng
+        </button>
+      </header>
+
+      {dynamicAssistantSlot ? (
+        <div className="shrink-0 border-b border-slate-200/80 lg:hidden">{dynamicAssistantSlot}</div>
+      ) : null}
+
+      <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
+        <div className="flex shrink-0 gap-1 border-b border-slate-200/80 bg-white/90 px-1 sm:px-2">
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200/80 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+            onClick={() => setDetailTab('workspace')}
+            className={[
+              'rounded-t-lg px-4 py-2.5 text-sm font-semibold transition',
+              detailTab === 'workspace'
+                ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900',
+            ].join(' ')}
           >
-            Đóng
+            Công việc &amp; tương tác
+          </button>
+          <button
+            type="button"
+            onClick={() => setDetailTab('audit')}
+            className={[
+              'rounded-t-lg px-4 py-2.5 text-sm font-semibold transition',
+              detailTab === 'audit'
+                ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900',
+            ].join(' ')}
+          >
+            Nhật ký thao tác
           </button>
         </div>
 
-        {dynamicAssistantSlot ? (
-          <div className="shrink-0 overflow-hidden border-b border-slate-200/80 lg:hidden">
-            {dynamicAssistantSlot}
-          </div>
-        ) : null}
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 gap-1 border-b border-slate-200/80 px-5">
-            <button
-              type="button"
-              onClick={() => setDetailTab('workspace')}
-              className={[
-                'rounded-t-lg px-3 py-2 text-xs font-semibold transition',
-                detailTab === 'workspace'
-                  ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900',
-              ].join(' ')}
-            >
-              Công việc & tương tác
-            </button>
-            <button
-              type="button"
-              onClick={() => setDetailTab('audit')}
-              className={[
-                'rounded-t-lg px-3 py-2 text-xs font-semibold transition',
-                detailTab === 'audit'
-                  ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900',
-              ].join(' ')}
-            >
-              Nhật ký thao tác
-            </button>
-          </div>
-          {detailTab === 'workspace' ? (
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-2">
-          <div className="scroll-touch min-h-0 space-y-6 overflow-y-auto overscroll-contain border-b border-slate-200/80 p-5 lg:border-b-0 lg:border-r">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <Info label="Mã KH" value={lead.customerId} />
-              <Info label="Nguồn" value={lead.source} />
-              <Info label="Hệ đào tạo" value={lead.educationLevel} />
-              <Info label="Tỉnh / TP" value={lead.province} />
-              <Info label="Địa chỉ" value={lead.address} />
-              <Info label="Trường học" value={lead.highSchool} />
-              <Info label="Lớp" value={lead.gradeClass} />
-              <Info label="Điện thoại SV" value={lead.phone} />
-              <Info label="ĐT người liên hệ" value={lead.parentPhone} />
-              <div className="col-span-2">
-                <p className="text-xs text-slate-500">Ghi chú / mô tả (trên hồ sơ)</p>
-                <p className="mt-0.5 whitespace-pre-wrap break-words text-slate-700">{lead.description?.trim() || '—'}</p>
-              </div>
-              <Info
-                label="Điểm (profile đang chọn)"
-                value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
-              />
-              <div>
-                <p className="text-xs text-slate-500">Nhãn (profile)</p>
-                <div className="mt-1">
-                  <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+        {detailTab === 'workspace' ? (
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden lg:bg-white/40">
+            <aside className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-3 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm sm:grid-cols-3">
+                <Info label="Mã KH" value={lead.customerId} />
+                <Info label="Nguồn" value={lead.source} />
+                <Info label="Hệ đào tạo" value={lead.educationLevel} />
+                <Info label="Tỉnh / TP" value={lead.province} />
+                <Info label="Địa chỉ" value={lead.address} />
+                <Info label="Trường học" value={lead.highSchool} />
+                <Info label="Lớp" value={lead.gradeClass} />
+                <Info label="Điện thoại SV" value={lead.phone} />
+                <Info label="ĐT người liên hệ" value={lead.parentPhone} />
+                <div className="col-span-2 sm:col-span-3">
+                  <p className="text-xs text-slate-500">Ghi chú / mô tả (trên hồ sơ)</p>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words text-slate-700">
+                    {lead.description?.trim() || '—'}
+                  </p>
+                </div>
+                <Info
+                  label="Điểm (profile đang chọn)"
+                  value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                />
+                <div>
+                  <p className="text-xs text-slate-500">Nhãn (profile)</p>
+                  <div className="mt-1">
+                    <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {db ? (
-              <CounselorLeadProgressForm
-                key={`cprog-${lead.id}`}
-                lead={lead}
-                db={db}
-                onUpdated={onUpdated}
-              />
-            ) : null}
-
-            {canReassignLead && db ? (
-              <LeadCrmQuickBlock
-                key={`${lead.id}-${lead.updatedAt.toMillis()}`}
-                lead={lead}
-                db={db}
-                counselorUsers={counselorUsers}
-                pickListUsers={pickListUsers}
-                counselorsLoading={counselorsLoading}
-                reassignElevated={reassignElevated}
-                onUpdated={onUpdated}
-              />
-            ) : null}
-
-            <section className="rounded-2xl border border-slate-200/80 bg-white/50 p-4 shadow-inner">
-              <h3 className="app-section-heading">Ghi chú và tương tác</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Lưu vào Firestore (<code className="text-emerald-700">interactions</code>) — mỗi lần lưu gồm ghi chú
-                text, <strong>nhãn đánh giá</strong> và (tuỳ chọn) pipeline. Dưới đây là <strong>lịch sử</strong> các lần
-                đã lưu (đọc lại để nắm tiến độ tư vấn).
-              </p>
-              <label className="mt-3 block text-sm font-medium text-slate-600">
-                Ghi chú
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={3}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/30"
+              {db ? (
+                <CounselorLeadProgressForm
+                  key={`cprog-${lead.id}`}
+                  lead={lead}
+                  db={db}
+                  onUpdated={onUpdated}
                 />
-              </label>
-              <label className="mt-3 block text-sm font-medium text-slate-600">
-                Nhãn đánh giá (lưu kèm ghi chú)
-                <select
-                  value={evalTag}
-                  onChange={(e) => setEvalTag(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-400/30"
-                >
-                  {EVALUATION_TAGS.map((t) => (
-                    <option key={t} value={t} className="bg-white">
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mt-3 block text-xs text-slate-600">
-                Pipeline
-                <select
-                  value={statusForForm}
-                  onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-400/30"
-                >
-                  {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                    <option key={k} value={k} className="bg-white">
-                      {PIPELINE_LABEL[k]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {msg ? <p className="mt-2 text-xs text-emerald-200">{msg}</p> : null}
-              <button
-                type="button"
-                disabled={saving || !db || !canSaveInteraction}
-                onClick={() => void save()}
-                className="mt-4 w-full rounded-xl border border-emerald-400/40 bg-emerald-500/25 py-2.5 text-sm font-medium text-emerald-50 shadow-lg shadow-emerald-900/30 hover:bg-emerald-500/35 disabled:opacity-50"
-              >
-                {saving ? 'Đang lưu…' : 'Lưu tương tác'}
-              </button>
-            </section>
+              ) : null}
 
-            <section>
-              <h3 className="app-section-heading">Lịch sử ghi chú &amp; đánh giá</h3>
-              <p className="mt-1 text-xs text-slate-500">Các lần tương tác đã lưu — đọc từ cũ đến mới trong danh sách.</p>
-              {intLoading ? <p className="mt-2 text-sm text-slate-500">Đang tải…</p> : null}
-              <ul className="scroll-touch mt-3 max-h-72 space-y-2 overflow-y-auto overscroll-contain">
-                {interactions.map((it) => (
-                  <li
-                    key={it.id}
-                    className="rounded-xl border border-slate-200/70 bg-white/70 p-2 text-xs text-slate-600"
+              {canReassignLead && db ? (
+                <LeadCrmQuickBlock
+                  key={`${lead.id}-${lead.updatedAt.toMillis()}`}
+                  lead={lead}
+                  db={db}
+                  counselorUsers={counselorUsers}
+                  pickListUsers={pickListUsers}
+                  counselorsLoading={counselorsLoading}
+                  reassignElevated={reassignElevated}
+                  onUpdated={onUpdated}
+                />
+              ) : null}
+            </aside>
+
+            <main className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-6 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-6">
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <h3 className="app-section-heading">Ghi chú và tương tác</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Lưu Firestore <code className="text-emerald-700">interactions</code> — ghi chú, nhãn đánh giá,
+                  pipeline (tuỳ chọn).
+                </p>
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  Ghi chú
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    rows={4}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/40"
+                  />
+                </label>
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  Nhãn đánh giá (lưu kèm ghi chú)
+                  <select
+                    value={evalTag}
+                    onChange={(e) => setEvalTag(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-emerald-400/40"
                   >
-                    <p className="font-medium text-slate-800">
-                      {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
-                    </p>
-                    {it.counselorNote ? (
-                      <p className="mt-1 whitespace-pre-wrap">{it.counselorNote}</p>
-                    ) : null}
-                    {it.aiSentiment ? (
-                      <p className="mt-1 text-violet-200">
-                        AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
+                    {EVALUATION_TAGS.map((t) => (
+                      <option key={t} value={t} className="bg-white">
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  Pipeline
+                  <select
+                    value={statusForForm}
+                    onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-emerald-400/40"
+                  >
+                    {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                      <option key={k} value={k} className="bg-white">
+                        {PIPELINE_LABEL[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {msg ? <p className="mt-2 text-sm text-emerald-700">{msg}</p> : null}
+                <button
+                  type="button"
+                  disabled={saving || !db || !canSaveInteraction}
+                  onClick={() => void save()}
+                  className="mt-4 w-full rounded-xl border border-emerald-500 bg-emerald-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {saving ? 'Đang lưu…' : 'Lưu tương tác'}
+                </button>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                <h3 className="app-section-heading">Lịch sử ghi chú &amp; đánh giá</h3>
+                <p className="mt-1 text-xs text-slate-500">Các lần đã lưu (cũ → mới trong danh sách).</p>
+                {intLoading ? <p className="mt-2 text-sm text-slate-500">Đang tải…</p> : null}
+                <ul className="scroll-touch mt-3 max-h-[min(40vh,22rem)] space-y-2 overflow-y-auto overscroll-contain">
+                  {interactions.map((it) => (
+                    <li
+                      key={it.id}
+                      className="rounded-xl border border-slate-200/70 bg-slate-50/90 p-3 text-sm text-slate-700"
+                    >
+                      <p className="font-medium text-slate-900">
+                        {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
                       </p>
-                    ) : null}
-                    <p className="mt-1 text-xs text-slate-500">
-                      {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
-                    </p>
-                  </li>
-                ))}
-                {!intLoading && !interactions.length ? (
-                  <li className="text-xs text-slate-500">Chưa có tương tác.</li>
-                ) : null}
-              </ul>
-            </section>
-          </div>
+                      {it.counselorNote ? (
+                        <p className="mt-1 whitespace-pre-wrap text-slate-700">{it.counselorNote}</p>
+                      ) : null}
+                      {it.aiSentiment ? (
+                        <p className="mt-1 text-sm text-violet-800">
+                          AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-xs text-slate-500">
+                        {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
+                      </p>
+                    </li>
+                  ))}
+                  {!intLoading && !interactions.length ? (
+                    <li className="text-sm text-slate-500">Chưa có tương tác.</li>
+                  ) : null}
+                </ul>
+              </section>
+            </main>
 
-          <div className="scroll-touch min-h-0 overflow-y-auto overscroll-contain p-5">
-            <h3 className="app-section-heading">Playbook tư vấn</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Gợi ý chiến lược theo điều kiện hồ sơ (cấu hình trong mục Cài đặt).
+            <aside className="scroll-touch space-y-5 p-4 sm:p-5 lg:col-span-3 lg:min-h-0 lg:overflow-y-auto xl:col-span-3">
+              {dynamicAssistantSlot ? <div className="hidden lg:block">{dynamicAssistantSlot}</div> : null}
+              {playbooksSection}
+            </aside>
+          </div>
+        ) : (
+          <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-4 sm:p-6 lg:p-8">
+            <h2 className="app-section-heading text-left normal-case">Dòng thời gian nhật ký</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Lịch sử thao tác hệ thống — trạng thái, phân công, ghi chú, AI. Nếu thấy lỗi index, bấm link trong khung
+              đỏ hoặc chạy <code className="rounded bg-white/80 px-1">firebase deploy --only firestore:indexes</code>.
             </p>
-            <div className="mt-4 space-y-4">
-              {matched.length ? (
-                matched.map((pb) => (
-                  <div
-                    key={pb.id}
-                    className="rounded-2xl border border-amber-200/80 bg-amber-50/90 p-4 shadow-inner"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                      {pb.title}
-                    </p>
-                    {pb.keySellingPoints?.length ? (
-                      <ul className="mt-2 list-inside list-disc text-xs text-slate-700">
-                        {pb.keySellingPoints.map((x) => (
-                          <li key={x}>{x}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
-                    {pb.objectionHandling?.length ? (
-                      <div className="mt-3 border-t border-slate-200/80 pt-2">
-                        <p className="text-xs font-medium text-amber-800">Phản đối dự kiến</p>
-                        <ul className="mt-1 list-inside list-decimal text-xs text-slate-600">
-                          {pb.objectionHandling.map((x) => (
-                            <li key={x}>{x}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
-              )}
+            <div className="mt-6 w-full">
+              <LeadAuditTimeline
+                entries={auditEntries}
+                loading={auditLoading}
+                error={auditError}
+                missingIndexUrl={auditIndexUrl}
+              />
             </div>
           </div>
-        </div>
-          ) : (
-            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-5">
-              <h2 className="app-section-heading text-left normal-case">Dòng thời gian nhật ký</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Lịch sử thao tác hệ thống — trạng thái, phân công, ghi chú, AI.
-              </p>
-              <div className="mt-4">
-                <LeadAuditTimeline
-                  entries={auditEntries}
-                  loading={auditLoading}
-                  error={auditError}
-                  missingIndexUrl={auditIndexUrl}
-                />
-              </div>
-            </div>
-          )}
+        )}
 
-          {canRunAi ? (
+        {canRunAi ? (
             <section
               className={`app-card-glass relative shrink-0 border-t border-amber-200/80 p-4 text-slate-900 shadow-md backdrop-blur-2xl ${
                 aiRunning ? 'ring-2 ring-amber-400/40 ring-inset animate-pulse' : ''
@@ -2534,9 +2538,8 @@ function LeadDetailPanel({
               </div>
             </section>
           ) : null}
-        </div>
-      </aside>
-    </>
+      </div>
+    </div>
   )
 }
 
