@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { motion, AnimatePresence } from 'motion/react'
-import { CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
+import { ChevronRight, CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
 import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { useScoringProfiles } from '../hooks/useScoringProfiles'
@@ -63,6 +63,8 @@ function ProfileEditorPanel({
   const [draft, setDraft] = useState(() => cloneProfile(profile))
   /** Thu gọn cột thư viện — canvas rộng hơn; mặc định mở để dễ kéo mẫu. */
   const [ruleLibraryCollapsed, setRuleLibraryCollapsed] = useState(false)
+  /** Thu gọn khối tên / mặc định / HOT·WARM / mô tả — dễ tập trung vào canvas (đặc biệt toàn màn). */
+  const [metaCollapsed, setMetaCollapsed] = useState(false)
   const isDefaultProfile = Boolean(profile.isDefaultForImport)
 
   const saveProfile = useCallback(async () => {
@@ -150,85 +152,123 @@ function ProfileEditorPanel({
         .join(' ')}
     >
       <div className="rounded-md border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white p-1.5 shadow-sm">
-        <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-1">
-          <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[8rem] sm:max-w-[14rem]">
-            Tên
-            <input
-              value={draft.profileName}
-              disabled={!canEdit}
-              onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
-              placeholder="Tên profile"
-              className="mt-0.5 h-8 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
-            />
-          </label>
-          <label
-            className="flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded border border-slate-200/80 bg-white px-2 text-xs font-medium leading-none text-slate-800 sm:mb-0"
-            title={defaultProfileTitle}
+        {metaCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setMetaCollapsed(false)}
+            aria-expanded={false}
+            className="flex w-full items-center gap-2 rounded border border-transparent px-1 py-1 text-left transition hover:border-amber-200/80 hover:bg-white/80"
           >
-            <input
-              type="checkbox"
-              checked={Boolean(draft.isDefaultForImport)}
-              disabled={!canEdit}
-              onChange={(e) => setDraft({ ...draft, isDefaultForImport: e.target.checked })}
-              className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 bg-white accent-amber-600"
-            />
-            <span className="whitespace-nowrap">Mặc định</span>
-          </label>
-          <div className="flex flex-wrap items-end gap-1.5">
-            <label className="w-12 text-xs font-medium leading-none text-slate-700">
-              HOT
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={draft.thresholds.hotMinScore}
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {draft.profileName.trim() || 'Chưa đặt tên'}
+              </p>
+              <p className="truncate text-xs text-slate-600">
+                HOT ≥{draft.thresholds.hotMinScore} · WARM ≥{draft.thresholds.warmMinScore}
+                {draft.isDefaultForImport ? ' · Mặc định import' : ''}
+                {draft.description.trim() ? ` · ${draft.description.trim().slice(0, 48)}${draft.description.trim().length > 48 ? '…' : ''}` : ''}
+              </p>
+            </div>
+            <span className="shrink-0 text-xs font-medium text-amber-900">Mở rộng</span>
+          </button>
+        ) : (
+          <>
+            <div className="mb-1 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setMetaCollapsed(true)
+                  setRuleLibraryCollapsed(true)
+                }}
+                aria-expanded={true}
+                title="Thu gọn tên, ngưỡng, mô tả và cột thư viện — canvas rộng hơn"
+                className="rounded px-2 py-0.5 text-xs font-semibold text-amber-900 underline-offset-2 hover:bg-amber-50 hover:underline"
+              >
+                Rút gọn
+              </button>
+            </div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-1">
+              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[8rem] sm:max-w-[14rem]">
+                Tên
+                <input
+                  value={draft.profileName}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
+                  placeholder="Tên profile"
+                  className="mt-0.5 h-8 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
+                />
+              </label>
+              <label
+                className="flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded border border-slate-200/80 bg-white px-2 text-xs font-medium leading-none text-slate-800 sm:mb-0"
+                title={defaultProfileTitle}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.isDefaultForImport)}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft({ ...draft, isDefaultForImport: e.target.checked })}
+                  className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 bg-white accent-amber-600"
+                />
+                <span className="whitespace-nowrap">Mặc định</span>
+              </label>
+              <div className="flex flex-wrap items-end gap-1.5">
+                <label className="w-12 text-xs font-medium leading-none text-slate-700">
+                  HOT
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={draft.thresholds.hotMinScore}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        thresholds: { ...draft.thresholds, hotMinScore: Number(e.target.value) },
+                      })
+                    }
+                    className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
+                  />
+                </label>
+                <label className="w-12 text-xs font-medium leading-none text-slate-700">
+                  WARM
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={draft.thresholds.warmMinScore}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        thresholds: { ...draft.thresholds, warmMinScore: Number(e.target.value) },
+                      })
+                    }
+                    className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="mb-0.5 flex h-8 items-end pb-0.5 text-slate-400 hover:text-slate-600"
+                  title={thresholdExplainTitle}
+                  aria-label={thresholdExplainTitle}
+                >
+                  <CircleHelp className="h-4 w-4 shrink-0" aria-hidden />
+                </button>
+              </div>
+            </div>
+            <label className="mt-1 block text-xs font-medium leading-none text-slate-700">
+              Mô tả
+              <textarea
+                value={draft.description}
                 disabled={!canEdit}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    thresholds: { ...draft.thresholds, hotMinScore: Number(e.target.value) },
-                  })
-                }
-                className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
+                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                rows={1}
+                className="mt-0.5 max-h-14 min-h-[2rem] w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-sm leading-snug text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
               />
             </label>
-            <label className="w-12 text-xs font-medium leading-none text-slate-700">
-              WARM
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={draft.thresholds.warmMinScore}
-                disabled={!canEdit}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    thresholds: { ...draft.thresholds, warmMinScore: Number(e.target.value) },
-                  })
-                }
-                className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
-              />
-            </label>
-            <button
-              type="button"
-              className="mb-0.5 flex h-8 items-end pb-0.5 text-slate-400 hover:text-slate-600"
-              title={thresholdExplainTitle}
-              aria-label={thresholdExplainTitle}
-            >
-              <CircleHelp className="h-4 w-4 shrink-0" aria-hidden />
-            </button>
-          </div>
-        </div>
-        <label className="mt-1 block text-xs font-medium leading-none text-slate-700">
-          Mô tả
-          <textarea
-            value={draft.description}
-            disabled={!canEdit}
-            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            rows={1}
-            className="mt-0.5 max-h-14 min-h-[2rem] w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-sm leading-snug text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
-          />
-        </label>
+          </>
+        )}
       </div>
 
       <div
@@ -242,7 +282,9 @@ function ProfileEditorPanel({
         <p className="text-xs font-semibold leading-tight text-slate-800">
           Builder —{' '}
           <span className="font-normal text-slate-600">
-            kéo mẫu trái → canvas; cộng dồn dòng; thu gọn thư viện khi cần.
+            {metaCollapsed
+              ? 'kéo mẫu vào canvas. Bấm «Mở rộng» phía trên để sửa tên, ngưỡng và mô tả.'
+              : 'kéo mẫu trái → canvas; cộng dồn dòng; thu gọn thư viện khi cần.'}
           </span>
         </p>
         <div
