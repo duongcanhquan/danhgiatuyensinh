@@ -107,12 +107,15 @@ export function ConsultingAssistantPanel({
   loading,
   error,
   variant = 'rail',
+  /** Ẩn khối tiêu đề + Win% (dùng khi chrome nằm ở dialog cha). */
+  showHeader = true,
 }: {
   lead: Lead
   snippets: ScriptSnippet[]
   loading?: boolean
   error?: string | null
   variant?: ConsultingAssistantVariant
+  showHeader?: boolean
 }) {
   const { can } = useAuth()
   const canConfigureScripts = can('config:playbooks')
@@ -123,7 +126,9 @@ export function ConsultingAssistantPanel({
   const isRail = variant === 'rail'
   const shell = isRail
     ? 'relative fixed inset-y-0 right-0 z-[52] hidden h-full w-full max-w-[min(24rem,100vw)] flex-col border-l border-slate-200/80 bg-white/55 text-slate-900 shadow-[-12px_0_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl lg:flex'
-    : 'relative flex w-full flex-col border-b border-slate-200/80 bg-white/50 p-4 text-slate-900 shadow-sm backdrop-blur-2xl'
+    : showHeader
+      ? 'relative flex w-full flex-col border-b border-slate-200/80 bg-white/50 p-4 text-slate-900 shadow-sm backdrop-blur-2xl'
+      : 'relative flex min-h-0 w-full flex-1 flex-col bg-transparent p-0 text-slate-900'
 
   return (
     <aside className={shell} aria-label="Trợ lý tư vấn động">
@@ -136,33 +141,35 @@ export function ConsultingAssistantPanel({
       />
 
       <div className={`relative flex min-h-0 flex-1 flex-col ${isRail ? 'p-4' : ''}`}>
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200/80 pb-3">
-          <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-200/90 bg-white/90 shadow-md shadow-amber-500/10">
-            <Sparkles className="h-5 w-5 text-amber-600" strokeWidth={1.6} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold uppercase tracking-wide text-slate-900">Trợ lý tư vấn động</h2>
-            <p className="text-xs text-slate-600">Luồng kịch bản theo hồ sơ (Script Hub)</p>
-          </div>
-          <div
-            className="flex items-center gap-2 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-amber-50/50 px-2.5 py-1.5 shadow-[0_0_20px_rgba(167,139,250,0.2)]"
-            title={`Win probability: ${ml.mlWinProbability}%. ${ml.mlExplanation}`}
-          >
-            <MlWinGauge value={ml.mlWinProbability} />
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Win probability</p>
-              <p className="truncate text-xs font-semibold text-slate-800">{ml.mlWinProbability}%</p>
-              <p className="text-xs text-violet-800/80">Hover: ML reasoning</p>
+        {showHeader ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200/80 pb-3">
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-200/90 bg-white/90 shadow-md shadow-amber-500/10">
+              <Sparkles className="h-5 w-5 text-amber-600" strokeWidth={1.6} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold uppercase tracking-wide text-slate-900">Trợ lý tư vấn động</h2>
+              <p className="text-xs text-slate-600">Luồng kịch bản theo hồ sơ (Script Hub)</p>
+            </div>
+            <div
+              className="flex items-center gap-2 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-amber-50/50 px-2.5 py-1.5 shadow-[0_0_20px_rgba(167,139,250,0.2)]"
+              title={`Win probability: ${ml.mlWinProbability}%. ${ml.mlExplanation}`}
+            >
+              <MlWinGauge value={ml.mlWinProbability} />
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Win probability</p>
+                <p className="truncate text-xs font-semibold text-slate-800">{ml.mlWinProbability}%</p>
+                <p className="text-xs text-violet-800/80">Hover: ML reasoning</p>
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         {loading ? (
           <p className="mt-4 text-sm text-slate-600">Đang tải kịch bản…</p>
         ) : null}
         {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
 
-        <div className={`relative mt-3 min-h-0 flex-1 overflow-y-auto ${isRail ? 'pr-1' : ''}`}>
+        <div className={`relative ${showHeader ? 'mt-3' : 'mt-0'} min-h-0 flex-1 overflow-y-auto ${isRail ? 'pr-1' : ''}`}>
           {!loading && !totalSteps ? (
             <div className="rounded-2xl border border-slate-200/90 bg-white/80 p-4 text-center shadow-inner backdrop-blur-md">
               <BookOpen className="mx-auto h-8 w-8 text-amber-600" strokeWidth={1.25} />

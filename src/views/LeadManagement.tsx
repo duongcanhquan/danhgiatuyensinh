@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Download, Info as InfoIcon, Sparkles, Upload, Wand2, X } from 'lucide-react'
+import { Bot, Download, Info as InfoIcon, Sparkles, Upload, Wand2, X } from 'lucide-react'
 import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import type {
   Lead,
@@ -1376,6 +1376,7 @@ export function LeadManagement() {
               dynamicAssistantSlot={
                 <ConsultingAssistantPanel
                   variant="embedded"
+                  showHeader={false}
                   lead={selected}
                   snippets={scriptSnippets}
                   loading={scriptSnippetsLoading}
@@ -1938,6 +1939,7 @@ function LeadDetailPanel({
   const [msg, setMsg] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<'workspace' | 'audit'>('workspace')
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
+  const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const { entries: auditEntries, loading: auditLoading, error: auditError, missingIndexUrl: auditIndexUrl } =
     useAuditLogs(lead.id)
 
@@ -1965,6 +1967,8 @@ function LeadDetailPanel({
     const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
     return u ? formatStaffDirectoryLabel(u) : `${uid.slice(0, 8)}…`
   }, [lead.assignedTo, lead.assignedCounselorId, pickListUsers, counselorUsers])
+
+  const leadMl = useMemo(() => resolveMlWinDisplay(lead), [lead])
 
   const [aiSelTaskId, setAiSelTaskId] = useState('')
   const [aiRunning, setAiRunning] = useState(false)
@@ -1997,13 +2001,16 @@ function LeadDetailPanel({
   }, [aiPreview, storedAiInsight])
 
   useEffect(() => {
-    if (!llmPopupOpen) return
+    if (!llmPopupOpen && !assistantPopupOpen) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLlmPopupOpen(false)
+      if (e.key === 'Escape') {
+        setLlmPopupOpen(false)
+        setAssistantPopupOpen(false)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [llmPopupOpen])
+  }, [llmPopupOpen, assistantPopupOpen])
 
   const canSaveInteraction = can('interactions:create:self_assigned')
   const canRunAi = can('ai:use')
@@ -2160,7 +2167,7 @@ function LeadDetailPanel({
       <p className="text-sm text-slate-500">
         Gợi ý chiến lược theo điều kiện hồ sơ (cấu hình trong mục Cài đặt).
       </p>
-      <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {matched.length ? (
           matched.map((pb) => (
             <div
@@ -2212,9 +2219,10 @@ function LeadDetailPanel({
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
           <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-500 sm:text-sm">
-            Tab <strong className="font-medium text-slate-700">Công việc &amp; tương tác</strong>: ghi chú, đánh giá,
-            playbook. Tab <strong className="font-medium text-slate-700">Nhật ký thao tác</strong>: phân công, CRM,
-            thao tác hệ thống và AI.
+            <span className="font-medium text-slate-700">Công việc &amp; tương tác</span> — ghi chú, playbook;{' '}
+            <span className="font-medium text-slate-700">Trợ lý kịch bản</span> và{' '}
+            <span className="font-medium text-slate-700">Phân tích LLM</span> mở bằng nút bên phải.{' '}
+            <span className="font-medium text-slate-700">Nhật ký thao tác</span> — lịch sử hệ thống.
           </p>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[
@@ -2239,7 +2247,17 @@ function LeadDetailPanel({
             ))}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-end">
+        <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-2">
+          {dynamicAssistantSlot ? (
+            <button
+              type="button"
+              onClick={() => setAssistantPopupOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-300/80 bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-sky-700"
+            >
+              <Bot className="h-4 w-4 shrink-0" aria-hidden strokeWidth={1.75} />
+              Trợ lý kịch bản
+            </button>
+          ) : null}
           {canRunAi ? (
             <button
               type="button"
@@ -2260,10 +2278,6 @@ function LeadDetailPanel({
           </button>
         </div>
       </header>
-
-      {dynamicAssistantSlot ? (
-        <div className="shrink-0 border-b border-slate-200/80 lg:hidden">{dynamicAssistantSlot}</div>
-      ) : null}
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex shrink-0 gap-1 border-b border-slate-200/80 bg-white/90 px-1 sm:px-2">
@@ -2294,10 +2308,11 @@ function LeadDetailPanel({
         </div>
 
         {detailTab === 'workspace' ? (
-          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden lg:bg-white/40">
-            <aside className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-3 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
-              <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm sm:grid-cols-3">
-                <Info label="Mã KH" value={lead.customerId} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
+            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
+              <aside className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-4 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm lg:grid-cols-2">
+                  <Info label="Mã KH" value={lead.customerId} />
                 <Info label="Nguồn" value={lead.source} />
                 <Info label="Hệ đào tạo" value={lead.educationLevel} />
                 <Info label="Tỉnh / TP" value={lead.province} />
@@ -2306,7 +2321,7 @@ function LeadDetailPanel({
                 <Info label="Lớp" value={lead.gradeClass} />
                 <Info label="Điện thoại SV" value={lead.phone} />
                 <Info label="ĐT người liên hệ" value={lead.parentPhone} />
-                <div className="col-span-2 sm:col-span-3">
+                <div className="col-span-2">
                   <p className="text-xs text-slate-500">Ghi chú / mô tả (trên hồ sơ)</p>
                   <p className="mt-0.5 whitespace-pre-wrap break-words text-slate-700">
                     {lead.description?.trim() || '—'}
@@ -2347,7 +2362,7 @@ function LeadDetailPanel({
               ) : null}
             </aside>
 
-            <main className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-6 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-6">
+            <main className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:overflow-y-auto xl:col-span-9">
               <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
                 <h3 className="app-section-heading">Ghi chú và tương tác</h3>
                 <p className="mt-1 text-sm text-slate-500">
@@ -2359,7 +2374,7 @@ function LeadDetailPanel({
                   <textarea
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    rows={4}
+                    rows={5}
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/40"
                   />
                 </label>
@@ -2406,7 +2421,7 @@ function LeadDetailPanel({
                 <h3 className="app-section-heading">Lịch sử ghi chú &amp; đánh giá</h3>
                 <p className="mt-1 text-xs text-slate-500">Các lần đã lưu (cũ → mới trong danh sách).</p>
                 {intLoading ? <p className="mt-2 text-sm text-slate-500">Đang tải…</p> : null}
-                <ul className="scroll-touch mt-3 max-h-[min(40vh,22rem)] space-y-2 overflow-y-auto overscroll-contain">
+                <ul className="scroll-touch mt-3 max-h-[min(48vh,28rem)] space-y-2 overflow-y-auto overscroll-contain">
                   {interactions.map((it) => (
                     <li
                       key={it.id}
@@ -2434,11 +2449,11 @@ function LeadDetailPanel({
                 </ul>
               </section>
             </main>
+            </div>
 
-            <aside className="scroll-touch space-y-5 p-4 sm:p-5 lg:col-span-3 lg:min-h-0 lg:overflow-y-auto xl:col-span-3">
-              {dynamicAssistantSlot ? <div className="hidden lg:block">{dynamicAssistantSlot}</div> : null}
+            <div className="max-h-[min(38vh,26rem)] shrink-0 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-slate-50/80 px-4 py-4 sm:px-6">
               {playbooksSection}
-            </aside>
+            </div>
           </div>
         ) : (
           <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-4 sm:p-6 lg:p-8">
@@ -2566,6 +2581,55 @@ function LeadDetailPanel({
                   LLM.
                 </p>
               )}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {dynamicAssistantSlot && assistantPopupOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
+            aria-label="Đóng cửa sổ trợ lý kịch bản"
+            onClick={() => setAssistantPopupOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lead-assistant-dialog-title"
+            className="fixed left-1/2 top-1/2 z-[120] flex max-h-[min(88dvh,800px)] w-[min(96vw,760px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl"
+          >
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-sky-50/90 to-white px-4 py-3">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-200/80 bg-white shadow-sm">
+                  <Bot className="h-5 w-5 text-sky-700" strokeWidth={1.75} aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="lead-assistant-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
+                    Trợ lý kịch bản
+                  </h2>
+                  <p className="text-xs text-slate-600 sm:text-sm">Luồng Script Hub theo hồ sơ</p>
+                </div>
+                <div
+                  className="flex items-center gap-2 rounded-xl border border-violet-200/80 bg-violet-50/80 px-2.5 py-1.5 shadow-sm"
+                  title={`Win probability: ${leadMl.mlWinProbability}%. ${leadMl.mlExplanation}`}
+                >
+                  <MlWinGauge value={leadMl.mlWinProbability} />
+                  <span className="text-sm font-bold text-violet-900">{leadMl.mlWinProbability}%</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssistantPopupOpen(false)}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" aria-hidden />
+                Đóng
+              </button>
+            </div>
+            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
+              {dynamicAssistantSlot}
             </div>
           </div>
         </>
