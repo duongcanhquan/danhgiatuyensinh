@@ -1,9 +1,9 @@
 import type { MouseEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, Download, Info as InfoIcon, Sparkles, Upload, Wand2, X } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, Download, Info as InfoIcon, Sparkles, Wand2, X } from 'lucide-react'
 import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import type {
   Lead,
@@ -43,8 +43,6 @@ import { MlWinGauge } from '../components/MlWinGauge'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
-import { LeadAuditTimeline } from '../components/LeadAuditTimeline'
-import { useAuditLogs } from '../hooks/useAuditLogs'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
@@ -837,61 +835,67 @@ export function LeadManagement() {
       ) : null}
 
       <section className="app-card-glass-strong space-y-2 p-2 shadow-md sm:p-3">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-end">
-            <label className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              Bộ chấm điểm
-              <div className="relative mt-0.5">
-                <select
-                  value={resolvedScoringProfileId ?? ''}
-                  disabled={!scoringProfiles.length || profilesLoading}
-                  onChange={(e) => setScoringProfileId(e.target.value || null)}
-                  className="w-full appearance-none rounded-lg border border-slate-200/95 bg-white/95 py-1.5 pl-2 pr-7 text-xs font-medium text-slate-900 shadow-inner outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100 disabled:opacity-50 sm:min-w-[12rem]"
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
+          <details className="group min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white/50 px-2 py-1 shadow-sm open:bg-white/85 sm:px-2.5">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+              <ChevronDown
+                className="h-4 w-4 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <span className="shrink-0">Bộ chấm điểm</span>
+              <span className="min-w-0 flex-1 truncate text-left text-[10px] font-semibold normal-case tracking-normal text-slate-800 group-open:hidden">
+                {profilesLoading
+                  ? 'Đang tải…'
+                  : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'Chưa có profile' : '—')}
+              </span>
+            </summary>
+            <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/60 pt-2 sm:flex-row sm:items-end">
+              <label className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                Chọn profile
+                <div className="relative mt-0.5">
+                  <select
+                    value={resolvedScoringProfileId ?? ''}
+                    disabled={!scoringProfiles.length || profilesLoading}
+                    onChange={(e) => setScoringProfileId(e.target.value || null)}
+                    className="w-full appearance-none rounded-lg border border-slate-200/95 bg-white/95 py-1.5 pl-2 pr-7 text-xs font-medium text-slate-900 shadow-inner outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100 disabled:opacity-50 sm:min-w-[12rem]"
+                  >
+                    {!scoringProfiles.length ? (
+                      <option value="">Chưa có profile — Cấu hình</option>
+                    ) : null}
+                    {scoringProfiles.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-white text-slate-900">
+                        {p.profileName} · HOT≥{p.thresholds?.hotMinScore ?? '—'} · WARM≥{p.thresholds?.warmMinScore ?? '—'}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">
+                    ▾
+                  </span>
+                </div>
+              </label>
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={!activeScoringProfile}
+                  onClick={() => setInspectProfileOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
                 >
-                  {!scoringProfiles.length ? (
-                    <option value="">Chưa có profile — Cấu hình</option>
-                  ) : null}
-                  {scoringProfiles.map((p) => (
-                    <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                      {p.profileName} · HOT≥{p.thresholds?.hotMinScore ?? '—'} · WARM≥{p.thresholds?.warmMinScore ?? '—'}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">
-                  ▾
-                </span>
+                  <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Quy tắc
+                </button>
+                <button
+                  type="button"
+                  disabled={!sortedFiltered.length}
+                  onClick={handleExportEvaluated}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
+                >
+                  <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Xuất Excel (trang hiện tại)
+                </button>
               </div>
-            </label>
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                disabled={!activeScoringProfile}
-                onClick={() => setInspectProfileOpen(true)}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
-              >
-                <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Quy tắc
-              </button>
-              <button
-                type="button"
-                disabled={!sortedFiltered.length}
-                onClick={handleExportEvaluated}
-                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
-              >
-                <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Xuất Excel (trang hiện tại)
-              </button>
-              {can('data:intake') ? (
-                <Link
-                  to="/import"
-                  className="inline-flex items-center gap-1 rounded-lg border border-violet-500 bg-violet-600 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-violet-700"
-                >
-                  <Upload className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Nhập Excel
-                </Link>
-              ) : null}
             </div>
-          </div>
+          </details>
           <label className="min-w-0 w-full text-[10px] font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
             Tìm kiếm
             <input
@@ -903,7 +907,7 @@ export function LeadManagement() {
           </label>
         </div>
 
-        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto pb-0.5 pt-1 [scrollbar-width:thin]">
+        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin]">
           <FilterSelect
             compact
             label="Nhãn"
@@ -957,9 +961,6 @@ export function LeadManagement() {
               ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
             ]}
           />
-        </div>
-
-        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200/70 pt-2">
           <FilterSelect
             compact
             label="Nguồn"
@@ -967,7 +968,7 @@ export function LeadManagement() {
             onChange={setSourceFilter}
             options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
           />
-          <label className="flex flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <label className="flex shrink-0 flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
             Điểm từ
             <input
               type="number"
@@ -975,10 +976,10 @@ export function LeadManagement() {
               placeholder="—"
               value={scoreMinInput}
               onChange={(e) => setScoreMinInput(e.target.value)}
-              className="mt-0.5 w-[5.5rem] rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-[11px] tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
-          <label className="flex flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <label className="flex shrink-0 flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
             Điểm đến
             <input
               type="number"
@@ -986,13 +987,13 @@ export function LeadManagement() {
               placeholder="—"
               value={scoreMaxInput}
               onChange={(e) => setScoreMaxInput(e.target.value)}
-              className="mt-0.5 w-[5.5rem] rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-[11px] tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
           <button
             type="button"
             onClick={clearQuickFilters}
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
+            className="shrink-0 self-end rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
           >
             Xóa lọc nhanh
           </button>
@@ -1526,7 +1527,7 @@ function FilterSelect({
     <label
       className={
         compact
-          ? 'flex min-w-0 flex-col text-xs font-semibold uppercase tracking-wide text-slate-500'
+          ? 'flex shrink-0 flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500'
           : 'flex flex-col text-xs font-medium text-slate-600'
       }
     >
@@ -1536,7 +1537,7 @@ function FilterSelect({
         onChange={(e) => onChange(e.target.value)}
         className={
           compact
-            ? 'mt-0.5 max-w-[8.5rem] min-w-[4.25rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-[11px] font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            ? 'mt-0.5 max-w-[7.25rem] min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-[11px] font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
             : 'mt-1 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
         }
       >
@@ -1701,7 +1702,7 @@ function CounselorLeadProgressForm({
         lastTouchedAt: touch.lastTouchedAt,
       })
       setNoteLine('')
-      setMsg('Đã lưu lên Firestore.')
+      setMsg('Đã lưu dữ liệu.')
     } catch (e) {
       console.error(e)
       setMsg('Không lưu được — kiểm tra quyền.')
@@ -1711,44 +1712,40 @@ function CounselorLeadProgressForm({
   }
 
   return (
-    <section className="rounded-2xl border border-white/12 bg-gradient-to-br from-slate-950/55 via-indigo-950/35 to-slate-950/50 p-4 shadow-2xl shadow-black/30 ring-1 ring-amber-400/20 backdrop-blur-xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200/80">Tiến độ tư vấn</p>
-      <p className="mt-1 text-sm text-slate-300/90">
-        Chọn tình trạng CRM, thêm ghi chú (tùy), rồi bấm lưu — có thể chỉ đổi CRM, chỉ thêm ghi chú, hoặc cả hai. Mọi
-        thay đổi ghi vào Firestore và nhật ký kiểm tra.
-      </p>
-      <label className="mt-4 block text-sm font-medium text-slate-200">
+    <section className="rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-slate-50 p-4 shadow-md ring-1 ring-amber-100/80">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900/90">Tiến độ tư vấn</p>
+      <label className="mt-3 block text-sm font-medium text-slate-800">
         Tình trạng (CRM)
         <select
           value={crmStatus}
           onChange={(e) => setCrmStatus(e.target.value as LeadCounselorStatus)}
-          className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/[0.07] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/25"
+          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-300/50"
         >
           {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
-            <option key={s} value={s} className="bg-slate-900 text-slate-100">
+            <option key={s} value={s} className="bg-white text-slate-900">
               {LEAD_COUNSELOR_STATUS_LABELS[s]}
             </option>
           ))}
         </select>
       </label>
-      <label className="mt-3 block text-sm font-medium text-slate-200">
+      <label className="mt-3 block text-sm font-medium text-slate-800">
         Ghi chú nối thêm vào «Mô tả»
         <textarea
           value={noteLine}
           onChange={(e) => setNoteLine(e.target.value)}
           rows={3}
           placeholder="VD: Đã gọi phụ huynh, hẹn campus tour…"
-          className="mt-1.5 w-full resize-y rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-500/20"
+          className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-200/60"
         />
       </label>
-      {msg ? <p className="mt-2 text-sm text-amber-100/90">{msg}</p> : null}
+      {msg ? <p className="mt-2 text-sm font-medium text-amber-950">{msg}</p> : null}
       <button
         type="button"
         disabled={busy}
         onClick={() => void save()}
-        className="mt-4 w-full rounded-xl border border-amber-400/40 bg-gradient-to-r from-amber-500/90 via-amber-400/85 to-amber-600/90 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-950/30 transition hover:brightness-110 disabled:opacity-50"
+        className="mt-4 w-full rounded-xl border border-amber-500/80 bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-amber-900/15 transition hover:brightness-105 disabled:opacity-50"
       >
-        {busy ? 'Đang lưu…' : 'Lưu lên Firestore'}
+        {busy ? 'Đang lưu…' : 'Lưu dữ liệu'}
       </button>
     </section>
   )
@@ -1854,7 +1851,7 @@ function LeadCrmQuickBlock({
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
-      setCrmMsg('Đã cập nhật phân công & CRM.')
+      setCrmMsg('Đã cập nhật phân công.')
     } catch (e) {
       console.error(e)
       setCrmMsg('Không lưu được. Kiểm tra quyền Firestore.')
@@ -1866,11 +1863,12 @@ function LeadCrmQuickBlock({
   return (
     <section className="rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm">
       <h3 className="app-section-heading">Phân công &amp; CRM</h3>
-      <p className="mt-0.5 text-sm leading-snug text-slate-600">
-        {peerMode
-          ? 'Chuyển hồ sơ của bạn cho đồng nghiệp (danh sách: tên hiển thị · email). Không thể bỏ gán trống — chọn người nhận.'
-          : 'Gán tư vấn viên / quản trị và giai đoạn Kanban — lưu trực tiếp, có ghi nhật ký thao tác (tên · email trong danh sách).'}
-      </p>
+      {peerMode ? (
+        <p className="mt-0.5 text-sm leading-snug text-slate-600">
+          Chuyển hồ sơ của bạn cho đồng nghiệp (danh sách: tên hiển thị · email). Không thể bỏ gán trống — chọn người
+          nhận.
+        </p>
+      ) : null}
       <label className="mt-2 block text-sm font-medium text-slate-700">
         {reassignElevated ? 'Phụ trách (TVV / Admin)' : 'Tư vấn viên'}
         <select
@@ -1908,7 +1906,7 @@ function LeadCrmQuickBlock({
         onClick={() => void save()}
         className="mt-3 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
       >
-        {crmBusy ? 'Đang lưu…' : 'Lưu phân công &amp; CRM'}
+        {crmBusy ? 'Đang lưu…' : 'Lưu phân công'}
       </button>
     </section>
   )
@@ -1957,12 +1955,9 @@ function LeadDetailPanel({
   const statusForForm = statusDirty ?? lead.pipelineStatus
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [detailTab, setDetailTab] = useState<'workspace' | 'audit'>('workspace')
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
-  const { entries: auditEntries, loading: auditLoading, error: auditError, missingIndexUrl: auditIndexUrl } =
-    useAuditLogs(lead.id)
 
   useEffect(() => {
     const prev = document.body.style.overflow
@@ -2294,35 +2289,7 @@ function LeadDetailPanel({
       </header>
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
-        <div className="flex shrink-0 gap-0.5 border-b border-slate-200/80 bg-white/90 px-1">
-          <button
-            type="button"
-            onClick={() => setDetailTab('workspace')}
-            className={[
-              'rounded-t-md px-3 py-2 text-xs font-semibold transition',
-              detailTab === 'workspace'
-                ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900',
-            ].join(' ')}
-          >
-            Công việc &amp; tương tác
-          </button>
-          <button
-            type="button"
-            onClick={() => setDetailTab('audit')}
-            className={[
-              'rounded-t-md px-3 py-2 text-xs font-semibold transition',
-              detailTab === 'audit'
-                ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900',
-            ].join(' ')}
-          >
-            Nhật ký thao tác
-          </button>
-        </div>
-
-        {detailTab === 'workspace' ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
               {/* ~2/3: thông tin hồ sơ, tiến độ, CRM, form thêm ghi chú */}
               <div className="scroll-touch flex min-h-0 flex-col gap-3 border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
@@ -2467,22 +2434,7 @@ function LeadDetailPanel({
                 </section>
               </aside>
             </div>
-          </div>
-        ) : (
-          <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-3 sm:p-5">
-            <h2 className="text-left text-[11px] font-bold uppercase tracking-wider text-slate-700">
-              Nhật ký thao tác
-            </h2>
-            <div className="mt-3 w-full">
-              <LeadAuditTimeline
-                entries={auditEntries}
-                loading={auditLoading}
-                error={auditError}
-                missingIndexUrl={auditIndexUrl}
-              />
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {playbookPopupOpen ? (
@@ -2497,7 +2449,7 @@ function LeadDetailPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-playbook-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex max-h-[min(88dvh,800px)] w-[min(96vw,760px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl"
+            className="fixed left-1/2 top-1/2 z-[120] flex h-[50dvh] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:w-[50vw] sm:max-w-none"
           >
             <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-3 py-2.5 sm:px-4">
               <div className="flex min-w-0 items-start gap-2">
@@ -2542,7 +2494,7 @@ function LeadDetailPanel({
             aria-modal="true"
             aria-labelledby="lead-llm-dialog-title"
             className={[
-              'fixed left-1/2 top-1/2 z-[120] flex max-h-[min(88dvh,760px)] w-[min(96vw,640px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl',
+              'fixed left-1/2 top-1/2 z-[120] flex h-[50dvh] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:w-[50vw] sm:max-w-none',
               aiRunning ? 'ring-2 ring-amber-400/50 ring-inset' : '',
             ].join(' ')}
           >
@@ -2652,7 +2604,7 @@ function LeadDetailPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-assistant-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex max-h-[min(88dvh,800px)] w-[min(96vw,760px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl"
+            className="fixed left-1/2 top-1/2 z-[120] flex h-[50dvh] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl sm:w-[50vw] sm:max-w-none"
           >
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-sky-50/90 to-white px-4 py-3">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
