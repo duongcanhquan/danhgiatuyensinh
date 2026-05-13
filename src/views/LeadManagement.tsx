@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Bot, Download, Info as InfoIcon, Sparkles, Upload, Wand2, X } from 'lucide-react'
+import { BookOpen, Bot, Download, Info as InfoIcon, Sparkles, Upload, Wand2, X } from 'lucide-react'
 import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import type {
   Lead,
@@ -1940,6 +1940,7 @@ function LeadDetailPanel({
   const [detailTab, setDetailTab] = useState<'workspace' | 'audit'>('workspace')
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
+  const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
   const { entries: auditEntries, loading: auditLoading, error: auditError, missingIndexUrl: auditIndexUrl } =
     useAuditLogs(lead.id)
 
@@ -2001,16 +2002,17 @@ function LeadDetailPanel({
   }, [aiPreview, storedAiInsight])
 
   useEffect(() => {
-    if (!llmPopupOpen && !assistantPopupOpen) return
+    if (!llmPopupOpen && !assistantPopupOpen && !playbookPopupOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setLlmPopupOpen(false)
         setAssistantPopupOpen(false)
+        setPlaybookPopupOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [llmPopupOpen, assistantPopupOpen])
+  }, [llmPopupOpen, assistantPopupOpen, playbookPopupOpen])
 
   const canSaveInteraction = can('interactions:create:self_assigned')
   const canRunAi = can('ai:use')
@@ -2159,47 +2161,39 @@ function LeadDetailPanel({
     }
   }
 
-  const playbooksSection = (
-    <section className="space-y-3" aria-labelledby="lead-detail-playbooks">
-      <h3 id="lead-detail-playbooks" className="app-section-heading">
-        Playbook tư vấn
-      </h3>
-      <p className="text-sm text-slate-500">
-        Gợi ý chiến lược theo điều kiện hồ sơ (cấu hình trong mục Cài đặt).
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {matched.length ? (
-          matched.map((pb) => (
-            <div
-              key={pb.id}
-              className="rounded-2xl border border-amber-200/80 bg-amber-50/90 p-4 shadow-inner"
-            >
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">{pb.title}</p>
-              {pb.keySellingPoints?.length ? (
-                <ul className="mt-2 list-inside list-disc text-xs text-slate-700">
-                  {pb.keySellingPoints.map((x) => (
+  const playbooksBody = (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {matched.length ? (
+        matched.map((pb) => (
+          <div
+            key={pb.id}
+            className="rounded-xl border border-amber-200/80 bg-amber-50/90 p-3 shadow-inner"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900">{pb.title}</p>
+            {pb.keySellingPoints?.length ? (
+              <ul className="mt-1.5 list-inside list-disc text-[11px] leading-snug text-slate-700">
+                {pb.keySellingPoints.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-800">{pb.strategy}</p>
+            {pb.objectionHandling?.length ? (
+              <div className="mt-2 border-t border-slate-200/80 pt-1.5">
+                <p className="text-[10px] font-medium text-amber-800">Phản đối dự kiến</p>
+                <ul className="mt-1 list-inside list-decimal text-[11px] text-slate-600">
+                  {pb.objectionHandling.map((x) => (
                     <li key={x}>{x}</li>
                   ))}
                 </ul>
-              ) : null}
-              <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
-              {pb.objectionHandling?.length ? (
-                <div className="mt-3 border-t border-slate-200/80 pt-2">
-                  <p className="text-xs font-medium text-amber-800">Phản đối dự kiến</p>
-                  <ul className="mt-1 list-inside list-decimal text-xs text-slate-600">
-                    {pb.objectionHandling.map((x) => (
-                      <li key={x}>{x}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ))
-        ) : (
-          <p className="text-xs text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
-        )}
-      </div>
-    </section>
+              </div>
+            ) : null}
+          </div>
+        ))
+      ) : (
+        <p className="col-span-full text-xs text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
+      )}
+    </div>
   )
 
   return (
@@ -2209,83 +2203,83 @@ function LeadDetailPanel({
       aria-labelledby="lead-detail-title"
       className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
     >
-      <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200/90 bg-white/95 px-4 py-4 shadow-sm sm:px-6 lg:px-8">
+      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:px-5 lg:px-6">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Chi tiết hồ sơ</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-amber-800">Chi tiết hồ sơ</p>
           <h2
             id="lead-detail-title"
-            className="font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl"
+            className="font-display text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
           >
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
-          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-500 sm:text-sm">
-            <span className="font-medium text-slate-700">Công việc &amp; tương tác</span> — ghi chú, playbook;{' '}
-            <span className="font-medium text-slate-700">Trợ lý kịch bản</span> và{' '}
-            <span className="font-medium text-slate-700">Phân tích LLM</span> mở bằng nút bên phải.{' '}
-            <span className="font-medium text-slate-700">Nhật ký thao tác</span> — lịch sử hệ thống.
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-2 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
             {[
-              { k: 'SĐT', v: lead.phone || '—' },
-              { k: 'SĐT PH', v: lead.parentPhone || '—' },
-              { k: 'Mã KH', v: lead.customerId || '—' },
-              { k: 'Nguồn', v: lead.source || '—', truncate: true },
-              { k: 'CRM', v: LEAD_COUNSELOR_STATUS_LABELS[lead.status] },
-              { k: 'Pipeline', v: PIPELINE_LABEL[lead.pipelineStatus] },
-              { k: 'TVV', v: assigneeHeaderLabel, truncate: true },
+              { k: 'SĐT', v: lead.phone || '—', t: false },
+              { k: 'SĐT PH', v: lead.parentPhone || '—', t: false },
+              { k: 'Mã KH', v: lead.customerId || '—', t: false },
+              { k: 'Nguồn', v: lead.source || '—', t: true },
+              { k: 'CRM', v: LEAD_COUNSELOR_STATUS_LABELS[lead.status], t: false },
+              { k: 'Pipeline', v: PIPELINE_LABEL[lead.pipelineStatus], t: false },
+              { k: 'TVV', v: assigneeHeaderLabel, t: true },
             ].map((row) => (
               <div
                 key={row.k}
-                className="flex min-w-0 items-baseline justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 shadow-sm sm:text-sm"
-                title={row.truncate ? row.v : undefined}
+                className="flex max-w-[10.5rem] shrink-0 items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
+                title={row.t ? row.v : undefined}
               >
-                <span className="shrink-0 font-medium text-slate-500">{row.k}</span>
-                <span className={`min-w-0 text-right font-medium text-slate-900 ${row.truncate ? 'truncate' : ''}`}>
-                  {row.v}
-                </span>
+                <span className="shrink-0 text-slate-500">{row.k}</span>
+                <span className="min-w-0 truncate font-medium text-slate-900">{row.v}</span>
               </div>
             ))}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => setPlaybookPopupOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+          >
+            <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+            Playbook
+          </button>
           {dynamicAssistantSlot ? (
             <button
               type="button"
               onClick={() => setAssistantPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-300/80 bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-sky-700"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-300/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
             >
-              <Bot className="h-4 w-4 shrink-0" aria-hidden strokeWidth={1.75} />
-              Trợ lý kịch bản
+              <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+              Trợ lý
             </button>
           ) : null}
           {canRunAi ? (
             <button
               type="button"
               onClick={() => setLlmPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
             >
-              <Sparkles className="h-4 w-4 shrink-0" aria-hidden strokeWidth={1.75} />
-              Phân tích LLM
+              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+              LLM
             </button>
           ) : null}
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
           >
-            <X className="h-4 w-4" aria-hidden />
-            Đóng hồ sơ
+            <X className="h-3.5 w-3.5" aria-hidden />
+            Đóng
           </button>
         </div>
       </header>
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
-        <div className="flex shrink-0 gap-1 border-b border-slate-200/80 bg-white/90 px-1 sm:px-2">
+        <div className="flex shrink-0 gap-0.5 border-b border-slate-200/80 bg-white/90 px-1">
           <button
             type="button"
             onClick={() => setDetailTab('workspace')}
             className={[
-              'rounded-t-lg px-4 py-2.5 text-sm font-semibold transition',
+              'rounded-t-md px-3 py-2 text-xs font-semibold transition',
               detailTab === 'workspace'
                 ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900',
@@ -2297,7 +2291,7 @@ function LeadDetailPanel({
             type="button"
             onClick={() => setDetailTab('audit')}
             className={[
-              'rounded-t-lg px-4 py-2.5 text-sm font-semibold transition',
+              'rounded-t-md px-3 py-2 text-xs font-semibold transition',
               detailTab === 'audit'
                 ? 'border border-amber-300/80 bg-amber-50 text-amber-950 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900',
@@ -2310,34 +2304,34 @@ function LeadDetailPanel({
         {detailTab === 'workspace' ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              <aside className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-4 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
-                <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm lg:grid-cols-2">
+              <aside className="scroll-touch space-y-3 border-b border-slate-200/80 p-3 text-[12px] leading-snug sm:p-4 lg:col-span-3 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-2">
                   <Info label="Mã KH" value={lead.customerId} />
-                <Info label="Nguồn" value={lead.source} />
-                <Info label="Hệ đào tạo" value={lead.educationLevel} />
-                <Info label="Tỉnh / TP" value={lead.province} />
-                <Info label="Địa chỉ" value={lead.address} />
-                <Info label="Trường học" value={lead.highSchool} />
-                <Info label="Lớp" value={lead.gradeClass} />
-                <Info label="Điện thoại SV" value={lead.phone} />
-                <Info label="ĐT người liên hệ" value={lead.parentPhone} />
-                <div className="col-span-2">
-                  <p className="text-xs text-slate-500">Ghi chú / mô tả (trên hồ sơ)</p>
-                  <p className="mt-0.5 whitespace-pre-wrap break-words text-slate-700">
-                    {lead.description?.trim() || '—'}
-                  </p>
-                </div>
-                <Info
-                  label="Điểm (profile đang chọn)"
-                  value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
-                />
-                <div>
-                  <p className="text-xs text-slate-500">Nhãn (profile)</p>
-                  <div className="mt-1">
-                    <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                  <Info label="Nguồn" value={lead.source} />
+                  <Info label="Hệ đào tạo" value={lead.educationLevel} />
+                  <Info label="Tỉnh / TP" value={lead.province} />
+                  <Info label="Địa chỉ" value={lead.address} />
+                  <Info label="Trường học" value={lead.highSchool} />
+                  <Info label="Lớp" value={lead.gradeClass} />
+                  <Info label="Điện thoại SV" value={lead.phone} />
+                  <Info label="ĐT người liên hệ" value={lead.parentPhone} />
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
+                    <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-700">
+                      {lead.description?.trim() || '—'}
+                    </p>
+                  </div>
+                  <Info
+                    label="Điểm (profile)"
+                    value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                  />
+                  <div>
+                    <p className="text-[10px] text-slate-500">Nhãn</p>
+                    <div className="mt-0.5">
+                      <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
               {db ? (
                 <CounselorLeadProgressForm
@@ -2362,107 +2356,104 @@ function LeadDetailPanel({
               ) : null}
             </aside>
 
-            <main className="scroll-touch space-y-5 border-b border-slate-200/80 p-4 sm:p-5 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:overflow-y-auto xl:col-span-9">
-              <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                <h3 className="app-section-heading">Ghi chú và tương tác</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Lưu Firestore <code className="text-emerald-700">interactions</code> — ghi chú, nhãn đánh giá,
-                  pipeline (tuỳ chọn).
-                </p>
-                <label className="mt-3 block text-sm font-medium text-slate-700">
-                  Ghi chú
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    rows={5}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/40"
-                  />
-                </label>
-                <label className="mt-3 block text-sm font-medium text-slate-700">
-                  Nhãn đánh giá (lưu kèm ghi chú)
-                  <select
-                    value={evalTag}
-                    onChange={(e) => setEvalTag(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-emerald-400/40"
-                  >
-                    {EVALUATION_TAGS.map((t) => (
-                      <option key={t} value={t} className="bg-white">
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="mt-3 block text-sm font-medium text-slate-700">
-                  Pipeline
-                  <select
-                    value={statusForForm}
-                    onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-emerald-400/40"
-                  >
-                    {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                      <option key={k} value={k} className="bg-white">
-                        {PIPELINE_LABEL[k]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {msg ? <p className="mt-2 text-sm text-emerald-700">{msg}</p> : null}
-                <button
-                  type="button"
-                  disabled={saving || !db || !canSaveInteraction}
-                  onClick={() => void save()}
-                  className="mt-4 w-full rounded-xl border border-emerald-500 bg-emerald-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {saving ? 'Đang lưu…' : 'Lưu tương tác'}
-                </button>
-              </section>
-
-              <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                <h3 className="app-section-heading">Lịch sử ghi chú &amp; đánh giá</h3>
-                <p className="mt-1 text-xs text-slate-500">Các lần đã lưu (cũ → mới trong danh sách).</p>
-                {intLoading ? <p className="mt-2 text-sm text-slate-500">Đang tải…</p> : null}
-                <ul className="scroll-touch mt-3 max-h-[min(48vh,28rem)] space-y-2 overflow-y-auto overscroll-contain">
+            <main className="scroll-touch space-y-3 border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-9 lg:min-h-0 lg:border-b-0 lg:overflow-y-auto xl:col-span-9">
+              <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  Lịch sử ghi chú &amp; đánh giá
+                </h3>
+                {intLoading ? <p className="mt-1 text-xs text-slate-500">Đang tải…</p> : null}
+                <ul className="scroll-touch mt-2 max-h-[min(52vh,34rem)] space-y-1.5 overflow-y-auto overscroll-contain">
                   {interactions.map((it) => (
                     <li
                       key={it.id}
-                      className="rounded-xl border border-slate-200/70 bg-slate-50/90 p-3 text-sm text-slate-700"
+                      className="rounded-lg border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
                     >
                       <p className="font-medium text-slate-900">
                         {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
                       </p>
                       {it.counselorNote ? (
-                        <p className="mt-1 whitespace-pre-wrap text-slate-700">{it.counselorNote}</p>
+                        <p className="mt-0.5 whitespace-pre-wrap leading-snug text-slate-700">{it.counselorNote}</p>
                       ) : null}
                       {it.aiSentiment ? (
-                        <p className="mt-1 text-sm text-violet-800">
+                        <p className="mt-0.5 text-[11px] text-violet-800">
                           AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
                         </p>
                       ) : null}
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-0.5 text-[10px] text-slate-500">
                         {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
                       </p>
                     </li>
                   ))}
                   {!intLoading && !interactions.length ? (
-                    <li className="text-sm text-slate-500">Chưa có tương tác.</li>
+                    <li className="text-xs text-slate-500">Chưa có tương tác.</li>
                   ) : null}
                 </ul>
               </section>
-            </main>
-            </div>
 
-            <div className="max-h-[min(38vh,26rem)] shrink-0 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-slate-50/80 px-4 py-4 sm:px-6">
-              {playbooksSection}
+              <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Thêm ghi chú</h3>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label className="block text-xs font-medium text-slate-700 sm:col-span-2">
+                    Ghi chú
+                    <textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      rows={3}
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-700">
+                    Nhãn
+                    <select
+                      value={evalTag}
+                      onChange={(e) => setEvalTag(e.target.value)}
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                    >
+                      {EVALUATION_TAGS.map((t) => (
+                        <option key={t} value={t} className="bg-white">
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-slate-700">
+                    Pipeline
+                    <select
+                      value={statusForForm}
+                      onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                    >
+                      {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                        <option key={k} value={k} className="bg-white">
+                          {PIPELINE_LABEL[k]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {msg ? <p className="mt-1.5 text-xs text-emerald-700">{msg}</p> : null}
+                <button
+                  type="button"
+                  disabled={saving || !db || !canSaveInteraction}
+                  onClick={() => void save()}
+                  className="mt-2 w-full rounded-lg border border-emerald-500 bg-emerald-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {saving ? 'Đang lưu…' : 'Lưu tương tác'}
+                </button>
+              </section>
+            </main>
             </div>
           </div>
         ) : (
-          <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-4 sm:p-6 lg:p-8">
-            <h2 className="app-section-heading text-left normal-case">Dòng thời gian nhật ký</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
-              Lịch sử thao tác hệ thống — trạng thái, phân công, ghi chú, AI. Nếu thấy lỗi index, bấm link trong khung
-              đỏ hoặc chạy <code className="rounded bg-white/80 px-1">firebase deploy --only firestore:indexes</code>.
+          <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-200/80 bg-gradient-to-b from-slate-50/95 to-sky-50/40 p-3 sm:p-5">
+            <h2 className="text-left text-[11px] font-bold uppercase tracking-wider text-slate-700">
+              Nhật ký thao tác
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              Phân công, CRM, ghi chú hệ thống, AI. Lỗi index: link trong thông báo đỏ hoặc{' '}
+              <code className="rounded bg-white/80 px-0.5 text-[10px]">firebase deploy --only firestore:indexes</code>.
             </p>
-            <div className="mt-6 w-full">
+            <div className="mt-3 w-full">
               <LeadAuditTimeline
                 entries={auditEntries}
                 loading={auditLoading}
@@ -2473,6 +2464,50 @@ function LeadDetailPanel({
           </div>
         )}
       </div>
+
+      {playbookPopupOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
+            aria-label="Đóng cửa sổ playbook"
+            onClick={() => setPlaybookPopupOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lead-playbook-dialog-title"
+            className="fixed left-1/2 top-1/2 z-[120] flex max-h-[min(88dvh,800px)] w-[min(96vw,760px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl"
+          >
+            <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-3 py-2.5 sm:px-4">
+              <div className="flex min-w-0 items-start gap-2">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200/80 bg-white shadow-sm">
+                  <BookOpen className="h-4 w-4 text-amber-700" strokeWidth={1.75} aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="lead-playbook-dialog-title" className="text-sm font-semibold text-slate-900 sm:text-base">
+                    Playbook tư vấn
+                  </h2>
+                  <p className="text-[11px] leading-snug text-slate-600 sm:text-xs">
+                    Gợi ý chiến lược, điểm bán, xử lý phản đối — khớp điều kiện hồ sơ; cấu hình trong Cài đặt.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlaybookPopupOpen(false)}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden />
+                Đóng
+              </button>
+            </div>
+            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+              {playbooksBody}
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {canRunAi && llmPopupOpen ? (
         <>
@@ -2641,8 +2676,8 @@ function LeadDetailPanel({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-0.5 text-slate-700">{value || '—'}</p>
+      <p className="text-[10px] font-medium text-slate-500">{label}</p>
+      <p className="mt-0.5 break-words text-xs text-slate-800">{value || '—'}</p>
     </div>
   )
 }
