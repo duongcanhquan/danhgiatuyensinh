@@ -2324,144 +2324,148 @@ function LeadDetailPanel({
         {detailTab === 'workspace' ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              <aside className="scroll-touch space-y-3 border-b border-slate-200/80 p-3 text-sm leading-snug sm:p-4 lg:col-span-3 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto xl:col-span-3">
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-2">
-                  <Info label="Mã KH" value={lead.customerId} />
-                  <Info label="Nguồn" value={lead.source} />
-                  <Info label="Hệ đào tạo" value={lead.educationLevel} />
-                  <Info label="Tỉnh / TP" value={lead.province} />
-                  <Info label="Địa chỉ" value={lead.address} />
-                  <Info label="Trường học" value={lead.highSchool} />
-                  <Info label="Lớp" value={lead.gradeClass} />
-                  <Info label="Điện thoại SV" value={lead.phone} />
-                  <Info label="ĐT người liên hệ" value={lead.parentPhone} />
-                  <div className="col-span-2">
-                    <p className="text-xs text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
-                    <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-800">
-                      {leadDescriptionForDisplay(lead.description).trim() || '—'}
-                    </p>
-                  </div>
-                  <Info
-                    label="Điểm (profile)"
-                    value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
-                  />
-                  <div>
-                    <p className="text-[10px] text-slate-500">Nhãn</p>
-                    <div className="mt-0.5">
-                      <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+              {/* ~2/3: thông tin hồ sơ, tiến độ, CRM, form thêm ghi chú */}
+              <div className="scroll-touch flex min-h-0 flex-col gap-3 border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
+                <aside className="space-y-3 text-sm leading-snug">
+                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-2">
+                    <Info label="Mã KH" value={lead.customerId} />
+                    <Info label="Nguồn" value={lead.source} />
+                    <Info label="Hệ đào tạo" value={lead.educationLevel} />
+                    <Info label="Tỉnh / TP" value={lead.province} />
+                    <Info label="Địa chỉ" value={lead.address} />
+                    <Info label="Trường học" value={lead.highSchool} />
+                    <Info label="Lớp" value={lead.gradeClass} />
+                    <Info label="Điện thoại SV" value={lead.phone} />
+                    <Info label="ĐT người liên hệ" value={lead.parentPhone} />
+                    <div className="col-span-2">
+                      <p className="text-xs text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
+                      <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-800">
+                        {leadDescriptionForDisplay(lead.description).trim() || '—'}
+                      </p>
+                    </div>
+                    <Info
+                      label="Điểm (profile)"
+                      value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                    />
+                    <div>
+                      <p className="text-[10px] text-slate-500">Nhãn</p>
+                      <div className="mt-0.5">
+                        <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-              {db ? (
-                <CounselorLeadProgressForm
-                  key={`cprog-${lead.id}`}
-                  lead={lead}
-                  db={db}
-                  onUpdated={onUpdated}
-                />
-              ) : null}
-
-              {canReassignLead && db ? (
-                <LeadCrmQuickBlock
-                  key={`${lead.id}-${lead.updatedAt.toMillis()}`}
-                  lead={lead}
-                  db={db}
-                  counselorUsers={counselorUsers}
-                  pickListUsers={pickListUsers}
-                  counselorsLoading={counselorsLoading}
-                  reassignElevated={reassignElevated}
-                  onUpdated={onUpdated}
-                />
-              ) : null}
-            </aside>
-
-            <main className="scroll-touch space-y-3 border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-9 lg:min-h-0 lg:border-b-0 lg:overflow-y-auto xl:col-span-9">
-              <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  Lịch sử ghi chú &amp; đánh giá
-                </h3>
-                {intLoading ? <p className="mt-1 text-xs text-slate-500">Đang tải…</p> : null}
-                <ul className="scroll-touch mt-2 max-h-[min(52vh,34rem)] space-y-1.5 overflow-y-auto overscroll-contain">
-                  {interactions.map((it) => (
-                    <li
-                      key={it.id}
-                      className="rounded-lg border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
-                    >
-                      <p className="font-medium text-slate-900">
-                        {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
-                      </p>
-                      {it.counselorNote ? (
-                        <p className="mt-0.5 whitespace-pre-wrap leading-snug text-slate-700">{it.counselorNote}</p>
-                      ) : null}
-                      {it.aiSentiment ? (
-                        <p className="mt-0.5 text-[11px] text-violet-800">
-                          AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
-                        </p>
-                      ) : null}
-                      <p className="mt-0.5 text-[10px] text-slate-500">
-                        {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
-                      </p>
-                    </li>
-                  ))}
-                  {!intLoading && !interactions.length ? (
-                    <li className="text-xs text-slate-500">Chưa có tương tác.</li>
-                  ) : null}
-                </ul>
-              </section>
-
-              <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Thêm ghi chú</h3>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <label className="block text-xs font-medium text-slate-700 sm:col-span-2">
-                    Ghi chú
-                    <textarea
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      rows={3}
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                  {db ? (
+                    <CounselorLeadProgressForm
+                      key={`cprog-${lead.id}`}
+                      lead={lead}
+                      db={db}
+                      onUpdated={onUpdated}
                     />
-                  </label>
-                  <label className="block text-xs font-medium text-slate-700">
-                    Nhãn
-                    <select
-                      value={evalTag}
-                      onChange={(e) => setEvalTag(e.target.value)}
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                    >
-                      {EVALUATION_TAGS.map((t) => (
-                        <option key={t} value={t} className="bg-white">
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block text-xs font-medium text-slate-700">
-                    Pipeline
-                    <select
-                      value={statusForForm}
-                      onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                      className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                    >
-                      {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                        <option key={k} value={k} className="bg-white">
-                          {PIPELINE_LABEL[k]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                {msg ? <p className="mt-1.5 text-xs text-emerald-700">{msg}</p> : null}
-                <button
-                  type="button"
-                  disabled={saving || !db || !canSaveInteraction}
-                  onClick={() => void save()}
-                  className="mt-2 w-full rounded-lg border border-emerald-500 bg-emerald-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {saving ? 'Đang lưu…' : 'Lưu tương tác'}
-                </button>
-              </section>
-            </main>
+                  ) : null}
+
+                  {canReassignLead && db ? (
+                    <LeadCrmQuickBlock
+                      key={`${lead.id}-${lead.updatedAt.toMillis()}`}
+                      lead={lead}
+                      db={db}
+                      counselorUsers={counselorUsers}
+                      pickListUsers={pickListUsers}
+                      counselorsLoading={counselorsLoading}
+                      reassignElevated={reassignElevated}
+                      onUpdated={onUpdated}
+                    />
+                  ) : null}
+                </aside>
+
+                <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Thêm ghi chú</h3>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <label className="block text-xs font-medium text-slate-700 sm:col-span-2">
+                      Ghi chú
+                      <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        rows={3}
+                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-slate-700">
+                      Nhãn
+                      <select
+                        value={evalTag}
+                        onChange={(e) => setEvalTag(e.target.value)}
+                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                      >
+                        {EVALUATION_TAGS.map((t) => (
+                          <option key={t} value={t} className="bg-white">
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-xs font-medium text-slate-700">
+                      Pipeline
+                      <select
+                        value={statusForForm}
+                        onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                      >
+                        {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                          <option key={k} value={k} className="bg-white">
+                            {PIPELINE_LABEL[k]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {msg ? <p className="mt-1.5 text-xs text-emerald-700">{msg}</p> : null}
+                  <button
+                    type="button"
+                    disabled={saving || !db || !canSaveInteraction}
+                    onClick={() => void save()}
+                    className="mt-2 w-full rounded-lg border border-emerald-500 bg-emerald-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {saving ? 'Đang lưu…' : 'Lưu tương tác'}
+                  </button>
+                </section>
+              </div>
+
+              {/* ~1/3: chỉ lịch sử ghi chú & đánh giá */}
+              <aside className="scroll-touch flex min-h-0 flex-col border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-4 lg:max-h-full lg:border-b-0 lg:overflow-hidden">
+                <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+                  <h3 className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    Lịch sử ghi chú &amp; đánh giá
+                  </h3>
+                  {intLoading ? <p className="mt-1 shrink-0 text-xs text-slate-500">Đang tải…</p> : null}
+                  <ul className="scroll-touch mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain">
+                    {interactions.map((it) => (
+                      <li
+                        key={it.id}
+                        className="rounded-lg border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
+                      >
+                        <p className="font-medium text-slate-900">
+                          {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
+                        </p>
+                        {it.counselorNote ? (
+                          <p className="mt-0.5 whitespace-pre-wrap leading-snug text-slate-700">{it.counselorNote}</p>
+                        ) : null}
+                        {it.aiSentiment ? (
+                          <p className="mt-0.5 text-[11px] text-violet-800">
+                            AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
+                          </p>
+                        ) : null}
+                        <p className="mt-0.5 text-[10px] text-slate-500">
+                          {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
+                        </p>
+                      </li>
+                    ))}
+                    {!intLoading && !interactions.length ? (
+                      <li className="text-xs text-slate-500">Chưa có tương tác.</li>
+                    ) : null}
+                  </ul>
+                </section>
+              </aside>
             </div>
           </div>
         ) : (

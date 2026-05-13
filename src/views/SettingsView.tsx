@@ -270,7 +270,7 @@ export function SettingsView() {
       {db ? (
         <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-2 shadow-lg backdrop-blur-xl md:p-3">
           <nav
-            className="scroll-touch flex gap-1 overflow-x-auto overscroll-x-contain pb-1 md:flex-wrap md:gap-2 md:overflow-visible md:pb-0"
+            className="scroll-touch flex flex-wrap justify-end gap-1 overflow-x-auto overscroll-x-contain pb-1 md:gap-1.5 md:overflow-visible md:pb-0"
             role="tablist"
             aria-label="Nhóm cấu hình"
           >
@@ -285,7 +285,7 @@ export function SettingsView() {
                   disabled={!t.enabled}
                   onClick={() => setTab(t.id)}
                   className={[
-                    'flex min-h-11 shrink-0 items-center rounded-xl border px-3 py-2.5 text-left text-sm font-semibold uppercase tracking-wide transition sm:text-base md:min-h-0 md:px-4 md:py-3',
+                    'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium tracking-tight transition md:px-3 md:py-2',
                     selected
                       ? 'border-amber-500/45 bg-amber-50/95 text-slate-900 shadow-sm ring-1 ring-amber-900/5'
                       : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50',
