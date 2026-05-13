@@ -2327,7 +2327,7 @@ function LeadDetailPanel({
               {/* ~2/3: thông tin hồ sơ, tiến độ, CRM, form thêm ghi chú */}
               <div className="scroll-touch flex min-h-0 flex-col gap-3 border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
                 <aside className="space-y-3 text-sm leading-snug">
-                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 sm:gap-x-3">
                     <Info label="Mã KH" value={lead.customerId} />
                     <Info label="Nguồn" value={lead.source} />
                     <Info label="Hệ đào tạo" value={lead.educationLevel} />
@@ -2337,7 +2337,7 @@ function LeadDetailPanel({
                     <Info label="Lớp" value={lead.gradeClass} />
                     <Info label="Điện thoại SV" value={lead.phone} />
                     <Info label="ĐT người liên hệ" value={lead.parentPhone} />
-                    <div className="col-span-2">
+                    <div className="col-span-2 sm:col-span-3">
                       <p className="text-xs text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
                       <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-800">
                         {leadDescriptionForDisplay(lead.description).trim() || '—'}
