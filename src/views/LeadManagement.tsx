@@ -1937,6 +1937,7 @@ function LeadDetailPanel({
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<'workspace' | 'audit'>('workspace')
+  const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const { entries: auditEntries, loading: auditLoading, error: auditError, missingIndexUrl: auditIndexUrl } =
     useAuditLogs(lead.id)
 
@@ -1994,6 +1995,15 @@ function LeadDetailPanel({
     if (r && typeof r === 'object' && !Array.isArray(r)) return r as Record<string, unknown>
     return null
   }, [aiPreview, storedAiInsight])
+
+  useEffect(() => {
+    if (!llmPopupOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLlmPopupOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [llmPopupOpen])
 
   const canSaveInteraction = can('interactions:create:self_assigned')
   const canRunAi = can('ai:use')
@@ -2229,14 +2239,26 @@ function LeadDetailPanel({
             ))}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
-        >
-          <X className="h-4 w-4" aria-hidden />
-          Đóng
-        </button>
+        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-end">
+          {canRunAi ? (
+            <button
+              type="button"
+              onClick={() => setLlmPopupOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
+            >
+              <Sparkles className="h-4 w-4 shrink-0" aria-hidden strokeWidth={1.75} />
+              Phân tích LLM
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+          >
+            <X className="h-4 w-4" aria-hidden />
+            Đóng hồ sơ
+          </button>
+        </div>
       </header>
 
       {dynamicAssistantSlot ? (
@@ -2435,110 +2457,119 @@ function LeadDetailPanel({
             </div>
           </div>
         )}
-
-        {canRunAi ? (
-            <section
-              className={`app-card-glass relative shrink-0 border-t border-amber-200/80 p-4 text-slate-900 shadow-md backdrop-blur-2xl ${
-                aiRunning ? 'ring-2 ring-amber-400/40 ring-inset animate-pulse' : ''
-              }`}
-            >
-              <div className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(ellipse_at_top_right,rgba(168,85,247,0.08),transparent_50%),radial-gradient(ellipse_at_bottom_left,rgba(245,158,11,0.1),transparent_45%)]" />
-              <div className="relative">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-200/80 bg-white/90 shadow-md shadow-amber-500/15">
-                    <Sparkles className="h-4 w-4 text-amber-600" strokeWidth={1.75} />
-                  </span>
-                  <div>
-                    <VietMyAccentHeading as="h3" tone="onLight" size="md" className="block">
-                      Phân tích LLM
-                    </VietMyAccentHeading>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Gọi API Google Gemini hoặc OpenAI (ChatGPT) đã lưu trong trình duyệt — kết quả ghi vào hồ sơ
-                      (Firestore).
-                    </p>
-                  </div>
-                </div>
-
-                {aiTasksErr ? (
-                  <p className="mt-2 text-sm text-rose-700">{aiTasksErr}</p>
-                ) : null}
-
-                <label className="mt-3 block text-sm font-medium text-slate-600">
-                  Tác vụ phân tích
-                  <select
-                    value={resolvedAiTaskId}
-                    onChange={(e) => {
-                      setAiSelTaskId(e.target.value)
-                      setAiErr(null)
-                      setAiPreview(null)
-                    }}
-                    disabled={aiTasksLoading || !aiTasks.length}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-50"
-                  >
-                    {!aiTasks.length ? (
-                      <option value="">Chưa có tác vụ — tạo trong Cài đặt</option>
-                    ) : (
-                      aiTasks.map((t) => (
-                        <option key={t.id} value={t.id} className="bg-white">
-                          {t.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </label>
-
-                {storedAiInsight && formatAiRunAt(storedAiInsight.runAt) ? (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Lần chạy gần nhất: {formatAiRunAt(storedAiInsight.runAt)}
-                  </p>
-                ) : null}
-
-                <button
-                  type="button"
-                  disabled={
-                    aiRunning || aiTasksLoading || !selectedAITask || !aiTasks.length || !db
-                  }
-                  onClick={() => void runAiLlmAnalysis()}
-                  className="group relative mt-3 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-amber-400/45 bg-gradient-to-r from-violet-600/95 via-fuchsia-600/90 to-amber-600/95 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(245,158,11,0.22)] transition hover:brightness-110 disabled:opacity-45"
-                >
-                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition group-hover:translate-x-full group-hover:opacity-100 group-hover:duration-700" />
-                  <Wand2 className="relative h-4 w-4 shrink-0 text-amber-100" strokeWidth={1.75} />
-                  <span className="relative">
-                    {aiRunning ? 'Đang phân tích…' : 'Chạy phân tích AI'}
-                  </span>
-                </button>
-
-                {aiErr ? <p className="mt-2 text-sm text-rose-700">{aiErr}</p> : null}
-
-                {aiRunning ? (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs text-slate-400">Đang suy luận…</p>
-                    <div className="h-10 rounded-xl ai-skeleton-shimmer" />
-                    <div
-                      className="h-10 rounded-xl ai-skeleton-shimmer"
-                      style={{ animationDelay: '0.15s' }}
-                    />
-                    <div
-                      className="h-24 rounded-xl ai-skeleton-shimmer"
-                      style={{ animationDelay: '0.3s' }}
-                    />
-                  </div>
-                ) : displayAiResult ? (
-                  <div className="mt-4 rounded-2xl border border-rose-200/60 bg-gradient-to-br from-white/95 to-rose-50/40 p-3 shadow-inner backdrop-blur-md">
-                    <VietMyAccentHeading as="p" tone="onLight" size="sm" className="mb-2 block">
-                      Kết quả
-                    </VietMyAccentHeading>
-                    <AiInsightsGrid data={displayAiResult} />
-                  </div>
-                ) : (
-                  <p className="mt-3 text-xs text-slate-500">
-                    Chọn tác vụ và bấm chạy. API key lưu cục bộ trên trình duyệt (localStorage).
-                  </p>
-                )}
-              </div>
-            </section>
-          ) : null}
       </div>
+
+      {canRunAi && llmPopupOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
+            aria-label="Đóng cửa sổ phân tích LLM"
+            onClick={() => setLlmPopupOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lead-llm-dialog-title"
+            className={[
+              'fixed left-1/2 top-1/2 z-[120] flex max-h-[min(88dvh,760px)] w-[min(96vw,640px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl',
+              aiRunning ? 'ring-2 ring-amber-400/50 ring-inset' : '',
+            ].join(' ')}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-violet-50/90 to-amber-50/80 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white shadow-sm">
+                  <Sparkles className="h-4 w-4 text-amber-600" strokeWidth={1.75} aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="lead-llm-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
+                    Phân tích LLM
+                  </h2>
+                  <p className="truncate text-xs text-slate-600 sm:text-sm">
+                    Gemini / ChatGPT (key trong trình duyệt) — kết quả lưu Firestore.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLlmPopupOpen(false)}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" aria-hidden />
+                Đóng
+              </button>
+            </div>
+
+            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
+              {aiTasksErr ? <p className="text-sm text-rose-700">{aiTasksErr}</p> : null}
+
+              <label className="mt-1 block text-sm font-medium text-slate-700">
+                Tác vụ phân tích
+                <select
+                  value={resolvedAiTaskId}
+                  onChange={(e) => {
+                    setAiSelTaskId(e.target.value)
+                    setAiErr(null)
+                    setAiPreview(null)
+                  }}
+                  disabled={aiTasksLoading || !aiTasks.length}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-50"
+                >
+                  {!aiTasks.length ? (
+                    <option value="">Chưa có tác vụ — tạo trong Cài đặt</option>
+                  ) : (
+                    aiTasks.map((t) => (
+                      <option key={t.id} value={t.id} className="bg-white">
+                        {t.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+
+              {storedAiInsight && formatAiRunAt(storedAiInsight.runAt) ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Lần chạy gần nhất: {formatAiRunAt(storedAiInsight.runAt)}
+                </p>
+              ) : null}
+
+              <button
+                type="button"
+                disabled={aiRunning || aiTasksLoading || !selectedAITask || !aiTasks.length || !db}
+                onClick={() => void runAiLlmAnalysis()}
+                className="group relative mt-4 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-amber-400/45 bg-gradient-to-r from-violet-600/95 via-fuchsia-600/90 to-amber-600/95 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:opacity-45"
+              >
+                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition group-hover:translate-x-full group-hover:opacity-100 group-hover:duration-700" />
+                <Wand2 className="relative h-4 w-4 shrink-0 text-amber-100" strokeWidth={1.75} />
+                <span className="relative">{aiRunning ? 'Đang phân tích…' : 'Chạy phân tích AI'}</span>
+              </button>
+
+              {aiErr ? <p className="mt-2 text-sm text-rose-700">{aiErr}</p> : null}
+
+              {aiRunning ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs text-slate-400">Đang suy luận…</p>
+                  <div className="h-10 rounded-xl ai-skeleton-shimmer" />
+                  <div className="h-10 rounded-xl ai-skeleton-shimmer" style={{ animationDelay: '0.15s' }} />
+                  <div className="h-24 rounded-xl ai-skeleton-shimmer" style={{ animationDelay: '0.3s' }} />
+                </div>
+              ) : displayAiResult ? (
+                <div className="mt-4 rounded-2xl border border-rose-200/60 bg-gradient-to-br from-white to-rose-50/50 p-3 shadow-inner">
+                  <VietMyAccentHeading as="p" tone="onLight" size="sm" className="mb-2 block">
+                    Kết quả
+                  </VietMyAccentHeading>
+                  <AiInsightsGrid data={displayAiResult} />
+                </div>
+              ) : (
+                <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                  Chọn tác vụ và bấm chạy. API key lưu cục bộ (localStorage), cấu hình tại Cấu hình dữ liệu → Tích hợp
+                  LLM.
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
