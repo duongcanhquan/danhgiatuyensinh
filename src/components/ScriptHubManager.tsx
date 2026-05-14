@@ -129,6 +129,16 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
     })
   }, [snippets, filterCategory, filterActive, filterMajor])
 
+  const filtersActive = Boolean(
+    filterCategory || filterActive !== 'all' || filterMajor.trim(),
+  )
+
+  const clearFilters = useCallback(() => {
+    setFilterCategory('')
+    setFilterActive('all')
+    setFilterMajor('')
+  }, [])
+
   const openCreate = useCallback(() => {
     setEditingId(null)
     setTitle('')
@@ -275,13 +285,15 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
               Các đoạn kịch bản ghép nối — hệ thống tự ráp luồng tư vấn theo từng hồ sơ (trợ lý trên màn chi tiết).
             </p>
             <p className="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">
-              Nạp / cập nhật bộ 20 snippet mẫu (service account):{' '}
-              <code className="rounded bg-black/30 px-1 text-slate-300">npm run seed:script-snippets</code>. Xóa đúng
+              <strong className="text-slate-300">Lưu ý:</strong> lệnh seed chạy trên <strong>máy bạn (Terminal)</strong>,
+              cần file service account —{' '}
+              <code className="rounded bg-black/30 px-1 text-slate-300">GOOGLE_APPLICATION_CREDENTIALS=./secrets/…json</code>{' '}
+              rồi <code className="rounded bg-black/30 px-1 text-slate-300">npm run seed:script-snippets</code>. Xóa
               bộ đã seed:{' '}
               <code className="rounded bg-black/30 px-1 text-slate-300">
                 DELETE_SCRIPT_SNIPPET_SEED=1 npm run seed:script-snippets
               </code>
-              . Sửa nội dung: chỉnh trong bảng dưới hoặc sửa file{' '}
+              . Sửa nội dung: chỉnh trong bảng hoặc file{' '}
               <code className="text-slate-400">scripts/data/vietmy-script-snippet-seed-entries.mjs</code> rồi chạy lại
               seed.
             </p>
@@ -346,8 +358,26 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
               <option value="inactive">Đang tắt</option>
             </select>
           </label>
+          {filtersActive ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10"
+            >
+              Xóa bộ lọc
+            </button>
+          ) : null}
           {loading ? <span className="text-xs text-slate-500">Đang tải…</span> : null}
         </div>
+        {!loading ? (
+          <p className="mt-2 text-xs text-slate-400">
+            Trên Firestore hiện có{' '}
+            <strong className="text-amber-100/95">{snippets.length}</strong> snippet
+            {filtersActive && filteredSnippets.length !== snippets.length
+              ? ` — sau lọc còn ${filteredSnippets.length}.`
+              : '.'}
+          </p>
+        ) : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/40 backdrop-blur-md">
           <table className="min-w-full text-left text-sm">
@@ -424,8 +454,32 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
               ))}
               {!filteredSnippets.length && !loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                    Không có snippet khớp bộ lọc.
+                  <td colSpan={6} className="px-3 py-6 text-left text-sm text-slate-400">
+                    {snippets.length === 0 ? (
+                      <div className="mx-auto max-w-xl space-y-2 rounded-xl border border-amber-500/25 bg-amber-950/30 px-4 py-4 text-left">
+                        <p className="font-medium text-amber-100">Chưa có snippet trên Firestore</p>
+                        <p className="text-xs leading-relaxed text-slate-300">
+                          Giao diện web <strong>không</strong> tự tải file từ GitHub. Bạn cần mở Terminal trong thư mục
+                          project, cấu hình <code className="text-amber-200/90">GOOGLE_APPLICATION_CREDENTIALS</code>{' '}
+                          trỏ tới JSON service account của <strong>cùng</strong> Firebase project với app, rồi chạy:{' '}
+                          <code className="block mt-2 rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-slate-100">
+                            npm run seed:script-snippets
+                          </code>
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Hoặc bấm «Snippet mới» ở trên để tạo tay. Sau khi seed, tải lại trang — bộ đếm «Trên
+                          Firestore» sẽ là 20.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 text-center">
+                        <p>Không có snippet khớp bộ lọc hiện tại.</p>
+                        <p className="text-xs text-slate-500">
+                          Thử chọn Danh mục «Tất cả» và Ngành «— Tất cả —», hoặc bấm «Xóa bộ lọc». (Đang có{' '}
+                          {snippets.length} snippet trên server.)
+                        </p>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : null}
