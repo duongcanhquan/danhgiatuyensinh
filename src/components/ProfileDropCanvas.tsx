@@ -8,6 +8,7 @@ import type {
   ScoringRuleConditionRow,
 } from '../types'
 import { RULE_CATEGORY_LABELS } from '../types'
+import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { createBlockFromTemplateKey, RULE_TEMPLATE_DRAG_MIME, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 
 function conditionUsesNoValueRow(c: ProfileScoringCondition): boolean {
