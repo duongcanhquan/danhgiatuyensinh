@@ -149,7 +149,8 @@ export function AnalyticsAdvancedView() {
   return (
     <div className="space-y-8">
       <header>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+        <p className="app-page-kicker">VietMy Admissions OS</p>
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
           Phân tích nâng cao
         </VietMyAccentHeading>
         <p className="mt-1 text-base text-slate-600">

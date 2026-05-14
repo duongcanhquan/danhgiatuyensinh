@@ -37,6 +37,7 @@ import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
 import { AiLabView } from '../views/AiLabView'
 import { StaffManagementView } from '../views/StaffManagementView'
+import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 type SettingsTabId = 'master' | 'scoring' | 'consulting' | 'knowledge' | 'llm' | 'ai_lab' | 'staff'
 
@@ -69,12 +70,8 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
         <>
           <p className="font-semibold text-slate-900">Danh mục</p>
           <p className="mt-1.5">
-            Giá trị dùng chung cho CRM (lọc hồ sơ, chấm điểm, Script Hub…). Chọn loại ở cột trái, chỉnh danh sách mục
-            bên phải. Giữ ổn định <strong>mã nội bộ (id)</strong> sau khi đã dùng trong quy tắc hoặc tích hợp.
-          </p>
-          <p className={`mt-2 ${settingsCopyMuted}`}>
-            Có thể cấu hình kiểu khớp (chính xác / tương đối chữ, khoảng số…) cho từng loại và từng mục — dùng khi quy
-            tắc chấm điểm so <strong>IN_LIST</strong> với trường lead tương ứng.
+            Giá trị dùng chung cho CRM (lọc hồ sơ, chấm điểm, Script Hub…). Chọn loại ở cột trái, thêm hoặc chỉnh các
+            mục bên phải.
           </p>
         </>
       )
@@ -302,7 +299,7 @@ export function SettingsView() {
     }
     if (
       !window.confirm(
-        `Xóa loại danh mục «${c.label}» (mã: ${c.id})? Các mục trong danh mục này sẽ bị xóa khỏi Firestore.`,
+        `Xóa loại danh mục «${c.label}»? Các mục trong danh mục này sẽ bị xóa khỏi Firestore.`,
       )
     ) {
       return
@@ -408,7 +405,12 @@ export function SettingsView() {
 
   return (
     <div className={`space-y-4 md:space-y-5 ${settingsCopy}`}>
-      <h1 className="sr-only">Cài đặt</h1>
+      <header className="space-y-1">
+        <p className="app-page-kicker">VietMy Admissions OS</p>
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
+          Cài đặt
+        </VietMyAccentHeading>
+      </header>
       {!configured || !db ? (
         <div className={`rounded-2xl border border-rose-300/70 bg-rose-50 px-5 py-4 text-rose-900 backdrop-blur-xl ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
@@ -557,7 +559,7 @@ export function SettingsView() {
                   </p>
                   <nav
                     className="min-h-0 flex-1 select-none space-y-1 overflow-y-auto overscroll-contain pr-0.5"
-                    aria-label="Danh mục master data"
+                    aria-label="Danh sách danh mục"
                   >
                     {catalogs.map((c) => {
                       const on = activeMasterCatalog?.id === c.id
@@ -574,7 +576,6 @@ export function SettingsView() {
                           ].join(' ')}
                         >
                           <span className="font-semibold leading-snug">{c.label}</span>
-                          <code className="mt-0.5 block truncate font-mono text-[0.85em] text-slate-500">{c.id}</code>
                         </button>
                       )
                     })}
@@ -599,7 +600,6 @@ export function SettingsView() {
                           <h3 className={settingsHeading}>
                             {activeMasterCatalog.label}
                           </h3>
-                          <code className={`mt-1 block font-mono text-[0.92em] text-slate-500 ${settingsCopy}`}>{activeMasterCatalog.id}</code>
                         </div>
                         {canMaster ? (
                           <button
@@ -1059,19 +1059,13 @@ function AddMasterCatalogForm({
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const existingIds = useMemo(() => catalogs.map((c) => c.id), [catalogs])
   const allowedModes = matchModesForCatalogValueKind(valueKind)
-
-  const idPreview = useMemo(
-    () => uniqueCatalogIdFromLabel(label, existingIds),
-    [label, existingIds],
-  )
 
   const submit = async () => {
     setMsg(null)
     const trimmed = label.trim()
     if (trimmed.length < 2) {
-      setMsg('Nhập tên hiển thị đủ dài để tạo mã lưu trữ (ít nhất 2 ký tự có nghĩa).')
+      setMsg('Nhập tên danh mục (ít nhất 2 ký tự).')
       return
     }
     setBusy(true)
@@ -1083,7 +1077,7 @@ function AddMasterCatalogForm({
         (catalogs.length ? [...catalogs] : DEFAULT_MASTER_CATALOGS.map((c) => ({ ...c })))
       const catalogId = uniqueCatalogIdFromLabel(trimmed, base.map((c) => c.id))
       if (!catalogId) {
-        setMsg('Không tạo được mã danh mục hợp lệ từ tên — đổi tên hoặc thử tên khác.')
+        setMsg('Không tạo được loại danh mục từ tên này — đổi tên hoặc thử tên khác.')
         return
       }
       const maxOrder = base.reduce((m, x) => Math.max(m, x.order), 0)
@@ -1108,7 +1102,7 @@ function AddMasterCatalogForm({
       setLabel('')
       setValueKind('text')
       setDefaultMatchMode('exact_norm')
-      setMsg(`Đã thêm danh mục «${trimmed}» (mã lưu: ${catalogId}).`)
+      setMsg(`Đã thêm danh mục «${trimmed}».`)
       onCatalogAdded?.(catalogId)
     } catch (e) {
       console.error(e)
@@ -1129,11 +1123,6 @@ function AddMasterCatalogForm({
       <h3 className={settingsHeading}>
         {compact ? 'Thêm loại mới' : 'Thêm loại danh mục mới'}
       </h3>
-      <p className={`mt-2 text-xs leading-snug text-slate-600 ${settingsCopy}`}>
-        Chỉ cần đặt <strong>tên</strong> và chọn <strong>kiểu + cách khớp</strong>. Mã lưu Firestore (đường dẫn{' '}
-        <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">masterData/…</code>) được tạo tự động từ
-        tên — dùng trong chấm điểm IN_LIST khi <code className="font-mono">targetField</code> trùng mã đó.
-      </p>
       <div
         className={
           compact
@@ -1148,7 +1137,7 @@ function AddMasterCatalogForm({
               : `min-w-[14rem] flex-[1.2] font-medium text-slate-700 ${settingsCopy}`
           }
         >
-          Tên hiển thị
+          Tên danh mục
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
@@ -1160,15 +1149,6 @@ function AddMasterCatalogForm({
                 : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
             }
           />
-          {idPreview ? (
-            <span className={`mt-1 block font-mono text-[0.8rem] text-slate-500 ${settingsCopy}`}>
-              → Mã lưu: <strong className="text-slate-700">{idPreview}</strong>
-            </span>
-          ) : label.trim() ? (
-            <span className={`mt-1 block text-[0.8rem] text-amber-800 ${settingsCopy}`}>
-              Gõ thêm ký tự — chưa tạo được mã hợp lệ.
-            </span>
-          ) : null}
         </label>
         <label
           className={
@@ -1352,7 +1332,7 @@ function CatalogMatchMetaPanel({
           onClick={() => void save()}
           className={`shrink-0 rounded-lg border border-amber-800/90 bg-gradient-to-r from-amber-800 to-amber-950 px-4 py-2 font-semibold text-white shadow-sm hover:from-amber-900 hover:to-amber-950 disabled:opacity-50 ${settingsCopy}`}
         >
-          {busy ? 'Đang lưu…' : 'Lưu cấu hình catalog'}
+          {busy ? 'Đang lưu…' : 'Lưu cấu hình danh mục'}
         </button>
       </div>
       {msg ? (
@@ -1604,7 +1584,6 @@ function MasterEntriesEditor({
         <div className="mb-3 flex items-start justify-between gap-3 pr-24">
           <div>
             <h3 className={settingsHeading}>{title}</h3>
-            <p className={`mt-0.5 font-mono text-[0.92em] text-slate-500 ${settingsCopy}`}>{catalogId}</p>
           </div>
           {loading ? <span className={`shrink-0 text-slate-500 ${settingsCopyMuted}`}>Đang tải…</span> : null}
         </div>
@@ -1644,13 +1623,8 @@ function MasterEntriesEditor({
           className={`mt-3 shrink-0 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 text-slate-700 ${settingsCopy}`}
         >
           <p className={settingsHeading}>Khớp cho từng mục mới (tùy chọn)</p>
-          <p className={`text-xs leading-relaxed text-slate-600 ${settingsCopy}`}>
-            Mặc định mỗi mục dùng <strong>chế độ khớp của danh mục</strong> (khối «Kiểu danh mục / Khớp mặc định» phía
-            trên). Chỉ chỉnh các ô dưới khi <strong>một mục</strong> cần quy tắc khác (ví dụ một khoảng điểm riêng,
-            hoặc tên khác viết tắt trong synonyms).
-          </p>
           <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
-            Tên khác (synonyms), cách nhau bởi dấu phẩy
+            Tên khác (tách bằng dấu phẩy)
             <input
               value={addSynonyms}
               onChange={(e) => setAddSynonyms(e.target.value)}
@@ -1668,7 +1642,7 @@ function MasterEntriesEditor({
                 disabled={!db || busy}
                 className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
               >
-                <option value="">Theo catalog ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
+                <option value="">Theo danh mục ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
                 {addAllowedModes.map((m) => (
                   <option key={m} value={m}>
                     {MATCH_MODE_LABELS[m]}
@@ -1719,7 +1693,7 @@ function MasterEntriesEditor({
               />
             </label>
             <label className={`block font-medium text-slate-700 sm:col-span-2 ${settingsCopy}`}>
-              Synonyms (phẩy)
+              Tên khác (phẩy)
               <input
                 value={(editing.synonyms ?? []).join(', ')}
                 onChange={(e) =>
@@ -1750,7 +1724,7 @@ function MasterEntriesEditor({
                 }}
                 className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
               >
-                <option value="">Theo catalog ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
+                <option value="">Theo danh mục ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
                 {addAllowedModes.map((m) => (
                   <option key={m} value={m}>
                     {MATCH_MODE_LABELS[m]}

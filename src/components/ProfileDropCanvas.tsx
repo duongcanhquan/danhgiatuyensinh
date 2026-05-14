@@ -67,8 +67,11 @@ function CumulativeScoringCanvasHeader() {
   return (
     <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200/90 bg-white/95 px-2.5 py-2 shadow-sm backdrop-blur-sm">
       <p className="text-[11px] font-semibold leading-snug text-slate-700">
-        Canvas bên phải · <span className="text-slate-600">mỗi dòng: bấm thanh tóm tắt để thu gọn / mở chi tiết</span> · cộng
-        dồn ± theo dòng khớp
+        Canvas bên phải ·{' '}
+        <span className="text-slate-600">
+          kéo mẫu từ thư viện; mỗi dòng: bấm thanh tóm tắt để thu gọn / mở chi tiết
+        </span>{' '}
+        · cộng dồn ± theo dòng khớp
       </p>
     </header>
   )
@@ -143,29 +146,6 @@ function RuleConfigurationCard({
             className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/40 disabled:opacity-50"
             placeholder="Nhãn khối"
           />
-          <div className="grid gap-1.5 sm:grid-cols-2">
-            <label className="block text-[10px] text-slate-600">
-              Trường lead
-              <input
-                value={String(block.targetField)}
-                disabled={!canEdit}
-                onChange={(e) => onPatch({ targetField: e.target.value })}
-                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
-              />
-            </label>
-            <label className="block text-[10px] text-slate-600">
-              Max weight (≥ 0)
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={block.maxWeight}
-                disabled={!canEdit}
-                onChange={(e) => onPatch({ maxWeight: Math.max(0, Number(e.target.value) || 0) })}
-                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
-              />
-            </label>
-          </div>
         </div>
         {canEdit ? (
           <button
@@ -308,9 +288,13 @@ function RuleConfigurationCard({
                   <select
                     value={r.allocationKind}
                     disabled={!canEdit}
-                    onChange={(e) =>
-                      onPatchRow(ri, { allocationKind: e.target.value as ScoringRuleAllocationKind })
-                    }
+                    onChange={(e) => {
+                      const kind = e.target.value as ScoringRuleAllocationKind
+                      onPatchRow(ri, { allocationKind: kind })
+                      if (kind === 'percent_of_max' && Math.max(0, Number(block.maxWeight) || 0) === 0) {
+                        onPatch({ maxWeight: 100 })
+                      }
+                    }}
                     className="mt-0.5 w-full rounded-md border border-amber-200/80 bg-white px-1.5 py-1.5 text-xs text-slate-900 disabled:opacity-50"
                   >
                     {ALLOCATION_OPTIONS.map((o) => (

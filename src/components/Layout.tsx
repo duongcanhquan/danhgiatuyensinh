@@ -28,7 +28,7 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean) {
 const mainNav: NavDef[] = [
   { to: '/', label: 'Tổng kết', icon: LayoutDashboard },
   { to: '/leads', label: 'Hồ sơ', icon: Users },
-  { to: '/counselor', label: 'Tư Vấn', icon: LayoutGrid, perm: 'dashboard:counselor' },
+  { to: '/counselor', label: 'Tư vấn', icon: LayoutGrid, perm: 'dashboard:counselor' },
   { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, perm: 'analytics:advanced' },
   { to: '/import', label: 'Nhập liệu', icon: Database, perm: 'data:intake' },
   { to: '/settings', label: 'Cài đặt', icon: Settings2 },

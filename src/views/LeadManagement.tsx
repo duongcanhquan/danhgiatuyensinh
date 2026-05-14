@@ -768,7 +768,8 @@ export function LeadManagement() {
     <div className="space-y-3">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+          <p className="app-page-kicker">VietMy Admissions OS</p>
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
             Hồ sơ
           </VietMyAccentHeading>
         </div>
