@@ -78,42 +78,17 @@ export function Layout() {
                 <BarChart3 className="h-5 w-5 text-slate-950 md:h-[1.35rem] md:w-[1.35rem]" strokeWidth={2} />
               </div>
               <div className="min-w-0">
-                <div className="hidden min-w-0 flex-col gap-0.5 md:flex">
-                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0 leading-tight">
-                    <span className="font-display shrink-0 text-base font-semibold tracking-wide text-amber-100 md:text-lg">
-                      VIETMY COLLEGE
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    {profile ? (
-                      <span
-                        className="max-w-[18rem] truncate text-xs font-medium text-amber-200/85 md:text-sm"
-                        title={USER_ROLE_LABELS[profile.role]}
-                      >
-                        {USER_ROLE_LABELS[profile.role]}
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium text-amber-200/60 md:text-sm">—</span>
-                    )}
-                    {!firebaseUser && import.meta.env.DEV ? (
-                      <span className="text-xs font-medium text-amber-300/85 md:text-sm">Bản thử</span>
-                    ) : null}
-                  </div>
+                <div className="hidden min-w-0 md:block">
+                  <span className="font-display text-base font-semibold tracking-wide text-amber-100 md:text-lg">
+                    VIETMY COLLEGE
+                  </span>
                 </div>
                 <div className="flex w-full min-w-0 flex-col gap-1.5 md:hidden">
                   <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 self-center">
                       <p className="truncate font-display text-base font-semibold tracking-wide leading-tight text-amber-100">
                         VIETMY COLLEGE
                       </p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                        {profile ? (
-                          <span className="max-w-[12rem] truncate text-xs text-amber-200/80">{USER_ROLE_LABELS[profile.role]}</span>
-                        ) : null}
-                        {!firebaseUser && import.meta.env.DEV ? (
-                          <span className="text-xs font-medium text-amber-300/85">Bản thử</span>
-                        ) : null}
-                      </div>
                     </div>
                     {showSignOut ? (
                       <div className="flex shrink-0 flex-col items-end gap-1">
