@@ -3,8 +3,9 @@ import type {
   MasterCatalogValueKind,
   MasterDataEntry,
   MasterEntryMatchMode,
+  RuleCategory,
 } from '../types'
-import { DEFAULT_MASTER_CATALOGS, MASTER_DATA_REGISTRY_DOC_ID } from '../types'
+import { DEFAULT_MASTER_CATALOGS, MASTER_DATA_REGISTRY_DOC_ID, RULE_CATEGORIES } from '../types'
 
 /** Document legacy → bucket chuẩn (không hiển thị như một danh mục riêng). */
 const LEGACY_MERGE_INTO: Record<string, string> = {
@@ -124,6 +125,37 @@ export function normalizeCatalogSlug(raw: string): string {
     .slice(0, 64)
 }
 
+const RULE_CAT_SET = new Set<string>(RULE_CATEGORIES as readonly string[])
+
+function parseRuleCategory(raw: unknown): RuleCategory | undefined {
+  if (typeof raw !== 'string' || !RULE_CAT_SET.has(raw)) return undefined
+  return raw as RuleCategory
+}
+
+/** Nhóm UI: taxonomy Chấm điểm, hoặc «other» khi chưa gán / không khớp. */
+export type MasterCatalogUiGroup = RuleCategory | 'other'
+
+export function resolvedMasterCatalogGroup(c: MasterCatalogDefinition): MasterCatalogUiGroup {
+  const fromDoc = parseRuleCategory(c.ruleCategory)
+  if (fromDoc) return fromDoc
+  const seed = DEFAULT_MASTER_CATALOGS.find((d) => d.id === c.id)?.ruleCategory
+  if (seed && RULE_CAT_SET.has(seed)) return seed
+  return 'other'
+}
+
+/** Một dòng `catalogs[]` ghi Firestore `_registry` (không gửi field thừa). */
+export function masterCatalogToRegistryRow(c: MasterCatalogDefinition): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    id: c.id,
+    label: c.label,
+    order: c.order,
+    valueKind: c.valueKind ?? 'text',
+    defaultMatchMode: c.defaultMatchMode ?? 'exact_norm',
+  }
+  if (c.ruleCategory) row.ruleCategory = c.ruleCategory
+  return row
+}
+
 const CATALOG_ID_PATTERN = /^([a-z][a-z0-9_]{0,63})$/
 
 /**
@@ -196,12 +228,14 @@ export function parseCatalogsFromRegistryData(
       dm === 'between'
         ? dm
         : undefined
+    const ruleCategory = parseRuleCategory(o.ruleCategory)
     out.push({
       id,
       label,
       order: Number.isFinite(order) ? order : out.length * 10,
       ...(valueKind ? { valueKind } : {}),
       ...(defaultMatchMode ? { defaultMatchMode } : {}),
+      ...(ruleCategory ? { ruleCategory } : {}),
     })
   }
   return out.length ? out.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)) : null

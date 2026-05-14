@@ -16,8 +16,15 @@ import type {
   MasterDataEntry,
   MasterEntryMatchMode,
   PlaybookTriggerCondition,
+  RuleCategory,
 } from '../types'
-import { DEFAULT_MASTER_CATALOGS, FS_COLLECTIONS, MASTER_DATA_REGISTRY_DOC_ID } from '../types'
+import {
+  DEFAULT_MASTER_CATALOGS,
+  FS_COLLECTIONS,
+  MASTER_DATA_REGISTRY_DOC_ID,
+  RULE_CATEGORIES,
+  RULE_CATEGORY_LABELS,
+} from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
@@ -26,7 +33,9 @@ import { useAuth } from '../hooks/useAuth'
 import { evaluateLead, resolveTagBands } from '../utils/scoring'
 import {
   masterDataEntriesForFirestore,
+  masterCatalogToRegistryRow,
   parseCatalogsFromRegistryData,
+  resolvedMasterCatalogGroup,
   uniqueCatalogIdFromLabel,
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
@@ -217,6 +226,9 @@ export function SettingsView() {
 
   const [masterWorkspaceOpen, setMasterWorkspaceOpen] = useState(false)
   const [selectedMasterCatalogId, setSelectedMasterCatalogId] = useState<string | null>(null)
+  const [masterNavOpenGroups, setMasterNavOpenGroups] = useState<Partial<Record<string, boolean>>>({})
+  const [addCatalogPresetSeq, setAddCatalogPresetSeq] = useState(0)
+  const [addCatalogPresetGroup, setAddCatalogPresetGroup] = useState<RuleCategory | 'other' | null>(null)
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
   const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
@@ -291,6 +303,35 @@ export function SettingsView() {
     return id ? (catalogs.find((c) => c.id === id) ?? null) : null
   }, [catalogs, selectedMasterCatalogId])
 
+  const masterCatalogNavGroups = useMemo(() => {
+    const byKey = new Map<string, MasterCatalogDefinition[]>()
+    for (const rc of RULE_CATEGORIES) byKey.set(rc, [])
+    byKey.set('other', [])
+    for (const c of catalogs) {
+      const g = resolvedMasterCatalogGroup(c)
+      byKey.get(g)!.push(c)
+    }
+    return [
+      ...RULE_CATEGORIES.map((group) => ({
+        group: group as RuleCategory,
+        label: RULE_CATEGORY_LABELS[group],
+        items: byKey.get(group)!,
+      })),
+      { group: 'other' as const, label: 'Khác', items: byKey.get('other')! },
+    ]
+  }, [catalogs])
+
+  useEffect(() => {
+    if (!activeMasterCatalog) return
+    const g = resolvedMasterCatalogGroup(activeMasterCatalog)
+    setMasterNavOpenGroups((prev) => ({ ...prev, [g]: true }))
+  }, [activeMasterCatalog?.id])
+
+  const queueAddMasterCatalogPreset = (g: RuleCategory | 'other') => {
+    setAddCatalogPresetGroup(g)
+    setAddCatalogPresetSeq((s) => s + 1)
+  }
+
   const removeMasterCatalog = async (c: MasterCatalogDefinition) => {
     if (!db || !canMaster) return
     if (catalogs.length <= 1) {
@@ -316,7 +357,10 @@ export function SettingsView() {
       }
       const batch = writeBatch(db)
       batch.delete(doc(db, FS_COLLECTIONS.masterData, c.id))
-      batch.set(regRef, { catalogs: next, updatedAt: Timestamp.now() }, { merge: true })
+      batch.set(regRef, {
+        catalogs: next.map(masterCatalogToRegistryRow),
+        updatedAt: Timestamp.now(),
+      }, { merge: true })
       await batch.commit()
     } catch (e) {
       console.error(e)
@@ -558,25 +602,62 @@ export function SettingsView() {
                     Chọn danh mục
                   </p>
                   <nav
-                    className="min-h-0 flex-1 select-none space-y-1 overflow-y-auto overscroll-contain pr-0.5"
-                    aria-label="Danh sách danh mục"
+                    className="min-h-0 flex-1 select-none space-y-1.5 overflow-y-auto overscroll-contain pr-0.5"
+                    aria-label="Danh sách danh mục theo nhóm"
                   >
-                    {catalogs.map((c) => {
-                      const on = activeMasterCatalog?.id === c.id
+                    {masterCatalogNavGroups.map(({ group, label, items }) => {
+                      const gKey = group
+                      const isOpen = masterNavOpenGroups[gKey] ?? false
                       return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelectedMasterCatalogId(c.id)}
-                          className={[
-                            `w-full rounded-lg border px-3 py-2.5 text-left transition ${settingsCopy}`,
-                            on
-                              ? 'border-amber-400/80 bg-amber-50 text-slate-900 shadow-sm ring-1 ring-amber-200/60'
-                              : 'border-slate-200/80 bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50/40',
-                          ].join(' ')}
+                        <details
+                          key={gKey}
+                          className="rounded-lg border border-slate-200/80 bg-white/90 open:border-amber-300/50 open:bg-amber-50/30"
+                          open={isOpen}
+                          onToggle={(e) => {
+                            const el = e.currentTarget
+                            setMasterNavOpenGroups((prev) => ({ ...prev, [gKey]: el.open }))
+                          }}
                         >
-                          <span className="font-semibold leading-snug">{c.label}</span>
-                        </button>
+                          <summary
+                            className={`cursor-pointer list-none select-none rounded-lg px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden ${settingsCopy}`}
+                          >
+                            <span className="flex items-center justify-between gap-2 font-semibold text-slate-800">
+                              <span className="min-w-0 truncate">{label}</span>
+                              <span className="shrink-0 text-xs font-medium tabular-nums text-slate-500">
+                                {items.length}
+                              </span>
+                            </span>
+                          </summary>
+                          <div className="space-y-1 border-t border-slate-200/70 px-1.5 py-1.5">
+                            {items.map((c) => {
+                              const on = activeMasterCatalog?.id === c.id
+                              return (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => setSelectedMasterCatalogId(c.id)}
+                                  className={[
+                                    `w-full rounded-lg border px-2.5 py-2 text-left transition ${settingsCopy}`,
+                                    on
+                                      ? 'border-amber-400/80 bg-amber-50 text-slate-900 shadow-sm ring-1 ring-amber-200/60'
+                                      : 'border-slate-200/80 bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50/40',
+                                  ].join(' ')}
+                                >
+                                  <span className="font-semibold leading-snug">{c.label}</span>
+                                </button>
+                              )
+                            })}
+                            {canMaster ? (
+                              <button
+                                type="button"
+                                onClick={() => queueAddMasterCatalogPreset(group)}
+                                className={`mt-0.5 w-full rounded-md border border-dashed border-amber-400/60 bg-amber-50/50 px-2 py-1.5 text-center text-xs font-semibold text-amber-900 hover:bg-amber-100/80 ${settingsCopy}`}
+                              >
+                                + Thêm trong nhóm này
+                              </button>
+                            ) : null}
+                          </div>
+                        </details>
                       )
                     })}
                   </nav>
@@ -586,6 +667,8 @@ export function SettingsView() {
                         db={db}
                         catalogs={catalogs}
                         onCatalogAdded={(id) => setSelectedMasterCatalogId(id)}
+                        addCatalogPresetSeq={addCatalogPresetSeq}
+                        addCatalogPresetGroup={addCatalogPresetGroup}
                         compact
                       />
                     </div>
@@ -1047,17 +1130,28 @@ function AddMasterCatalogForm({
   catalogs,
   onCatalogAdded,
   compact,
+  addCatalogPresetSeq = 0,
+  addCatalogPresetGroup = null,
 }: {
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
   catalogs: MasterCatalogDefinition[]
   onCatalogAdded?: (catalogId: string) => void
   compact?: boolean
+  addCatalogPresetSeq?: number
+  addCatalogPresetGroup?: RuleCategory | 'other' | null
 }) {
   const [label, setLabel] = useState('')
   const [valueKind, setValueKind] = useState<MasterCatalogValueKind>('text')
   const [defaultMatchMode, setDefaultMatchMode] = useState<MasterEntryMatchMode>('exact_norm')
+  const [ruleCategory, setRuleCategory] = useState<'' | RuleCategory>('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (addCatalogPresetSeq < 1 || addCatalogPresetGroup == null) return
+    if (addCatalogPresetGroup === 'other') setRuleCategory('')
+    else setRuleCategory(addCatalogPresetGroup)
+  }, [addCatalogPresetSeq, addCatalogPresetGroup])
 
   const allowedModes = matchModesForCatalogValueKind(valueKind)
 
@@ -1089,10 +1183,14 @@ function AddMasterCatalogForm({
           order: maxOrder + 10,
           valueKind,
           defaultMatchMode,
+          ...(ruleCategory ? { ruleCategory } : {}),
         },
       ].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
       const batch = writeBatch(db)
-      batch.set(regRef, { catalogs: next, updatedAt: Timestamp.now() }, { merge: true })
+      batch.set(regRef, {
+        catalogs: next.map(masterCatalogToRegistryRow),
+        updatedAt: Timestamp.now(),
+      }, { merge: true })
       batch.set(doc(db, FS_COLLECTIONS.masterData, catalogId), {
         id: catalogId,
         entries: [],
@@ -1102,6 +1200,7 @@ function AddMasterCatalogForm({
       setLabel('')
       setValueKind('text')
       setDefaultMatchMode('exact_norm')
+      setRuleCategory('')
       setMsg(`Đã thêm danh mục «${trimmed}».`)
       onCatalogAdded?.(catalogId)
     } catch (e) {
@@ -1130,6 +1229,32 @@ function AddMasterCatalogForm({
             : 'mt-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end'
         }
       >
+        <label
+          className={
+            compact
+              ? `w-full font-medium text-slate-700 ${settingsCopy}`
+              : `min-w-[12rem] flex-[1.1] font-medium text-slate-700 ${settingsCopy}`
+          }
+        >
+          Nhóm (như Chấm điểm)
+          <select
+            value={ruleCategory}
+            onChange={(e) => setRuleCategory((e.target.value || '') as '' | RuleCategory)}
+            disabled={busy}
+            className={
+              compact
+                ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+                : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+            }
+          >
+            <option value="">Khác</option>
+            {RULE_CATEGORIES.map((rc) => (
+              <option key={rc} value={rc}>
+                {RULE_CATEGORY_LABELS[rc]}
+              </option>
+            ))}
+          </select>
+        </label>
         <label
           className={
             compact
@@ -1244,14 +1369,24 @@ function CatalogMatchMetaPanel({
   const [defaultMatchMode, setDefaultMatchMode] = useState<MasterEntryMatchMode>(
     active.defaultMatchMode ?? 'exact_norm',
   )
+  const [ruleCategory, setRuleCategory] = useState<'' | RuleCategory>(
+    active.ruleCategory && (RULE_CATEGORIES as readonly string[]).includes(active.ruleCategory)
+      ? active.ruleCategory
+      : '',
+  )
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
     setValueKind(active.valueKind ?? 'text')
     setDefaultMatchMode(active.defaultMatchMode ?? 'exact_norm')
+    setRuleCategory(
+      active.ruleCategory && (RULE_CATEGORIES as readonly string[]).includes(active.ruleCategory)
+        ? active.ruleCategory
+        : '',
+    )
     setMsg(null)
-  }, [active.id, active.valueKind, active.defaultMatchMode])
+  }, [active.id, active.valueKind, active.defaultMatchMode, active.ruleCategory])
 
   const allowedModes = matchModesForCatalogValueKind(valueKind)
 
@@ -1259,21 +1394,18 @@ function CatalogMatchMetaPanel({
     setBusy(true)
     setMsg(null)
     try {
-      const nextCatalogs = catalogs.map((c) =>
-        c.id === active.id
-          ? {
-              ...c,
-              valueKind,
-              defaultMatchMode,
-            }
-          : c,
-      )
-      const payload = nextCatalogs.map((c) => {
-        const row: Record<string, unknown> = { id: c.id, label: c.label, order: c.order }
-        row.valueKind = c.valueKind ?? 'text'
-        row.defaultMatchMode = c.defaultMatchMode ?? 'exact_norm'
-        return row
+      const nextCatalogs = catalogs.map((c) => {
+        if (c.id !== active.id) return c
+        const next: MasterCatalogDefinition = {
+          ...c,
+          valueKind,
+          defaultMatchMode,
+        }
+        if (ruleCategory) next.ruleCategory = ruleCategory
+        else delete next.ruleCategory
+        return next
       })
+      const payload = nextCatalogs.map(masterCatalogToRegistryRow)
       await setDoc(
         doc(db, FS_COLLECTIONS.masterData, MASTER_DATA_REGISTRY_DOC_ID),
         { catalogs: payload, updatedAt: Timestamp.now() },
@@ -1290,6 +1422,22 @@ function CatalogMatchMetaPanel({
   return (
     <div className={`mb-4 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3 text-slate-800 shadow-inner md:p-4 ${settingsCopy}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className={`min-w-[12rem] flex-[1.15] font-medium text-slate-700 ${settingsCopy}`}>
+          Nhóm (như Chấm điểm)
+          <select
+            value={ruleCategory}
+            onChange={(e) => setRuleCategory((e.target.value || '') as '' | RuleCategory)}
+            disabled={busy}
+            className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+          >
+            <option value="">Khác</option>
+            {RULE_CATEGORIES.map((rc) => (
+              <option key={rc} value={rc}>
+                {RULE_CATEGORY_LABELS[rc]}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className={`min-w-[10rem] flex-1 font-medium text-slate-700 ${settingsCopy}`}>
           Kiểu danh mục
           <select

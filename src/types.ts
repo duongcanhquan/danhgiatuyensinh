@@ -469,6 +469,11 @@ export interface MasterCatalogDefinition {
   id: string
   label: string
   order: number
+  /**
+   * Nhóm hiển thị (giống khối Chấm điểm: Nhân khẩu, Học thuật, …). Bỏ trống = «Khác» trong UI.
+   * Không đổi id document Firestore `masterData/{id}`.
+   */
+  ruleCategory?: RuleCategory
   /** Mặc định `text` — dùng `number` khi danh mục là khoảng điểm, học phí, v.v. */
   valueKind?: MasterCatalogValueKind
   /** Khi mục không khai báo `matchMode`. */
@@ -477,14 +482,14 @@ export interface MasterCatalogDefinition {
 
 /** Seed + gợi ý nhãn khi chưa có `_registry` hoặc khi thêm catalog lạ. */
 export const DEFAULT_MASTER_CATALOGS: readonly MasterCatalogDefinition[] = [
-  { id: 'regions', label: 'Vùng / tỉnh', order: 10 },
-  { id: 'hanoi_areas', label: 'Khu vực Hà Nội (quận / huyện)', order: 20 },
-  { id: 'high_schools', label: 'Trường THPT', order: 30 },
-  { id: 'majors', label: 'Ngành đào tạo', order: 40 },
-  { id: 'school_types', label: 'Loại hình trường', order: 50 },
-  { id: 'financial_profiles', label: 'Nhóm tài chính', order: 60 },
-  { id: 'academic_performance', label: 'Học lực', order: 70 },
-  { id: 'study_intentions', label: 'Dự định (hình thức đào tạo)', order: 80 },
+  { id: 'regions', label: 'Vùng / tỉnh', order: 10, ruleCategory: 'demographics' },
+  { id: 'hanoi_areas', label: 'Khu vực Hà Nội (quận / huyện)', order: 20, ruleCategory: 'demographics' },
+  { id: 'high_schools', label: 'Trường THPT', order: 30, ruleCategory: 'demographics' },
+  { id: 'majors', label: 'Ngành đào tạo', order: 40, ruleCategory: 'academic' },
+  { id: 'school_types', label: 'Loại hình trường', order: 50, ruleCategory: 'academic' },
+  { id: 'financial_profiles', label: 'Nhóm tài chính', order: 60, ruleCategory: 'psychographics' },
+  { id: 'academic_performance', label: 'Học lực', order: 70, ruleCategory: 'academic' },
+  { id: 'study_intentions', label: 'Dự định (hình thức đào tạo)', order: 80, ruleCategory: 'academic' },
 ] as const
 
 /** Id catalog mặc định (bootstrap / migration). Thực tế UI lấy từ `_registry`. */
