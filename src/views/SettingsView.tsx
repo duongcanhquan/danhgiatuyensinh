@@ -1594,17 +1594,11 @@ function MasterEntriesEditor({
   showHeading?: boolean
 }) {
   const [input, setInput] = useState('')
-  const [addSynonyms, setAddSynonyms] = useState('')
-  const [addMatchMode, setAddMatchMode] = useState<'' | MasterEntryMatchMode>('')
-  const [addMin, setAddMin] = useState('')
-  const [addMax, setAddMax] = useState('')
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
   const [localEntries, setLocalEntries] = useState<MasterDataEntry[]>(entries)
   const [editing, setEditing] = useState<MasterDataEntry | null>(null)
   const pendingServerMatch = useRef<MasterDataEntry[] | null>(null)
-
-  const addAllowedModes = matchModesForCatalogValueKind(catalogDef.valueKind ?? 'text')
 
   function snapshotIncludesWrite(want: MasterDataEntry[], snap: MasterDataEntry[]): boolean {
     return want.every((w) => snap.some((e) => entryPersistFingerprint(e) === entryPersistFingerprint(w)))
@@ -1622,10 +1616,6 @@ function MasterEntriesEditor({
 
   useEffect(() => {
     setEditing(null)
-    setAddSynonyms('')
-    setAddMatchMode('')
-    setAddMin('')
-    setAddMax('')
   }, [catalogId])
 
   const persist = async (next: MasterDataEntry[]): Promise<boolean> => {
@@ -1651,55 +1641,17 @@ function MasterEntriesEditor({
     }
   }
 
-  const buildEntryFromAddForm = (label: string, id: string): MasterDataEntry => {
-    const synonyms = addSynonyms
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const effMode: MasterEntryMatchMode =
-      addMatchMode === '' ? catalogDef.defaultMatchMode ?? 'exact_norm' : addMatchMode
-    const minRaw = addMin.trim().replace(',', '.')
-    const maxRaw = addMax.trim().replace(',', '.')
-    const numMin = minRaw === '' ? undefined : Number(minRaw)
-    const numMax = maxRaw === '' ? undefined : Number(maxRaw)
-    const entry: MasterDataEntry = {
-      id,
-      label,
-      isActive: true,
-      ...(synonyms.length ? { synonyms } : {}),
-    }
-    const catalogDefault = catalogDef.defaultMatchMode ?? 'exact_norm'
-    if (addMatchMode !== '' && addMatchMode !== catalogDefault) {
-      entry.matchMode = addMatchMode
-    }
-    if (effMode === 'gte' || effMode === 'between') {
-      if (numMin !== undefined && Number.isFinite(numMin)) entry.numericMin = numMin
-    }
-    if (effMode === 'lte' || effMode === 'between') {
-      if (numMax !== undefined && Number.isFinite(numMax)) entry.numericMax = numMax
-    }
-    return entry
-  }
+  const buildEntryFromAddForm = (label: string, id: string): MasterDataEntry => ({
+    id,
+    label,
+    isActive: true,
+  })
 
   const addItem = async () => {
     const label = input.trim()
     if (!label || !db || disabled) return
     if (localEntries.some((e) => e.label.toLowerCase() === label.toLowerCase())) {
       setLocalError('Mục này đã có trong danh sách (không phân biệt hoa thường).')
-      return
-    }
-    const effMode: MasterEntryMatchMode =
-      addMatchMode === '' ? catalogDef.defaultMatchMode ?? 'exact_norm' : addMatchMode
-    if (effMode === 'between' && (addMin.trim() === '' || addMax.trim() === '')) {
-      setLocalError('Chế độ «từ … đến …» cần nhập cả giá trị Từ và Đến.')
-      return
-    }
-    if (effMode === 'gte' && addMin.trim() === '') {
-      setLocalError('Chế độ «lớn hơn hoặc bằng» cần nhập ngưỡng Từ.')
-      return
-    }
-    if (effMode === 'lte' && addMax.trim() === '') {
-      setLocalError('Chế độ «bé hơn hoặc bằng» cần nhập ngưỡng Đến.')
       return
     }
     const newEntry = buildEntryFromAddForm(label, crypto.randomUUID())
@@ -1709,10 +1661,6 @@ function MasterEntriesEditor({
     if (ok) {
       pendingServerMatch.current = next
       setInput('')
-      setAddSynonyms('')
-      setAddMatchMode('')
-      setAddMin('')
-      setAddMax('')
     } else {
       pendingServerMatch.current = null
       setLocalEntries(entries)
@@ -1739,23 +1687,18 @@ function MasterEntriesEditor({
       setLocalError('Nhãn không được để trống.')
       return
     }
-    const syn = editing.synonyms?.map((s) => String(s).trim()).filter(Boolean)
-    const cleaned: MasterDataEntry = {
-      ...editing,
-      label,
-      synonyms: syn?.length ? syn : undefined,
-    }
+    const cleaned: MasterDataEntry = { ...editing, label }
     const mode = cleaned.matchMode ?? catalogDef.defaultMatchMode ?? 'exact_norm'
     if (mode === 'between' && (cleaned.numericMin === undefined || cleaned.numericMax === undefined)) {
-      setLocalError('Khoảng «từ … đến …» cần đủ hai biên số.')
+      setLocalError('Khoảng «từ … đến …» cần đủ hai biên số — chỉnh trong Firestore hoặc liên hệ quản trị.')
       return
     }
     if (mode === 'gte' && cleaned.numericMin === undefined) {
-      setLocalError('Cần nhập ngưỡng dưới (numericMin).')
+      setLocalError('Thiếu ngưỡng dưới — chỉnh trong Firestore hoặc liên hệ quản trị.')
       return
     }
     if (mode === 'lte' && cleaned.numericMax === undefined) {
-      setLocalError('Cần nhập ngưỡng trên (numericMax).')
+      setLocalError('Thiếu ngưỡng trên — chỉnh trong Firestore hoặc liên hệ quản trị.')
       return
     }
     const next = localEntries.map((x) => (x.id === cleaned.id ? cleaned : x))
@@ -1816,61 +1759,6 @@ function MasterEntriesEditor({
           Thêm
         </button>
       </div>
-      {!disabled ? (
-        <div
-          className={`mt-3 shrink-0 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 text-slate-700 ${settingsCopy}`}
-        >
-          <p className={settingsHeading}>Khớp cho từng mục mới (tùy chọn)</p>
-          <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
-            Tên khác (tách bằng dấu phẩy)
-            <input
-              value={addSynonyms}
-              onChange={(e) => setAddSynonyms(e.target.value)}
-              disabled={!db || busy}
-              placeholder="VD: Dien Bien, DB"
-              className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-            />
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <label className={`min-w-0 flex-1 font-medium text-slate-700 ${settingsCopy}`}>
-              Ghi đè chế độ khớp (để trống = theo danh mục)
-              <select
-                value={addMatchMode}
-                onChange={(e) => setAddMatchMode((e.target.value || '') as '' | MasterEntryMatchMode)}
-                disabled={!db || busy}
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              >
-                <option value="">Theo danh mục ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
-                {addAllowedModes.map((m) => (
-                  <option key={m} value={m}>
-                    {MATCH_MODE_LABELS[m]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={`w-full shrink-0 font-medium text-slate-700 sm:w-28 ${settingsCopy}`}>
-              Từ (số)
-              <input
-                value={addMin}
-                onChange={(e) => setAddMin(e.target.value)}
-                disabled={!db || busy}
-                inputMode="decimal"
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              />
-            </label>
-            <label className={`w-full shrink-0 font-medium text-slate-700 sm:w-28 ${settingsCopy}`}>
-              Đến (số)
-              <input
-                value={addMax}
-                onChange={(e) => setAddMax(e.target.value)}
-                disabled={!db || busy}
-                inputMode="decimal"
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              />
-            </label>
-          </div>
-        </div>
-      ) : null}
       {localError ? (
         <p className={`mt-2 text-rose-700 ${settingsCopy}`} role="alert">
           {localError}
@@ -1881,87 +1769,13 @@ function MasterEntriesEditor({
           className={`mt-3 shrink-0 rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-slate-800 ${settingsCopy}`}
         >
           <p className={`font-semibold text-amber-950 ${settingsCopy}`}>Sửa mục: {editing.label}</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div className="mt-2">
             <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
               Nhãn
               <input
                 value={editing.label}
                 onChange={(e) => setEditing({ ...editing, label: e.target.value })}
                 className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              />
-            </label>
-            <label className={`block font-medium text-slate-700 sm:col-span-2 ${settingsCopy}`}>
-              Tên khác (phẩy)
-              <input
-                value={(editing.synonyms ?? []).join(', ')}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    synonyms: e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  })
-                }
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              />
-            </label>
-            <label className={`block font-medium text-slate-700 sm:col-span-2 ${settingsCopy}`}>
-              Chế độ khớp
-              <select
-                value={editing.matchMode ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value as MasterEntryMatchMode | ''
-                  const next: MasterDataEntry = {
-                    ...editing,
-                    matchMode: v === '' ? undefined : v,
-                  }
-                  if (v !== 'gte' && v !== 'between') delete next.numericMin
-                  if (v !== 'lte' && v !== 'between') delete next.numericMax
-                  setEditing(next)
-                }}
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              >
-                <option value="">Theo danh mục ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
-                {addAllowedModes.map((m) => (
-                  <option key={m} value={m}>
-                    {MATCH_MODE_LABELS[m]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
-              Từ (số)
-              <input
-                value={editing.numericMin ?? ''}
-                onChange={(e) => {
-                  const t = e.target.value.trim()
-                  if (t === '') {
-                    setEditing({ ...editing, numericMin: undefined })
-                    return
-                  }
-                  const n = Number(t.replace(',', '.'))
-                  setEditing({ ...editing, numericMin: Number.isFinite(n) ? n : editing.numericMin })
-                }}
-                inputMode="decimal"
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-              />
-            </label>
-            <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
-              Đến (số)
-              <input
-                value={editing.numericMax ?? ''}
-                onChange={(e) => {
-                  const t = e.target.value.trim()
-                  if (t === '') {
-                    setEditing({ ...editing, numericMax: undefined })
-                    return
-                  }
-                  const n = Number(t.replace(',', '.'))
-                  setEditing({ ...editing, numericMax: Number.isFinite(n) ? n : editing.numericMax })
-                }}
-                inputMode="decimal"
-                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
               />
             </label>
           </div>
