@@ -582,7 +582,7 @@ function ProfileEditorPanel({
 export function ProfileManagerTab({ db }: { db: Firestore }) {
   const { can } = useAuth()
   const { profiles, loading, error } = useScoringProfiles()
-  const { ruleLibraryTemplates } = useScoringRuleTemplates()
+  const { ruleLibraryTemplates, loading: templatesLoading, error: templatesError } = useScoringRuleTemplates()
   const canEdit = can('config:scoring_rules')
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -653,6 +653,18 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
       >
         <h2 className="sr-only">Bộ chấm điểm — profiles</h2>
 
+        {templatesError ? (
+          <p className="mt-2 shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-900">
+            <strong>Mẫu Firestore (thư viện kéo):</strong> {templatesError} — kiểm tra Rules collection{' '}
+            <code className="rounded bg-rose-100 px-1">scoringRuleTemplates</code> và tab «Quy tắc mẫu».
+          </p>
+        ) : null}
+        {!templatesLoading && !templatesError && ruleLibraryTemplates.length === 0 ? (
+          <p className="mt-2 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
+            Chưa có mẫu tùy chỉnh trong Firestore. Thêm mẫu tại Cài đặt → tab <strong>Quy tắc mẫu</strong> — sau khi lưu, mẫu
+            sẽ xuất hiện <em>đầu</em> mỗi nhóm trong cột «Thư viện quy tắc» bên trái.
+          </p>
+        ) : null}
         {!canEdit ? (
           <p className="mt-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             Bạn không có quyền <code className="rounded bg-amber-100 px-1 text-amber-900">config:scoring_rules</code> — chỉ xem được danh sách.

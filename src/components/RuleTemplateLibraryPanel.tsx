@@ -178,8 +178,30 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
   const isSaved = session && docs.some((d) => d.id === session.id)
 
   return (
-    <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
-      <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+    <div className="space-y-4">
+      <div
+        className="rounded-xl border border-sky-200/90 bg-sky-50/80 px-3 py-2.5 text-xs leading-relaxed text-slate-800 shadow-sm"
+        role="note"
+      >
+        <p className="font-semibold text-sky-950">Ba phần khác nhau — dễ nhầm</p>
+        <ul className="mt-1.5 list-disc space-y-1 pl-4 marker:text-sky-700">
+          <li>
+            <strong>Danh mục</strong> (tab khác): danh sách giá trị chuẩn (tỉnh, nguồn, v.v.) để điền hồ sơ và để điều kiện{' '}
+            <code className="rounded bg-white/90 px-1 font-mono text-[0.85em]">IN_LIST</code> so khớp —{' '}
+            <em>không</em> phải chỗ kéo khối quy tắc.
+          </li>
+          <li>
+            <strong>Quy tắc mẫu</strong> (tab này): tạo / sửa <em>mẫu khối</em> lưu Firestore; sau khi lưu, mẫu xuất hiện ở tab{' '}
+            <strong>Chấm điểm</strong> → cột <strong>Thư viện quy tắc</strong> (đứng <em>trước</em> mẫu có sẵn trong từng nhóm).
+          </li>
+          <li>
+            <strong>Profile chấm điểm</strong>: kéo mẫu sang canvas bên phải, chỉnh điểm rồi <strong>Lưu profile</strong> — mỗi profile là một bản cấu hình riêng; sửa mẫu Firestore không tự đổi profile đã lưu trước đó.
+          </li>
+        </ul>
+      </div>
+
+      <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
+        <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Mẫu đã lưu</p>
           {canEdit ? (
@@ -225,9 +247,9 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
             Chưa có mẫu — thêm mẫu để xuất hiện trong thư viện kéo-thả profile.
           </p>
         ) : null}
-      </div>
+        </div>
 
-      <div className="min-h-0 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+        <div className="min-h-0 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm">
         {!session ? (
           <p className="text-sm text-slate-600">Chọn một mẫu bên trái hoặc bấm «Thêm mẫu».</p>
         ) : (
@@ -452,6 +474,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   )
