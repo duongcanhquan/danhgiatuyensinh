@@ -99,6 +99,8 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
     const academicPerformance =
       String(data.academicPerformance ?? '').trim() || String(data.academicLevel ?? '').trim()
     const studyIntention = String(data.studyIntention ?? '').trim()
+    const financialStatus = String(data.financialStatus ?? '').trim() || undefined
+    const hanoiArea = String(data.hanoiArea ?? '').trim() || undefined
     const schoolType = String(data.schoolType ?? '').trim()
     const educationLevelRaw = String(data.educationLevel ?? '').trim()
     const educationLevel =
@@ -168,6 +170,8 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       majorInterest: majorInterest || undefined,
       academicPerformance: academicPerformance || undefined,
       studyIntention: studyIntention || undefined,
+      financialStatus,
+      hanoiArea,
       schoolType: schoolType || undefined,
       assignedTo,
       assignedCounselorId: legacyAssigned ?? undefined,

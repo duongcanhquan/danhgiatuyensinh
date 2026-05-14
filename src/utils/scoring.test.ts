@@ -482,6 +482,77 @@ describe('evaluateLead', () => {
     const r = evaluateLead(lead, profile, buckets)
     expect(r.calculatedScore).toBe(2)
   })
+
+  it('IN_LIST uses financial_profiles when targetField is financialStatus', () => {
+    const profile = {
+      rules: [] as ScoringRule[],
+      ruleBlocks: [
+        {
+          id: 'b',
+          category: 'demographics' as const,
+          label: 'fin',
+          targetField: 'financialStatus',
+          maxWeight: 10,
+          rows: [
+            {
+              id: 'r',
+              condition: 'IN_LIST' as const,
+              value: ['Khá'],
+              allocationKind: 'absolute' as const,
+              allocationValue: 10,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const buckets = {
+      regionLabels: [],
+      highSchoolLabels: [],
+      majorLabels: [],
+      academicPerformanceLabels: [],
+      catalogs: [{ id: 'financial_profiles', label: 'TC', order: 60, valueKind: 'text' as const }],
+      entriesByCatalogId: {
+        financial_profiles: [{ id: '1', label: 'Khá', isActive: true }],
+      },
+    }
+    expect(evaluateLead({ financialStatus: 'Khá' }, profile, buckets).calculatedScore).toBe(10)
+  })
+
+  it('IN_LIST resolves catalog when targetField equals custom masterData catalog id', () => {
+    const profile = {
+      rules: [] as ScoringRule[],
+      ruleBlocks: [
+        {
+          id: 'b',
+          category: 'demographics' as const,
+          label: 'c',
+          targetField: 'custom_volunteer_tier',
+          maxWeight: 5,
+          rows: [
+            {
+              id: 'r',
+              condition: 'IN_LIST' as const,
+              value: ['A'],
+              allocationKind: 'absolute' as const,
+              allocationValue: 5,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const buckets = {
+      regionLabels: [],
+      highSchoolLabels: [],
+      majorLabels: [],
+      catalogs: [{ id: 'custom_volunteer_tier', label: 'Tầng', order: 900 }],
+      entriesByCatalogId: {
+        custom_volunteer_tier: [{ id: 'x', label: 'A', isActive: true }],
+      },
+    }
+    expect(evaluateLead({ custom_volunteer_tier: 'A' }, profile, buckets).calculatedScore).toBe(5)
+  })
 })
 
 describe('sumBlockMaxWeights', () => {

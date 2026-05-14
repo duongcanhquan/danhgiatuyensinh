@@ -242,6 +242,10 @@ export interface Lead {
   schoolType?: string
   /** Dự định hình thức đào tạo (Đại học / Cao đẳng / …) */
   studyIntention?: string
+  /** Nhóm tài chính / khả năng (đồng bộ danh mục `financial_profiles` + chấm điểm IN_LIST) */
+  financialStatus?: string
+  /** Quận / huyện Hà Nội khi có (danh mục `hanoi_areas`) */
+  hanoiArea?: string
   /** Người phụ trách — Firebase Auth UID (RBAC biên Counselor) */
   assignedTo: UserId | null
   /** Tình trạng — Kanban tư vấn (Firestore `status`) */

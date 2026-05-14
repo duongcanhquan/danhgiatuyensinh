@@ -527,7 +527,7 @@ export function SettingsView() {
           <div
             className={
               masterWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pt-4 md:gap-5 md:pt-5'
+                ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden overscroll-contain pt-4 md:gap-5 md:pt-5'
                 : 'mt-4 space-y-4 md:mt-5 md:space-y-5'
             }
           >
@@ -592,9 +592,9 @@ export function SettingsView() {
                   ) : null}
                 </aside>
 
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-white/90 p-3 shadow-sm md:p-5">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white/90 p-3 shadow-sm md:p-5">
                   {activeMasterCatalog && db ? (
-                    <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
                         <div className="min-w-0">
                           <h3 className={settingsHeading}>
@@ -1557,7 +1557,7 @@ function MasterEntriesEditor({
           {readonlyHint}
         </p>
       ) : null}
-      <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:gap-3">
         <input
           value={input}
           onChange={(e) => {
@@ -1581,7 +1581,9 @@ function MasterEntriesEditor({
         </button>
       </div>
       {!disabled ? (
-        <div className={`mt-3 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 text-slate-700 ${settingsCopy}`}>
+        <div
+          className={`mt-3 shrink-0 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 text-slate-700 ${settingsCopy}`}
+        >
           <p className={settingsHeading}>Tùy chọn khi thêm mục</p>
           <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
             Tên khác (synonyms), cách nhau bởi dấu phẩy
@@ -1639,7 +1641,9 @@ function MasterEntriesEditor({
         </p>
       ) : null}
       {editing ? (
-        <div className={`mt-3 rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-slate-800 ${settingsCopy}`}>
+        <div
+          className={`mt-3 shrink-0 rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-slate-800 ${settingsCopy}`}
+        >
           <p className={`font-semibold text-amber-950 ${settingsCopy}`}>Sửa mục: {editing.label}</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
@@ -1748,10 +1752,17 @@ function MasterEntriesEditor({
       <div
         className={
           showHeading
-            ? 'mt-3 flex max-h-[min(52vh,28rem)] flex-wrap gap-2 overflow-y-auto overscroll-contain'
-            : 'mt-3 flex min-h-0 flex-1 flex-wrap content-start gap-2 overflow-y-auto overscroll-contain'
+            ? 'mt-3 max-h-[min(52vh,28rem)] min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y'
+            : 'mt-3 flex min-h-0 flex-1 flex-col overflow-hidden'
         }
       >
+        <div
+          className={
+            showHeading
+              ? 'flex flex-col gap-2 pr-0.5'
+              : 'min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y pr-0.5'
+          }
+        >
         {localEntries.map((x) => {
           const hint = entryHintBadge(x, catalogDef)
           return (
@@ -1791,6 +1802,7 @@ function MasterEntriesEditor({
         {!localEntries.length ? (
           <span className={settingsCopyMuted}>Chưa có mục.</span>
         ) : null}
+        </div>
       </div>
     </div>
   )

@@ -137,16 +137,29 @@ export function catalogIdForScoringTargetField(targetField: string): string | nu
       return 'school_types'
     case 'studyIntention':
       return 'study_intentions'
+    case 'financialStatus':
+      return 'financial_profiles'
+    case 'hanoiArea':
+      return 'hanoi_areas'
     default:
       return null
   }
+}
+
+/** Catalog dùng cho IN_LIST: ánh xạ cố định + catalog có id trùng `targetField` (danh mục tùy thêm). */
+function resolveCatalogIdForInList(targetField: string, buckets?: MasterDataBuckets): string | null {
+  const mapped = catalogIdForScoringTargetField(targetField)
+  if (mapped) return mapped
+  const raw = targetField.trim()
+  if (raw && buckets?.entriesByCatalogId?.[raw]?.length) return raw
+  return null
 }
 
 function resolveInListEntries(
   targetField: string,
   buckets?: MasterDataBuckets,
 ): { entries: MasterDataEntry[]; catalog?: MasterCatalogDefinition } | null {
-  const catalogId = catalogIdForScoringTargetField(targetField)
+  const catalogId = resolveCatalogIdForInList(targetField, buckets)
   if (catalogId && buckets?.entriesByCatalogId?.[catalogId]?.length) {
     const entries = buckets.entriesByCatalogId[catalogId]!
     const catalog = buckets.catalogs?.find((c) => c.id === catalogId)
@@ -433,6 +446,8 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     calculatedScore: lead.calculatedScore,
     priorityTag: lead.priorityTag,
     studyIntention: lead.studyIntention?.trim() ?? '',
+    financialStatus: lead.financialStatus?.trim() ?? '',
+    hanoiArea: lead.hanoiArea?.trim() ?? '',
     schoolType: lead.schoolType?.trim() ?? '',
     // Legacy field names still referenced by older scoring rules in Firestore
     region: lead.province,
