@@ -22,6 +22,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLeads } from '../hooks/useLeads'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
+import { isAdminLikeRole } from '../auth/roleUtils'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 /** Nhãn ưu tiên — đồng bộ amber / brass theme (sidebar + OS) */
@@ -76,7 +77,7 @@ function formatMonth(d: Date): string {
 
 export function DashboardView() {
   const { profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
+  const isAdmin = isAdminLikeRole(profile?.role)
   const { leads, loading, error, totalLeadCount, totalLeadCountError, totalPages, currentPage } = useLeads()
   const adminAgg = useAdminDashboardAggregates(isAdmin)
   const {

@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore'
 import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
+import { isAdminLikeRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { useMasterData } from './useMasterData'
@@ -94,9 +95,17 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         : String(assignedToRaw)
 
     const province = String(data.province ?? data.region ?? '')
-    const educationLevel = String(
-      data.educationLevel ?? data.majorInterest ?? data.studyIntention ?? data.academicLevel ?? '',
-    )
+    const majorInterest = String(data.majorInterest ?? data.major ?? '').trim()
+    const academicPerformance =
+      String(data.academicPerformance ?? '').trim() || String(data.academicLevel ?? '').trim()
+    const studyIntention = String(data.studyIntention ?? '').trim()
+    const schoolType = String(data.schoolType ?? '').trim()
+    const educationLevelRaw = String(data.educationLevel ?? '').trim()
+    const educationLevel =
+      educationLevelRaw ||
+      (!majorInterest && !studyIntention && !academicPerformance
+        ? String(data.majorInterest ?? data.studyIntention ?? '').trim()
+        : '')
     const highSchool = String(data.highSchool ?? data.highSchoolName ?? data.schoolName ?? '')
     const customerId = String(data.customerId ?? '')
     const fullName = String(data.fullName ?? '')
@@ -156,6 +165,10 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       parentPhone,
       source,
       educationLevel,
+      majorInterest: majorInterest || undefined,
+      academicPerformance: academicPerformance || undefined,
+      studyIntention: studyIntention || undefined,
+      schoolType: schoolType || undefined,
       assignedTo,
       assignedCounselorId: legacyAssigned ?? undefined,
       status,
@@ -247,7 +260,7 @@ export type UseLeadsOptions = {
 }
 
 function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryFilterConstraint | null {
-  if (profile.role === 'admin') return null
+  if (isAdminLikeRole(profile.role)) return null
 
   if (profile.role === 'counselor') {
     return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
@@ -300,7 +313,7 @@ function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMy
     if (p.length === 1) c.push(where('province', '==', p[0]))
     else if (p.length > 1) c.push(where('province', 'in', p))
   }
-  if (f.assignedCounselorIn?.length && profile.role === 'admin') {
+  if (f.assignedCounselorIn?.length && isAdminLikeRole(profile.role)) {
     const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
     if (ids.length === 1) {
       c.push(or(where('assignedTo', '==', ids[0]), where('assignedCounselorId', '==', ids[0])))

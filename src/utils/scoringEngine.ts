@@ -1,5 +1,7 @@
 import type {
   Lead,
+  MasterCatalogDefinition,
+  MasterDataEntry,
   PriorityTag,
   ScoringProfile,
   ScoringProfileThresholds,
@@ -10,6 +12,7 @@ import type {
   RuleCategory,
 } from '../types'
 import { inferSignalRuleCategory, scoringSignalsToEvaluationFlat } from './leadScoringSignals'
+import { entryMatchesMasterValue, findMasterEntryForListItem } from './masterDataMatch'
 
 /** Ngưỡng mặc định khi profile không cấu hình hoặc giá trị không hợp lệ. */
 export const FIXED_TAG_THRESHOLDS = {
@@ -53,6 +56,15 @@ export type MasterDataBuckets = {
   regionLabels: string[]
   highSchoolLabels: string[]
   majorLabels: string[]
+  /** Tùy chọn — mở rộng IN_LIST theo `synonyms` + chế độ khớp trên từng mục master */
+  regionEntries?: MasterDataEntry[]
+  majorEntries?: MasterDataEntry[]
+  /** Nhãn học lực trong master (vd. Giỏi, Khá) */
+  academicPerformanceLabels?: string[]
+  /** Meta catalog (valueKind, defaultMatchMode) — đồng bộ với `_registry`. */
+  catalogs?: MasterCatalogDefinition[]
+  /** Toàn bộ mục theo id catalog — dùng cho IN_LIST theo `targetField`. */
+  entriesByCatalogId?: Record<string, MasterDataEntry[]>
 }
 
 /**
@@ -67,6 +79,132 @@ function norm(s: string): string {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .replace(/\s+/g, ' ')
+}
+
+/** Chuẩn hoá loại trường để rule EQUALS / IN_LIST dùng mã ổn định (bỏ dấu, không phân biệt hoa thường). */
+export function normalizeSchoolTypeKey(raw: string): string {
+  const n = norm(raw)
+  if (!n) return 'UNKNOWN'
+  if (n.includes('lien ket') || n.includes('hop tac') || n.includes('ket hop')) return 'LIEN_KET'
+  if (n.includes('quoc te') || n.includes('international')) return 'INTERNATIONAL'
+  if (n.includes('tu thuc') || n.includes('dan lap') || n.includes('private')) return 'PRIVATE'
+  if (n.includes('cong lap') || n.includes('nha nuoc') || n === 'public') return 'PUBLIC'
+  const upper = raw.trim().toUpperCase()
+  if (['PUBLIC', 'PRIVATE', 'INTERNATIONAL', 'UNKNOWN', 'LIEN_KET'].includes(upper)) return upper
+  return 'UNKNOWN'
+}
+
+/**
+ * So khớp ngành quan tâm với danh mục ngành đào tạo (đã chuẩn hoá).
+ * `outside_or_unknown`: chưa nhập, từ khóa «chưa biết / ngoài ngành», hoặc không khớp bất kỳ ngành nào.
+ */
+export function computeMajorTrainingAlignment(majorInterest: string, majorLabels: string[]): string {
+  const m = norm(majorInterest)
+  if (!m) return 'empty'
+  const undecided = [
+    'chua biet',
+    'chua xac dinh',
+    'chua ro',
+    'ngoai nganh',
+    'ngoai nganh dao tao',
+    'khong xac dinh',
+    'chua chon nganh',
+    'chua chon',
+    'tu van',
+    'xx',
+  ]
+  if (undecided.some((u) => m === u || m.includes(u))) return 'outside_or_unknown'
+  const norms = majorLabels.map((x) => norm(String(x))).filter(Boolean)
+  for (const ml of norms) {
+    if (m === ml || m.includes(ml) || ml.includes(m)) return 'aligned'
+  }
+  return 'outside_or_unknown'
+}
+
+/** Ánh xạ trường lead (rule.targetField) → id document catalog trong `masterData`. */
+export function catalogIdForScoringTargetField(targetField: string): string | null {
+  switch (targetField) {
+    case 'province':
+    case 'region':
+      return 'regions'
+    case 'majorInterest':
+      return 'majors'
+    case 'academicLevel':
+      return 'academic_performance'
+    case 'highSchool':
+      return 'high_schools'
+    case 'schoolType':
+      return 'school_types'
+    case 'studyIntention':
+      return 'study_intentions'
+    default:
+      return null
+  }
+}
+
+function resolveInListEntries(
+  targetField: string,
+  buckets?: MasterDataBuckets,
+): { entries: MasterDataEntry[]; catalog?: MasterCatalogDefinition } | null {
+  const catalogId = catalogIdForScoringTargetField(targetField)
+  if (catalogId && buckets?.entriesByCatalogId?.[catalogId]?.length) {
+    const entries = buckets.entriesByCatalogId[catalogId]!
+    const catalog = buckets.catalogs?.find((c) => c.id === catalogId)
+    return { entries, catalog }
+  }
+  if (targetField === 'province' || targetField === 'region') {
+    const e = buckets?.regionEntries
+    if (!e?.length) return null
+    const catalog = buckets?.catalogs?.find((c) => c.id === 'regions')
+    return { entries: e, catalog }
+  }
+  if (targetField === 'majorInterest') {
+    const e = buckets?.majorEntries
+    if (!e?.length) return null
+    const catalog = buckets?.catalogs?.find((c) => c.id === 'majors')
+    return { entries: e, catalog }
+  }
+  return null
+}
+
+function inListMatchesField(
+  rawField: string,
+  fieldVal: string,
+  list: unknown[],
+  targetField: string,
+  buckets?: MasterDataBuckets,
+): boolean {
+  const items = (Array.isArray(list) ? list : [String(list)]).map((x) => String(x))
+  const baseSet = new Set(items.map((x) => norm(x)))
+  if (baseSet.has(fieldVal)) return true
+
+  const resolved = resolveInListEntries(targetField, buckets)
+  if (!resolved?.entries.length) return false
+  const { entries, catalog } = resolved
+
+  for (const item of items) {
+    const want = norm(String(item))
+    const entry = findMasterEntryForListItem(entries, want)
+    if (!entry) continue
+    if (entryMatchesMasterValue(rawField, fieldVal, entry, catalog)) return true
+  }
+  return false
+}
+
+function augmentLeadDataForScoring(
+  leadData: Record<string, unknown>,
+  buckets?: MasterDataBuckets,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...leadData }
+  const schoolRaw = String(leadData.schoolType ?? '').trim()
+  out.schoolTypeKey = schoolRaw ? normalizeSchoolTypeKey(schoolRaw) : 'UNKNOWN'
+  if (buckets?.majorLabels?.length) {
+    out.majorTrainingAlignment = computeMajorTrainingAlignment(
+      String(leadData.majorInterest ?? ''),
+      buckets.majorLabels,
+    )
+  }
+  return out
 }
 
 function getFieldValue(leadData: Record<string, unknown>, targetField: string): string {
@@ -93,7 +231,11 @@ function phoneDigitsMatch(leadData: Record<string, unknown>, rule: ScoringRule, 
   return wantTen ? ok : !ok
 }
 
-function ruleMatches(leadData: Record<string, unknown>, rule: ScoringRule): boolean {
+function ruleMatches(
+  leadData: Record<string, unknown>,
+  rule: ScoringRule,
+  buckets?: MasterDataBuckets,
+): boolean {
   const condition = rule.condition
   if (condition === 'PHONE_VN_10_DIGITS') {
     return phoneDigitsMatch(leadData, rule, true)
@@ -123,6 +265,12 @@ function ruleMatches(leadData: Record<string, unknown>, rule: ScoringRule): bool
   }
   if (condition === 'IN_LIST') {
     const list = Array.isArray(rule.value) ? rule.value : [String(rule.value)]
+    const rawField = getFieldValue(leadData, rule.targetField)
+    const fieldVal = norm(rawField)
+    const resolved = resolveInListEntries(rule.targetField, buckets)
+    if (resolved?.entries.length) {
+      return inListMatchesField(rawField, fieldVal, list, rule.targetField, buckets)
+    }
     const set = new Set(list.map((x) => norm(String(x))))
     return set.has(fieldVal)
   }
@@ -157,21 +305,29 @@ function allocationToPoints(
 /**
  * Một khối: **cộng dồn** mọi dòng điều kiện khớp (điểm có thể âm). Không còn trần theo maxWeight.
  */
-export function scoreOneBlock(leadData: Record<string, unknown>, block: ScoringRuleBlock): number {
+export function scoreOneBlock(
+  leadData: Record<string, unknown>,
+  block: ScoringRuleBlock,
+  buckets?: MasterDataBuckets,
+): number {
   if (!block.rows?.length) return 0
   const cap = Math.max(0, Number(block.maxWeight) || 0)
   let total = 0
   for (const row of block.rows) {
-    if (!ruleMatches(leadData, rowAsSyntheticRule(block, row))) continue
+    if (!ruleMatches(leadData, rowAsSyntheticRule(block, row), buckets)) continue
     total += allocationToPoints(row, cap, row.allocationKind)
   }
   return total
 }
 
-export function sumBlockPoints(leadData: Record<string, unknown>, blocks: ScoringRuleBlock[]): number {
+export function sumBlockPoints(
+  leadData: Record<string, unknown>,
+  blocks: ScoringRuleBlock[],
+  buckets?: MasterDataBuckets,
+): number {
   let total = 0
   for (const b of blocks) {
-    total += scoreOneBlock(leadData, b)
+    total += scoreOneBlock(leadData, b, buckets)
   }
   return total
 }
@@ -195,9 +351,17 @@ export function inferRuleCategory(targetField: string): RuleCategory {
   if (f === 'aiSentimentScore') return 'ai_insights'
   if (['leadSource', 'source', 'parentPhone'].includes(f)) return 'source_engagement'
   if (
-    ['academicLevel', 'schoolType', 'highSchoolName', 'highSchoolId', 'highSchool', 'educationLevel', 'gradeClass'].includes(
-      f,
-    )
+    [
+      'academicLevel',
+      'schoolType',
+      'schoolTypeKey',
+      'majorTrainingAlignment',
+      'highSchoolName',
+      'highSchoolId',
+      'highSchool',
+      'educationLevel',
+      'gradeClass',
+    ].includes(f)
   )
     return 'academic'
   return 'demographics'
@@ -223,10 +387,14 @@ export function legacyRulesToBlocks(rules: ScoringRule[]): ScoringRuleBlock[] {
 }
 
 /** Quy tắc phẳng: mọi rule khớp đều cộng điểm (có thể âm). */
-export function sumRulePoints(leadData: Record<string, unknown>, rules: ScoringRule[]): number {
+export function sumRulePoints(
+  leadData: Record<string, unknown>,
+  rules: ScoringRule[],
+  buckets?: MasterDataBuckets,
+): number {
   let total = 0
   for (const rule of rules) {
-    if (ruleMatches(leadData, rule)) total += Number(rule.points) || 0
+    if (ruleMatches(leadData, rule, buckets)) total += Number(rule.points) || 0
   }
   return total
 }
@@ -244,6 +412,8 @@ export function scoreToPriorityTag(
 }
 
 export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
+  const majorInterest = (lead.majorInterest?.trim() || lead.educationLevel || '').trim()
+  const academicLevel = (lead.academicPerformance?.trim() || lead.educationLevel || '').trim()
   return {
     customerId: lead.customerId,
     fullName: lead.fullName,
@@ -262,10 +432,12 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     uniqueHash: lead.uniqueHash,
     calculatedScore: lead.calculatedScore,
     priorityTag: lead.priorityTag,
+    studyIntention: lead.studyIntention?.trim() ?? '',
+    schoolType: lead.schoolType?.trim() ?? '',
     // Legacy field names still referenced by older scoring rules in Firestore
     region: lead.province,
-    majorInterest: lead.educationLevel,
-    academicLevel: lead.educationLevel,
+    majorInterest,
+    academicLevel,
     highSchoolName: lead.highSchool,
     leadSource: lead.source,
     assignedCounselorId: lead.assignedTo ?? lead.assignedCounselorId,
@@ -277,12 +449,13 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
 function profileRawScore(
   leadData: Record<string, unknown>,
   profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks'>,
+  buckets?: MasterDataBuckets,
 ): number {
   const blocks = profile.ruleBlocks
   if (blocks && blocks.length > 0) {
-    return sumBlockPoints(leadData, blocks)
+    return sumBlockPoints(leadData, blocks, buckets)
   }
-  return sumRulePoints(leadData, profile.rules ?? [])
+  return sumRulePoints(leadData, profile.rules ?? [], buckets)
 }
 
 /**
@@ -292,11 +465,11 @@ function profileRawScore(
 export function evaluateLead(
   leadData: Record<string, unknown>,
   profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'>,
-  _masterData?: MasterDataBuckets,
+  masterBuckets?: MasterDataBuckets,
 ): { calculatedScore: number; priorityTag: PriorityTag } {
-  void _masterData
   try {
-    const raw = profileRawScore(leadData, profile)
+    const merged = augmentLeadDataForScoring(leadData, masterBuckets)
+    const raw = profileRawScore(merged, profile, masterBuckets)
     const calculatedScore = Number.isFinite(raw) ? raw : 0
     const priorityTag = scoreToPriorityTag(calculatedScore, profile.thresholds)
     return { calculatedScore, priorityTag }

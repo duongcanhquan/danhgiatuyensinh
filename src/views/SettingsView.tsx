@@ -1,9 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { FirebaseError } from 'firebase/app'
 import {
-  addDoc,
-  collection,
-  deleteDoc,
   doc,
   getDoc,
   setDoc,
@@ -12,7 +9,14 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useSearchParams } from 'react-router-dom'
-import type { ConsultingPlaybook, MasterCatalogDefinition, MasterDataEntry, PlaybookTriggerCondition } from '../types'
+import type {
+  ConsultingPlaybook,
+  MasterCatalogDefinition,
+  MasterCatalogValueKind,
+  MasterDataEntry,
+  MasterEntryMatchMode,
+  PlaybookTriggerCondition,
+} from '../types'
 import { DEFAULT_MASTER_CATALOGS, FS_COLLECTIONS, MASTER_DATA_REGISTRY_DOC_ID } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useScoringProfiles } from '../hooks/useScoringProfiles'
@@ -26,30 +30,17 @@ import {
   normalizeCatalogSlug,
   parseCatalogsFromRegistryData,
 } from '../utils/masterDataRegistry'
-import { importVietMyPlaybooksFromPublic } from '../utils/clientFirestoreSeedImport'
-import { ChevronDown, ChevronUp, GripVertical, Maximize2, X } from 'lucide-react'
+import { Maximize2, X } from 'lucide-react'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
+import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { AiLabView } from '../views/AiLabView'
 import { StaffManagementView } from '../views/StaffManagementView'
 
 type SettingsTabId = 'master' | 'scoring' | 'consulting' | 'knowledge' | 'llm' | 'ai_lab' | 'staff'
-
-async function persistMasterRegistryCatalogs(
-  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
-  nextCatalogs: MasterCatalogDefinition[],
-): Promise<void> {
-  const regRef = doc(db, FS_COLLECTIONS.masterData, MASTER_DATA_REGISTRY_DOC_ID)
-  await setDoc(regRef, { catalogs: nextCatalogs, updatedAt: Timestamp.now() }, { merge: true })
-}
-
-/** Gán lại order 10,20,… theo thứ tự mảng (để UI ổn định). */
-function withSequentialOrders(list: MasterCatalogDefinition[]): MasterCatalogDefinition[] {
-  return list.map((c, idx) => ({ ...c, order: (idx + 1) * 10 }))
-}
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -80,6 +71,11 @@ function SettingsTabHint({ children }: { children: ReactNode }) {
   )
 }
 
+/** Đồng bộ cỡ/khoảng dòng với nội dung trong `SettingsTabHint` (vd. đoạn Tư vấn / Playbook). */
+const settingsCopy = 'text-sm leading-relaxed text-slate-800 md:text-[15px]'
+const settingsCopyMuted = 'text-sm leading-relaxed text-slate-600 md:text-[15px]'
+const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight text-slate-900 md:text-[15px]'
+
 function parseSettingsTab(raw: string | null): SettingsTabId | null {
   if (
     raw === 'master' ||
@@ -104,15 +100,15 @@ export function SettingsView() {
   const { playbooks, loading: pbLoading, error: pbError } = useConsultingPlaybooks()
 
   const [demoJson, setDemoJson] = useState(
-    '{"region":"Hà Nội","majorInterest":"Công nghệ thông tin","academicLevel":"Khá"}',
+    '{"province":"Điện Biên","majorInterest":"Công nghệ thông tin","academicLevel":"Giỏi","schoolType":"Liên kết / hợp tác"}',
   )
   const [demoResult, setDemoResult] = useState<string | null>(null)
 
   const [masterWorkspaceOpen, setMasterWorkspaceOpen] = useState(false)
+  const [selectedMasterCatalogId, setSelectedMasterCatalogId] = useState<string | null>(null)
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
   const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
-  const [playbookSeedBusy, setPlaybookSeedBusy] = useState(false)
 
   const settingsWorkspaceOpen = masterWorkspaceOpen || consultingWorkspaceOpen || llmWorkspaceOpen
 
@@ -140,8 +136,13 @@ export function SettingsView() {
       regionLabels: (byKind.regions ?? []).map((e) => e.label),
       highSchoolLabels: (byKind.high_schools ?? []).map((e) => e.label),
       majorLabels: (byKind.majors ?? []).map((e) => e.label),
+      academicPerformanceLabels: (byKind.academic_performance ?? []).map((e) => e.label),
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
     }),
-    [byKind],
+    [byKind, catalogs],
   )
 
   const runDemo = () => {
@@ -167,6 +168,15 @@ export function SettingsView() {
   const canAiEngine = can('config:ai_engine')
   const canAiLab = can('ai:use')
   const canStaff = can('config:users')
+
+  const activeMasterCatalog = useMemo(() => {
+    const validId =
+      selectedMasterCatalogId && catalogs.some((c) => c.id === selectedMasterCatalogId)
+        ? selectedMasterCatalogId
+        : null
+    const id = validId ?? catalogs[0]?.id ?? null
+    return id ? (catalogs.find((c) => c.id === id) ?? null) : null
+  }, [catalogs, selectedMasterCatalogId])
 
   const removeMasterCatalog = async (c: MasterCatalogDefinition) => {
     if (!db || !canMaster) return
@@ -271,7 +281,7 @@ export function SettingsView() {
   }
 
   return (
-    <div className="space-y-4 text-slate-800 md:space-y-5">
+    <div className={`space-y-4 md:space-y-5 ${settingsCopy}`}>
       <header>
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Cài đặt
@@ -279,7 +289,7 @@ export function SettingsView() {
       </header>
 
       {!configured || !db ? (
-        <div className="rounded-2xl border border-rose-300/70 bg-rose-50 px-5 py-4 text-base text-rose-900 backdrop-blur-xl">
+        <div className={`rounded-2xl border border-rose-300/70 bg-rose-50 px-5 py-4 text-rose-900 backdrop-blur-xl ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
         </div>
       ) : null}
@@ -302,7 +312,8 @@ export function SettingsView() {
                   disabled={!t.enabled}
                   onClick={() => setTab(t.id)}
                   className={[
-                    'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium tracking-tight transition md:px-3 md:py-2',
+                    'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
+                    settingsCopy,
                     selected
                       ? 'border-amber-500/45 bg-amber-50/95 text-slate-900 shadow-sm ring-1 ring-amber-900/5'
                       : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50',
@@ -335,13 +346,13 @@ export function SettingsView() {
               .filter(Boolean)
               .join(' ')}
           >
-            <h2 id="tab-master" className="app-section-heading md:text-xl">
+            <h2 id="tab-master" className={settingsHeading}>
               Danh mục dùng chung
             </h2>
             <button
               type="button"
               onClick={() => setMasterWorkspaceOpen((v) => !v)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5"
+              className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               aria-pressed={masterWorkspaceOpen}
             >
               {masterWorkspaceOpen ? (
@@ -365,56 +376,135 @@ export function SettingsView() {
             }
           >
             {authStatus === 'authenticated' && firebaseUser && !profile ? (
-              <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-base text-rose-900">
-                Đã đăng nhập nhưng chưa tải được hồ sơ trên Firestore (<code className="text-sm">users/{'{uid}'}</code>
+              <p className={`rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-900 ${settingsCopy}`}>
+                Đã đăng nhập nhưng chưa tải được hồ sơ trên Firestore (<code className="font-mono text-[0.92em]">users/{'{uid}'}</code>
                 ). Quyền trong ứng dụng chưa áp dụng — thường do Rules chặn đọc/ghi hồ sơ người dùng. Kiểm tra Rules và
                 thử đăng nhập lại; sau khi hồ sơ tải được, tài khoản quản trị mới chỉnh được danh mục.
               </p>
             ) : null}
             {!canMaster ? (
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-base text-amber-900">
+              <p className={`rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 ${settingsCopy}`}>
                 Chỉ tài khoản được cấp quyền cấu hình danh mục (thường là quản trị) mới thêm hoặc xóa mục. Vai trò hiện
                 tại của bạn không có quyền này — liên hệ quản trị nếu cần chỉnh danh sách vùng, trường, ngành…
               </p>
             ) : null}
-            {mdError ? <p className="text-base text-rose-700">{mdError}</p> : null}
-            {db && canMaster ? (
-              <AddMasterCatalogForm db={db} catalogs={catalogs} />
-            ) : null}
-            {db ? (
-              <MasterCatalogRegistryEditor
-                db={db}
-                catalogs={catalogs}
-                disabled={!canMaster}
-              />
-            ) : null}
-            <div className="grid gap-4 lg:grid-cols-2">
-              {catalogs.map((c) => (
-                <div key={c.id} className="relative">
-                  {canMaster ? (
-                    <button
-                      type="button"
-                      onClick={() => void removeMasterCatalog(c)}
-                      className="absolute right-4 top-4 z-10 rounded-lg border border-rose-200/90 bg-white/95 px-2.5 py-1 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-50"
-                    >
-                      Xóa loại
-                    </button>
+            {mdError ? <p className={`text-rose-700 ${settingsCopy}`}>{mdError}</p> : null}
+            <div
+              className={[
+                'flex min-h-0 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3 shadow-inner md:p-4',
+                masterWorkspaceOpen ? 'min-h-0 flex-1 lg:min-h-[min(72vh,560px)]' : 'min-h-[22rem] lg:min-h-[28rem]',
+              ].join(' ')}
+            >
+              <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:overflow-hidden">
+                <aside className="flex max-h-[min(42vh,22rem)] shrink-0 flex-col gap-3 rounded-xl border border-slate-200/90 bg-white/85 p-3 shadow-sm md:p-4 lg:max-h-none lg:w-[min(100%,19rem)] xl:w-80">
+                  <div className={`shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-amber-950 ${settingsCopy}`}>
+                    <p className="font-semibold text-amber-950">Lưu ý về danh mục</p>
+                    <p className="mt-1.5 text-amber-900/95">
+                      Đây là <strong>dữ liệu dùng chung</strong> cho CRM (lọc hồ sơ, chấm điểm, Script Hub…). Mỗi loại có{' '}
+                      <strong>mã nội bộ</strong> (<code className="rounded bg-white/80 px-0.5 font-mono text-[0.85em]">id</code>
+                      ) — nên giữ ổn định sau khi đã dùng trong quy tắc hoặc tích hợp.
+                    </p>
+                    <p className="mt-1.5 text-amber-900/90">
+                      Chọn một danh mục trong danh sách bên dưới; cột phải hiện các giá trị — thêm hoặc xóa mục ở trên
+                      danh sách đó.
+                    </p>
+                    <p className="mt-1.5 text-amber-900/85">
+                      Có thể cấu hình <strong>kiểu khớp</strong> (chính xác / tương đối chữ, khoảng số từ–đến, ≥, ≤) cho
+                      từng loại và cho từng mục — dùng khi quy tắc chấm điểm dùng điều kiện <strong>IN_LIST</strong> trên
+                      trường lead tương ứng (ví dụ tỉnh → <code className="rounded bg-white/80 px-0.5 font-mono text-[0.85em]">regions</code>
+                      , học lực → <code className="rounded bg-white/80 px-0.5 font-mono text-[0.85em]">academic_performance</code>
+                      ).
+                    </p>
+                  </div>
+                  <p className={`shrink-0 font-semibold uppercase tracking-wide text-slate-600 ${settingsCopy}`}>
+                    Chọn danh mục
+                  </p>
+                  <nav
+                    className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5"
+                    aria-label="Danh mục master data"
+                  >
+                    {catalogs.map((c) => {
+                      const on = activeMasterCatalog?.id === c.id
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedMasterCatalogId(c.id)}
+                          className={[
+                            `w-full rounded-lg border px-3 py-2.5 text-left transition ${settingsCopy}`,
+                            on
+                              ? 'border-amber-400/80 bg-amber-50 text-slate-900 shadow-sm ring-1 ring-amber-200/60'
+                              : 'border-slate-200/80 bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50/40',
+                          ].join(' ')}
+                        >
+                          <span className="font-semibold leading-snug">{c.label}</span>
+                          <code className="mt-0.5 block truncate font-mono text-[0.85em] text-slate-500">{c.id}</code>
+                        </button>
+                      )
+                    })}
+                  </nav>
+                  {db && canMaster ? (
+                    <div className="shrink-0 border-t border-slate-200/80 pt-3">
+                      <AddMasterCatalogForm
+                        db={db}
+                        catalogs={catalogs}
+                        onCatalogAdded={(id) => setSelectedMasterCatalogId(id)}
+                        compact
+                      />
+                    </div>
                   ) : null}
-                  <MasterEntriesEditor
-                    catalogId={c.id}
-                    title={c.label}
-                    entries={byKind[c.id] ?? []}
-                    loading={mdLoading}
-                    db={db}
-                    disabled={!canMaster}
-                    readonlyHint={
-                      !canMaster
-                        ? 'Chỉ xem — không có quyền chỉnh. Nút Thêm và xóa đã tắt.'
-                        : undefined
-                    }
-                  />
+                </aside>
+
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-white/90 p-3 shadow-sm md:p-5">
+                  {activeMasterCatalog && db ? (
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div className="min-w-0">
+                          <h3 className={settingsHeading}>
+                            {activeMasterCatalog.label}
+                          </h3>
+                          <code className={`mt-1 block font-mono text-[0.92em] text-slate-500 ${settingsCopy}`}>{activeMasterCatalog.id}</code>
+                        </div>
+                        {canMaster ? (
+                          <button
+                            type="button"
+                            onClick={() => void removeMasterCatalog(activeMasterCatalog)}
+                            className={`shrink-0 rounded-lg border border-rose-200/90 bg-rose-50 px-3 py-1.5 font-semibold text-rose-800 shadow-sm hover:bg-rose-100 ${settingsCopy}`}
+                          >
+                            Xóa loại danh mục
+                          </button>
+                        ) : null}
+                      </div>
+                      {canMaster ? (
+                        <CatalogMatchMetaPanel db={db} catalogs={catalogs} active={activeMasterCatalog} />
+                      ) : null}
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        <MasterEntriesEditor
+                          catalogId={activeMasterCatalog.id}
+                          catalogDef={activeMasterCatalog}
+                          title={activeMasterCatalog.label}
+                          entries={byKind[activeMasterCatalog.id] ?? []}
+                          loading={mdLoading}
+                          db={db}
+                          disabled={!canMaster}
+                          showHeading={false}
+                          readonlyHint={
+                            !canMaster
+                              ? 'Chỉ xem — không có quyền chỉnh. Nút Thêm và xóa đã tắt.'
+                              : undefined
+                          }
+                        />
+                      </div>
+                    </div>
+                  ) : !catalogs.length ? (
+                    <p className={settingsCopyMuted}>
+                      Chưa có danh mục. {canMaster ? 'Thêm loại mới ở cột trái (khi có quyền).' : ''}
+                    </p>
+                  ) : (
+                    <p className={settingsCopyMuted}>Chọn một danh mục ở cột trái.</p>
+                  )}
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         </section>
@@ -439,29 +529,29 @@ export function SettingsView() {
           </SettingsTabHint>
           <ProfileManagerTab db={db} />
           <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
-            <h3 className="app-section-heading md:text-xl">
+            <h3 className={settingsHeading}>
               Thử nghiệm chấm điểm (JSON)
             </h3>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">
+            <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
               Dán JSON mẫu — dùng <strong>profile đầu tiên</strong> trong danh sách. Các khóa nên khớp{' '}
-              <code className="rounded bg-slate-200/80 px-1 text-sm">targetField</code> trong quy tắc của profile đó.
+              <code className={`rounded bg-slate-200/80 px-1 font-mono ${settingsCopy}`}>targetField</code> trong quy tắc của profile đó.
             </p>
             <textarea
               value={demoJson}
               onChange={(e) => setDemoJson(e.target.value)}
               rows={5}
-              className="mt-4 w-full rounded-xl border border-slate-200/80 bg-slate-50/95 px-4 py-3 font-mono text-sm leading-relaxed text-slate-900 outline-none ring-emerald-400/30 focus:ring-2 md:text-base"
+              className={`mt-4 w-full rounded-xl border border-slate-200/80 bg-slate-50/95 px-4 py-3 font-mono leading-relaxed text-slate-900 outline-none ring-emerald-400/30 focus:ring-2 ${settingsCopy}`}
             />
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 onClick={runDemo}
-                className="min-h-11 rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700 md:text-base"
+                className={`min-h-11 rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-emerald-700 ${settingsCopy}`}
               >
                 Chạy thử chấm điểm
               </button>
               {demoResult ? (
-                <p className="text-sm font-medium text-slate-800 md:text-base">{demoResult}</p>
+                <p className={`font-medium text-slate-800 ${settingsCopy}`}>{demoResult}</p>
               ) : null}
             </div>
           </section>
@@ -486,13 +576,13 @@ export function SettingsView() {
               .filter(Boolean)
               .join(' ')}
           >
-            <h2 id="tab-consulting" className="app-section-heading md:text-xl">
+            <h2 id="tab-consulting" className={settingsHeading}>
               Playbook &amp; kịch bản tư vấn
             </h2>
             <button
               type="button"
               onClick={() => setConsultingWorkspaceOpen((v) => !v)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5"
+              className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               aria-pressed={consultingWorkspaceOpen}
             >
               {consultingWorkspaceOpen ? (
@@ -528,115 +618,28 @@ export function SettingsView() {
                 <strong>Không thay</strong> kho tri thức RAG (dành cho LLM đọc học phí — quy chế) và{' '}
                 <strong>không thay</strong> tab LLM hay Phòng thử AI.
               </p>
-              <p className="mt-2 border-t border-sky-200/60 pt-2 text-xs text-slate-600">
-                <strong>Nạp từ app:</strong> bấm «Nạp 50 playbook mẫu» cạnh danh sách (cần file{' '}
-                <code className="rounded bg-white/80 px-1">public/seed/consulting-playbooks.json</code> — chạy{' '}
-                <code className="rounded bg-white/80 px-1">npm run export:public-seed</code> rồi build/deploy).{' '}
-                <strong>Hoặc từ Terminal</strong> (service account):{' '}
-                <code className="rounded bg-white/80 px-1">npm run seed:consulting-playbooks</code>. Xóa đúng bộ đã seed:{' '}
-                <code className="rounded bg-white/80 px-1">DELETE_PLAYBOOK_SEED=1 npm run seed:consulting-playbooks</code>{' '}
+              <p className={`mt-2 border-t border-sky-200/60 pt-2 ${settingsCopyMuted}`}>
+                <strong>Nạp từ app:</strong> trong khối Playbook bên dưới — tab <strong>Thiết lập</strong> (tải file mẫu,
+                tải JSON lên, nạp mẫu build, thêm nhanh) và tab <strong>Dữ liệu</strong> (danh sách, tìm kiếm, lọc). File
+                seed:{' '}
+                <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>public/seed/consulting-playbooks.json</code>{' '}
+                — chạy <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>npm run export:public-seed</code> rồi
+                build/deploy. <strong>Hoặc từ Terminal</strong> (service account):{' '}
+                <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>npm run seed:consulting-playbooks</code>. Xóa
+                đúng bộ đã seed:{' '}
+                <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>DELETE_PLAYBOOK_SEED=1 npm run seed:consulting-playbooks</code>{' '}
                 rồi chạy lại lệnh seed nếu muốn nạp lại.
               </p>
             </SettingsTabHint>
-            <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-2xl backdrop-blur-xl md:p-8">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="app-section-heading">
-                  Danh sách playbook
-                </h3>
-                <div className="flex flex-wrap items-center gap-2">
-                  {pbLoading ? <span className="text-sm text-slate-500">Đang tải…</span> : null}
-                  {db && canPlaybooks ? (
-                    <button
-                      type="button"
-                      disabled={playbookSeedBusy}
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            'Nạp 50 playbook mẫu (id vietmy_seed_playbook_01 … 50) vào Firestore? Dùng quyền tài khoản đang đăng nhập; có thể ghi đè bản seed cùng id.',
-                          )
-                        )
-                          return
-                        void (async () => {
-                          setPlaybookSeedBusy(true)
-                          try {
-                            const n = await importVietMyPlaybooksFromPublic(db)
-                            window.alert(`Đã ghi ${n} playbook. Danh sách cập nhật theo thời gian thực.`)
-                          } catch (e) {
-                            console.error(e)
-                            window.alert(firestoreWriteErrorMessage(e))
-                          } finally {
-                            setPlaybookSeedBusy(false)
-                          }
-                        })()
-                      }}
-                      className="min-h-10 rounded-lg border border-emerald-600/80 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
-                    >
-                      {playbookSeedBusy ? 'Đang nạp…' : 'Nạp 50 playbook mẫu'}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              {!canPlaybooks ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:text-base">
-                  Bạn không có quyền chỉnh playbook (<code className="text-sm">config:playbooks</code>).
-                </p>
-              ) : null}
-              {pbError ? <p className="mt-2 text-base text-rose-700">{pbError}</p> : null}
-              {db && canPlaybooks ? <PlaybookQuickAdd db={db} /> : null}
-              <ul
-                className={[
-                  'mt-4 space-y-2 overflow-y-auto pr-1 text-sm md:text-base',
-                  consultingWorkspaceOpen ? 'max-h-none' : 'max-h-[min(50vh,22rem)]',
-                ].join(' ')}
-              >
-                {playbooks.map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/60 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900">{p.title}</p>
-                      <p className="text-slate-600">
-                        Ưu tiên {p.priority}
-                        {p.triggerConditions?.length ? (
-                          <span className="mt-0.5 block text-xs text-slate-500">
-                            {p.triggerConditions.length} điều kiện (AND)
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
-                    {db && canPlaybooks ? (
-                      <div className="flex shrink-0 gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setPlaybookEditor(p)}
-                          className="min-h-10 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                          if (!window.confirm(`Xóa playbook «${p.title}»?`)) return
-                          void (async () => {
-                            try {
-                              await deleteDoc(doc(db, FS_COLLECTIONS.consultingPlaybooks, p.id))
-                            } catch (e) {
-                              console.error(e)
-                              window.alert(firestoreWriteErrorMessage(e))
-                            }
-                          })()
-                        }}
-                        className="min-h-10 shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 hover:text-rose-900"
-                      >
-                        Xóa
-                      </button>
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <ConsultingPlaybookSection
+              db={db}
+              playbooks={playbooks}
+              loading={pbLoading}
+              error={pbError}
+              canPlaybooks={canPlaybooks}
+              onEdit={(p) => setPlaybookEditor(p)}
+              consultingWorkspaceOpen={consultingWorkspaceOpen}
+            />
             {db && canPlaybooks ? <ScriptHubManager db={db} /> : null}
           </div>
         </div>
@@ -664,6 +667,10 @@ export function SettingsView() {
                 <strong>Không</strong> tự hiện trong Playbook / Script Hub; <strong>không</strong> nạp vào ô «Phòng thử
                 AI». Khác <strong>Chấm điểm</strong> (công thức điểm, không phải văn bản cho LLM).
               </p>
+              <p className={`mt-2 ${settingsCopyMuted}`}>
+                Trong khối dưới: tab <strong>Thiết lập</strong> (nạp mẫu, thêm/sửa) và tab <strong>Dữ liệu</strong> (danh
+                sách, tìm kiếm, lọc theo danh mục).
+              </p>
             </SettingsTabHint>
           </div>
           <KnowledgeBaseTab db={db} />
@@ -688,13 +695,13 @@ export function SettingsView() {
               .filter(Boolean)
               .join(' ')}
           >
-            <h2 id="tab-llm" className="app-section-heading md:text-xl">
+            <h2 id="tab-llm" className={settingsHeading}>
               LLM &amp; tác vụ AI
             </h2>
             <button
               type="button"
               onClick={() => setLlmWorkspaceOpen((v) => !v)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5"
+              className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               aria-pressed={llmWorkspaceOpen}
             >
               {llmWorkspaceOpen ? (
@@ -717,18 +724,13 @@ export function SettingsView() {
                 : ''
             }
           >
-            <div className="mb-5 space-y-3">
+            <div className="mb-3 space-y-2">
               <SettingsTabHint>
-                <p className="font-semibold text-slate-900">LLM &amp; tác vụ AI là gì?</p>
-                <p className="mt-1.5">
-                  Tab này cấu hình <strong>nhà cung cấp + khóa API + model</strong> (lưu cục bộ trình duyệt) và các{' '}
-                  <strong>tác vụ AI</strong> (prompt + trường lead + schema JSON) lưu trên Firestore. Khi TVV chạy phân
-                  tích trên lead, app gọi API theo tác vụ đã chọn và có thể kèm <strong>Kho tri thức RAG</strong> nếu đã
-                  nhập.
-                </p>
-                <p className="mt-2 text-slate-700">
-                  <strong>Ứng dụng:</strong> phân tích / tổng hợp có cấu trúc trên hồ sơ. <strong>Khác</strong> tab Tư
-                  vấn (chỉ nội dung đọc cho người) và <strong>khác</strong> Phòng thử AI (chat thử, không ghi lead).
+                <p className="font-semibold text-slate-900">LLM &amp; tác vụ AI</p>
+                <p className={`mt-1.5 ${settingsCopy}`}>
+                  Khối bên dưới có các tab: <strong>Hướng dẫn</strong> (cách setup &amp; dùng), <strong>API</strong>,{' '}
+                  <strong>Gatekeeper</strong>, <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Bắt đầu từ
+                  tab Hướng dẫn nếu lần đầu cấu hình.
                 </p>
               </SettingsTabHint>
             </div>
@@ -864,7 +866,7 @@ function PlaybookEditorModal({
         className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xl md:p-6"
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-          <h2 id="playbook-editor-title" className="text-lg font-semibold text-slate-900">
+          <h2 id="playbook-editor-title" className={settingsHeading}>
             Sửa playbook
           </h2>
           <button
@@ -877,16 +879,16 @@ function PlaybookEditorModal({
           </button>
         </div>
         <div className="mt-4 grid gap-4">
-          <label className="text-sm font-medium text-slate-700">
+          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
             Tiêu đề
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-base text-slate-900"
+              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
             />
           </label>
           <div className="flex flex-wrap items-center gap-4">
-            <label className="text-sm font-medium text-slate-700">
+            <label className={`font-medium text-slate-700 ${settingsCopy}`}>
               Ưu tiên (0–1000)
               <input
                 type="number"
@@ -894,10 +896,10 @@ function PlaybookEditorModal({
                 max={1000}
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
-                className="mt-1.5 w-28 rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-base text-slate-900"
+                className={`mt-1.5 w-28 rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
               />
             </label>
-            <label className="flex cursor-pointer items-center gap-2 pt-6 text-sm font-medium text-slate-700">
+            <label className={`flex cursor-pointer items-center gap-2 pt-6 font-medium text-slate-700 ${settingsCopy}`}>
               <input
                 type="checkbox"
                 checked={isActive}
@@ -907,41 +909,41 @@ function PlaybookEditorModal({
               Đang bật
             </label>
           </div>
-          <label className="text-sm font-medium text-slate-700">
+          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
             Chiến lược
             <textarea
               value={strategy}
               onChange={(e) => setStrategy(e.target.value)}
               rows={4}
-              className="mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-base text-slate-900"
+              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
             />
           </label>
-          <label className="text-sm font-medium text-slate-700">
+          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
             USP (mỗi dòng)
             <textarea
               value={uspText}
               onChange={(e) => setUspText(e.target.value)}
               rows={4}
-              className="mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-base text-slate-900"
+              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
             />
           </label>
-          <label className="text-sm font-medium text-slate-700">
+          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
             Xử lý từ chối (mỗi dòng)
             <textarea
               value={objText}
               onChange={(e) => setObjText(e.target.value)}
               rows={4}
-              className="mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-base text-slate-900"
+              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
             />
           </label>
-          <label className="text-sm font-medium text-slate-700">
+          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
             Điều kiện kích hoạt (JSON — mảng các điều kiện AND)
             <textarea
               value={triggersJson}
               onChange={(e) => setTriggersJson(e.target.value)}
               spellCheck={false}
               rows={10}
-              className="mt-1.5 w-full rounded-lg border border-slate-200/90 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900"
+              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-slate-50 px-3 py-2.5 font-mono text-slate-900 ${settingsCopy}`}
             />
           </label>
         </div>
@@ -949,7 +951,7 @@ function PlaybookEditorModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className={`rounded-lg border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 ${settingsCopy}`}
           >
             Hủy
           </button>
@@ -957,7 +959,7 @@ function PlaybookEditorModal({
             type="button"
             disabled={busy}
             onClick={() => void save()}
-            className="rounded-lg border border-violet-600 bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            className={`rounded-lg border border-violet-600 bg-violet-600 px-4 py-2.5 font-semibold text-white hover:bg-violet-700 disabled:opacity-50 ${settingsCopy}`}
           >
             {busy ? 'Đang lưu…' : 'Lưu'}
           </button>
@@ -967,264 +969,16 @@ function PlaybookEditorModal({
   )
 }
 
-function MasterCatalogRegistryEditor({
-  db,
-  catalogs,
-  disabled,
-}: {
-  db: NonNullable<ReturnType<typeof getFirestoreDb>>
-  catalogs: MasterCatalogDefinition[]
-  disabled: boolean
-}) {
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [registryExpanded, setRegistryExpanded] = useState(false)
-
-  const resolveBase = useCallback(async (): Promise<MasterCatalogDefinition[]> => {
-    const regRef = doc(db, FS_COLLECTIONS.masterData, MASTER_DATA_REGISTRY_DOC_ID)
-    const regSnap = await getDoc(regRef)
-    return (
-      parseCatalogsFromRegistryData(regSnap.data() as Record<string, unknown>) ??
-      (catalogs.length ? [...catalogs] : DEFAULT_MASTER_CATALOGS.map((c) => ({ ...c })))
-    )
-  }, [db, catalogs])
-
-  const reorder = useCallback(
-    async (fromIndex: number, toIndex: number) => {
-      if (disabled || busy) return
-      if (fromIndex === toIndex) return
-      if (fromIndex < 0 || fromIndex >= catalogs.length) return
-      if (toIndex < 0 || toIndex > catalogs.length) return
-      setBusy(true)
-      setMsg(null)
-      try {
-        const base = await resolveBase()
-        const byId = new Map(base.map((c) => [c.id, c] as const))
-        const arr = catalogs.map((c) => byId.get(c.id) ?? c)
-        const copy = [...arr]
-        const [row] = copy.splice(fromIndex, 1)
-        if (!row) return
-        const insertAt = Math.max(0, Math.min(toIndex, copy.length))
-        copy.splice(insertAt, 0, row)
-        const next = withSequentialOrders(copy)
-        await persistMasterRegistryCatalogs(db, next)
-        setMsg('Đã cập nhật thứ tự danh mục.')
-      } catch (e) {
-        console.error(e)
-        setMsg(firestoreWriteErrorMessage(e))
-      } finally {
-        setBusy(false)
-      }
-    },
-    [disabled, busy, catalogs, db, resolveBase],
-  )
-
-  const saveLabel = useCallback(
-    async (catalogId: string, label: string) => {
-      if (disabled || busy) return
-      const trimmed = label.trim()
-      if (!trimmed) {
-        setMsg('Tên hiển thị không được để trống.')
-        return
-      }
-      setBusy(true)
-      setMsg(null)
-      try {
-        const base = await resolveBase()
-        const next = base.map((c) => (c.id === catalogId ? { ...c, label: trimmed } : c))
-        await persistMasterRegistryCatalogs(db, next)
-        setMsg('Đã lưu tên hiển thị.')
-      } catch (e) {
-        console.error(e)
-        setMsg(firestoreWriteErrorMessage(e))
-      } finally {
-        setBusy(false)
-      }
-    },
-    [disabled, busy, db, resolveBase],
-  )
-
-  return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-lg backdrop-blur-xl md:p-6">
-      <button
-        type="button"
-        id="master-registry-heading"
-        aria-expanded={registryExpanded}
-        aria-controls="master-registry-panel"
-        onClick={() => setRegistryExpanded((v) => !v)}
-        className="flex w-full items-start justify-between gap-3 rounded-xl text-left transition-colors hover:bg-slate-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80 md:items-center"
-      >
-        <div className="min-w-0">
-          <h3 className="app-section-heading">
-            Thứ tự và tên nhóm danh mục
-          </h3>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {registryExpanded ? 'Bấm để thu gọn' : 'Bấm để mở — kéo thả / mũi tên đổi thứ tự, sửa tên danh mục'}
-          </p>
-        </div>
-        <ChevronDown
-          className={[
-            'mt-0.5 h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200',
-            registryExpanded ? 'rotate-180' : '',
-          ].join(' ')}
-          aria-hidden
-        />
-      </button>
-
-      <div
-        id="master-registry-panel"
-        role="region"
-        aria-labelledby="master-registry-heading"
-        className={registryExpanded ? 'mt-3' : 'hidden'}
-      >
-        <p className="text-sm text-slate-600">
-          Mã <code className="text-xs">id</code> giữ nguyên (trùng document <code className="text-xs">masterData/…</code>
-          ). Kéo biểu tượng cột (⋮⋮) sang dòng khác hoặc dùng mũi tên; sửa ô tên rồi bấm «Lưu tên». Không cần sửa tay trên
-          Firestore Console.
-        </p>
-        {disabled ? (
-          <p className="mt-3 text-sm text-amber-800">Chế độ chỉ xem — không có quyền ghi cấu hình danh mục.</p>
-        ) : null}
-        <ul className="mt-4 divide-y divide-slate-200/90 rounded-xl border border-slate-200/80 bg-slate-50/50">
-          {catalogs.map((c, i) => (
-            <MasterCatalogRegistryRow
-              key={c.id}
-              catalog={c}
-              index={i}
-              total={catalogs.length}
-              disabled={disabled || busy}
-              onMoveUp={() => void reorder(i, i - 1)}
-              onMoveDown={() => void reorder(i, i + 1)}
-              onDropFrom={(fromIndex) => void reorder(fromIndex, i)}
-              onSaveLabel={(label) => void saveLabel(c.id, label)}
-            />
-          ))}
-        </ul>
-        {msg ? (
-          <p
-            className={['mt-3 text-sm', msg.startsWith('Đã') ? 'text-emerald-700' : 'text-rose-700'].join(' ')}
-            role="status"
-          >
-            {msg}
-          </p>
-        ) : null}
-      </div>
-    </section>
-  )
-}
-
-function MasterCatalogRegistryRow({
-  catalog,
-  index,
-  total,
-  disabled,
-  onMoveUp,
-  onMoveDown,
-  onDropFrom,
-  onSaveLabel,
-}: {
-  catalog: MasterCatalogDefinition
-  index: number
-  total: number
-  disabled: boolean
-  onMoveUp: () => void
-  onMoveDown: () => void
-  onDropFrom: (fromIndex: number) => void
-  onSaveLabel: (label: string) => void
-}) {
-  const [draft, setDraft] = useState(catalog.label)
-
-  useEffect(() => {
-    setDraft(catalog.label)
-  }, [catalog.id, catalog.label])
-
-  const dirty = draft.trim() !== catalog.label.trim()
-
-  return (
-    <li
-      onDragOver={(e) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        const raw = e.dataTransfer.getData('application/x-master-catalog-index')
-        const from = Number.parseInt(raw, 10)
-        if (Number.isNaN(from)) return
-        onDropFrom(from)
-      }}
-      className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
-    >
-      <div
-        className={[
-          'flex touch-none items-center gap-1 sm:w-[7.5rem] sm:shrink-0',
-          disabled ? '' : 'select-none',
-        ].join(' ')}
-        draggable={!disabled}
-        onDragStart={(e) => {
-          e.dataTransfer.setData('application/x-master-catalog-index', String(index))
-          e.dataTransfer.effectAllowed = 'move'
-        }}
-        title={disabled ? undefined : 'Kéo để đổi thứ tự'}
-      >
-        <span
-          className={[
-            'inline-flex rounded-lg border border-slate-200 bg-white p-2 text-slate-500 shadow-sm',
-            disabled ? 'opacity-40' : 'cursor-grab active:cursor-grabbing',
-          ].join(' ')}
-          aria-hidden
-        >
-          <GripVertical className="h-4 w-4" />
-        </span>
-        <button
-          type="button"
-          disabled={disabled || index <= 0}
-          onClick={onMoveUp}
-          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 disabled:opacity-40"
-          aria-label="Đưa danh mục lên trên"
-        >
-          <ChevronUp className="h-4 w-4" aria-hidden />
-        </button>
-        <button
-          type="button"
-          disabled={disabled || index >= total - 1}
-          onClick={onMoveDown}
-          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 disabled:opacity-40"
-          aria-label="Đưa danh mục xuống dưới"
-        >
-          <ChevronDown className="h-4 w-4" aria-hidden />
-        </button>
-      </div>
-      <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
-        <code className="block shrink-0 rounded bg-slate-200/70 px-2 py-1 text-xs text-slate-800">{catalog.id}</code>
-        <label className="mt-2 block min-w-0 flex-1 text-sm font-medium text-slate-700 sm:mt-0">
-          <span className="sr-only">Tên hiển thị</span>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={disabled}
-            className="mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 sm:mt-0"
-          />
-        </label>
-        <button
-          type="button"
-          disabled={disabled || !dirty}
-          onClick={() => onSaveLabel(draft)}
-          className="mt-2 shrink-0 rounded-lg border border-emerald-600/80 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-40 sm:mt-0"
-        >
-          Lưu tên
-        </button>
-      </div>
-    </li>
-  )
-}
-
 function AddMasterCatalogForm({
   db,
   catalogs,
+  onCatalogAdded,
+  compact,
 }: {
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
   catalogs: MasterCatalogDefinition[]
+  onCatalogAdded?: (catalogId: string) => void
+  compact?: boolean
 }) {
   const [slugRaw, setSlugRaw] = useState('')
   const [label, setLabel] = useState('')
@@ -1272,6 +1026,7 @@ function AddMasterCatalogForm({
       setSlugRaw('')
       setLabel('')
       setMsg('Đã thêm danh mục.')
+      onCatalogAdded?.(slug)
     } catch (e) {
       console.error(e)
       setMsg(firestoreWriteErrorMessage(e))
@@ -1281,43 +1036,79 @@ function AddMasterCatalogForm({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-lg backdrop-blur-xl md:p-6">
-      <h3 className="app-section-heading">
-        Thêm loại danh mục mới
+    <section
+      className={
+        compact
+          ? 'rounded-lg border border-slate-200/90 bg-slate-50/50 p-3'
+          : 'rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-lg backdrop-blur-xl md:p-6'
+      }
+    >
+      <h3 className={settingsHeading}>
+        {compact ? 'Thêm loại mới' : 'Thêm loại danh mục mới'}
       </h3>
-      <div className="mt-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
-        <label className="min-w-[12rem] flex-1 text-sm font-medium text-slate-700">
+      <div
+        className={
+          compact
+            ? 'mt-2 flex flex-col gap-2'
+            : 'mt-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end'
+        }
+      >
+        <label
+          className={
+            compact
+              ? `w-full font-medium text-slate-700 ${settingsCopy}`
+              : `min-w-[12rem] flex-1 font-medium text-slate-700 ${settingsCopy}`
+          }
+        >
           Mã (slug)
           <input
             value={slugRaw}
             onChange={(e) => setSlugRaw(e.target.value)}
             disabled={busy}
             placeholder="vi_du_danh_muc"
-            className="mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45"
+            className={
+              compact
+                ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+                : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+            }
           />
         </label>
-        <label className="min-w-[12rem] flex-1 text-sm font-medium text-slate-700">
+        <label
+          className={
+            compact
+              ? `w-full font-medium text-slate-700 ${settingsCopy}`
+              : `min-w-[12rem] flex-1 font-medium text-slate-700 ${settingsCopy}`
+          }
+        >
           Tên hiển thị
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             disabled={busy}
             placeholder="Nguồn lead"
-            className="mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45"
+            className={
+              compact
+                ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+                : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+            }
           />
         </label>
         <button
           type="button"
           disabled={busy}
           onClick={() => void submit()}
-          className="min-h-11 shrink-0 rounded-xl border border-amber-800 bg-gradient-to-r from-amber-800 to-amber-950 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:from-amber-900 hover:to-amber-950 disabled:opacity-50 md:mb-0.5"
+          className={
+            compact
+              ? `min-h-9 w-full rounded-lg border border-amber-800 bg-gradient-to-r from-amber-800 to-amber-950 px-3 py-2 font-semibold text-white shadow-sm hover:from-amber-900 hover:to-amber-950 disabled:opacity-50 ${settingsCopy}`
+              : `min-h-11 shrink-0 rounded-xl border border-amber-800 bg-gradient-to-r from-amber-800 to-amber-950 px-5 py-2.5 font-semibold text-white shadow-md hover:from-amber-900 hover:to-amber-950 disabled:opacity-50 md:mb-0.5 ${settingsCopy}`
+          }
         >
-          {busy ? 'Đang lưu…' : 'Thêm loại danh mục'}
+          {busy ? 'Đang lưu…' : compact ? 'Thêm' : 'Thêm loại danh mục'}
         </button>
       </div>
       {msg ? (
         <p
-          className={['mt-3 text-sm', msg.startsWith('Đã') ? 'text-emerald-700' : 'text-rose-700'].join(' ')}
+          className={['mt-3', settingsCopy, msg.startsWith('Đã') ? 'text-emerald-700' : 'text-rose-700'].join(' ')}
           role="status"
         >
           {msg}
@@ -1327,34 +1118,203 @@ function AddMasterCatalogForm({
   )
 }
 
+const MATCH_MODE_LABELS: Record<MasterEntryMatchMode, string> = {
+  exact_norm: 'Chính xác (chuẩn hoá, bỏ dấu)',
+  fuzzy_contains: 'Tương đối (chuỗi chứa nhau)',
+  gte: 'Số: lớn hơn hoặc bằng ngưỡng',
+  lte: 'Số: bé hơn hoặc bằng ngưỡng',
+  between: 'Số: từ … đến … (khoảng)',
+}
+
+function CatalogMatchMetaPanel({
+  db,
+  catalogs,
+  active,
+}: {
+  db: NonNullable<ReturnType<typeof getFirestoreDb>>
+  catalogs: MasterCatalogDefinition[]
+  active: MasterCatalogDefinition
+}) {
+  const [valueKind, setValueKind] = useState<MasterCatalogValueKind>(active.valueKind ?? 'text')
+  const [defaultMatchMode, setDefaultMatchMode] = useState<MasterEntryMatchMode>(
+    active.defaultMatchMode ?? 'exact_norm',
+  )
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setValueKind(active.valueKind ?? 'text')
+    setDefaultMatchMode(active.defaultMatchMode ?? 'exact_norm')
+    setMsg(null)
+  }, [active.id, active.valueKind, active.defaultMatchMode])
+
+  const allowedModes: MasterEntryMatchMode[] =
+    valueKind === 'number'
+      ? ['exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
+      : ['exact_norm', 'fuzzy_contains']
+
+  const save = async () => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const nextCatalogs = catalogs.map((c) =>
+        c.id === active.id
+          ? {
+              ...c,
+              valueKind,
+              defaultMatchMode,
+            }
+          : c,
+      )
+      const payload = nextCatalogs.map((c) => {
+        const row: Record<string, unknown> = { id: c.id, label: c.label, order: c.order }
+        row.valueKind = c.valueKind ?? 'text'
+        row.defaultMatchMode = c.defaultMatchMode ?? 'exact_norm'
+        return row
+      })
+      await setDoc(
+        doc(db, FS_COLLECTIONS.masterData, MASTER_DATA_REGISTRY_DOC_ID),
+        { catalogs: payload, updatedAt: Timestamp.now() },
+        { merge: true },
+      )
+      setMsg('Đã lưu cấu hình kiểu danh mục và cách khớp mặc định.')
+    } catch (e) {
+      setMsg(firestoreWriteErrorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={`mb-4 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3 text-slate-800 shadow-inner md:p-4 ${settingsCopy}`}>
+      <p className={settingsHeading}>Kiểu giá trị &amp; khớp mặc định (IN_LIST)</p>
+      <p className={`mt-1 ${settingsCopyMuted}`}>
+        Áp dụng khi quy tắc chấm điểm so trường lead với danh mục này. Mỗi mục có thể ghi đè chế độ riêng bên dưới.
+      </p>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className={`min-w-[10rem] flex-1 font-medium text-slate-700 ${settingsCopy}`}>
+          Kiểu danh mục
+          <select
+            value={valueKind}
+            onChange={(e) => {
+              const vk = e.target.value as MasterCatalogValueKind
+              setValueKind(vk)
+              if (
+                vk === 'text' &&
+                (defaultMatchMode === 'gte' || defaultMatchMode === 'lte' || defaultMatchMode === 'between')
+              ) {
+                setDefaultMatchMode('exact_norm')
+              }
+            }}
+            disabled={busy}
+            className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+          >
+            <option value="text">Văn bản</option>
+            <option value="number">Số (khoảng / so sánh)</option>
+          </select>
+        </label>
+        <label className={`min-w-[12rem] flex-[1.2] font-medium text-slate-700 ${settingsCopy}`}>
+          Khớp mặc định
+          <select
+            value={allowedModes.includes(defaultMatchMode) ? defaultMatchMode : 'exact_norm'}
+            onChange={(e) => setDefaultMatchMode(e.target.value as MasterEntryMatchMode)}
+            disabled={busy}
+            className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+          >
+            {allowedModes.map((m) => (
+              <option key={m} value={m}>
+                {MATCH_MODE_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void save()}
+          className={`shrink-0 rounded-lg border border-amber-800/90 bg-gradient-to-r from-amber-800 to-amber-950 px-4 py-2 font-semibold text-white shadow-sm hover:from-amber-900 hover:to-amber-950 disabled:opacity-50 ${settingsCopy}`}
+        >
+          {busy ? 'Đang lưu…' : 'Lưu cấu hình catalog'}
+        </button>
+      </div>
+      {msg ? (
+        <p
+          className={['mt-2', settingsCopy, msg.startsWith('Đã') ? 'text-emerald-700' : 'text-rose-700'].join(' ')}
+          role="status"
+        >
+          {msg}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function entryPersistFingerprint(e: MasterDataEntry): string {
+  return JSON.stringify({
+    id: e.id,
+    label: e.label,
+    isActive: e.isActive === false ? false : true,
+    synonyms: e.synonyms ?? [],
+    matchMode: e.matchMode ?? null,
+    numericMin: e.numericMin ?? null,
+    numericMax: e.numericMax ?? null,
+  })
+}
+
+function entryHintBadge(e: MasterDataEntry, catalogDef: MasterCatalogDefinition): string {
+  const mode = e.matchMode ?? catalogDef.defaultMatchMode ?? 'exact_norm'
+  const treatAsNumber =
+    catalogDef.valueKind === 'number' || mode === 'gte' || mode === 'lte' || mode === 'between'
+  if (treatAsNumber) {
+    if (mode === 'between' && e.numericMin !== undefined && e.numericMax !== undefined) {
+      return `${e.numericMin}–${e.numericMax}`
+    }
+    if (mode === 'gte' && e.numericMin !== undefined) return `≥${e.numericMin}`
+    if (mode === 'lte' && e.numericMax !== undefined) return `≤${e.numericMax}`
+  }
+  if (mode === 'fuzzy_contains') return '~'
+  return ''
+}
+
 function MasterEntriesEditor({
   catalogId,
+  catalogDef,
   title,
   entries,
   loading,
   db,
   disabled,
   readonlyHint,
+  showHeading = true,
 }: {
   catalogId: string
+  catalogDef: MasterCatalogDefinition
   title: string
   entries: MasterDataEntry[]
   loading: boolean
   db: ReturnType<typeof getFirestoreDb> | null
   disabled: boolean
   readonlyHint?: string
+  showHeading?: boolean
 }) {
   const [input, setInput] = useState('')
+  const [addSynonyms, setAddSynonyms] = useState('')
+  const [addMatchMode, setAddMatchMode] = useState<'' | MasterEntryMatchMode>('')
+  const [addMin, setAddMin] = useState('')
+  const [addMax, setAddMax] = useState('')
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
-  /** Tránh ghi đè khi snapshot Firestore chưa kịp về sau lần Thêm trước (race với prop `entries`). */
   const [localEntries, setLocalEntries] = useState<MasterDataEntry[]>(entries)
-  /** Sau khi persist thành công: chỉ đồng bộ từ `entries` khi snapshot khớp bản đã ghi (tránh prop cũ ghi đè UI). */
+  const [editing, setEditing] = useState<MasterDataEntry | null>(null)
   const pendingServerMatch = useRef<MasterDataEntry[] | null>(null)
 
-  /** Snapshot đã chứa đủ các mục vừa ghi (cho phép snapshot dài hơn nếu có chỉnh đồng thời). */
+  const addAllowedModes: MasterEntryMatchMode[] =
+    catalogDef.valueKind === 'number'
+      ? ['exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
+      : ['exact_norm', 'fuzzy_contains']
+
   function snapshotIncludesWrite(want: MasterDataEntry[], snap: MasterDataEntry[]): boolean {
-    return want.every((w) => snap.some((e) => e.id === w.id && e.label === w.label))
+    return want.every((w) => snap.some((e) => entryPersistFingerprint(e) === entryPersistFingerprint(w)))
   }
 
   useEffect(() => {
@@ -1366,6 +1326,14 @@ function MasterEntriesEditor({
     }
     setLocalEntries(entries)
   }, [entries, catalogId, busy])
+
+  useEffect(() => {
+    setEditing(null)
+    setAddSynonyms('')
+    setAddMatchMode('')
+    setAddMin('')
+    setAddMax('')
+  }, [catalogId])
 
   const persist = async (next: MasterDataEntry[]): Promise<boolean> => {
     if (!db || disabled) return false
@@ -1390,6 +1358,36 @@ function MasterEntriesEditor({
     }
   }
 
+  const buildEntryFromAddForm = (label: string, id: string): MasterDataEntry => {
+    const synonyms = addSynonyms
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const effMode: MasterEntryMatchMode =
+      addMatchMode === '' ? catalogDef.defaultMatchMode ?? 'exact_norm' : addMatchMode
+    const minRaw = addMin.trim().replace(',', '.')
+    const maxRaw = addMax.trim().replace(',', '.')
+    const numMin = minRaw === '' ? undefined : Number(minRaw)
+    const numMax = maxRaw === '' ? undefined : Number(maxRaw)
+    const entry: MasterDataEntry = {
+      id,
+      label,
+      isActive: true,
+      ...(synonyms.length ? { synonyms } : {}),
+    }
+    const catalogDefault = catalogDef.defaultMatchMode ?? 'exact_norm'
+    if (addMatchMode !== '' && addMatchMode !== catalogDefault) {
+      entry.matchMode = addMatchMode
+    }
+    if (effMode === 'gte' || effMode === 'between') {
+      if (numMin !== undefined && Number.isFinite(numMin)) entry.numericMin = numMin
+    }
+    if (effMode === 'lte' || effMode === 'between') {
+      if (numMax !== undefined && Number.isFinite(numMax)) entry.numericMax = numMax
+    }
+    return entry
+  }
+
   const addItem = async () => {
     const label = input.trim()
     if (!label || !db || disabled) return
@@ -1397,13 +1395,31 @@ function MasterEntriesEditor({
       setLocalError('Mục này đã có trong danh sách (không phân biệt hoa thường).')
       return
     }
-    const newEntry: MasterDataEntry = { id: crypto.randomUUID(), label, isActive: true }
+    const effMode: MasterEntryMatchMode =
+      addMatchMode === '' ? catalogDef.defaultMatchMode ?? 'exact_norm' : addMatchMode
+    if (effMode === 'between' && (addMin.trim() === '' || addMax.trim() === '')) {
+      setLocalError('Chế độ «từ … đến …» cần nhập cả giá trị Từ và Đến.')
+      return
+    }
+    if (effMode === 'gte' && addMin.trim() === '') {
+      setLocalError('Chế độ «lớn hơn hoặc bằng» cần nhập ngưỡng Từ.')
+      return
+    }
+    if (effMode === 'lte' && addMax.trim() === '') {
+      setLocalError('Chế độ «bé hơn hoặc bằng» cần nhập ngưỡng Đến.')
+      return
+    }
+    const newEntry = buildEntryFromAddForm(label, crypto.randomUUID())
     const next = [...localEntries, newEntry]
     setLocalEntries(next)
     const ok = await persist(next)
     if (ok) {
       pendingServerMatch.current = next
       setInput('')
+      setAddSynonyms('')
+      setAddMatchMode('')
+      setAddMin('')
+      setAddMax('')
     } else {
       pendingServerMatch.current = null
       setLocalEntries(entries)
@@ -1411,6 +1427,7 @@ function MasterEntriesEditor({
   }
 
   const removeItem = async (id: string) => {
+    if (editing?.id === id) setEditing(null)
     const next = localEntries.filter((x) => x.id !== id)
     setLocalEntries(next)
     const ok = await persist(next)
@@ -1422,17 +1439,65 @@ function MasterEntriesEditor({
     }
   }
 
+  const saveEdit = async () => {
+    if (!editing || !db || disabled) return
+    const label = editing.label.trim()
+    if (!label) {
+      setLocalError('Nhãn không được để trống.')
+      return
+    }
+    const syn = editing.synonyms?.map((s) => String(s).trim()).filter(Boolean)
+    const cleaned: MasterDataEntry = {
+      ...editing,
+      label,
+      synonyms: syn?.length ? syn : undefined,
+    }
+    const mode = cleaned.matchMode ?? catalogDef.defaultMatchMode ?? 'exact_norm'
+    if (mode === 'between' && (cleaned.numericMin === undefined || cleaned.numericMax === undefined)) {
+      setLocalError('Khoảng «từ … đến …» cần đủ hai biên số.')
+      return
+    }
+    if (mode === 'gte' && cleaned.numericMin === undefined) {
+      setLocalError('Cần nhập ngưỡng dưới (numericMin).')
+      return
+    }
+    if (mode === 'lte' && cleaned.numericMax === undefined) {
+      setLocalError('Cần nhập ngưỡng trên (numericMax).')
+      return
+    }
+    const next = localEntries.map((x) => (x.id === cleaned.id ? cleaned : x))
+    setLocalEntries(next)
+    const ok = await persist(next)
+    if (ok) {
+      pendingServerMatch.current = next
+      setEditing(null)
+    } else {
+      pendingServerMatch.current = null
+      setLocalEntries(entries)
+    }
+  }
+
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-6">
-      <div className="mb-3 flex items-start justify-between gap-3 pr-24">
-        <div>
-          <h3 className="app-section-heading md:text-xl">{title}</h3>
-          <p className="mt-0.5 font-mono text-xs text-slate-500">{catalogId}</p>
+    <div
+      className={
+        showHeading
+          ? 'rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-6'
+          : 'flex min-h-0 flex-1 flex-col'
+      }
+    >
+      {showHeading ? (
+        <div className="mb-3 flex items-start justify-between gap-3 pr-24">
+          <div>
+            <h3 className={settingsHeading}>{title}</h3>
+            <p className={`mt-0.5 font-mono text-[0.92em] text-slate-500 ${settingsCopy}`}>{catalogId}</p>
+          </div>
+          {loading ? <span className={`shrink-0 text-slate-500 ${settingsCopyMuted}`}>Đang tải…</span> : null}
         </div>
-        {loading ? <span className="shrink-0 text-sm text-slate-500">Đang tải…</span> : null}
-      </div>
+      ) : loading ? (
+        <p className={`mb-2 shrink-0 text-slate-500 ${settingsCopyMuted}`}>Đang tải…</p>
+      ) : null}
       {disabled && readonlyHint ? (
-        <p className="mb-3 text-sm text-slate-600" role="status">
+        <p className={`mb-3 text-slate-600 ${settingsCopy}`} role="status">
           {readonlyHint}
         </p>
       ) : null}
@@ -1448,152 +1513,228 @@ function MasterEntriesEditor({
           }}
           disabled={!db || busy || disabled}
           placeholder="Gõ nhãn hiển thị, Enter hoặc bấm Thêm"
-          className="min-w-0 flex-1 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 disabled:opacity-50"
+          className={`min-w-0 flex-1 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 disabled:opacity-50 ${settingsCopy}`}
         />
         <button
           type="button"
           disabled={!db || busy || disabled}
           onClick={() => void addItem()}
-          className="shrink-0 rounded-xl border border-amber-900/30 bg-gradient-to-r from-amber-800 to-amber-950 px-5 py-3 text-base font-semibold text-white shadow-md hover:from-amber-900 hover:to-amber-950 disabled:opacity-50"
+          className={`shrink-0 rounded-xl border border-amber-900/30 bg-gradient-to-r from-amber-800 to-amber-950 px-5 py-3 font-semibold text-white shadow-md hover:from-amber-900 hover:to-amber-950 disabled:opacity-50 ${settingsCopy}`}
         >
           Thêm
         </button>
       </div>
+      {!disabled ? (
+        <div className={`mt-3 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 text-slate-700 ${settingsCopy}`}>
+          <p className={settingsHeading}>Tùy chọn khi thêm mục</p>
+          <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
+            Tên khác (synonyms), cách nhau bởi dấu phẩy
+            <input
+              value={addSynonyms}
+              onChange={(e) => setAddSynonyms(e.target.value)}
+              disabled={!db || busy}
+              placeholder="VD: Dien Bien, DB"
+              className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+            />
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className={`min-w-0 flex-1 font-medium text-slate-700 ${settingsCopy}`}>
+              Chế độ khớp (để trống = theo mặc định catalog)
+              <select
+                value={addMatchMode}
+                onChange={(e) => setAddMatchMode((e.target.value || '') as '' | MasterEntryMatchMode)}
+                disabled={!db || busy}
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              >
+                <option value="">Theo catalog ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
+                {addAllowedModes.map((m) => (
+                  <option key={m} value={m}>
+                    {MATCH_MODE_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={`w-full shrink-0 font-medium text-slate-700 sm:w-28 ${settingsCopy}`}>
+              Từ (số)
+              <input
+                value={addMin}
+                onChange={(e) => setAddMin(e.target.value)}
+                disabled={!db || busy}
+                inputMode="decimal"
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              />
+            </label>
+            <label className={`w-full shrink-0 font-medium text-slate-700 sm:w-28 ${settingsCopy}`}>
+              Đến (số)
+              <input
+                value={addMax}
+                onChange={(e) => setAddMax(e.target.value)}
+                disabled={!db || busy}
+                inputMode="decimal"
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
       {localError ? (
-        <p className="mt-2 text-sm text-rose-700" role="alert">
+        <p className={`mt-2 text-rose-700 ${settingsCopy}`} role="alert">
           {localError}
         </p>
       ) : null}
-      <div className="mt-3 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
-        {localEntries.map((x) => (
-          <span
-            key={x.id}
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800"
-          >
-            {x.label}
+      {editing ? (
+        <div className={`mt-3 rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-slate-800 ${settingsCopy}`}>
+          <p className={`font-semibold text-amber-950 ${settingsCopy}`}>Sửa mục: {editing.label}</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
+              Nhãn
+              <input
+                value={editing.label}
+                onChange={(e) => setEditing({ ...editing, label: e.target.value })}
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              />
+            </label>
+            <label className={`block font-medium text-slate-700 sm:col-span-2 ${settingsCopy}`}>
+              Synonyms (phẩy)
+              <input
+                value={(editing.synonyms ?? []).join(', ')}
+                onChange={(e) =>
+                  setEditing({
+                    ...editing,
+                    synonyms: e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              />
+            </label>
+            <label className={`block font-medium text-slate-700 sm:col-span-2 ${settingsCopy}`}>
+              Chế độ khớp
+              <select
+                value={editing.matchMode ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value as MasterEntryMatchMode | ''
+                  const next: MasterDataEntry = {
+                    ...editing,
+                    matchMode: v === '' ? undefined : v,
+                  }
+                  if (v !== 'gte' && v !== 'between') delete next.numericMin
+                  if (v !== 'lte' && v !== 'between') delete next.numericMax
+                  setEditing(next)
+                }}
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              >
+                <option value="">Theo catalog ({MATCH_MODE_LABELS[catalogDef.defaultMatchMode ?? 'exact_norm']})</option>
+                {addAllowedModes.map((m) => (
+                  <option key={m} value={m}>
+                    {MATCH_MODE_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
+              Từ (số)
+              <input
+                value={editing.numericMin ?? ''}
+                onChange={(e) => {
+                  const t = e.target.value.trim()
+                  if (t === '') {
+                    setEditing({ ...editing, numericMin: undefined })
+                    return
+                  }
+                  const n = Number(t.replace(',', '.'))
+                  setEditing({ ...editing, numericMin: Number.isFinite(n) ? n : editing.numericMin })
+                }}
+                inputMode="decimal"
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              />
+            </label>
+            <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
+              Đến (số)
+              <input
+                value={editing.numericMax ?? ''}
+                onChange={(e) => {
+                  const t = e.target.value.trim()
+                  if (t === '') {
+                    setEditing({ ...editing, numericMax: undefined })
+                    return
+                  }
+                  const n = Number(t.replace(',', '.'))
+                  setEditing({ ...editing, numericMax: Number.isFinite(n) ? n : editing.numericMax })
+                }}
+                inputMode="decimal"
+                className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 font-mono text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={!db || busy || disabled}
-              onClick={() => void removeItem(x.id)}
-              className="text-lg leading-none text-slate-500 hover:text-rose-600 disabled:opacity-40"
-              aria-label={`Xóa ${x.label}`}
+              disabled={busy}
+              onClick={() => void saveEdit()}
+              className={`rounded-lg border border-amber-800 bg-amber-900 px-3 py-1.5 font-semibold text-white hover:bg-amber-950 disabled:opacity-50 ${settingsCopy}`}
             >
-              ×
+              Lưu sửa
             </button>
-          </span>
-        ))}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setEditing(null)}
+              className={`rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 ${settingsCopy}`}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div
+        className={
+          showHeading
+            ? 'mt-3 flex max-h-[min(52vh,28rem)] flex-wrap gap-2 overflow-y-auto overscroll-contain'
+            : 'mt-3 flex min-h-0 flex-1 flex-wrap content-start gap-2 overflow-y-auto overscroll-contain'
+        }
+      >
+        {localEntries.map((x) => {
+          const hint = entryHintBadge(x, catalogDef)
+          return (
+            <span
+              key={x.id}
+              className={`inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white py-1 pl-3 pr-1 text-slate-800 ${settingsCopy}`}
+            >
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  if (disabled) return
+                  setEditing({ ...x })
+                  setLocalError(null)
+                }}
+                className="min-w-0 truncate text-left hover:text-amber-900 disabled:cursor-default"
+              >
+                {x.label}
+                {hint ? (
+                  <span className="ml-1.5 font-mono text-[0.85em] text-slate-500" title="Gợi ý chế độ / khoảng">
+                    {hint}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                disabled={!db || busy || disabled}
+                onClick={() => void removeItem(x.id)}
+                className="shrink-0 rounded-full px-1.5 text-lg leading-none text-slate-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
+                aria-label={`Xóa ${x.label}`}
+              >
+                ×
+              </button>
+            </span>
+          )
+        })}
         {!localEntries.length ? (
-          <span className="text-base text-slate-600">Chưa có mục.</span>
+          <span className={settingsCopyMuted}>Chưa có mục.</span>
         ) : null}
-      </div>
-    </div>
-  )
-}
-
-function PlaybookQuickAdd({ db }: { db: NonNullable<ReturnType<typeof getFirestoreDb>> }) {
-  const [title, setTitle] = useState('Playbook mới')
-  const [field, setField] = useState('region')
-  const [value, setValue] = useState('')
-  const [strategy, setStrategy] = useState('')
-  const [usps, setUsps] = useState('')
-  const [objections, setObjections] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const save = async () => {
-    setBusy(true)
-    try {
-      const now = Timestamp.now()
-      const triggerConditions: PlaybookTriggerCondition[] =
-        field && value.trim()
-          ? [{ field: field as PlaybookTriggerCondition['field'], operator: 'EQUALS', value: value.trim() }]
-          : []
-      await addDoc(collection(db, FS_COLLECTIONS.consultingPlaybooks), {
-        title,
-        isActive: true,
-        priority: 10,
-        triggerConditions,
-        strategy,
-        keySellingPoints: usps
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        objectionHandling: objections
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        createdAt: now,
-        updatedAt: now,
-      })
-      setStrategy('')
-      setUsps('')
-      setObjections('')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="grid gap-4 rounded-xl border border-slate-200/80 bg-white/60 p-5 md:grid-cols-2 md:p-6">
-      <label className="text-base font-medium text-slate-700 md:col-span-2">
-        Tiêu đề
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="mt-2 w-full rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-base text-slate-900"
-        />
-      </label>
-      <label className="text-base font-medium text-slate-700">
-        Trường điều kiện
-        <input
-          value={field}
-          onChange={(e) => setField(e.target.value)}
-          className="mt-2 w-full rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-base text-slate-900"
-        />
-      </label>
-      <label className="text-base font-medium text-slate-700">
-        Giá trị
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="mt-2 w-full rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-base text-slate-900"
-        />
-      </label>
-      <label className="text-base font-medium text-slate-700 md:col-span-2">
-        Chiến lược (strategy)
-        <textarea
-          value={strategy}
-          onChange={(e) => setStrategy(e.target.value)}
-          rows={3}
-          className="mt-2 w-full rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-base text-slate-900"
-        />
-      </label>
-      <label className="text-base font-medium text-slate-700">
-        USP (mỗi dòng)
-        <textarea
-          value={usps}
-          onChange={(e) => setUsps(e.target.value)}
-          rows={3}
-          className="mt-2 w-full rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-base text-slate-900"
-        />
-      </label>
-      <label className="text-base font-medium text-slate-700">
-        Xử lý từ chối (mỗi dòng)
-        <textarea
-          value={objections}
-          onChange={(e) => setObjections(e.target.value)}
-          rows={3}
-          className="mt-2 w-full rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-base text-slate-900"
-        />
-      </label>
-      <div className="md:col-span-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void save()}
-          className="w-full rounded-lg border border-violet-600 bg-violet-600 py-3 text-base font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-        >
-          {busy ? 'Đang lưu…' : 'Thêm playbook'}
-        </button>
       </div>
     </div>
   )

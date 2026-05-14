@@ -6,16 +6,18 @@ import { callOpenAiCompatibleChat, type ChatMessage } from '../services/aiClient
 const PRESET = `Bạn là trợ lý tuyển sinh Cao đẳng Việt Mỹ. Gợi ý ngắn gọn, lịch sự, tiếng Việt.`
 
 export function AiLabView({ embedded = false }: { embedded?: boolean }) {
-  const { can } = useAuth()
+  const { can, canRunLlmAnalysis } = useAuth()
   const [input, setInput] = useState('')
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (!can('ai:use')) {
+  if (!can('ai:use') || !canRunLlmAnalysis) {
     return (
       <div className="rounded-2xl border border-amber-300/60 bg-amber-50/90 p-6 text-sm text-amber-900">
-        Bạn không có quyền sử dụng Phòng thử AI.
+        Bạn không có quyền dùng Phòng thử AI. Cần quyền <code className="rounded bg-white/80 px-1">ai:use</code> và
+        được Quản lý bật «Cho phép dùng LLM và tác vụ AI» trong Cài đặt → Quản lý nhân sự (Siêu quản trị không cần
+        cờ này).
       </div>
     )
   }

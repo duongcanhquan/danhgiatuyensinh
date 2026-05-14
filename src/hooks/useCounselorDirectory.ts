@@ -29,6 +29,7 @@ function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile |
       maxConcurrentLeads:
         data.maxConcurrentLeads !== undefined ? Number(data.maxConcurrentLeads) : undefined,
       isActive: data.isActive !== false,
+      allowLlmAndAiTasks: data.allowLlmAndAiTasks === true ? true : undefined,
       createdAt: (data.createdAt as Timestamp) ?? now,
       updatedAt: (data.updatedAt as Timestamp) ?? now,
     }

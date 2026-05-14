@@ -1,6 +1,211 @@
 import { doc, writeBatch, Timestamp, type Firestore } from 'firebase/firestore'
-import type { KnowledgeDocumentType, ScriptCategory } from '../types'
+import type {
+  KnowledgeDocumentType,
+  PlaybookOperator,
+  PlaybookTriggerCondition,
+  ScriptCategory,
+} from '../types'
 import { FS_COLLECTIONS } from '../types'
+
+const KNOWLEDGE_TYPES_ALLOWED = new Set<KnowledgeDocumentType>(['TUITION', 'POLICY', 'MAJOR_INFO'])
+const PLAYBOOK_OPERATORS: Set<string> = new Set(['EQUALS', 'CONTAINS', 'IN', 'NOT_IN'])
+
+export type KnowledgeImportRow = {
+  id: string
+  title: string
+  type: KnowledgeDocumentType
+  content: string
+}
+
+/** Kiểm tra JSON tải lên (mảng tài liệu) trước khi ghi Firestore. */
+export function parseKnowledgeDocumentsJson(raw: unknown, maxItems = 500): KnowledgeImportRow[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('File phải là một mảng JSON (array) các tài liệu.')
+  }
+  if (raw.length > maxItems) {
+    throw new Error(`Tối đa ${maxItems} tài liệu mỗi lần nạp.`)
+  }
+  const out: KnowledgeImportRow[] = []
+  let i = 0
+  for (const item of raw) {
+    i++
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Phần tử #${i}: không phải object JSON.`)
+    }
+    const o = item as Record<string, unknown>
+    const id = String(o.id ?? '').trim()
+    const title = String(o.title ?? '').trim()
+    const typeRaw = String(o.type ?? '').trim() as KnowledgeDocumentType
+    const content = String(o.content ?? '').trim()
+    if (!id) throw new Error(`Phần tử #${i}: thiếu trường "id" (chuỗi không rỗng).`)
+    if (!title) throw new Error(`Phần tử #${i}: thiếu "title".`)
+    if (!content) throw new Error(`Phần tử #${i}: thiếu "content".`)
+    if (!KNOWLEDGE_TYPES_ALLOWED.has(typeRaw)) {
+      throw new Error(
+        `Phần tử #${i}: "type" phải là TUITION, POLICY hoặc MAJOR_INFO (nhận được: ${typeRaw || '—'}).`,
+      )
+    }
+    out.push({ id, title, type: typeRaw, content })
+  }
+  return out
+}
+
+/** Ghi / merge từng tài liệu theo `id` document. */
+export async function importKnowledgeDocumentsBatch(db: Firestore, entries: KnowledgeImportRow[]): Promise<number> {
+  const now = Timestamp.now()
+  let batch = writeBatch(db)
+  let ops = 0
+  for (const e of entries) {
+    batch.set(
+      doc(db, FS_COLLECTIONS.knowledgeDocuments, e.id),
+      {
+        title: e.title,
+        type: e.type,
+        content: e.content,
+        uploadedAt: now,
+      },
+      { merge: true },
+    )
+    ops++
+    if (ops >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      ops = 0
+    }
+  }
+  if (ops) await batch.commit()
+  return entries.length
+}
+
+function parsePlaybookTriggerCondition(
+  raw: unknown,
+  playbookIndex: number,
+  condIndex: number,
+): PlaybookTriggerCondition {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`Playbook #${playbookIndex}: điều kiện #${condIndex} không hợp lệ.`)
+  }
+  const o = raw as Record<string, unknown>
+  const field = String(o.field ?? '').trim()
+  if (!field) {
+    throw new Error(`Playbook #${playbookIndex}: điều kiện #${condIndex} thiếu "field".`)
+  }
+  let operator = String(o.operator ?? 'EQUALS').trim() as PlaybookOperator
+  if (!PLAYBOOK_OPERATORS.has(operator)) {
+    operator = 'EQUALS'
+  }
+  const val = o.value
+  let value: string | string[]
+  if (Array.isArray(val)) {
+    value = val.map((v) => String(v))
+  } else if (val === undefined || val === null) {
+    value = ''
+  } else {
+    value = String(val)
+  }
+  return { field: field as PlaybookTriggerCondition['field'], operator, value }
+}
+
+export type PlaybookImportRow = {
+  id: string
+  title: string
+  isActive: boolean
+  priority: number
+  triggerConditions: PlaybookTriggerCondition[]
+  strategy: string
+  keySellingPoints: string[]
+  objectionHandling: string[]
+}
+
+/** Seed bundle chính thức (public/seed/consulting-playbooks.json). */
+export const VIETMY_PLAYBOOK_SEED_TAG = 'vietmy_playbooks_v1'
+/** Playbook nạp từ file JSON trong Cài đặt. */
+export const VIETMY_PLAYBOOK_JSON_UPLOAD_TAG = 'vietmy_json_upload_v1'
+
+/** Kiểm tra JSON tải lên (mảng playbook). */
+export function parseConsultingPlaybooksJson(raw: unknown, maxItems = 200): PlaybookImportRow[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('File phải là một mảng JSON (array) các playbook.')
+  }
+  if (raw.length > maxItems) {
+    throw new Error(`Tối đa ${maxItems} playbook mỗi lần nạp.`)
+  }
+  const out: PlaybookImportRow[] = []
+  let i = 0
+  for (const item of raw) {
+    i++
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Playbook #${i}: không phải object JSON.`)
+    }
+    const o = item as Record<string, unknown>
+    const id = String(o.id ?? '').trim()
+    const title = String(o.title ?? '').trim()
+    if (!id) throw new Error(`Playbook #${i}: thiếu "id".`)
+    if (!title) throw new Error(`Playbook #${i}: thiếu "title".`)
+    const strategy = String(o.strategy ?? '').trim()
+    const trigRaw = o.triggerConditions
+    const triggerConditions: PlaybookTriggerCondition[] = Array.isArray(trigRaw)
+      ? trigRaw.map((t, j) => parsePlaybookTriggerCondition(t, i, j + 1))
+      : []
+    const keySellingPoints = Array.isArray(o.keySellingPoints)
+      ? o.keySellingPoints.map((x) => String(x).trim()).filter(Boolean)
+      : []
+    const objectionHandling = Array.isArray(o.objectionHandling)
+      ? o.objectionHandling.map((x) => String(x).trim()).filter(Boolean)
+      : []
+    const priority = Number(o.priority)
+    const isActive = o.isActive !== false
+    out.push({
+      id,
+      title,
+      isActive,
+      priority: Number.isFinite(priority) ? priority : 10,
+      triggerConditions,
+      strategy,
+      keySellingPoints,
+      objectionHandling,
+    })
+  }
+  return out
+}
+
+/** Ghi / merge playbook theo `id`. `seedTag` mặc định gắn nhãn nạp từ file JSON trong app. */
+export async function importConsultingPlaybooksBatch(
+  db: Firestore,
+  entries: PlaybookImportRow[],
+  options?: { seedTag?: string },
+): Promise<number> {
+  const now = Timestamp.now()
+  const seedTag = options?.seedTag ?? VIETMY_PLAYBOOK_JSON_UPLOAD_TAG
+  let batch = writeBatch(db)
+  let ops = 0
+  for (const e of entries) {
+    batch.set(
+      doc(db, FS_COLLECTIONS.consultingPlaybooks, e.id),
+      {
+        title: e.title,
+        isActive: e.isActive,
+        priority: e.priority,
+        triggerConditions: e.triggerConditions,
+        strategy: e.strategy,
+        keySellingPoints: e.keySellingPoints,
+        objectionHandling: e.objectionHandling,
+        seedTag,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+    ops++
+    if (ops >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      ops = 0
+    }
+  }
+  if (ops) await batch.commit()
+  return entries.length
+}
 
 function seedAssetUrl(file: string): string {
   const base = import.meta.env.BASE_URL || '/'
@@ -50,79 +255,15 @@ export async function importVietMyScriptSnippetsFromPublic(db: Firestore): Promi
 export async function importVietMyKnowledgeFromPublic(db: Firestore): Promise<number> {
   const res = await fetch(seedAssetUrl('knowledge-documents.json'))
   if (!res.ok) throw new Error(`Không tải được bản mẫu kho tri thức (${res.status}).`)
-  const entries = (await res.json()) as Array<{
-    id: string
-    title: string
-    type: KnowledgeDocumentType
-    content: string
-  }>
-  const now = Timestamp.now()
-  let batch = writeBatch(db)
-  let ops = 0
-  for (const e of entries) {
-    batch.set(
-      doc(db, FS_COLLECTIONS.knowledgeDocuments, e.id),
-      {
-        title: e.title,
-        type: e.type,
-        content: e.content,
-        uploadedAt: now,
-      },
-      { merge: true },
-    )
-    ops++
-    if (ops >= 400) {
-      await batch.commit()
-      batch = writeBatch(db)
-      ops = 0
-    }
-  }
-  if (ops) await batch.commit()
-  return entries.length
+  const raw: unknown = await res.json()
+  const entries = parseKnowledgeDocumentsJson(raw, 500)
+  return importKnowledgeDocumentsBatch(db, entries)
 }
-
-const PLAYBOOK_SEED_TAG = 'vietmy_playbooks_v1'
 
 export async function importVietMyPlaybooksFromPublic(db: Firestore): Promise<number> {
   const res = await fetch(seedAssetUrl('consulting-playbooks.json'))
   if (!res.ok) throw new Error(`Không tải được bản mẫu playbook (${res.status}).`)
-  const entries = (await res.json()) as Array<{
-    id: string
-    title: string
-    priority: number
-    triggerConditions: unknown[]
-    strategy: string
-    keySellingPoints?: string[]
-    objectionHandling?: string[]
-    isActive?: boolean
-  }>
-  const now = Timestamp.now()
-  let batch = writeBatch(db)
-  let ops = 0
-  for (const e of entries) {
-    batch.set(
-      doc(db, FS_COLLECTIONS.consultingPlaybooks, e.id),
-      {
-        title: e.title,
-        isActive: e.isActive !== false,
-        priority: Number(e.priority ?? 0),
-        triggerConditions: Array.isArray(e.triggerConditions) ? e.triggerConditions : [],
-        strategy: String(e.strategy ?? ''),
-        keySellingPoints: Array.isArray(e.keySellingPoints) ? e.keySellingPoints.map(String) : [],
-        objectionHandling: Array.isArray(e.objectionHandling) ? e.objectionHandling.map(String) : [],
-        seedTag: PLAYBOOK_SEED_TAG,
-        createdAt: now,
-        updatedAt: now,
-      },
-      { merge: true },
-    )
-    ops++
-    if (ops >= 400) {
-      await batch.commit()
-      batch = writeBatch(db)
-      ops = 0
-    }
-  }
-  if (ops) await batch.commit()
-  return entries.length
+  const raw: unknown = await res.json()
+  const entries = parseConsultingPlaybooksJson(raw, 500)
+  return importConsultingPlaybooksBatch(db, entries, { seedTag: VIETMY_PLAYBOOK_SEED_TAG })
 }

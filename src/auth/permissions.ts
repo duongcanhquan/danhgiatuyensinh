@@ -3,13 +3,18 @@ import { PERMISSIONS } from '../types'
 
 const ALL = PERMISSIONS as unknown as readonly Permission[]
 
+/** Admin thường: mọi quyền trừ cấu hình khóa API LLM (chỉ Siêu quản trị). */
+const ALL_EXCEPT_LLM_API = ALL.filter((p) => p !== 'config:llm_api')
+
 /**
  * Ma trận quyền mặc định theo vai trò (UI + gợi ý Firestore Rules).
  */
 export function defaultPermissionsForRole(role: UserRole): readonly Permission[] {
   switch (role) {
-    case 'admin':
+    case 'super_admin':
       return ALL
+    case 'admin':
+      return ALL_EXCEPT_LLM_API
     case 'counselor':
       return [
         'leads:read:self_assigned',

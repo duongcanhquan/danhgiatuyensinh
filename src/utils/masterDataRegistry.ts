@@ -1,4 +1,9 @@
-import type { MasterCatalogDefinition, MasterDataEntry } from '../types'
+import type {
+  MasterCatalogDefinition,
+  MasterCatalogValueKind,
+  MasterDataEntry,
+  MasterEntryMatchMode,
+} from '../types'
 import { DEFAULT_MASTER_CATALOGS, MASTER_DATA_REGISTRY_DOC_ID } from '../types'
 
 /** Document legacy → bucket chuẩn (không hiển thị như một danh mục riêng). */
@@ -35,6 +40,13 @@ export function masterDataEntriesForFirestore(entries: MasterDataEntry[]): Recor
     if (e.annualCapacity !== undefined && Number.isFinite(Number(e.annualCapacity))) {
       row.annualCapacity = Number(e.annualCapacity)
     }
+    if (e.matchMode) row.matchMode = e.matchMode
+    if (e.numericMin !== undefined && Number.isFinite(Number(e.numericMin))) {
+      row.numericMin = Number(e.numericMin)
+    }
+    if (e.numericMax !== undefined && Number.isFinite(Number(e.numericMax))) {
+      row.numericMax = Number(e.numericMax)
+    }
     return row
   })
 }
@@ -46,10 +58,24 @@ export function parseEntriesFromDoc(data: Record<string, unknown>): MasterDataEn
       .map((x) => {
         if (x && typeof x === 'object' && 'label' in x) {
           const o = x as Record<string, unknown>
+          const matchModeRaw = o.matchMode
+          const matchMode =
+            matchModeRaw === 'exact_norm' ||
+            matchModeRaw === 'fuzzy_contains' ||
+            matchModeRaw === 'gte' ||
+            matchModeRaw === 'lte' ||
+            matchModeRaw === 'between'
+              ? (matchModeRaw as MasterEntryMatchMode)
+              : undefined
+          const numericMin = o.numericMin !== undefined ? Number(o.numericMin) : undefined
+          const numericMax = o.numericMax !== undefined ? Number(o.numericMax) : undefined
           return {
             id: String(o.id ?? crypto.randomUUID()),
             label: String(o.label ?? ''),
             synonyms: Array.isArray(o.synonyms) ? o.synonyms.map(String) : undefined,
+            matchMode,
+            numericMin: Number.isFinite(numericMin) ? numericMin : undefined,
+            numericMax: Number.isFinite(numericMax) ? numericMax : undefined,
             departmentId: o.departmentId ? String(o.departmentId) : undefined,
             annualCapacity: o.annualCapacity !== undefined ? Number(o.annualCapacity) : undefined,
             isActive: o.isActive !== false,
@@ -118,7 +144,25 @@ export function parseCatalogsFromRegistryData(
     const order = Number(o.order)
     if (!id || isReservedCatalogSlug(id)) continue
     if (!/^([a-z][a-z0-9_]{0,63})$/.test(id)) continue
-    out.push({ id, label, order: Number.isFinite(order) ? order : out.length * 10 })
+    const vk = o.valueKind
+    const valueKind: MasterCatalogValueKind | undefined =
+      vk === 'number' || vk === 'text' ? vk : undefined
+    const dm = o.defaultMatchMode
+    const defaultMatchMode: MasterEntryMatchMode | undefined =
+      dm === 'exact_norm' ||
+      dm === 'fuzzy_contains' ||
+      dm === 'gte' ||
+      dm === 'lte' ||
+      dm === 'between'
+        ? dm
+        : undefined
+    out.push({
+      id,
+      label,
+      order: Number.isFinite(order) ? order : out.length * 10,
+      ...(valueKind ? { valueKind } : {}),
+      ...(defaultMatchMode ? { defaultMatchMode } : {}),
+    })
   }
   return out.length ? out.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)) : null
 }

@@ -1,8 +1,9 @@
 import type { Lead, UserId, VietMyUserProfile } from '../types'
+import { isAdminLikeRole } from '../auth/roleUtils'
 
 /** Chọn một UID quản trị (ổn định theo email) để gán lead chờ điều phối khi import không khớp TVV. */
 export function pickPrimaryAdminUid(users: readonly VietMyUserProfile[]): UserId | null {
-  const admins = users.filter((u) => u.role === 'admin' && u.isActive)
+  const admins = users.filter((u) => isAdminLikeRole(u.role) && u.isActive)
   if (!admins.length) return null
   return [...admins].sort((a, b) => a.email.localeCompare(b.email, 'vi'))[0]!.id
 }

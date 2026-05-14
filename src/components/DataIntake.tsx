@@ -22,6 +22,7 @@ import { evaluateLead } from '../utils/scoring'
 import { countAssignments, pickCounselorByLowestLoad, pickPrimaryAdminUid } from '../utils/routing'
 import { computeLeadUniqueHash } from '../utils/leadIdentity'
 import { FS_COLLECTIONS, type VietMyUserProfile } from '../types'
+import { isAdminLikeRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { pickProfileForImport, useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
@@ -64,7 +65,7 @@ type ImportPreview = {
 }
 
 function activeStaffForExcelAssignMatch(users: VietMyUserProfile[]) {
-  return users.filter((u) => u.isActive && (u.role === 'counselor' || u.role === 'admin'))
+  return users.filter((u) => u.isActive && (u.role === 'counselor' || isAdminLikeRole(u.role)))
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -139,7 +140,7 @@ export function DataIntake() {
   const configured = isFirebaseConfigured()
   const { profile, can } = useAuth()
   const { profiles } = useScoringProfiles()
-  const { regionLabels, highSchoolLabels, majorLabels } = useMasterData()
+  const { regionLabels, highSchoolLabels, majorLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
   const { counselors, users: directoryUsers } = useCounselorDirectory()
 
   const matchStaffForImport = useMemo(
@@ -154,8 +155,17 @@ export function DataIntake() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const masterBuckets = useMemo(
-    () => ({ regionLabels, highSchoolLabels, majorLabels }),
-    [regionLabels, highSchoolLabels, majorLabels],
+    () => ({
+      regionLabels,
+      highSchoolLabels,
+      majorLabels,
+      academicPerformanceLabels,
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
+    }),
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
   )
 
   const canIntake = can('data:intake')
@@ -310,7 +320,7 @@ export function DataIntake() {
       const counts = await fetchAssignmentCountsForImport(db)
       const { prepared, uploadBatchId, uploadedBy, uploaderName } = preview
       const ownership = { uploadedBy, uploaderName, uploadBatchId }
-      const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (profile.role === 'admin' ? profile.id : null)
+      const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (isAdminLikeRole(profile.role) ? profile.id : null)
 
       const toCreate: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
       let rejectedInFile = 0
@@ -353,6 +363,12 @@ export function DataIntake() {
           parentPhone: pr.row.parentPhone,
           source: pr.row.source,
           educationLevel: pr.row.educationLevel,
+          ...(pr.row.majorInterest?.trim() ? { majorInterest: pr.row.majorInterest.trim() } : {}),
+          ...(pr.row.academicPerformance?.trim()
+            ? { academicPerformance: pr.row.academicPerformance.trim() }
+            : {}),
+          ...(pr.row.schoolType?.trim() ? { schoolType: pr.row.schoolType.trim() } : {}),
+          ...(pr.row.studyIntention?.trim() ? { studyIntention: pr.row.studyIntention.trim() } : {}),
           province: pr.row.province,
           highSchool: pr.row.highSchool,
           gradeClass: pr.row.gradeClass,

@@ -31,6 +31,7 @@ import {
 import { Link } from 'react-router-dom'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
+import { isAdminLikeRole } from '../auth/roleUtils'
 import {
   leadMatchesClientSearch,
   MAX_FULL_SCOPE_LEADS,
@@ -138,7 +139,7 @@ function effectiveAssigneeUid(l: Lead): string {
 }
 
 function isElevatedForBulk(role: string | undefined): boolean {
-  return role === 'admin' || role === 'head_of_department' || role === 'head_of_profession'
+  return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
 }
 
 function KanbanColumn({
@@ -477,7 +478,7 @@ function CounselorPipelineBoard({
 export function CounselorDashboard() {
   const db = getFirestoreDb()
   const { profile, can } = useAuth()
-  const { highSchoolLabels, majorLabels } = useMasterData()
+  const { highSchoolLabels, majorLabels, regionLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
 
   const counselorDirectoryLabelById = useMemo(() => {
@@ -492,6 +493,19 @@ export function CounselorDashboard() {
     dataMode: 'fullScope',
     directoryLabels: counselorDirectoryLabelById,
   })
+  const scoringMasterBuckets = useMemo(
+    () => ({
+      regionLabels,
+      highSchoolLabels,
+      majorLabels,
+      academicPerformanceLabels,
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
+    }),
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
+  )
   const { scoreByLeadId, activeScoringProfile } = useLeadScoring(leads)
 
   const [needle, setNeedle] = useState('')
@@ -534,7 +548,7 @@ export function CounselorDashboard() {
     const base = counselorUsers
     if (!isElevatedLeadScope) return base
     const extras = directoryUsers.filter(
-      (u) => u.isActive && u.role === 'admin' && !base.some((c) => c.id === u.id),
+      (u) => u.isActive && isAdminLikeRole(u.role) && !base.some((c) => c.id === u.id),
     )
     return [...base, ...extras].sort((a, b) =>
       formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
@@ -681,7 +695,7 @@ export function CounselorDashboard() {
       const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
       for (const l of rows) {
         const ev = activeScoringProfile
-          ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile)
+          ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets)
           : { calculatedScore: l.calculatedScore, priorityTag: l.priorityTag }
         m.set(l.id, ev)
       }

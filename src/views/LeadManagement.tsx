@@ -26,6 +26,7 @@ import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/us
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { isAdminLikeRole } from '../auth/roleUtils'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
 import { playbooksMatchingLead } from '../utils/playbookMatch'
@@ -43,7 +44,7 @@ import {
   mergeGatekeeperConfig,
 } from '../utils/aiGatekeeper'
 import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
-import { resolveMlWinDisplay } from '../utils/mlWinMock'
+import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
@@ -78,8 +79,12 @@ const EVALUATION_TAGS = [
   'Quan tâm cao',
 ] as const
 
+/** Tooltip cột — ngắn; chi tiết công thức nằm trên từng ô (đặt chuột lên gauge). */
+const ML_WIN_COLUMN_HINT =
+  'Ước lượng / chỉ số: MVP = độ đầy đủ hồ sơ (5–96%); Firestore = mlWinProbability + mlExplanation. Đặt chuột lên vòng % từng dòng để xem bảng điểm.'
+
 function isElevatedForAdminFilters(role: string | undefined): boolean {
-  return role === 'admin' || role === 'head_of_department' || role === 'head_of_profession'
+  return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
 }
 
 type AdminDateField = 'created' | 'updated' | 'imported'
@@ -123,8 +128,15 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
 export function LeadManagement() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
-  const { regionLabels, highSchoolLabels, majorLabels } = useMasterData()
-  const { profile, can } = useAuth()
+  const {
+    regionLabels,
+    highSchoolLabels,
+    majorLabels,
+    byKind,
+    academicPerformanceLabels,
+    catalogs,
+  } = useMasterData()
+  const { profile, can, canRunLlmAnalysis } = useAuth()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const institutionalRagBlock = useMemo(
@@ -255,6 +267,20 @@ export function LeadManagement() {
     dataMode: 'paged',
   })
 
+  const scoringMasterBuckets = useMemo(
+    () => ({
+      regionLabels,
+      highSchoolLabels,
+      majorLabels,
+      academicPerformanceLabels,
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
+    }),
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
+  )
+
   const {
     scoringProfiles,
     profilesLoading,
@@ -280,7 +306,7 @@ export function LeadManagement() {
     const elevated = isElevatedForAdminFilters(profile?.role)
     if (!elevated) return base
     const extras = directoryUsers.filter(
-      (u) => u.isActive && u.role === 'admin' && !base.some((c) => c.id === u.id),
+      (u) => u.isActive && isAdminLikeRole(u.role) && !base.some((c) => c.id === u.id),
     )
     return [...base, ...extras].sort((a, b) =>
       formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
@@ -485,7 +511,7 @@ export function LeadManagement() {
     const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
     for (const l of sortedFiltered) {
       const ev = activeScoringProfile
-        ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile)
+        ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets)
         : { calculatedScore: l.calculatedScore, priorityTag: l.priorityTag }
       m.set(l.id, ev)
     }
@@ -499,7 +525,7 @@ export function LeadManagement() {
       const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
       for (const l of rows) {
         const ev = activeScoringProfile
-          ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile)
+          ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets)
           : { calculatedScore: l.calculatedScore, priorityTag: l.priorityTag }
         m.set(l.id, ev)
       }
@@ -622,6 +648,12 @@ export function LeadManagement() {
   const executeBulkAiMiner = useCallback(
     async (warmPassed: Lead[]) => {
       if (!db || !profile) return
+      if (!canRunLlmAnalysis) {
+        setAiMinerError(
+          'Tác vụ LLM cần được Quản lý bật «Cho phép dùng LLM & tác vụ AI» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+        )
+        return
+      }
       const cfg = loadAIConfigFromStorage()
       if (!cfg) {
         setAiMinerError('Chưa cấu hình LLM — mở Cài đặt và lưu API key (tab LLM).')
@@ -679,11 +711,17 @@ export function LeadManagement() {
         setSelectedIds(new Set())
       }
     },
-    [db, profile],
+    [db, profile, canRunLlmAnalysis],
   )
 
   const openAiMinerGatekeeper = useCallback(async () => {
     if (!db || !profile) return
+    if (!canRunLlmAnalysis) {
+      setAiMinerError(
+        'Tác vụ LLM cần được Quản lý bật «Cho phép dùng LLM & tác vụ AI» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+      )
+      return
+    }
     const cfg = loadAIConfigFromStorage()
     if (!cfg) {
       setAiMinerError('Chưa cấu hình LLM — mở Cài đặt và lưu API key (tab LLM).')
@@ -717,7 +755,7 @@ export function LeadManagement() {
     } finally {
       setGatekeeperBusy(false)
     }
-  }, [db, profile, leads, selectedIds, effectiveLeadTag])
+  }, [db, profile, leads, selectedIds, effectiveLeadTag, canRunLlmAnalysis])
 
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
@@ -1299,9 +1337,10 @@ export function LeadManagement() {
                     type="button"
                     onClick={() => toggleSort('mlWin')}
                     className="inline-flex flex-col items-center gap-0.5 text-violet-900 transition hover:text-violet-700"
-                    title="Win probability (ML-ready / MVP mock)"
+                    title={ML_WIN_COLUMN_HINT}
                   >
-                    Win%
+                    <span className="leading-tight">Ước</span>
+                    <span className="leading-tight">lượng</span>
                     {sortKey === 'mlWin' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
@@ -1409,8 +1448,8 @@ export function LeadManagement() {
                     {formatDescPreview(l.description)}
                   </td>
                   <td className="px-4 py-3 font-medium text-violet-700 transition-colors duration-300">{displayScore}</td>
-                  <td className="px-1 py-2 text-center" title={ml.mlExplanation}>
-                    <MlWinGauge value={ml.mlWinProbability} />
+                  <td className="cursor-help px-1 py-2 text-center" title={buildMlWinHoverText(ml)}>
+                    <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
                   </td>
                   <td className="px-4 py-3 transition-all duration-300">
                     <motion.span layout key={`${l.id}-${displayTag}`}>
@@ -1450,7 +1489,7 @@ export function LeadManagement() {
           }}
           onExport={() => exportBulkSelection()}
           showReassign={showBulkReassign}
-          showAiMiner={tagFilter === 'WARM' && Boolean(can('ai:use'))}
+          showAiMiner={tagFilter === 'WARM' && canRunLlmAnalysis}
           onAiMiner={() => void openAiMinerGatekeeper()}
           aiMinerDisabled={
             aiMinerProgress !== null ||
@@ -1707,7 +1746,7 @@ export function LeadManagement() {
               scoringPreview={
                 activeScoringProfile
                   ? scoreByLeadId.get(selected.id) ??
-                    evaluateLead(leadToEvaluationRecord(selected), activeScoringProfile)
+                    evaluateLead(leadToEvaluationRecord(selected), activeScoringProfile, scoringMasterBuckets)
                   : undefined
               }
               db={db}
@@ -1971,7 +2010,7 @@ function CounselorLeadProgressForm({
   }, [lead.id, lead.status])
 
   const canEdit =
-    profile?.role === 'admin' ||
+    isAdminLikeRole(profile?.role) ||
     (Boolean(can('leads:write:self_assigned')) &&
       (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
 
@@ -2268,7 +2307,7 @@ function LeadDetailPanel({
   /** Trợ lý kịch bản (nhúng trong layout fullscreen). */
   dynamicAssistantSlot?: ReactNode
 }) {
-  const { profile, can } = useAuth()
+  const { profile, can, canRunLlmAnalysis } = useAuth()
   const canEditScoringSignals = can('leads:write:self_assigned')
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
@@ -2356,7 +2395,7 @@ function LeadDetailPanel({
   }, [llmPopupOpen, assistantPopupOpen, playbookPopupOpen])
 
   const canSaveInteraction = can('interactions:create:self_assigned')
-  const canRunAi = can('ai:use')
+  const canRunAi = canRunLlmAnalysis
 
   const save = async () => {
     if (!db || !profile) {
@@ -2426,6 +2465,12 @@ function LeadDetailPanel({
   }
 
   const runAiLlmAnalysis = async () => {
+    if (!canRunLlmAnalysis) {
+      setAiErr(
+        'Tác vụ LLM cần được Quản lý bật «Cho phép dùng LLM & tác vụ AI» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+      )
+      return
+    }
     const config = loadAIConfigFromStorage()
     if (!config?.apiKey?.trim()) {
       setAiErr('Chưa cấu hình Gemini hoặc ChatGPT: Cài đặt → tab LLM.')
@@ -2503,26 +2548,26 @@ function LeadDetailPanel({
   }
 
   const playbooksBody = (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {matched.length ? (
         matched.map((pb) => (
           <div
             key={pb.id}
-            className="rounded-xl border border-amber-200/80 bg-amber-50/90 p-3 shadow-inner"
+            className="rounded-xl border border-amber-200/80 bg-amber-50/90 p-4 shadow-inner sm:p-5"
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900">{pb.title}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 sm:text-sm">{pb.title}</p>
             {pb.keySellingPoints?.length ? (
-              <ul className="mt-1.5 list-inside list-disc text-[11px] leading-snug text-slate-700">
+              <ul className="mt-2 list-inside list-disc text-sm leading-relaxed text-slate-700">
                 {pb.keySellingPoints.map((x) => (
                   <li key={x}>{x}</li>
                 ))}
               </ul>
             ) : null}
-            <p className="mt-1.5 text-xs leading-relaxed text-slate-800">{pb.strategy}</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-800 sm:text-[15px]">{pb.strategy}</p>
             {pb.objectionHandling?.length ? (
-              <div className="mt-2 border-t border-slate-200/80 pt-1.5">
-                <p className="text-[10px] font-medium text-amber-800">Phản đối dự kiến</p>
-                <ul className="mt-1 list-inside list-decimal text-[11px] text-slate-600">
+              <div className="mt-3 border-t border-slate-200/80 pt-2">
+                <p className="text-xs font-medium text-amber-800 sm:text-sm">Phản đối dự kiến</p>
+                <ul className="mt-1.5 list-inside list-decimal text-sm leading-relaxed text-slate-600">
                   {pb.objectionHandling.map((x) => (
                     <li key={x}>{x}</li>
                   ))}
@@ -2532,7 +2577,7 @@ function LeadDetailPanel({
           </div>
         ))
       ) : (
-        <p className="col-span-full text-xs text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
+        <p className="col-span-full text-sm text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
       )}
     </div>
   )
@@ -2823,18 +2868,18 @@ function LeadDetailPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-playbook-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex h-[50dvh] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:w-[50vw] sm:max-w-none"
+            className="fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,88dvh)] max-h-[92dvh] w-[min(calc(100vw-1rem),85rem)] max-w-[min(96vw,85rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:h-[min(92dvh,76dvh)]"
           >
-            <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-3 py-2.5 sm:px-4">
-              <div className="flex min-w-0 items-start gap-2">
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200/80 bg-white shadow-sm">
-                  <BookOpen className="h-4 w-4 text-amber-700" strokeWidth={1.75} aria-hidden />
+            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-4 py-3 sm:px-5 sm:py-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white shadow-sm sm:h-11 sm:w-11">
+                  <BookOpen className="h-5 w-5 text-amber-700 sm:h-6 sm:w-6" strokeWidth={1.75} aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <h2 id="lead-playbook-dialog-title" className="text-sm font-semibold text-slate-900 sm:text-base">
+                  <h2 id="lead-playbook-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
                     Playbook tư vấn
                   </h2>
-                  <p className="text-[11px] leading-snug text-slate-600 sm:text-xs">
+                  <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
                     Gợi ý chiến lược, điểm bán, xử lý phản đối — khớp điều kiện hồ sơ; cấu hình trong Cài đặt.
                   </p>
                 </div>
@@ -2842,13 +2887,13 @@ function LeadDetailPanel({
               <button
                 type="button"
                 onClick={() => setPlaybookPopupOpen(false)}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
-                <X className="h-3.5 w-3.5" aria-hidden />
+                <X className="h-4 w-4" aria-hidden />
                 Đóng
               </button>
             </div>
-            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
               {playbooksBody}
             </div>
           </div>
@@ -2881,8 +2926,9 @@ function LeadDetailPanel({
                   <h2 id="lead-llm-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
                     Phân tích LLM
                   </h2>
-                  <p className="truncate text-xs text-slate-600 sm:text-sm">
-                    Gemini / ChatGPT (key trong trình duyệt) — kết quả lưu Firestore.
+                  <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
+                    Gemini / ChatGPT (key do Siêu quản trị cấu hình trên trình duyệt) — kết quả lưu Firestore. Cần quản
+                    lý bật quyền dùng LLM cho tài khoản của bạn.
                   </p>
                 </div>
               </div>
@@ -2958,7 +3004,8 @@ function LeadDetailPanel({
                 </div>
               ) : (
                 <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                  Chọn tác vụ và bấm chạy. API key lưu cục bộ (localStorage), cấu hình tại Cài đặt → tab LLM.
+                  Chọn tác vụ và bấm chạy. API key chỉ Siêu quản trị lưu được (Cài đặt → tab LLM). Nếu bị chặn, nhờ
+                  quản lý bật «Cho phép dùng LLM và tác vụ AI» trong Quản lý nhân sự.
                 </p>
               )}
             </div>
@@ -2978,25 +3025,30 @@ function LeadDetailPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-assistant-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex h-[50dvh] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl sm:w-[50vw] sm:max-w-none"
+            className="fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,88dvh)] max-h-[92dvh] w-[min(calc(100vw-1rem),85rem)] max-w-[min(96vw,85rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl sm:h-[min(92dvh,76dvh)]"
           >
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-sky-50/90 to-white px-4 py-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-sky-50/90 to-white px-4 py-3 sm:px-5 sm:py-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-200/80 bg-white shadow-sm">
                   <Bot className="h-5 w-5 text-sky-700" strokeWidth={1.75} aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <h2 id="lead-assistant-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
+                  <h2 id="lead-assistant-dialog-title" className="text-lg font-semibold text-slate-900 sm:text-xl">
                     Trợ lý kịch bản
                   </h2>
-                  <p className="text-xs text-slate-600 sm:text-sm">Luồng Script Hub theo hồ sơ</p>
+                  <p className="text-sm text-slate-600 sm:text-base">Luồng Script Hub theo hồ sơ</p>
                 </div>
                 <div
-                  className="flex items-center gap-2 rounded-xl border border-violet-200/80 bg-violet-50/80 px-2.5 py-1.5 shadow-sm"
-                  title={`Win probability: ${leadMl.mlWinProbability}%. ${leadMl.mlExplanation}`}
+                  className="flex cursor-help items-center gap-2 rounded-xl border border-violet-200/80 bg-violet-50/80 px-2.5 py-1.5 shadow-sm"
+                  title={buildMlWinHoverText(leadMl)}
                 >
-                  <MlWinGauge value={leadMl.mlWinProbability} />
-                  <span className="text-sm font-bold text-violet-900">{leadMl.mlWinProbability}%</span>
+                  <MlWinGauge value={leadMl.mlWinProbability} title={buildMlWinHoverText(leadMl)} />
+                  <div className="min-w-0">
+                    <span className="text-sm font-bold text-violet-900">{leadMl.mlWinProbability}%</span>
+                    <span className="ml-1.5 rounded bg-violet-200/80 px-1 text-[10px] font-semibold uppercase text-violet-950">
+                      {leadMl.source === 'mvp_mock' ? 'MVP' : 'Đã lưu'}
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
@@ -3008,7 +3060,7 @@ function LeadDetailPanel({
                 Đóng
               </button>
             </div>
-            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
+            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
               {dynamicAssistantSlot}
             </div>
           </div>

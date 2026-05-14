@@ -3,10 +3,21 @@ import { defaultPermissionsForRole, hasPermission } from './permissions'
 import type { Permission } from '../types'
 
 describe('defaultPermissionsForRole', () => {
-  it('grants admin every permission in PERMISSIONS', async () => {
+  it('grants super_admin every permission in PERMISSIONS', async () => {
+    const { PERMISSIONS } = await import('../types')
+    const perms = defaultPermissionsForRole('super_admin')
+    for (const p of PERMISSIONS as readonly Permission[]) {
+      expect(perms).toContain(p)
+    }
+  })
+
+  it('grants admin all permissions except config:llm_api', async () => {
     const { PERMISSIONS } = await import('../types')
     const perms = defaultPermissionsForRole('admin')
+    expect(hasPermission(perms, 'config:llm_api')).toBe(false)
+    expect(hasPermission(perms, 'config:ai_engine')).toBe(true)
     for (const p of PERMISSIONS as readonly Permission[]) {
+      if (p === 'config:llm_api') continue
       expect(perms).toContain(p)
     }
   })

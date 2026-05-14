@@ -441,6 +441,14 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             <p className="mt-0.5 max-w-2xl text-sm leading-snug text-slate-600">
               Chọn profile dưới đây; «Toàn màn» để kéo giãn builder.
             </p>
+            <p className="mt-2 max-w-3xl rounded-lg border border-sky-200/80 bg-sky-50/70 px-3 py-2 text-xs leading-relaxed text-sky-950">
+              <strong>Dữ liệu &amp; chấm điểm:</strong> engine so khớp <strong>bỏ dấu</strong>, gom khoảng trắng (vd. «Hà Nội» ≡ «ha
+              noi»). Với <strong>IN_LIST</strong> tỉnh/ngành, nếu master có <code className="rounded bg-white/80 px-1">synonyms</code> trên
+              từng mục thì từ đồng nghĩa cũng được tính. Nên tách cột Excel / Firestore: <strong>Ngành quan tâm</strong>,{' '}
+              <strong>Học lực</strong>, <strong>Loại trường</strong> — trường <code className="rounded bg-white/80 px-1">schoolTypeKey</code>{' '}
+              (PUBLIC / LIEN_KET / …) và <code className="rounded bg-white/80 px-1">majorTrainingAlignment</code> được bổ sung khi chấm
+              nếu app truyền master buckets (mặc định đã bật trên bảng hồ sơ).
+            </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {workspaceFullscreen ? (

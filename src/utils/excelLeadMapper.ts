@@ -15,6 +15,10 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'nguon khach hang': 'source',
   nguon: 'source',
   'he dao tao': 'educationLevel',
+  'nganh quan tam': 'majorInterest',
+  'hoc luc': 'academicPerformance',
+  'loai truong': 'schoolType',
+  'du dinh': 'studyIntention',
   'nguoi phu trach': 'assignedToRaw',
   'tinh trang': 'statusRaw',
   'mo ta': 'description',
@@ -36,6 +40,10 @@ export type ExcelLeadRow = {
   parentPhone: string
   source: string
   educationLevel: string
+  majorInterest?: string
+  academicPerformance?: string
+  schoolType?: string
+  studyIntention?: string
   /** Tên hiển thị (đăng nhập) hoặc email đăng nhập / UID — khớp `users` khi import. */
   assignedToRaw: string
   statusRaw: string
@@ -185,6 +193,14 @@ export function buildLeadFirestorePayload(
     calculatedScore,
     priorityTag,
     uniqueHash: identity?.uniqueHash ?? '',
+    ...(row.majorInterest?.trim()
+      ? { majorInterest: row.majorInterest.trim() }
+      : {}),
+    ...(row.academicPerformance?.trim()
+      ? { academicPerformance: row.academicPerformance.trim() }
+      : {}),
+    ...(row.schoolType?.trim() ? { schoolType: row.schoolType.trim() } : {}),
+    ...(row.studyIntention?.trim() ? { studyIntention: row.studyIntention.trim() } : {}),
     ...(ownership
       ? {
           uploadedBy: ownership.uploadedBy,
@@ -202,6 +218,10 @@ export function downloadStandardIntakeTemplate(): void {
     'Điện thoại',
     'Nguồn',
     'Hệ đào tạo',
+    'Ngành quan tâm',
+    'Học lực',
+    'Loại trường',
+    'Dự định',
     'Người phụ trách',
     'Tình trạng',
     'Ghi Chú thêm',
@@ -221,7 +241,7 @@ export function downloadStandardIntakeTemplate(): void {
     ['VietMy Admissions OS — mẫu nhập hồ sơ'],
     [''],
     [
-      '1. Giữ nguyên hàng tiêu đề (dòng 1): 13 cột A–M — Tên sinh viên, Điện thoại, Nguồn, Hệ đào tạo, Người phụ trách, Tình trạng, Ghi Chú thêm, Trường học, Lớp, Tỉnh /Thành Phố, Địa chỉ, ĐT Người liên hệ, Mã KH. Có thể dùng sheet tên «Leads».',
+      '1. Giữ nguyên hàng tiêu đề (dòng 1): các cột theo mẫu — Tên sinh viên, Điện thoại, Nguồn, Hệ đào tạo, Ngành quan tâm, Học lực, Loại trường, Dự định, Người phụ trách, … Có thể dùng sheet tên «Leads».',
     ],
     [
       '2. «Người phụ trách» = tư vấn viên: ghi tên hiển thị hoặc email đăng nhập (khớp TVV hoặc Admin trong hệ thống). Khớp → lead gán thẳng cho người đó; không khớp → hệ thống gán tạm Admin để sau này điều chuyển.',

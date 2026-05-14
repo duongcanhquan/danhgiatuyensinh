@@ -3,12 +3,14 @@
  */
 export {
   FIXED_TAG_THRESHOLDS,
+  computeMajorTrainingAlignment,
   evaluateLead,
   inferRuleCategory,
   isKnownHighSchool,
   isProfileOverBudget,
   leadToEvaluationRecord,
   legacyRulesToBlocks,
+  normalizeSchoolTypeKey,
   resolveTagBands,
   scoreOneBlock,
   scoreToPriorityTag,

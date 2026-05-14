@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ScoringProfile } from '../types'
+import type { ScoringProfile, ScoringRule } from '../types'
 import { evaluateLead, scoreToPriorityTag, sumBlockMaxWeights } from './scoring'
 
 describe('scoreToPriorityTag', () => {
@@ -308,6 +308,179 @@ describe('evaluateLead', () => {
     )
     expect(r.calculatedScore).toBe(0)
     expect(r.priorityTag).toBe('COLD')
+  })
+
+  it('IN_LIST matches province via master synonyms when buckets include regionEntries', () => {
+    const profile = {
+      rules: [] as ScoringRule[],
+      ruleBlocks: [
+        {
+          id: 'b',
+          category: 'demographics' as const,
+          label: 't',
+          targetField: 'province',
+          maxWeight: 10,
+          rows: [
+            {
+              id: 'r',
+              condition: 'IN_LIST' as const,
+              value: ['Điện Biên'],
+              allocationKind: 'absolute' as const,
+              allocationValue: 10,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const buckets = {
+      regionLabels: [],
+      highSchoolLabels: [],
+      majorLabels: [],
+      regionEntries: [{ id: 'db', label: 'Điện Biên', synonyms: ['Dien Bien', 'dien bien'] }],
+    }
+    expect(evaluateLead({ province: 'dien bien' }, profile, buckets).calculatedScore).toBe(10)
+  })
+
+  it('IN_LIST matches academicLevel numeric between via entriesByCatalogId + catalogs', () => {
+    const profile = {
+      rules: [] as ScoringRule[],
+      ruleBlocks: [
+        {
+          id: 'b',
+          category: 'academic' as const,
+          label: 'band',
+          targetField: 'academicLevel',
+          maxWeight: 10,
+          rows: [
+            {
+              id: 'r',
+              condition: 'IN_LIST' as const,
+              value: ['Nhóm 8–10'],
+              allocationKind: 'absolute' as const,
+              allocationValue: 10,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const buckets = {
+      regionLabels: [],
+      highSchoolLabels: [],
+      majorLabels: [],
+      academicPerformanceLabels: [],
+      catalogs: [
+        {
+          id: 'academic_performance',
+          label: 'Học lực',
+          order: 70,
+          valueKind: 'number' as const,
+          defaultMatchMode: 'between' as const,
+        },
+      ],
+      entriesByCatalogId: {
+        academic_performance: [
+          { id: 'b1', label: 'Nhóm 8–10', matchMode: 'between', numericMin: 8, numericMax: 10, isActive: true },
+        ],
+      },
+    }
+    expect(evaluateLead({ academicLevel: '9,2' }, profile, buckets).calculatedScore).toBe(10)
+    expect(evaluateLead({ academicLevel: '7' }, profile, buckets).calculatedScore).toBe(0)
+  })
+
+  it('IN_LIST fuzzy_contains on province when catalog default is fuzzy', () => {
+    const profile = {
+      rules: [] as ScoringRule[],
+      ruleBlocks: [
+        {
+          id: 'b',
+          category: 'demographics' as const,
+          label: 't',
+          targetField: 'province',
+          maxWeight: 10,
+          rows: [
+            {
+              id: 'r',
+              condition: 'IN_LIST' as const,
+              value: ['Điện Biên'],
+              allocationKind: 'absolute' as const,
+              allocationValue: 10,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const buckets = {
+      regionLabels: [],
+      highSchoolLabels: [],
+      majorLabels: [],
+      academicPerformanceLabels: [],
+      catalogs: [
+        {
+          id: 'regions',
+          label: 'Vùng',
+          order: 10,
+          valueKind: 'text' as const,
+          defaultMatchMode: 'fuzzy_contains' as const,
+        },
+      ],
+      entriesByCatalogId: {
+        regions: [{ id: 'db', label: 'Điện Biên', isActive: true }],
+      },
+    }
+    expect(evaluateLead({ province: 'Hộ khẩu tỉnh Điện Biên' }, profile, buckets).calculatedScore).toBe(10)
+  })
+
+  it('majorTrainingAlignment and schoolTypeKey augment scoring when buckets passed', () => {
+    const profile = {
+      rules: [] as ScoringRule[],
+      ruleBlocks: [
+        {
+          id: 'm',
+          category: 'academic' as const,
+          label: 'align',
+          targetField: 'majorTrainingAlignment',
+          maxWeight: 10,
+          rows: [
+            {
+              id: 'a',
+              condition: 'EQUALS' as const,
+              value: 'outside_or_unknown',
+              allocationKind: 'absolute' as const,
+              allocationValue: -5,
+            },
+          ],
+        },
+        {
+          id: 's',
+          category: 'academic' as const,
+          label: 'stype',
+          targetField: 'schoolTypeKey',
+          maxWeight: 10,
+          rows: [
+            {
+              id: 'k',
+              condition: 'EQUALS' as const,
+              value: 'LIEN_KET',
+              allocationKind: 'absolute' as const,
+              allocationValue: 7,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const buckets = {
+      regionLabels: [],
+      highSchoolLabels: [],
+      majorLabels: ['Công nghệ thông tin'],
+      majorEntries: [],
+    }
+    const lead = { majorInterest: 'chưa biết ngành', schoolType: 'liên kết' }
+    const r = evaluateLead(lead, profile, buckets)
+    expect(r.calculatedScore).toBe(2)
   })
 })
 

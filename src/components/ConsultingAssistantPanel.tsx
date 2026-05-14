@@ -13,7 +13,7 @@ import {
 import type { Lead, ScriptCategory, ScriptSnippet } from '../types'
 import { SCRIPT_CATEGORY_LABELS } from '../types'
 import { assembleConsultingFlow } from '../utils/scriptEngine'
-import { resolveMlWinDisplay } from '../utils/mlWinMock'
+import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useAuth } from '../hooks/useAuth'
 import { MlWinGauge } from './MlWinGauge'
 
@@ -52,10 +52,13 @@ function SnippetCard({
   snippet,
   category,
   canConfigureScripts,
+  comfortable = false,
 }: {
   snippet: ScriptSnippet
   category: ScriptCategory
   canConfigureScripts: boolean
+  /** Bố cục rộng hơn (popup chi tiết hồ sơ). */
+  comfortable?: boolean
 }) {
   const isUsp = category === 'USP'
   const isObjection = category === 'OBJECTION_HANDLING'
@@ -75,10 +78,14 @@ function SnippetCard({
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative rounded-xl border px-3 py-2.5 shadow-sm backdrop-blur-md ${shell}`}
+      className={[
+        'relative rounded-xl border shadow-sm backdrop-blur-md',
+        comfortable ? 'px-4 py-3.5 sm:px-5 sm:py-4' : 'px-3 py-2.5',
+        shell,
+      ].join(' ')}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-900">{snippet.title}</p>
+        <p className={`font-semibold text-slate-900 ${comfortable ? 'text-base sm:text-lg' : 'text-sm'}`}>{snippet.title}</p>
         {canConfigureScripts ? (
           <Link
             to={`/settings?editSnippet=${encodeURIComponent(snippet.id)}`}
@@ -90,12 +97,18 @@ function SnippetCard({
         ) : null}
       </div>
       {isObjection && parsed ? (
-        <div className="mt-2 space-y-2 text-sm leading-relaxed">
+        <div
+          className={`mt-2 space-y-2 leading-relaxed ${comfortable ? 'text-base sm:text-[17px]' : 'text-sm'}`}
+        >
           <p className="font-medium text-amber-900">{parsed.concern}</p>
           <p className="border-t border-slate-200/80 pt-2 text-slate-700">{parsed.script}</p>
         </div>
       ) : (
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{snippet.content}</p>
+        <p
+          className={`mt-2 whitespace-pre-wrap leading-relaxed text-slate-700 ${comfortable ? 'text-base sm:text-[17px]' : 'text-sm'}`}
+        >
+          {snippet.content}
+        </p>
       )}
     </motion.div>
   )
@@ -124,6 +137,8 @@ export function ConsultingAssistantPanel({
   const ml = useMemo(() => resolveMlWinDisplay(lead), [lead])
 
   const isRail = variant === 'rail'
+  /** Nội dung nhúng trong popup chi tiết — phóng to chữ & khoảng cách cho dễ đọc. */
+  const embeddedInDialog = variant === 'embedded' && !showHeader
   const shell = isRail
     ? 'relative fixed inset-y-0 right-0 z-[52] hidden h-full w-full max-w-[min(24rem,100vw)] flex-col border-l border-slate-200/80 bg-white/55 text-slate-900 shadow-[-12px_0_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl lg:flex'
     : showHeader
@@ -140,7 +155,7 @@ export function ConsultingAssistantPanel({
         }
       />
 
-      <div className={`relative flex min-h-0 flex-1 flex-col ${isRail ? 'p-4' : ''}`}>
+      <div className={`relative flex min-h-0 flex-1 flex-col ${isRail ? 'p-4' : embeddedInDialog ? 'px-3 py-2 sm:px-6 sm:py-4' : ''}`}>
         {showHeader ? (
           <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200/80 pb-3">
             <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-200/90 bg-white/90 shadow-md shadow-amber-500/10">
@@ -151,14 +166,16 @@ export function ConsultingAssistantPanel({
               <p className="text-xs text-slate-600">Luồng kịch bản theo hồ sơ (Script Hub)</p>
             </div>
             <div
-              className="flex items-center gap-2 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-amber-50/50 px-2.5 py-1.5 shadow-[0_0_20px_rgba(167,139,250,0.2)]"
-              title={`Win probability: ${ml.mlWinProbability}%. ${ml.mlExplanation}`}
+              className="flex cursor-help items-center gap-2 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-amber-50/50 px-2.5 py-1.5 shadow-[0_0_20px_rgba(167,139,250,0.2)]"
+              title={buildMlWinHoverText(ml)}
             >
-              <MlWinGauge value={ml.mlWinProbability} />
+              <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
               <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Win probability</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-violet-900">
+                  Ước lượng {ml.source === 'mvp_mock' ? '(MVP)' : '(đã lưu)'}
+                </p>
                 <p className="truncate text-xs font-semibold text-slate-800">{ml.mlWinProbability}%</p>
-                <p className="text-xs text-violet-800/80">Hover: ML reasoning</p>
+                <p className="text-[10px] leading-snug text-violet-800/90">Không phải xác suất ML thật khi hiện (MVP).</p>
               </div>
             </div>
           </div>
@@ -171,39 +188,55 @@ export function ConsultingAssistantPanel({
 
         <div className={`relative ${showHeader ? 'mt-3' : 'mt-0'} min-h-0 flex-1 overflow-y-auto ${isRail ? 'pr-1' : ''}`}>
           {!loading && !totalSteps ? (
-            <div className="rounded-2xl border border-slate-200/90 bg-white/80 p-4 text-center shadow-inner backdrop-blur-md">
-              <BookOpen className="mx-auto h-8 w-8 text-amber-600" strokeWidth={1.25} />
-              <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            <div
+              className={`rounded-2xl border border-slate-200/90 bg-white/80 text-center shadow-inner backdrop-blur-md ${embeddedInDialog ? 'p-6 sm:p-8' : 'p-4'}`}
+            >
+              <BookOpen
+                className={`mx-auto text-amber-600 ${embeddedInDialog ? 'h-10 w-10 sm:h-12 sm:w-12' : 'h-8 w-8'}`}
+                strokeWidth={1.25}
+              />
+              <p
+                className={`mt-3 leading-relaxed text-slate-700 ${embeddedInDialog ? 'text-base sm:text-lg' : 'text-sm'}`}
+              >
                 Chưa có kịch bản đặc thù cho hồ sơ này, hãy tư vấn theo quy chuẩn chung.
               </p>
             </div>
           ) : null}
 
           {totalSteps ? (
-            <div className="relative pl-7">
+            <div className={`relative ${embeddedInDialog ? 'pl-9 sm:pl-11' : 'pl-7'}`}>
               <div
-                className="absolute bottom-2 left-[13px] top-2 w-px bg-gradient-to-b from-amber-400/60 via-fuchsia-400/40 to-emerald-400/60 opacity-90"
+                className={`absolute w-px bg-gradient-to-b from-amber-400/60 via-fuchsia-400/40 to-emerald-400/60 opacity-90 ${embeddedInDialog ? 'bottom-2 left-[15px] top-2 sm:left-[17px]' : 'bottom-2 left-[13px] top-2'}`}
                 aria-hidden
               />
-              <ol className="space-y-5">
+              <ol className={embeddedInDialog ? 'space-y-6 sm:space-y-8' : 'space-y-5'}>
                 {flow.map((step, stepIndex) => (
                   <li key={step.category} className="relative">
-                    <div className="absolute -left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-amber-300 bg-white shadow-md shadow-amber-500/15">
-                      <span className="text-xs font-bold text-amber-800">{stepIndex + 1}</span>
+                    <div
+                      className={`absolute -left-1 top-1 flex items-center justify-center rounded-full border border-amber-300 bg-white shadow-md shadow-amber-500/15 ${embeddedInDialog ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-6 w-6'}`}
+                    >
+                      <span
+                        className={`font-bold text-amber-800 ${embeddedInDialog ? 'text-sm sm:text-base' : 'text-xs'}`}
+                      >
+                        {stepIndex + 1}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 pl-1">
                       <StepIcon category={step.category} />
-                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                      <span
+                        className={`font-semibold uppercase tracking-wider text-slate-600 ${embeddedInDialog ? 'text-sm sm:text-base' : 'text-xs'}`}
+                      >
                         {SCRIPT_CATEGORY_LABELS[step.category]}
                       </span>
                     </div>
-                    <div className="mt-2 space-y-2 pl-1">
+                    <div className={`mt-2 space-y-2 pl-1 ${embeddedInDialog ? 'mt-3 space-y-3' : ''}`}>
                       {step.snippets.map((s) => (
                         <SnippetCard
                           key={s.id}
                           snippet={s}
                           category={step.category}
                           canConfigureScripts={canConfigureScripts}
+                          comfortable={embeddedInDialog}
                         />
                       ))}
                     </div>

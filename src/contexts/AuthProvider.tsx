@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   type User,
 } from 'firebase/auth'
@@ -9,6 +10,7 @@ import { doc, getDoc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { AuthState, Permission, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { defaultPermissionsForRole, hasPermission } from '../auth/permissions'
+import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
 import { ensureDefaultFirestoreData } from '../services/firestoreBootstrap'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
@@ -45,6 +47,7 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
     specialtyMajorIds: d.specialtyMajorIds as string[] | undefined,
     maxConcurrentLeads: d.maxConcurrentLeads as number | undefined,
     isActive: d.isActive !== false,
+    allowLlmAndAiTasks: d.allowLlmAndAiTasks === true ? true : undefined,
     createdAt: (d.createdAt as Timestamp) ?? now,
     updatedAt: (d.updatedAt as Timestamp) ?? now,
   }
@@ -104,7 +107,7 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
       id: user.uid,
       email: user.email ?? '',
       displayName: user.displayName || user.email?.split('@')[0] || 'Người dùng',
-      role: isSuper ? 'admin' : 'counselor',
+      role: isSuper ? 'super_admin' : 'counselor',
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -115,9 +118,9 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
 
   const data = snap.data() as Record<string, unknown>
   let role = (data.role as UserRole) ?? 'counselor'
-  if (isSuper && role !== 'admin') {
-    role = 'admin'
-    await updateDoc(ref, { role: 'admin', updatedAt: now })
+  if (isSuper && role !== 'super_admin') {
+    role = 'super_admin'
+    await updateDoc(ref, { role: 'super_admin', updatedAt: now })
   }
   return mapProfileFromDoc(user.uid, user, { ...data, role })
 }
@@ -161,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('authenticating')
       try {
         const p = await withTimeout(syncUserProfileWithRetry(db, user), 22_000, 'Đồng bộ users/{uid}')
-        if (p.role === 'admin') {
+        if (p.role === 'admin' || p.role === 'super_admin') {
           void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
             console.warn('[firestoreBootstrap]', e)
           })
@@ -183,6 +186,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [profile])
 
   const can = useCallback((p: Permission) => hasPermission(permissions, p), [permissions])
+
+  const canRunLlmAnalysis = useMemo(() => {
+    if (!profile) return false
+    return hasPermission(permissions, 'ai:use') && isLlmAnalysisAllowedForProfile(profile)
+  }, [profile, permissions])
 
   const signOut = useCallback(async () => {
     const auth = getFirebaseAuth()
@@ -206,6 +214,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!hasPermission(permissions, 'config:users')) {
         throw new Error('Chỉ quản trị mới được thêm nhân sự.')
       }
+      if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
+        throw new Error('Chỉ Siêu quản trị mới được tạo tài khoản Siêu quản trị.')
+      }
       const secondary = getStaffCreatorAuth()
       const db = getFirestoreDb()
       if (!secondary || !db) throw new Error('Không khởi tạo được Firebase.')
@@ -222,6 +233,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updatedAt: now,
       })
     },
+    [permissions, profile?.role],
+  )
+
+  const updateStaffProfile = useCallback(
+    async (input: {
+      userId: string
+      displayName?: string
+      role?: UserRole
+      isActive?: boolean
+      allowLlmAndAiTasks?: boolean
+    }) => {
+      if (!hasPermission(permissions, 'config:users')) {
+        throw new Error('Chỉ quản trị mới được sửa nhân sự.')
+      }
+      const db = getFirestoreDb()
+      if (!db) throw new Error('Firestore chưa cấu hình.')
+      const uid = input.userId.trim()
+      if (!uid) throw new Error('Thiếu userId.')
+
+      const ref = doc(db, FS_COLLECTIONS.users, uid)
+      const snap = await getDoc(ref)
+      if (!snap.exists()) throw new Error('Không tìm thấy users/{uid}.')
+      const data = snap.data() as Record<string, unknown>
+      const currentRole = (data.role as UserRole) ?? 'counselor'
+
+      if (currentRole === 'super_admin' && profile?.role !== 'super_admin') {
+        throw new Error('Chỉ Siêu quản trị mới chỉnh được tài khoản Siêu quản trị khác.')
+      }
+      if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
+        throw new Error('Chỉ Siêu quản trị mới gán được vai trò Siêu quản trị.')
+      }
+      if (input.role !== undefined && input.role !== 'super_admin' && currentRole === 'super_admin') {
+        throw new Error('Chỉ Siêu quản trị mới đổi vai trò tài khoản Siêu quản trị.')
+      }
+
+      if (firebaseUser?.uid === uid && input.role !== undefined) {
+        const cur = profile?.role
+        if (cur === 'super_admin' && input.role !== 'super_admin') {
+          throw new Error('Không tự đổi vai trò Siêu quản trị trên chính tài khoản đang đăng nhập.')
+        }
+        if (cur === 'admin' && input.role !== 'admin') {
+          throw new Error('Không tự hạ cấp quản trị trên chính tài khoản đang đăng nhập.')
+        }
+      }
+      if (firebaseUser?.uid === uid) {
+        if (input.isActive === false) {
+          throw new Error('Không tự vô hiệu hóa chính tài khoản đang đăng nhập.')
+        }
+      }
+      const patch: Record<string, unknown> = { updatedAt: Timestamp.now() }
+      if (input.displayName !== undefined) patch.displayName = input.displayName.trim()
+      if (input.role !== undefined) patch.role = input.role
+      if (input.isActive !== undefined) patch.isActive = input.isActive
+      if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
+      await updateDoc(ref, patch)
+    },
+    [permissions, firebaseUser?.uid, profile?.role],
+  )
+
+  const sendStaffPasswordResetEmail = useCallback(
+    async (email: string) => {
+      if (!hasPermission(permissions, 'config:users')) {
+        throw new Error('Chỉ quản trị mới gửi được email đặt lại mật khẩu.')
+      }
+      const auth = getFirebaseAuth()
+      if (!auth) throw new Error('Firebase Auth chưa cấu hình.')
+      const normalized = email.trim().toLowerCase()
+      if (!normalized) throw new Error('Thiếu email.')
+      await sendPasswordResetEmail(auth, normalized)
+    },
     [permissions],
   )
 
@@ -233,11 +314,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       permissions,
       firebaseUser,
       can,
+      canRunLlmAnalysis,
       signOut,
       signInWithEmail,
       createStaffAccount,
+      updateStaffProfile,
+      sendStaffPasswordResetEmail,
     }),
-    [status, firebaseUser, profile, permissions, can, signOut, signInWithEmail, createStaffAccount],
+    [
+      status,
+      firebaseUser,
+      profile,
+      permissions,
+      can,
+      canRunLlmAnalysis,
+      signOut,
+      signInWithEmail,
+      createStaffAccount,
+      updateStaffProfile,
+      sendStaffPasswordResetEmail,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -5,6 +5,7 @@ import type { Lead, LeadScoringSignalKey, LeadScoringSignals, ScoringProfile } f
 import { FS_COLLECTIONS } from '../types'
 import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
 import { ALL_SCORING_SIGNAL_KEYS, SCORING_SIGNAL_META } from '../utils/leadScoringSignals'
+import { useMasterData } from '../hooks/useMasterData'
 
 function buildSignalsPatch(
   base: LeadScoringSignals | undefined,
@@ -30,6 +31,28 @@ export function LeadScoringSignalsPanel({
   canEdit: boolean
   onUpdated: (patch: Partial<Lead>) => void
 }) {
+  const {
+    regionLabels,
+    highSchoolLabels,
+    majorLabels,
+    byKind,
+    academicPerformanceLabels,
+    catalogs,
+  } = useMasterData()
+  const masterBuckets = useMemo(
+    () => ({
+      regionLabels,
+      highSchoolLabels,
+      majorLabels,
+      academicPerformanceLabels,
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
+    }),
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
+  )
+
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -51,7 +74,7 @@ export function LeadScoringSignalsPanel({
         const nextSignals = buildSignalsPatch(lead.scoringSignals, key, checked)
         const previewLead: Lead = { ...lead, scoringSignals: nextSignals }
         const ev = activeScoringProfile
-          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile)
+          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile, masterBuckets)
           : null
         const patch: Record<string, unknown> = {
           scoringSignals: nextSignals ?? null,

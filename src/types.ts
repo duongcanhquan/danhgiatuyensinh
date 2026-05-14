@@ -36,6 +36,7 @@ export type DocumentId = string
 // -----------------------------------------------------------------------------
 
 export const USER_ROLES = [
+  'super_admin',
   'counselor',
   'head_of_profession',
   'head_of_department',
@@ -46,6 +47,7 @@ export type UserRole = (typeof USER_ROLES)[number]
 
 /** Human-readable labels (UI / audit) */
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  super_admin: 'Siêu quản trị',
   counselor: 'Tư vấn viên',
   head_of_profession: 'Trưởng ngành',
   head_of_department: 'Trưởng khoa',
@@ -74,6 +76,12 @@ export interface VietMyUserProfile {
   /** Counselor: soft capacity / workload hint for routing engine */
   maxConcurrentLeads?: number
   isActive: boolean
+  /**
+   * Quản lý nhân sự bật: được chạy phân tích LLM trên hồ sơ, AI Lead Miner, Phòng thử AI
+   * (vẫn cần API đã cấu hình trên trình duyệt nơi Siêu quản trị lưu khóa).
+   * Siêu quản trị không cần cờ này.
+   */
+  allowLlmAndAiTasks?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -110,7 +118,9 @@ export const PERMISSIONS = [
   'config:users',
   'data:intake',
   'ai:use',
-  /** Cấu hình API LLM + builder tác vụ AI (Settings) */
+  /** Chỉ Siêu quản trị: lưu khóa API LLM + AI Gatekeeper (localStorage trên trình duyệt). */
+  'config:llm_api',
+  /** Cấu hình tác vụ AI trên Firestore (`ai_tasks`) — Admin / Siêu quản trị. */
   'config:ai_engine',
   'analytics:advanced',
 ] as const
@@ -224,6 +234,14 @@ export interface Lead {
   source: string
   /** Hệ đào tạo — Trưởng khoa lọc theo khớp nhãn ngành trong phạm vi `managedMajorIds` */
   educationLevel: string
+  /** Ngành / nội dung quan tâm (ưu tiên cho chấm điểm `majorInterest`; tách khỏi hệ đào tạo khi nhập đủ cột) */
+  majorInterest?: string
+  /** Học lực / xếp loại (ưu tiên cho khối chấm điểm `academicLevel`) */
+  academicPerformance?: string
+  /** Loại hình THPT — nhãn hoặc mã (vd. Công lập, Liên kết, PUBLIC) */
+  schoolType?: string
+  /** Dự định hình thức đào tạo (Đại học / Cao đẳng / …) */
+  studyIntention?: string
   /** Người phụ trách — Firebase Auth UID (RBAC biên Counselor) */
   assignedTo: UserId | null
   /** Tình trạng — Kanban tư vấn (Firestore `status`) */
@@ -430,10 +448,25 @@ export interface ScoringRuleSet {
 /** Document meta: danh sách catalog + thứ tự hiển thị (không phải danh mục giá trị). */
 export const MASTER_DATA_REGISTRY_DOC_ID = '_registry' as const
 
+/** Kiểu giá trị trong danh mục — ảnh hưởng cách IN_LIST so với trường lead. */
+export type MasterCatalogValueKind = 'text' | 'number'
+
+/**
+ * Chế độ khớp mặc định cho catalog (mỗi mục có thể ghi đè `matchMode`).
+ * - exact_norm: chuỗi sau bỏ dấu / gom khoảng trắng — khớp đúng nhãn hoặc synonym.
+ * - fuzzy_contains: chuỗi lead và nhãn (hoặc synonym) chứa lẫn nhau — kiểm tra tương đối.
+ * - gte / lte / between: so sánh số (parse từ giá trị lead); dùng `numericMin` / `numericMax` trên mục.
+ */
+export type MasterEntryMatchMode = 'exact_norm' | 'fuzzy_contains' | 'gte' | 'lte' | 'between'
+
 export interface MasterCatalogDefinition {
   id: string
   label: string
   order: number
+  /** Mặc định `text` — dùng `number` khi danh mục là khoảng điểm, học phí, v.v. */
+  valueKind?: MasterCatalogValueKind
+  /** Khi mục không khai báo `matchMode`. */
+  defaultMatchMode?: MasterEntryMatchMode
 }
 
 /** Seed + gợi ý nhãn khi chưa có `_registry` hoặc khi thêm catalog lạ. */
@@ -470,6 +503,12 @@ export interface MasterDataEntry {
   label: string
   /** Alternative spellings for intake normalization */
   synonyms?: string[]
+  /** Ghi đè `defaultMatchMode` của catalog cho mục này. */
+  matchMode?: MasterEntryMatchMode
+  /** Biên dưới (gte, between) hoặc ngưỡng tùy `matchMode`. */
+  numericMin?: number
+  /** Biên trên (lte, between). */
+  numericMax?: number
   /** For majors: owning department */
   departmentId?: DocumentId
   /** Program capacity planning (Head of Department dashboards) */
