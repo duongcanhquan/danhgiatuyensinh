@@ -1,0 +1,157 @@
+### [MAJOR_INFO] Tổng quan ngành Công nghệ thông tin (Mã ngành: 6480201)
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Thời gian đào tạo: 2.5 năm (7 học kỳ).
+
+Định hướng chuyên sâu: Lập trình Web, Lập trình Mobile (Android/iOS), Kiểm thử phần mềm (Tester).
+
+Ngôn ngữ học chính: Java, Python, JavaScript, C#.
+
+### [MAJOR_INFO] Môi trường thực hành ngành Công nghệ thông tin
+
+Cơ sở vật chất: 100% học thực hành tại phòng máy tính cấu hình cao (Core i7, RAM 16GB).
+
+Trang bị riêng: Trường có 1 phòng Lab iMac chuyên dụng cho sinh viên học lập trình iOS.
+
+Yêu cầu laptop cá nhân: Sinh viên nên trang bị laptop cấu hình tối thiểu Core i5, RAM 8GB.
+
+### [MAJOR_INFO] Cơ hội việc làm ngành Công nghệ thông tin
+Sau khi ra trường, sinh viên có thể làm việc tại:
+
+FPT Software, CMC, RikkeiSoft (đối tác ký kết của trường).
+
+Vị trí: Lập trình viên Front-end / Back-end, Nhân viên kiểm thử phần mềm (QA/QC), Quản trị hệ thống mạng.
+
+Mức lương khởi điểm tham khảo: 8.000.000 - 12.000.000 VNĐ/tháng.
+
+### [MAJOR_INFO] Tổng quan ngành Thiết kế đồ họa (Mã ngành: 6480215)
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Thời gian đào tạo: 2.5 năm.
+
+Phần mềm đào tạo: Toàn bộ hệ sinh thái Adobe (Photoshop, Illustrator, Premiere, After Effects, InDesign).
+
+Định hướng: Thiết kế 2D (Nhận diện thương hiệu), UI/UX cho Website/App, Dựng video ngắn.
+
+### [MAJOR_INFO] Môi trường thực hành ngành Thiết kế đồ họa
+
+Sinh viên được học tại Studio ảnh thực tế của trường (có phông xanh, hệ thống đèn chiếu sáng chuyên nghiệp).
+
+Được cấp tài khoản Adobe Creative Cloud bản quyền trong suốt quá trình học.
+
+Cần có laptop cá nhân có card màn hình rời để phục vụ làm bài tập ở nhà.
+
+### [MAJOR_INFO] Tổng quan ngành Digital Marketing (Marketing số)
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Kỹ năng cốt lõi được học: Chạy quảng cáo Facebook Ads, Google Ads, SEO (tối ưu hóa công cụ tìm kiếm), Viết nội dung (Content Marketing), Xây dựng kênh TikTok.
+
+Tính thực chiến: Sinh viên phải chạy các chiến dịch quảng cáo bằng tiền thật trong môn Đồ án tốt nghiệp.
+
+### [MAJOR_INFO] Tổng quan ngành Tiếng Đức (Cử nhân Thực hành)
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Chuẩn đầu ra: Đạt trình độ tiếng Đức tương đương B1 hoặc B2 (theo khung tham chiếu Châu Âu).
+
+Nội dung: Học kỹ năng Nghe - Nói - Đọc - Viết tiếng Đức, văn hóa Đức, tiếng Đức thương mại/du lịch.
+
+### [MAJOR_INFO] Cơ hội du học và làm việc ngành Tiếng Đức
+
+Mục tiêu: Phục vụ xuất khẩu lao động hoặc du học nghề tại CHLB Đức.
+
+Ngành nghề tuyển dụng tại Đức: Điều dưỡng, Nhà hàng khách sạn, Cơ khí.
+
+Nhà trường có đối tác viện đào tạo tại Đức để hỗ trợ làm hồ sơ xin Visa và thủ tục bay cho sinh viên có nhu cầu.
+
+### [MAJOR_INFO] Tổng quan ngành Điều dưỡng (Mã ngành: 6720301)
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Thời gian đào tạo: 3 năm (Ngành Y tế học dài hơn nửa năm so với khối Kinh tế).
+
+Nội dung học: Giải phẫu học, Kỹ năng điều dưỡng cơ bản, Điều dưỡng Nội khoa, Ngoại khoa, Nhi khoa.
+
+### [MAJOR_INFO] Cơ sở thực hành ngành Điều dưỡng
+
+Thực hành tại trường: Phòng Skill Lab với mô hình bệnh nhân giả định, thiết bị y tế tiêu chuẩn y tế cơ sở.
+
+Thực tập bệnh viện: Sinh viên bắt buộc thực tập lâm sàng tại các Bệnh viện đa khoa tuyến Trung ương/Thành phố từ năm thứ 2.
+
+### [MAJOR_INFO] Điều kiện sức khỏe khi đăng ký ngành Điều dưỡng
+
+Không mắc các bệnh truyền nhiễm (HIV, Viêm gan B, Lao).
+
+Không bị dị tật bẩm sinh ảnh hưởng đến thao tác chuyên môn y tế.
+
+Sẽ có vòng khám sức khỏe sàng lọc khi làm thủ tục nhập học.
+
+### [MAJOR_INFO] Tổng quan ngành Quản trị Khách sạn
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Nghiệp vụ: Lễ tân (Front Office), Buồng phòng (Housekeeping), Nhà hàng (F&B).
+
+Ngoại ngữ: Tiếng Anh chuyên ngành Khách sạn là môn học bắt buộc.
+
+### [MAJOR_INFO] Môi trường thực hành ngành Quản trị Khách sạn
+
+Trường có mô hình phòng khách sạn 4 sao giả lập ngay trong khuôn viên.
+
+Sinh viên có kỳ thực tập nhận lương (Paid Internship) 3 tháng tại các resort, khách sạn 4-5 sao (đối tác của trường).
+
+### [MAJOR_INFO] Tổng quan ngành Công nghệ Ô tô
+
+Bậc đào tạo: Cao đẳng chính quy.
+
+Nội dung: Cấu tạo động cơ đốt trong, Hệ thống điện - điện tử ô tô, Ô tô điện & Hybrid cơ bản, Chẩn đoán lỗi ô tô.
+
+### [MAJOR_INFO] Cơ sở thực hành ngành Công nghệ Ô tô
+
+Học phần lý thuyết chiếm 30%, Thực hành xưởng chiếm 70%.
+
+Xưởng thực hành có cầu nâng, máy chẩn đoán lỗi đa năng, các dòng động cơ từ hãng Toyota, Kia, Hyundai.
+
+Yêu cầu trang phục: Bắt buộc mặc đồ bảo hộ và giày mũi sắt khi vào xưởng.
+
+### [MAJOR_INFO] Khác biệt giữa Cử nhân Thực hành (Cao đẳng) và Cử nhân Đại học
+
+Thời gian: Cao đẳng (2.5 năm) ngắn hơn Đại học (4 năm).
+
+Phương pháp: Cao đẳng thiên 70% thực hành nghiệp vụ, giảm bớt các môn lý thuyết hàn lâm/nghiên cứu.
+
+Bằng cấp: Tốt nghiệp nhận bằng "Cử nhân Thực hành" (hoặc "Kỹ sư Thực hành") do Bộ Lao động Thương binh và Xã hội (Tổng cục GDNN) cấp.
+
+### [MAJOR_INFO] Giá trị Bằng cấp và Cơ hội Liên thông
+
+Bằng cấp hợp lệ trên toàn quốc, đủ điều kiện thi tuyển viên chức nhà nước.
+
+Liên thông: Sau khi tốt nghiệp Cao đẳng, sinh viên có thể học liên thông lên Đại học (học thêm 1.5 - 2 năm) tại các trường Đại học có tuyển sinh liên thông cùng ngành.
+
+### [MAJOR_INFO] Khối lượng Kiến thức (Tín chỉ) chung
+
+Một chương trình Cao đẳng kéo dài khoảng 90 đến 105 tín chỉ tùy ngành.
+
+Một tín chỉ lý thuyết = 15 giờ học trên lớp.
+
+Một tín chỉ thực hành = 30 giờ học thực hành.
+
+### [MAJOR_INFO] Đội ngũ Giảng viên
+
+100% Giảng viên cơ hữu có trình độ từ Thạc sĩ trở lên hoặc chuyên gia có trên 5 năm kinh nghiệm thực chiến tại doanh nghiệp.
+
+Môn thực hành nghề: Mời các Quản lý, Giám đốc, Kỹ sư trưởng từ doanh nghiệp về hướng dẫn trực tiếp.
+
+### [MAJOR_INFO] Thông tin Câu lạc bộ sinh viên (Ngoại khóa)
+Danh sách CLB hoạt động chính thức:
+
+Khối nghệ thuật: CLB Âm nhạc, CLB Nhảy hiện đại.
+
+Khối kỹ năng: CLB Đại sứ sinh viên, CLB Tiếng Anh (English Club).
+
+Khối chuyên môn: CLB IT, CLB Truyền thông.
+
+Quyền lợi: Tham gia CLB được cộng điểm rèn luyện hàng kỳ.

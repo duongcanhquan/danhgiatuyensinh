@@ -200,6 +200,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
         isActive,
         lastUpdated: now,
         createdAt: existing?.createdAt ?? existing?.lastUpdated ?? now,
+        ...(existing?.seedTag ? { seedTag: existing.seedTag } : {}),
       })
       setMsg('Đã lưu.')
       closeModal()
@@ -272,6 +273,17 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">
               Các đoạn kịch bản ghép nối — hệ thống tự ráp luồng tư vấn theo từng hồ sơ (trợ lý trên màn chi tiết).
+            </p>
+            <p className="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">
+              Nạp / cập nhật bộ 20 snippet mẫu (service account):{' '}
+              <code className="rounded bg-black/30 px-1 text-slate-300">npm run seed:script-snippets</code>. Xóa đúng
+              bộ đã seed:{' '}
+              <code className="rounded bg-black/30 px-1 text-slate-300">
+                DELETE_SCRIPT_SNIPPET_SEED=1 npm run seed:script-snippets
+              </code>
+              . Sửa nội dung: chỉnh trong bảng dưới hoặc sửa file{' '}
+              <code className="text-slate-400">scripts/data/vietmy-script-snippet-seed-entries.mjs</code> rồi chạy lại
+              seed.
             </p>
           </div>
           {canEdit ? (
@@ -352,7 +364,17 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
             <tbody>
               {filteredSnippets.map((s) => (
                 <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.04]">
-                  <td className="max-w-[200px] truncate px-3 py-2 font-medium text-white">{s.title}</td>
+                  <td className="max-w-[220px] truncate px-3 py-2 font-medium text-white">
+                    {s.title}
+                    {s.seedTag ? (
+                      <span
+                        className="ml-1 align-middle rounded bg-violet-500/25 px-1 text-[10px] font-normal uppercase tracking-wide text-violet-200"
+                        title={s.seedTag}
+                      >
+                        seed
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-300">
                     {SCRIPT_CATEGORY_LABELS[s.category]}
                   </td>

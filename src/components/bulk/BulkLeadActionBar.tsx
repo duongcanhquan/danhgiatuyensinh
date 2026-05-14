@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { UserPlus, Download, GitBranch, X } from 'lucide-react'
+import { UserPlus, Download, GitBranch, Sparkles, X } from 'lucide-react'
 
 type Props = {
   count: number
@@ -8,6 +8,10 @@ type Props = {
   onBulkStatus: () => void
   onExport: () => void
   showReassign: boolean
+  /** Chỉ hiện khi lọc WARM + có quyền AI — stage-2 shortlist miner */
+  showAiMiner?: boolean
+  onAiMiner?: () => void
+  aiMinerDisabled?: boolean
 }
 
 export function BulkLeadActionBar({
@@ -17,6 +21,9 @@ export function BulkLeadActionBar({
   onBulkStatus,
   onExport,
   showReassign,
+  showAiMiner,
+  onAiMiner,
+  aiMinerDisabled,
 }: Props) {
   return (
     <AnimatePresence>
@@ -26,7 +33,7 @@ export function BulkLeadActionBar({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 120, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-          className="pointer-events-auto fixed left-1/2 z-[45] w-[min(96vw,720px)] -translate-x-1/2 pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-[480px]:bottom-2 bottom-6"
+          className="pointer-events-auto fixed left-1/2 z-[45] w-[min(96vw,860px)] -translate-x-1/2 pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-[480px]:bottom-2 bottom-6"
         >
           <div className="app-glass-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-3 py-3 shadow-[0_16px_48px_rgba(15,23,42,0.1)] sm:px-4">
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
@@ -43,6 +50,22 @@ export function BulkLeadActionBar({
               </button>
             </div>
             <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+              {showAiMiner && onAiMiner ? (
+                <button
+                  type="button"
+                  disabled={Boolean(aiMinerDisabled)}
+                  onClick={onAiMiner}
+                  title={
+                    aiMinerDisabled
+                      ? 'Chọn ít nhất một lead WARM và cấu hình LLM trong Cài đặt'
+                      : 'Chạy AI Lead Miner (shortlist) trên các lead WARM đã chọn'
+                  }
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-amber-400/90 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 px-3 py-2.5 text-sm font-bold text-amber-950 shadow-[0_0_24px_rgba(251,191,36,0.55)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-initial sm:min-h-0 sm:py-2"
+                >
+                  <Sparkles className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                  ✨ Chạy AI Phân tích (Shortlist)
+                </button>
+              ) : null}
               {showReassign ? (
                 <button
                   type="button"

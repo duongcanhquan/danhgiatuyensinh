@@ -1,0 +1,230 @@
+[
+  {
+    "title": "Khách Nội thành Hà Nội – Đánh mạnh Tuyến xe",
+    "priority": 40,
+    "triggerConditions": [
+      {
+        "field": "province",
+        "operator": "EQUALS",
+        "value": "Hà Nội"
+      }
+    ],
+    "strategy": "Học sinh Hà Nội có nhiều lựa chọn. Nhấn mạnh tiện lợi (xe đưa đón, lộ trình rõ), môi trường học hiện đại và trải nghiệm thực tế tại trường.",
+    "keySellingPoints": [
+      "Có hệ thống xe Bus đưa đón toàn Hà Nội.",
+      "Môi trường học tập năng động, nhiều sự kiện giải trí."
+    ],
+    "objectionHandling": [
+      "Trường xa nhà em: -> Trường có xe đưa đón tận ngõ, lên xe ngủ 1 giấc là tới trường ạ."
+    ]
+  },
+  {
+    "title": "Khách Ngoại thành Hà Nội (Sóc Sơn, Ba Vì...)",
+    "priority": 45,
+    "triggerConditions": [
+      {
+        "field": "province",
+        "operator": "EQUALS",
+        "value": "Hà Nội"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      }
+    ],
+    "strategy": "Nửa muốn trọ học nửa muốn đi về. Tư vấn linh hoạt KTX hoặc Bus tuyến dài. Đánh vào chi phí hợp lý hơn học nội thành trung tâm.",
+    "keySellingPoints": [
+      "Vị trí trường tránh tắc đường, dễ dàng di chuyển.",
+      "Học phí cạnh tranh so với các trường nội đô."
+    ],
+    "objectionHandling": [
+      "Em muốn học trường giữa trung tâm: -> Trung tâm rất tắc đường và chi phí đắt đỏ, khu vực trường mình không gian rộng rãi, thoáng mát hơn."
+    ]
+  },
+  {
+    "title": "Khách Vùng Tây Bắc (Lào Cai, Yên Bái...)",
+    "priority": 55,
+    "triggerConditions": [
+      {
+        "field": "province",
+        "operator": "IN",
+        "value": [
+          "Lào Cai",
+          "Yên Bái",
+          "Phú Thọ",
+          "Vĩnh Phúc"
+        ]
+      }
+    ],
+    "strategy": "Tuyến đường bộ cao tốc thuận lợi. Nhấn mạnh việc dễ dàng bắt xe khách về quê cuối tuần. Tạo sự gần gũi, chân chất khi tư vấn.",
+    "keySellingPoints": [
+      "Vị trí trường ngay trục đường chính, dễ bắt xe khách về tỉnh.",
+      "Cộng đồng sinh viên Tây Bắc tại trường rất đông và đoàn kết."
+    ],
+    "objectionHandling": [
+      "Sợ xa nhà nhớ nhà: -> Đường cao tốc đi lại rất nhanh, cuối tuần em về thăm nhà hoàn toàn tiện lợi."
+    ]
+  },
+  {
+    "title": "Khách Vùng Đông Bắc (Quảng Ninh, Hải Phòng)",
+    "priority": 55,
+    "triggerConditions": [
+      {
+        "field": "province",
+        "operator": "IN",
+        "value": [
+          "Quảng Ninh",
+          "Hải Phòng",
+          "Hải Dương"
+        ]
+      }
+    ],
+    "strategy": "Tệp khách này gia đình thường có kinh tế khá hơn. Đừng bàn nhiều về học phí rẻ, hãy bán sự CHUYÊN NGHIỆP, CƠ SỞ VẬT CHẤT ĐẸP và VIỆC LÀM DOANH NGHIỆP LỚN.",
+    "keySellingPoints": [
+      "Môi trường học tập chuẩn quốc tế, trang thiết bị hiện đại.",
+      "Bảo chứng việc làm tại các tập đoàn lớn."
+    ],
+    "objectionHandling": [
+      "Học phí trả 1 lần được không: -> Dạ được ạ, đóng 1 lần toàn khóa trường giảm thêm 15% và tặng laptop (theo chính sách hiện hành)."
+    ]
+  },
+  {
+    "title": "Khách miền Nam / Miền Trung (Đà Nẵng đổ vào)",
+    "priority": 50,
+    "triggerConditions": [
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      },
+      {
+        "field": "province",
+        "operator": "NOT_IN",
+        "value": [
+          "Hà Nội",
+          "Thanh Hóa",
+          "Nghệ An"
+        ]
+      }
+    ],
+    "strategy": "Đề cao sự dũng cảm khi ra thủ đô học tập. Tư vấn chi tiết về việc đưa đón sân bay/bến xe ngày nhập học để phụ huynh yên tâm tuyệt đối.",
+    "keySellingPoints": [
+      "Trường có đội tình nguyện đón tân sinh viên tại bến xe/sân bay.",
+      "KTX ưu tiên phòng đẹp nhất cho sinh viên phương xa."
+    ],
+    "objectionHandling": [
+      "Khí hậu ngoài Bắc lạnh sợ ốm: -> KTX có điều hòa 2 chiều và bình nóng lạnh đầy đủ ạ."
+    ]
+  },
+  {
+    "title": "Lead MỚI TINH (NEW) – Mọi ngành",
+    "priority": 30,
+    "triggerConditions": [
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "NEW"
+      }
+    ],
+    "strategy": "Mục tiêu duy nhất: Tốc độ. Phải là người gọi đầu tiên trước các trường đối thủ. Kịch bản chào hỏi nhanh, xác nhận thông tin và tạo sự hứng khởi.",
+    "keySellingPoints": [
+      "Chúc mừng em đã đăng ký nhận thông tin từ trường Cao đẳng Việt Mỹ.",
+      "Em là một trong 50 bạn đầu tiên được ưu tiên tư vấn lộ trình."
+    ],
+    "objectionHandling": [
+      "Đang bận không nghe được: -> Em nhắn Zalo anh/chị thông tin tóm tắt nhé, tối anh/chị gọi lại."
+    ]
+  },
+  {
+    "title": "Đã gọi nhưng Kẹt lại (CONTACTED – WARM)",
+    "priority": 40,
+    "triggerConditions": [
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "CONTACTED"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "Khách đang ở vùng xám. Gọi lại với một «cái cớ» (Bên trường chuẩn bị chốt danh sách đợt 1 / Có hội thảo mới / Có chính sách ưu đãi mới).",
+    "keySellingPoints": [
+      "Trường sắp hết hạn ưu đãi giảm 10% học phí.",
+      "Chỉ còn 5 suất KTX giá rẻ."
+    ],
+    "objectionHandling": [
+      "Em đang suy nghĩ thêm: -> Cứ đặt cọc giữ suất theo mức tối thiểu quy định, em không mất quyền lợi nếu còn trong thời hạn hoàn cọc — để vụt mất ưu đãi thì tiếc ạ."
+    ]
+  },
+  {
+    "title": "Khách HOT – Sắp chốt (đang tư vấn tích cực)",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      },
+      {
+        "field": "status",
+        "operator": "EQUALS",
+        "value": "INTERESTED"
+      }
+    ],
+    "strategy": "Áp dụng kỹ thuật chốt giả định (Assumptive Close). Thay vì hỏi «Em có nhập học không?», hãy hỏi «Em chuyển khoản cọc bằng Vietcombank hay Sacombank để chị làm hồ sơ?».",
+    "keySellingPoints": [
+      "Thủ tục nhập học online nhanh chóng trong 5 phút.",
+      "Gửi ngay Giấy báo trúng tuyển bản PDF qua Zalo."
+    ],
+    "objectionHandling": [
+      "Phụ huynh muốn lên tận nơi xem mới đóng tiền: -> Dạ em mời cô chú cuối tuần này lên trường, em sẽ đích thân dẫn gia đình đi tham quan ạ."
+    ]
+  },
+  {
+    "title": "Khách COLD đã liên hệ (cân nhắc trường khác)",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "COLD"
+      },
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "CONTACTED"
+      }
+    ],
+    "strategy": "Đóng vai trò là «Chuyên gia hướng nghiệp» thay vì «Người bán hàng». Hỏi chân thành xem rào cản lớn nhất của họ là gì (Tiền? Uy tín trường? Ngành học?).",
+    "keySellingPoints": [
+      "Tư vấn hướng nghiệp hoàn toàn miễn phí, không ép buộc.",
+      "Hỗ trợ sinh viên định hướng lại đam mê thực sự."
+    ],
+    "objectionHandling": [
+      "Trường khác báo học phí rẻ hơn: -> Mình so sánh cả chất lượng thực hành và cam kết học phí: trường mình không tăng học phí trong khóa và đầu tư phòng lab hiện đại — em cân nhắc tổng chi phí để ra nghề ạ."
+    ]
+  },
+  {
+    "title": "Nuôi Zalo – thêm [no_answer_7d] vào mô tả lead",
+    "priority": 85,
+    "triggerConditions": [
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "[no_answer_7d]"
+      }
+    ],
+    "strategy": "Chuyển trạng thái sang «Nuôi Zalo». Không gọi điện làm phiền nữa. Dùng ZNS gửi một tin nhắn gây tò mò. (Điều kiện: TVV gắn chuỗi [no_answer_7d] vào mô tả lead khi không bắt máy > 7 ngày.)",
+    "keySellingPoints": [
+      "Cập nhật thông tin tuyển sinh mới nhất qua Zalo.",
+      "Hình ảnh thực tế hoạt động sôi nổi của sinh viên."
+    ],
+    "objectionHandling": [
+      "(Không có phản hồi) -> Chỉ cần đảm bảo họ xem được Zalo status của TVV hàng ngày."
+    ]
+  }
+]

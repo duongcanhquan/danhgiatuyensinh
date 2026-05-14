@@ -1,0 +1,194 @@
+/**
+ * 20 snippet Script Hub — BƯỚC 1–5 (GREETING → CLOSING).
+ * `majorInterest` khớp `lead.educationLevel` (quy ước app).
+ * OBJECTION_HANDLING: dòng «Lo ngại: …», một dòng `---`, sau đó là script trả lời (chuẩn `ConsultingAssistantPanel`).
+ */
+export const VIETMY_SCRIPT_SNIPPET_SEED_ENTRIES = [
+  {
+    id: 'vietmy_seed_script_01',
+    title: '01. Chào hỏi – Lead mới (ưu tiên tốc độ)',
+    category: 'GREETING',
+    matchConditions: [{ field: 'pipelineStatus', operator: 'EQUALS', value: 'NEW' }],
+    content:
+      'Dạ alo, chào em. Em nghe chị — chị gọi từ Ban tuyển sinh Trường Cao đẳng Việt Mỹ Hà Nội. Cảm ơn em đã đăng ký sớm, em thuộc nhóm được ưu tiên tư vấn đợt một. Chị thấy em quan tâm ngành mình đăng ký; em đã tìm hiểu kỹ chưa, hay để chị tóm lược lộ trình và điều kiện xét tuyển giúp em nhé?',
+  },
+  {
+    id: 'vietmy_seed_script_02',
+    title: '02. Chào hỏi – Khách Hà Nội (thân thiện, địa lý)',
+    category: 'GREETING',
+    matchConditions: [{ field: 'province', operator: 'EQUALS', value: 'Hà Nội' }],
+    content:
+      'Chào em, chị gọi từ Cao đẳng Việt Mỹ Hà Nội. Trường có lợi thế vị trí thuận tiện đi lại trong nội thành. Em đang ở quận/huyện nào để chị gợi ý tuyến xe buýt hoặc lộ trình đi cho hợp lý nhất nhé?',
+  },
+  {
+    id: 'vietmy_seed_script_03',
+    title: '03. Chào hỏi – Gọi lại chăm sóc (WARM / COLD)',
+    category: 'GREETING',
+    matchConditions: [
+      { field: 'pipelineStatus', operator: 'EQUALS', value: 'CONTACTED' },
+      { field: 'priorityTag', operator: 'IN', value: ['WARM', 'COLD'] },
+    ],
+    content:
+      'Alo chào em, chị bên Cao đẳng Việt Mỹ Hà Nội đây. Lần trước mình đã trao đổi qua, không biết hiện em cân nhắc chọn trường đến đâu rồi? Nếu có chỗ vướng, em cứ nói thẳng với chị để chị hỗ trợ định hướng nhé.',
+  },
+  {
+    id: 'vietmy_seed_script_04',
+    title: '04. USP – Công nghệ thông tin',
+    category: 'USP',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Công nghệ thông tin' }],
+    content: `Điểm khác biệt ngành CNTT bên trường:
+
+Thực hành khoảng 70% trên phòng lab máy tính cấu hình cao (ví dụ Core i7).
+
+Có phòng thực hành iMac riêng phục vụ lập trình iOS.
+
+Giáo trình cập nhật theo nhu cầu doanh nghiệp phần mềm.`,
+  },
+  {
+    id: 'vietmy_seed_script_05',
+    title: '05. USP – Thiết kế đồ họa',
+    category: 'USP',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Thiết kế đồ họa' }],
+    content: `Ba lợi thế nổi bật khi học Thiết kế đồ họa tại Việt Mỹ:
+
+Thực hành tại studio chụp ảnh / quay phim chuyên nghiệp của trường.
+
+Hỗ trợ tài khoản Adobe Creative Cloud bản quyền trong thời gian học.
+
+Sản phẩm thật ngay từ năm nhất, tích lũy portfolio theo từng học phần.`,
+  },
+  {
+    id: 'vietmy_seed_script_06',
+    title: '06. USP – Ký túc xá (sinh viên ngoại tỉnh)',
+    category: 'USP',
+    matchConditions: [{ field: 'province', operator: 'NOT_IN', value: ['Hà Nội'] }],
+    content: `Trường dành sự quan tâm đặc biệt cho sinh viên tỉnh xa:
+
+Ký túc xá khép kín, an ninh 24/7 trong khuôn viên.
+
+Tiện nghi: điều hòa, nước nóng, khu tự học.
+
+Chi phí minh bạch, thường hợp lý hơn thuê trọ tự do và dễ quản lý sinh hoạt.`,
+  },
+  {
+    id: 'vietmy_seed_script_07',
+    title: '07. USP – Điều dưỡng',
+    category: 'USP',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Điều dưỡng' }],
+    content: `Đào tạo tại phòng skill lab với mô hình bệnh nhân giả lập hiện đại.
+
+Thực tập lâm sàng tại các bệnh viện đa khoa tuyến Trung ương từ năm thứ hai.
+
+Hướng đến giới thiệu việc làm tại bệnh viện, phòng khám đa khoa và phòng khám nha khoa sau tốt nghiệp (theo năng lực và nhu cầu tuyển dụng).`,
+  },
+  {
+    id: 'vietmy_seed_script_08',
+    title: '08. Tầm nhìn nghề nghiệp – Tiếng Đức',
+    category: 'CAREER_VISION',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Tiếng Đức' }],
+    content:
+      'Lộ trình rõ ràng: sau Cao đẳng, em hướng tới chứng chỉ tiếng Đức B1/B2; nhà trường đồng hành thủ tục du học nghề hoặc hướng xuất khẩu lao động (theo điều kiện cá nhân và chính sách đối tác). Tại Đức, mức thu nhập thực tập và khi đi làm chính thức phụ thuộc hợp đồng và vị trí — chị chỉ báo khoảng tham khảo thị trường khi đã rõ hồ sơ của em, tránh cam kết số tuyệt đối.',
+  },
+  {
+    id: 'vietmy_seed_script_09',
+    title: '09. Tầm nhìn nghề nghiệp – Digital Marketing',
+    category: 'CAREER_VISION',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Digital Marketing' }],
+    content:
+      'Ngành marketing số có nhu cầu rộng: chạy quảng cáo, vận hành fanpage, xây kênh TikTok, kinh doanh online… Nhiều sinh viên có thể nhận việc freelance nhẹ từ năm hai trở đi nếu chủ động và có portfolio — mức thu nhập tùy dự án, không cố định.',
+  },
+  {
+    id: 'vietmy_seed_script_10',
+    title: '10. Tầm nhìn nghề nghiệp – Quản trị khách sạn',
+    category: 'CAREER_VISION',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Quản trị Khách sạn' }],
+    content:
+      'Em hướng tới thực tập có hỗ trợ thù lao (paid internship) tại hệ thống khách sạn / resort cao cấp hoặc môi trường quốc tế phù hợp. Lộ trình thăng tiến có thể đi từ lễ tân đến giám sát, quản lý tiền sảnh — thu nhập và điều kiện làm việc phụ thuộc đơn vị tuyển dụng và năng lực cá nhân.',
+  },
+  {
+    id: 'vietmy_seed_script_11',
+    title: '11. Xử lý từ chối – Lo học phí',
+    category: 'OBJECTION_HANDLING',
+    matchConditions: [{ field: 'priorityTag', operator: 'IN', value: ['HOT', 'WARM'] }],
+    content: `Lo ngại: Gia đình khó khăn, lo học phí phải đóng một lần quá lớn.
+---
+Học phí được niêm yết và có lộ trình đóng theo học kỳ; nhà trường có hướng dẫn trả góp qua ngân hàng (0% lãi suất khi áp dụng được chương trình thẻ). Khi cần, trường hỗ trợ giấy xác nhận sinh viên để gia đình làm thủ tục vay vốn chính sách tại địa phương — chị gửi em checklist cụ thể sau cuộc gọi nhé.`,
+  },
+  {
+    id: 'vietmy_seed_script_12',
+    title: '12. Xử lý từ chối – Phân vân Đại học và Cao đẳng',
+    category: 'OBJECTION_HANDLING',
+    matchConditions: [{ field: 'priorityTag', operator: 'IN', value: ['WARM', 'COLD'] }],
+    content: `Lo ngại: Bố mẹ muốn em học đại học vì nghĩ bằng đại học «tên tuổi» hơn.
+---
+Đại học thường kéo dài bốn năm, nhiều chương trình nặng lý thuyết; Cao đẳng Việt Mỹ tập trung thực hành, thời gian đào tạo ngắn hơn, em đi làm sớm và tích lũy kinh nghiệm. Sau khi đi làm, em vẫn có thể liên thông đại học nếu gia đình muốn có thêm bằng. Doanh nghiệp hiện đánh giá năng lực làm việc và kết quả thử việc, không chỉ tên bằng.`,
+  },
+  {
+    id: 'vietmy_seed_script_13',
+    title: '13. Xử lý từ chối – Sợ ngành IT khó',
+    category: 'OBJECTION_HANDLING',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Công nghệ thông tin' }],
+    content: `Lo ngại: Sợ lập trình khó, em không giỏi tự nhiên như khối A.
+---
+Chương trình được thiết kế từ nền tảng; giảng viên có kinh nghiệm dự án, có giờ hỗ trợ thực hành thêm. Nhiều bạn khối C, D vẫn làm tốt khi kiên trì luyện tập — ngành này cần thói quen code và tư duy giải quyết bài toán hơn là «siêu toán».`,
+  },
+  {
+    id: 'vietmy_seed_script_14',
+    title: '14. Xử lý từ chối – Phụ huynh lo an toàn khi lên Hà Nội',
+    category: 'OBJECTION_HANDLING',
+    matchConditions: [{ field: 'province', operator: 'NOT_IN', value: ['Hà Nội'] }],
+    content: `Lo ngại: Bố mẹ lo con ở tỉnh ra thủ đô một mình, sợ môi trường phức tạp.
+---
+Năm đầu, nhà trường khuyến khích ở ký túc xá trong khuôn viên: có quy định giờ giấc, camera, bảo vệ; hạn chế người ngoài. Sinh viên tập trung học tập, có giáo viên chủ nhiệm cập nhật định kỳ cho phụ huynh khi cần.`,
+  },
+  {
+    id: 'vietmy_seed_script_15',
+    title: '15. Xử lý từ chối – Điều dưỡng: sợ ca đêm, công việc nặng',
+    category: 'OBJECTION_HANDLING',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Điều dưỡng' }],
+    content: `Lo ngại: Nghe nói điều dưỡng hay trực đêm, thể lực căng thẳng.
+---
+Điều dưỡng có nhiều môi trường làm việc: ngoài cấp cứu, em có thể hướng tới phòng khám đa khoa tư, nha khoa, thẩm mỹ, y tế học đường… nhiều vị trí làm giờ hành chính, môi trường ổn định. Em chọn hướng phù hợp sức khỏe và nguyện vọng, chị tư vấn chi tiết từng nhóm công việc nhé.`,
+  },
+  {
+    id: 'vietmy_seed_script_16',
+    title: '16. Xử lý từ chối – Công nghệ ô tô: sợ bẩn dầu mỡ',
+    category: 'OBJECTION_HANDLING',
+    matchConditions: [{ field: 'majorInterest', operator: 'EQUALS', value: 'Công nghệ Ô tô' }],
+    content: `Lo ngại: Sợ làm nghề ô tô là dầu mỡ, quần áo bẩn suốt.
+---
+Kỹ thuật ô tô hiện đại dùng thiết bị chẩn đoán, phần mềm; xe điện, hybrid càng ít dầu mỡ truyền thống. Vị trí tư vấn dịch vụ, bảo hành tại đại lý thường yêu cầu giao tiếp chuyên nghiệp, trang phục gọn gàng.`,
+  },
+  {
+    id: 'vietmy_seed_script_17',
+    title: '17. Chốt – Ngoại tỉnh (Zalo và hồ sơ)',
+    category: 'CLOSING',
+    matchConditions: [{ field: 'province', operator: 'NOT_IN', value: ['Hà Nội'] }],
+    content:
+      'Sau cuộc gọi, chị xin phép kết bạn Zalo đúng số em đang dùng để gửi bảng học phí, hình ảnh ký túc xá cho gia đình xem. Em chụp ảnh bảng điểm lớp 12 (hoặc giấy tờ đang có) gửi lại chị, chị hướng dẫn hồ sơ xét tuyển online và giữ suất KTX nếu em đủ điều kiện.',
+  },
+  {
+    id: 'vietmy_seed_script_18',
+    title: '18. Chốt – Nội thành Hà Nội (mời tham quan)',
+    category: 'CLOSING',
+    matchConditions: [{ field: 'province', operator: 'EQUALS', value: 'Hà Nội' }],
+    content:
+      'Chị mời em và phụ huynh sắp xếp một buổi thứ Bảy hoặc Chủ nhật gần nhất lên tham quan phòng học và xưởng thực hành. Chị báo lại lịch cụ thể và quà lưu niệm theo chính sách hiện tại của trường. Gia đình thuận buổi sáng hay chiều hơn ạ?',
+  },
+  {
+    id: 'vietmy_seed_script_19',
+    title: '19. Chốt – Khách HOT (cọc giữ ưu đãi)',
+    category: 'CLOSING',
+    matchConditions: [{ field: 'priorityTag', operator: 'EQUALS', value: 'HOT' }],
+    content:
+      'Ưu đãi đang áp dụng (ví dụ giảm học phí hoặc quà đi kèm — chị gửi lại đúng điều khoản đang hiệu lực). Em đặt cọc 2.000.000 đồng để giữ suất; phần cọc được khấu trừ vào học phí kỳ một khi nhập học. Nếu em rút hồ sơ hoặc không nhập học đúng quy định của trường, phần hoàn trả thực hiện theo quy chế (chị đọc rõ điều khoản cho em ngay sau đây). Em dùng ngân hàng nào để chị gửi thông tin chuyển khoản của nhà trường?',
+  },
+  {
+    id: 'vietmy_seed_script_20',
+    title: '20. Chốt – Khách COLD (nuôi dưỡng)',
+    category: 'CLOSING',
+    matchConditions: [{ field: 'priorityTag', operator: 'EQUALS', value: 'COLD' }],
+    content:
+      'Chị hiểu em và gia đình cần thêm thời gian cân nhắc. Chị xin phép kết bạn Zalo; khi có hội thảo, ngày hội việc làm hoặc chính sách mới, chị gửi cập nhật ngắn gọn. Lúc nào em cần định hướng lại, cứ nhắn chị — miễn phí, không ép nhập học nhé.',
+  },
+]

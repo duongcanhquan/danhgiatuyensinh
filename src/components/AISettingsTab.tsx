@@ -1,12 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import { Sparkles, Trash2 } from 'lucide-react'
+import { Shield, Sparkles, Trash2 } from 'lucide-react'
 import type { AIIntegrationConfig, AIProviderId, AITask } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { useAITasks } from '../hooks/useAITasks'
 import { useAuth } from '../hooks/useAuth'
 import { loadAIConfigFromStorage, saveAIConfigToStorage } from '../utils/aiEngine'
+import {
+  DEFAULT_AI_GATEKEEPER_RULES,
+  loadAiGatekeeperFromStorage,
+  mergeGatekeeperConfig,
+  saveAiGatekeeperToStorage,
+  type AiGatekeeperStored,
+} from '../utils/aiGatekeeper'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
 
@@ -54,6 +61,41 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   ])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+
+  const initialGk = useMemo(() => mergeGatekeeperConfig(loadAiGatekeeperFromStorage()), [])
+  const [gkMinLen, setGkMinLen] = useState(() => String(initialGk.minCombinedNoteLength))
+  const [gkKeywordsCsv, setGkKeywordsCsv] = useState(() => initialGk.intentKeywords.join(', '))
+  const [gkDays, setGkDays] = useState(() => String(initialGk.maxInteractionAgeDays))
+
+  const persistGatekeeper = useCallback(() => {
+    const minN = Math.max(0, Math.min(5000, Math.floor(Number(gkMinLen) || 0)))
+    const days = Math.max(
+      1,
+      Math.min(365, Math.floor(Number(gkDays) || DEFAULT_AI_GATEKEEPER_RULES.maxInteractionAgeDays)),
+    )
+    const payload: AiGatekeeperStored = {
+      minCombinedNoteLength: minN,
+      intentKeywordsCsv: gkKeywordsCsv,
+      maxInteractionAgeDays: days,
+    }
+    saveAiGatekeeperToStorage(payload)
+    setGkMinLen(String(minN))
+    setGkDays(String(days))
+    setMsg('Đã lưu quy tắc AI Gatekeeper vào trình duyệt (localStorage).')
+  }, [gkMinLen, gkKeywordsCsv, gkDays])
+
+  const resetGatekeeperDefaults = useCallback(() => {
+    const d = DEFAULT_AI_GATEKEEPER_RULES
+    setGkMinLen(String(d.minCombinedNoteLength))
+    setGkKeywordsCsv(d.intentKeywords.join(', '))
+    setGkDays(String(d.maxInteractionAgeDays))
+    saveAiGatekeeperToStorage({
+      minCombinedNoteLength: d.minCombinedNoteLength,
+      intentKeywordsCsv: d.intentKeywords.join(', '),
+      maxInteractionAgeDays: d.maxInteractionAgeDays,
+    })
+    setMsg('Đã khôi phục quy tắc AI Gatekeeper mặc định và lưu vào trình duyệt.')
+  }, [])
 
   const persistConfig = useCallback(() => {
     saveAIConfigToStorage(cfg)
@@ -246,6 +288,80 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                 <li className="text-xs text-slate-500">Chưa có tác vụ — tạo bên dưới.</li>
               ) : null}
             </ul>
+          </div>
+        </div>
+
+        <div className="mt-8 overflow-hidden rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-slate-900/80 via-indigo-950/50 to-teal-950/35 p-1 shadow-[0_20px_60px_rgba(6,182,212,0.12)]">
+          <div className="rounded-[14px] border border-white/10 bg-gradient-to-br from-white/[0.06] to-cyan-950/20 p-5 backdrop-blur-md md:p-6">
+            <div className="flex flex-wrap items-start gap-3">
+              <Shield className="h-7 w-7 shrink-0 text-cyan-300" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <VietMyAccentHeading as="h3" tone="onDark" size="md" className="mb-0">
+                  AI Gatekeeper Rules
+                </VietMyAccentHeading>
+                <p className="mt-2 text-sm text-slate-300">
+                  Tiền lọc không tốn token trước khi gọi LLM: độ dài ghi chú tương tác, từ khóa ý định (regex), và hoạt động
+                  gần đây. Cấu hình lưu cục bộ trên trình duyệt (cùng thiết bị với người chạy AI hàng loạt).
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <label className="block text-xs font-medium text-slate-400">
+                Độ dài ghi chú tối thiểu (ký tự)
+                <input
+                  type="number"
+                  min={0}
+                  max={5000}
+                  value={gkMinLen}
+                  disabled={!canEdit}
+                  onChange={(e) => setGkMinLen(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-white/18 bg-slate-800/50 px-3 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400/35 disabled:opacity-50"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-400 md:col-span-2">
+                Từ khóa ý định (cách nhau bằng dấu phẩy)
+                <input
+                  value={gkKeywordsCsv}
+                  disabled={!canEdit}
+                  onChange={(e) => setGkKeywordsCsv(e.target.value)}
+                  placeholder="vd. học phí, bố mẹ, phân vân…"
+                  className="mt-1.5 w-full rounded-xl border border-white/18 bg-slate-800/50 px-3 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400/35 disabled:opacity-50"
+                />
+                <span className="mt-1.5 block text-[11px] text-slate-500">
+                  Để trống toàn bộ = tắt lọc theo từ khóa (chỉ còn độ dài + hoạt động gần đây).
+                </span>
+              </label>
+              <label className="block text-xs font-medium text-slate-400 md:col-span-3">
+                Tương tác trong vòng (ngày)
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={gkDays}
+                  disabled={!canEdit}
+                  onChange={(e) => setGkDays(e.target.value)}
+                  className="mt-1.5 max-w-[200px] rounded-xl border border-white/18 bg-slate-800/50 px-3 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400/35 disabled:opacity-50"
+                />
+              </label>
+            </div>
+            {canEdit ? (
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={persistGatekeeper}
+                  className="rounded-xl border border-cyan-400/45 bg-gradient-to-r from-cyan-600/35 to-teal-800/40 px-4 py-2.5 text-sm font-semibold text-cyan-50 transition hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+                >
+                  Lưu quy tắc Gatekeeper
+                </button>
+                <button
+                  type="button"
+                  onClick={resetGatekeeperDefaults}
+                  className="rounded-xl border border-white/15 bg-white/[0.06] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10"
+                >
+                  Khôi phục mặc định
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 

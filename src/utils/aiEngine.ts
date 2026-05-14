@@ -183,3 +183,18 @@ export async function runAIAnalysis(
   }
   return parsed as Record<string, unknown>
 }
+
+/**
+ * Raw JSON text from the LLM (markdown fences stripped). For batch miners and custom flows.
+ */
+export async function invokeLlmJsonText(
+  config: AIIntegrationConfig,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  const raw =
+    config.provider === 'Gemini'
+      ? await callGemini(config, systemPrompt, userPrompt)
+      : await callOpenAI(config, systemPrompt, userPrompt)
+  return stripJsonFence(raw)
+}

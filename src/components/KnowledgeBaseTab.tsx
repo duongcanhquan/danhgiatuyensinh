@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { addDoc, collection, deleteDoc, doc, Timestamp } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { KnowledgeDocumentType } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import type { Firestore } from 'firebase/firestore'
@@ -18,6 +18,14 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const resetForm = () => {
+    setEditingId(null)
+    setTitle('')
+    setContent('')
+    setType('POLICY')
+  }
 
   const save = async () => {
     if (!title.trim() || !content.trim()) {
@@ -27,15 +35,24 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
     setBusy(true)
     setMsg(null)
     try {
-      await addDoc(collection(db, FS_COLLECTIONS.knowledgeDocuments), {
-        title: title.trim(),
-        type,
-        content: content.trim(),
-        uploadedAt: Timestamp.now(),
-      })
-      setTitle('')
-      setContent('')
-      setMsg('Đã lưu vào kho tri thức (RAG).')
+      if (editingId) {
+        await updateDoc(doc(db, FS_COLLECTIONS.knowledgeDocuments, editingId), {
+          title: title.trim(),
+          type,
+          content: content.trim(),
+          uploadedAt: Timestamp.now(),
+        })
+        setMsg('Đã cập nhật tài liệu trong kho tri thức (RAG).')
+      } else {
+        await addDoc(collection(db, FS_COLLECTIONS.knowledgeDocuments), {
+          title: title.trim(),
+          type,
+          content: content.trim(),
+          uploadedAt: Timestamp.now(),
+        })
+        setMsg('Đã thêm tài liệu mới vào kho tri thức (RAG).')
+      }
+      resetForm()
     } catch (e) {
       console.error(e)
       setMsg('Không lưu được — kiểm tra Firestore Rules.')
@@ -48,10 +65,19 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
     if (!window.confirm('Xóa tài liệu này khỏi kho tri thức?')) return
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.knowledgeDocuments, id))
+      if (editingId === id) resetForm()
     } catch (e) {
       console.error(e)
       window.alert('Không xóa được.')
     }
+  }
+
+  const startEdit = (id: string, t: string, c: string, ty: KnowledgeDocumentType) => {
+    setEditingId(id)
+    setTitle(t)
+    setContent(c)
+    setType(ty)
+    setMsg(null)
   }
 
   return (
@@ -69,7 +95,14 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
       ) : null}
 
       <section className="rounded-2xl border border-slate-200/90 bg-white/80 p-4 shadow-inner md:p-5">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">Thêm / cập nhật tài liệu</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">
+          {editingId ? 'Sửa tài liệu' : 'Thêm tài liệu mới'}
+        </h3>
+        {editingId ? (
+          <p className="mt-2 text-xs text-amber-900">
+            Đang sửa mục đã lưu — lưu để ghi đè Firestore, hoặc Hủy sửa để soạn mục mới.
+          </p>
+        ) : null}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="block text-xs font-medium text-slate-600 md:col-span-2">
             Tiêu đề
@@ -112,8 +145,21 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
             onClick={() => void save()}
             className="rounded-xl border border-amber-800 bg-gradient-to-r from-amber-800 to-amber-950 px-5 py-2.5 text-sm font-semibold text-white shadow-md disabled:opacity-50"
           >
-            {busy ? 'Đang lưu…' : 'Lưu vào Firestore'}
+            {busy ? 'Đang lưu…' : editingId ? 'Cập nhật Firestore' : 'Lưu vào Firestore'}
           </button>
+          {editingId ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                resetForm()
+                setMsg(null)
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 shadow-sm disabled:opacity-50"
+            >
+              Hủy sửa
+            </button>
+          ) : null}
           {msg ? <span className="text-xs text-slate-600">{msg}</span> : null}
         </div>
       </section>
@@ -130,7 +176,10 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
           {documents.map((d) => (
             <li
               key={d.id}
-              className="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-3 text-sm shadow-sm md:flex-row md:items-start md:justify-between"
+              className={[
+                'flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-3 text-sm shadow-sm md:flex-row md:items-start md:justify-between',
+                editingId === d.id ? 'ring-2 ring-amber-400/80 ring-offset-1' : '',
+              ].join(' ')}
             >
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-900">{d.title}</p>
@@ -140,13 +189,22 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
                   {d.uploadedAt.toDate?.().toLocaleString?.('vi-VN') ?? ''}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void remove(d.id)}
-                className="shrink-0 self-start rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-900 hover:bg-rose-100"
-              >
-                Xóa
-              </button>
+              <div className="flex shrink-0 flex-col gap-1.5 self-start sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => startEdit(d.id, d.title, d.content, d.type)}
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-950 hover:bg-amber-100"
+                >
+                  Sửa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void remove(d.id)}
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-900 hover:bg-rose-100"
+                >
+                  Xóa
+                </button>
+              </div>
             </li>
           ))}
         </ul>

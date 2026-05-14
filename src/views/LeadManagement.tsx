@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, ChevronDown, Download, Info as InfoIcon, Sparkles, Wand2, X } from 'lucide-react'
-import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
+import { BookOpen, Bot, ChevronDown, Download, Info as InfoIcon, Sparkles, Wand2, X, Zap } from 'lucide-react'
+import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore'
 import type {
   Lead,
   LeadCounselorStatus,
@@ -35,6 +35,13 @@ import {
   exportSelectedEvaluatedLeadsToXlsx,
 } from '../utils/exportEvaluatedLeads'
 import { loadAIConfigFromStorage, runAIAnalysis } from '../utils/aiEngine'
+import { fetchLeadInteractionNotesBulk, runBatchAiMiner } from '../utils/aiMiner'
+import {
+  fetchInteractionsBulkForGatekeeper,
+  filterLeadsForAI,
+  loadAiGatekeeperFromStorage,
+  mergeGatekeeperConfig,
+} from '../utils/aiGatekeeper'
 import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
 import { resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
@@ -159,6 +166,7 @@ export function LeadManagement() {
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
   const [scoreMinInput, setScoreMinInput] = useState('')
   const [scoreMaxInput, setScoreMaxInput] = useState('')
+  const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -190,6 +198,7 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
+    if (aiShortlistOnly) o.aiShortlistedOnly = true
     if (showAdminGlobalFilters) {
       if (adminUploaderIds.length) o.uploadedByIn = adminUploaderIds.slice(0, 10)
       if (adminRegions.length) o.provinceIn = adminRegions.slice(0, 10)
@@ -227,6 +236,7 @@ export function LeadManagement() {
     adminDateField,
     scoreMinInput,
     scoreMaxInput,
+    aiShortlistOnly,
   ])
 
   const {
@@ -252,6 +262,11 @@ export function LeadManagement() {
     activeScoringProfile,
     scoreByLeadId,
   } = useLeadScoring(leads)
+
+  const effectiveLeadTag = useCallback(
+    (l: Lead) => (activeScoringProfile ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag),
+    [activeScoringProfile, scoreByLeadId],
+  )
 
   const {
     snippets: scriptSnippets,
@@ -314,11 +329,25 @@ export function LeadManagement() {
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [aiMinerProgress, setAiMinerProgress] = useState<null | { total: number; done: number }>(null)
+  const [aiMinerError, setAiMinerError] = useState<string | null>(null)
+  const [gatekeeperBusy, setGatekeeperBusy] = useState(false)
+  const [gatekeeperModal, setGatekeeperModal] = useState<null | {
+    totalSelected: number
+    warmCount: number
+    skipped: number
+    passed: Lead[]
+  }>(null)
 
   const isElevatedLeadScope = isElevatedForAdminFilters(profile?.role)
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
+
+  const selectedWarmCount = useMemo(
+    () => leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM').length,
+    [leads, selectedIds, effectiveLeadTag],
+  )
 
   const regions = useMemo(() => {
     if (showAdminGlobalFilters && regionLabels.length) {
@@ -439,6 +468,7 @@ export function LeadManagement() {
     setSourceFilter('ALL')
     setScoreMinInput('')
     setScoreMaxInput('')
+    setAiShortlistOnly(false)
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -587,6 +617,106 @@ export function LeadManagement() {
       setBulkBusy(false)
     }
   }, [db, profile, selectedIds, leads, bulkCrmStatus])
+
+  const executeBulkAiMiner = useCallback(
+    async (warmPassed: Lead[]) => {
+      if (!db || !profile) return
+      const cfg = loadAIConfigFromStorage()
+      if (!cfg) {
+        setAiMinerError('Chưa cấu hình LLM — mở Cài đặt và lưu API key (tab LLM).')
+        return
+      }
+      if (!warmPassed.length) return
+      setGatekeeperModal(null)
+      setAiMinerError(null)
+      setAiMinerProgress({ total: warmPassed.length, done: 0 })
+      try {
+        const notes = await fetchLeadInteractionNotesBulk(
+          db,
+          warmPassed.map((l) => l.id),
+        )
+        const results = await runBatchAiMiner(warmPassed, cfg, {
+          notesByLeadId: notes,
+          onChunkProgress: (done, total) => setAiMinerProgress({ total, done }),
+        })
+        let batch = writeBatch(db)
+        let ops = 0
+        for (const r of results) {
+          batch.update(doc(db, FS_COLLECTIONS.leads, r.leadId), {
+            isAiShortlisted: r.isShortlisted,
+            aiShortlistReason:
+              r.reasoning ||
+              (r.isShortlisted ? 'Được AI đánh dấu shortlist — xem nhật ký tương tác.' : 'Không đủ tín hiệu shortlist.'),
+            recommendedAction:
+              r.nextBestAction ||
+              (r.isShortlisted ? 'Liên hệ ngay theo kênh ưu tiên của phụ huynh.' : 'Tiếp tục nuôi lead trong nhóm WARM.'),
+            aiProcessedAt: Timestamp.now(),
+            ...leadTouchPatch(),
+          })
+          ops++
+          if (ops >= 450) {
+            await batch.commit()
+            batch = writeBatch(db)
+            ops = 0
+          }
+        }
+        if (ops) await batch.commit()
+        const performer = profile.displayName?.trim() || profile.email || profile.id
+        const shorted = results.filter((x) => x.isShortlisted).length
+        await commitAuditLog(db, {
+          leadId: warmPassed[0]!.id,
+          actionType: 'AI_RUN',
+          description: `AI Lead Miner (shortlist, sau Gatekeeper): ${results.length} hồ sơ → ${shorted} shortlist`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      } catch (e) {
+        console.error(e)
+        setAiMinerError(e instanceof Error ? e.message : 'Không chạy được AI Lead Miner.')
+      } finally {
+        setAiMinerProgress(null)
+        setSelectedIds(new Set())
+      }
+    },
+    [db, profile],
+  )
+
+  const openAiMinerGatekeeper = useCallback(async () => {
+    if (!db || !profile) return
+    const cfg = loadAIConfigFromStorage()
+    if (!cfg) {
+      setAiMinerError('Chưa cấu hình LLM — mở Cài đặt và lưu API key (tab LLM).')
+      return
+    }
+    const warmRows = leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM')
+    if (!warmRows.length) {
+      setAiMinerError('Chọn ít nhất một hồ sơ có nhãn WARM (theo profile chấm điểm hiện tại).')
+      return
+    }
+    setAiMinerError(null)
+    setGatekeeperBusy(true)
+    try {
+      const interactions = await fetchInteractionsBulkForGatekeeper(
+        db,
+        warmRows.map((l) => l.id),
+      )
+      const rules = mergeGatekeeperConfig(loadAiGatekeeperFromStorage())
+      const { passed, skipped } = filterLeadsForAI(warmRows, interactions, rules)
+      setGatekeeperModal({
+        totalSelected: selectedIds.size,
+        warmCount: warmRows.length,
+        skipped: skipped.length,
+        passed,
+      })
+    } catch (e) {
+      console.error(e)
+      setAiMinerError(
+        e instanceof Error ? e.message : 'Không tải được tương tác cho bộ lọc AI Gatekeeper.',
+      )
+    } finally {
+      setGatekeeperBusy(false)
+    }
+  }, [db, profile, leads, selectedIds, effectiveLeadTag])
 
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
@@ -998,6 +1128,30 @@ export function LeadManagement() {
             Xóa lọc nhanh
           </button>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAiShortlistOnly((v) => !v)
+              setPage(1)
+            }}
+            className={[
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition',
+              aiShortlistOnly
+                ? 'border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 shadow-[0_0_22px_rgba(251,191,36,0.5)]'
+                : 'border-slate-200/90 bg-white/90 text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
+            ].join(' ')}
+          >
+            <Zap className="h-3.5 w-3.5 shrink-0 text-current" strokeWidth={2.5} aria-hidden />
+            ⚡ AI Shortlist
+          </button>
+          {aiShortlistOnly ? (
+            <span className="text-[11px] leading-snug text-slate-600">
+              Chỉ hồ sơ có <span className="font-semibold text-amber-900">isAiShortlisted</span> trên Firestore.
+            </span>
+          ) : null}
+        </div>
       </section>
 
       {inspectProfileOpen && activeScoringProfile ? (
@@ -1005,6 +1159,18 @@ export function LeadManagement() {
       ) : null}
 
       <div className="app-card-glass-strong overflow-hidden transition-all duration-300">
+        {aiMinerError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200/80 bg-rose-50/95 px-3 py-2 text-sm text-rose-900 sm:px-4">
+            <span className="min-w-0 flex-1">{aiMinerError}</span>
+            <button
+              type="button"
+              onClick={() => setAiMinerError(null)}
+              className="shrink-0 rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+            >
+              Đóng
+            </button>
+          </div>
+        ) : null}
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">
@@ -1213,7 +1379,19 @@ export function LeadManagement() {
                       />
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">{l.fullName || '—'}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900">
+                    <span className="inline-flex max-w-full items-center gap-1.5">
+                      {l.isAiShortlisted ? (
+                        <Zap
+                          className="h-4 w-4 shrink-0 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.95)]"
+                          strokeWidth={2.5}
+                          fill="currentColor"
+                          aria-label="AI Shortlist"
+                        />
+                      ) : null}
+                      <span className="min-w-0 truncate">{l.fullName || '—'}</span>
+                    </span>
+                  </td>
                   <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.customerId || undefined}>
                     {l.customerId || '—'}
                   </td>
@@ -1271,6 +1449,14 @@ export function LeadManagement() {
           }}
           onExport={() => exportBulkSelection()}
           showReassign={showBulkReassign}
+          showAiMiner={tagFilter === 'WARM' && Boolean(can('ai:use'))}
+          onAiMiner={() => void openAiMinerGatekeeper()}
+          aiMinerDisabled={
+            aiMinerProgress !== null ||
+            gatekeeperBusy ||
+            !loadAIConfigFromStorage() ||
+            selectedWarmCount === 0
+          }
         />
       ) : null}
 
@@ -1375,6 +1561,141 @@ export function LeadManagement() {
           </div>
         </>
       ) : null}
+
+      {gatekeeperModal && typeof document !== 'undefined'
+        ? createPortal(
+            <div className="fixed inset-0 z-[72] flex items-center justify-center px-4 py-8">
+              <button
+                type="button"
+                className="absolute inset-0 bg-slate-950/40 backdrop-blur-md"
+                aria-label="Đóng"
+                onClick={() => setGatekeeperModal(null)}
+              />
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="absolute -left-1/4 top-0 h-[120%] w-[70%] rounded-full bg-gradient-to-br from-violet-500/25 via-fuchsia-500/20 to-transparent blur-3xl" />
+                <div className="absolute -right-1/4 bottom-0 h-[110%] w-[65%] rounded-full bg-gradient-to-tl from-cyan-400/20 via-teal-400/15 to-transparent blur-3xl" />
+                <div className="absolute left-1/3 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300/10 blur-3xl" />
+              </div>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="gatekeeper-title"
+                className="relative w-full max-w-lg overflow-hidden rounded-[22px] border border-white/45 bg-gradient-to-br from-white/35 via-violet-50/25 to-cyan-50/20 p-px shadow-[0_28px_90px_rgba(15,23,42,0.35)] backdrop-blur-2xl"
+              >
+                <div className="rounded-[20px] border border-white/30 bg-gradient-to-b from-white/50 to-white/15 px-6 py-6 sm:px-8 sm:py-7">
+                  <p
+                    id="gatekeeper-title"
+                    className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-600"
+                  >
+                    AI Gatekeeper · Tiết kiệm token
+                  </p>
+                  <p className="mt-4 text-center text-base font-semibold text-slate-900">
+                    Bạn đã chọn {gatekeeperModal.totalSelected} hồ sơ
+                    {gatekeeperModal.totalSelected !== gatekeeperModal.warmCount ? (
+                      <span className="mt-1 block text-sm font-normal text-slate-600">
+                        Trong đó {gatekeeperModal.warmCount} hồ sơ WARM được đưa vào bộ lọc tiền xử lý (chỉ nhóm này gọi
+                        LLM).
+                      </span>
+                    ) : null}
+                  </p>
+                  {gatekeeperModal.warmCount > 0 ? (
+                    <p className="mt-4 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm leading-relaxed text-emerald-950">
+                      🛡️ Bộ lọc Tiền xử lý đã loại bỏ{' '}
+                      <span className="font-bold tabular-nums">{gatekeeperModal.skipped}</span> hồ sơ (ghi chú quá ngắn,
+                      không có tín hiệu ý định theo cấu hình, hoặc không có tương tác trong cửa sổ thời gian).
+                    </p>
+                  ) : null}
+                  {gatekeeperModal.passed.length > 0 ? (
+                    <>
+                      <p className="mt-4 text-center text-[15px] font-medium text-slate-800">
+                        🚀 Chỉ có{' '}
+                        <span className="font-bold text-violet-800 tabular-nums">{gatekeeperModal.passed.length}</span>{' '}
+                        hồ sơ đạt chuẩn. Bạn có muốn bắt đầu chạy AI cho{' '}
+                        <span className="font-semibold tabular-nums">{gatekeeperModal.passed.length}</span> hồ sơ này
+                        không?
+                        {gatekeeperModal.warmCount > 0 ? (
+                          <span className="mt-2 block text-sm font-normal text-slate-600">
+                            (Ước tính tiết kiệm ~{Math.round((gatekeeperModal.skipped / gatekeeperModal.warmCount) * 100)}
+                            % chi phí API so với gửi toàn bộ WARM đã chọn.)
+                          </span>
+                        ) : null}
+                      </p>
+                      <div className="mt-6 flex flex-wrap justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setGatekeeperModal(null)}
+                          className="min-h-11 rounded-xl border border-slate-300/80 bg-white/70 px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition hover:bg-white"
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void executeBulkAiMiner(gatekeeperModal.passed)}
+                          className="min-h-11 rounded-xl border border-amber-400/90 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 px-5 py-2.5 text-sm font-bold text-amber-950 shadow-[0_0_24px_rgba(251,191,36,0.45)] transition hover:brightness-105"
+                        >
+                          Chạy AI ({gatekeeperModal.passed.length} hồ sơ)
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-4 text-center text-sm text-slate-700">
+                      Không có hồ sơ WARM nào vượt qua bộ lọc. Điều chỉnh quy tắc trong Cài đặt (tab LLM → AI Gatekeeper)
+                      hoặc cập nhật ghi chú tương tác rồi thử lại.
+                    </p>
+                  )}
+                  {gatekeeperModal.passed.length === 0 ? (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setGatekeeperModal(null)}
+                        className="min-h-11 rounded-xl border border-slate-300/80 bg-white/70 px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition hover:bg-white"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {aiMinerProgress && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[80] flex items-center justify-center px-4 py-8"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={aiMinerProgress.total}
+              aria-valuenow={aiMinerProgress.done}
+              aria-label="AI Lead Miner đang chạy"
+            >
+              <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(167,139,250,0.35),transparent_50%),radial-gradient(ellipse_at_70%_80%,rgba(45,212,191,0.25),transparent_45%),radial-gradient(ellipse_at_50%_50%,rgba(251,191,36,0.2),transparent_55%)]" />
+              <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/40 bg-gradient-to-br from-white/30 via-violet-100/25 to-teal-100/20 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-2xl">
+                <p className="text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  AI Shortlist · theo lô
+                </p>
+                <p className="mt-2 text-center text-base font-semibold text-slate-900">
+                  {aiMinerProgress.done}/{aiMinerProgress.total} hồ sơ
+                </p>
+                <p className="mt-1 text-center text-xs text-slate-600">
+                  Xử lý theo lô — tối đa 12 hồ sơ / lần gọi LLM (tiết kiệm token).
+                </p>
+                <div className="relative mt-5 h-2.5 overflow-hidden rounded-full border border-white/50 bg-white/20 shadow-inner">
+                  <div
+                    className="ai-skeleton-shimmer absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-violet-500/90 via-teal-400/90 to-amber-400/90 transition-[width] duration-500 ease-out"
+                    style={{
+                      width: `${Math.max(6, (100 * aiMinerProgress.done) / Math.max(1, aiMinerProgress.total))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {selected && typeof document !== 'undefined'
         ? createPortal(
@@ -2287,6 +2608,43 @@ function LeadDetailPanel({
           </button>
         </div>
       </header>
+
+      {lead.isAiShortlisted ? (
+        <section className="relative shrink-0 border-b border-amber-400/35 bg-gradient-to-r from-amber-50/95 via-yellow-50/85 to-amber-100/80 px-3 py-4 shadow-[inset_0_0_48px_rgba(251,191,36,0.12)] backdrop-blur-xl sm:px-6">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(251,191,36,0.22),_transparent_55%)]" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-8">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-300/90 bg-white/90 shadow-md shadow-amber-500/20">
+                <Zap className="h-5 w-5 text-amber-600" fill="currentColor" strokeWidth={1.5} aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-900">
+                  AI Shortlist · Chiến lược chốt
+                </p>
+                {lead.aiProcessedAt?.toDate ? (
+                  <p className="mt-0.5 text-[10px] text-amber-800/80">
+                    Cập nhật AI: {lead.aiProcessedAt.toDate().toLocaleString('vi-VN')}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/90">Phân tích</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-900">
+                  {lead.aiShortlistReason?.trim() || '—'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-amber-300/60 bg-white/70 px-3 py-2.5 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900">Hành động đề xuất</p>
+                <p className="mt-1 text-sm font-semibold leading-snug text-emerald-950">
+                  {lead.recommendedAction?.trim() || '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">

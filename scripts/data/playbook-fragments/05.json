@@ -1,0 +1,202 @@
+[
+  {
+    "title": "Phụ huynh phản đối trường tư / so với công lập",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "công lập"
+      }
+    ],
+    "strategy": "Thay đổi tư duy phụ huynh. Phân tích trường công học nặng lý thuyết, cơ sở vật chất cũ. Trường tư giáo trình update liên tục theo doanh nghiệp, chăm sóc sinh viên như khách hàng.",
+    "keySellingPoints": [
+      "Giáo trình chuẩn quốc tế, sát với nhu cầu doanh nghiệp.",
+      "Dịch vụ chăm sóc sinh viên 24/7, phòng học điều hòa 100%."
+    ],
+    "objectionHandling": [
+      "Bằng trường công mới dễ xin việc: -> Doanh nghiệp giờ test năng lực thực tế (thử việc), không quan trọng bằng công hay tư đâu cô chú ạ."
+    ]
+  },
+  {
+    "title": "Đang phân vân với Đại học (mô tả có «đại học»)",
+    "priority": 75,
+    "triggerConditions": [
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      },
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "đại học"
+      }
+    ],
+    "strategy": "Tấn công vào điểm yếu của ĐH top dưới (bằng cấp kém giá trị, học phí cao, dễ thất nghiệp). Bán Cao đẳng VietMy như một «Lựa chọn an toàn và thực dụng».",
+    "keySellingPoints": [
+      "Tốt nghiệp Cao đẳng xuất sắc có giá hơn Đại học trung bình.",
+      "Ra trường sớm 1.5 năm, tiết kiệm hàng trăm triệu đồng cho bố mẹ."
+    ],
+    "objectionHandling": [
+      "Vẫn muốn cái danh Đại học: -> Học xong Cao đẳng, đi làm có lương rồi em liên thông lên Đại học dễ như trở bàn tay."
+    ]
+  },
+  {
+    "title": "Lead hỏi học phí (mô tả có «học phí»)",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "học phí"
+      }
+    ],
+    "strategy": "Không báo giá 1 cục ngay lập tức (dễ gây shock). Báo giá theo học kỳ, nhấn mạnh «Cam kết không tăng học phí», «Bao gồm vật tư» — chi tiết đối chiếu kho tri thức RAG.",
+    "keySellingPoints": [
+      "Học phí niêm yết minh bạch, cam kết không tăng toàn khóa.",
+      "Chia nhỏ đóng theo học kỳ, hỗ trợ trả góp."
+    ],
+    "objectionHandling": [
+      "Chê đắt: -> Tính ra mỗi tháng chỉ bằng tiền học thêm cấp 3, mà em lại được học nghề có lương sau này ạ."
+    ]
+  },
+  {
+    "title": "Khách hỏi KTX / nhà trọ (mô tả có «ktx»)",
+    "priority": 85,
+    "triggerConditions": [
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "ktx"
+      }
+    ],
+    "strategy": "Xây dựng hình ảnh an toàn tuyệt đối. Phụ huynh ở quê cực kỳ sợ con lên thành phố sa ngã. Bán KTX như một «Trại huấn luyện» an toàn.",
+    "keySellingPoints": [
+      "KTX khép kín, camera an ninh, bảo vệ 24/24.",
+      "Quản lý giờ giấc chặt chẽ, có khu tự học."
+    ],
+    "objectionHandling": [
+      "Sợ phòng chật/nóng: -> Có option phòng 4 người máy lạnh tiêu chuẩn như khách sạn để gia đình lựa chọn ạ."
+    ]
+  },
+  {
+    "title": "Giới thiệu bạn bè / nhóm (nguồn Giới thiệu)",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "source",
+        "operator": "CONTAINS",
+        "value": "Giới thiệu"
+      }
+    ],
+    "strategy": "Đánh vào tâm lý bầy đàn và lợi ích tài chính. Cung cấp gói «Học bổng nhóm». Thúc giục bạn này chốt để cả 2 cùng được ưu đãi.",
+    "keySellingPoints": [
+      "Chính sách học bổng giới thiệu/đăng ký nhóm giảm 10%.",
+      "Hỗ trợ xếp chung phòng KTX cho 2 bạn."
+    ],
+    "objectionHandling": [
+      "Bạn em đổi ý học trường khác rồi: -> Em hãy quyết định vì tương lai của chính em, lên trường em sẽ có rất nhiều bạn mới xuất sắc."
+    ]
+  },
+  {
+    "title": "Chiến dịch Early Bird (CONTACTED + WARM)",
+    "priority": 70,
+    "triggerConditions": [
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "CONTACTED"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "Tạo FOMO. Gọi điện thông báo: Chỉ còn vài ngày nữa là chốt danh sách tặng Laptop/Giảm 15% học phí (theo chính sách hiện hành).",
+    "keySellingPoints": [
+      "Tặng laptop / giảm học phí theo đợt (đối chiếu kho tri thức).",
+      "Giảm 10% nếu cọc trước ngày 30/06 (nếu áp dụng)."
+    ],
+    "objectionHandling": [
+      "Nhà chưa lo đủ tiền: -> Chỉ cần cọc 2 triệu giữ ưu đãi, đến tháng 8 đóng phần còn lại vẫn được tính ạ."
+    ]
+  },
+  {
+    "title": "Summer Melt – Đã cọc (chống rơi rụng)",
+    "priority": 95,
+    "triggerConditions": [
+      {
+        "field": "status",
+        "operator": "EQUALS",
+        "value": "DEPOSIT_PAID"
+      }
+    ],
+    "strategy": "Khách đã cọc nhưng tháng 8 mới nhập học, rất dễ bị đối thủ cướp. Gọi điện hỏi thăm sức khỏe, mời tham gia mini-game trên Fanpage, hoặc gửi áo đồng phục về tận nhà làm quà.",
+    "keySellingPoints": [
+      "Chào mừng tân sinh viên chính thức của VietMy.",
+      "Nhà trường gửi tặng bộ quà tặng nhập học về tận nhà."
+    ],
+    "objectionHandling": [
+      "Muốn xin rút cọc vì đỗ ĐH: -> Xử lý theo quy định, cố gắng thuyết phục giữ lại bằng bài toán thời gian và việc làm."
+    ]
+  },
+  {
+    "title": "Hỗ trợ vay vốn (mô tả có «vay»)",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "vay"
+      }
+    ],
+    "strategy": "Đồng cảm sâu sắc. Thể hiện nhà trường luôn có tính nhân văn. Tư vấn rõ ràng quy trình xin Giấy xác nhận để vay vốn ngân hàng chính sách tại địa phương.",
+    "keySellingPoints": [
+      "Cấp giấy xác nhận sinh viên miễn phí ngay tuần đầu.",
+      "Hỗ trợ làm hồ sơ trả góp 0% qua thẻ tín dụng (theo chính sách)."
+    ],
+    "objectionHandling": [
+      "Thủ tục vay rắc rối: -> Rất đơn giản, nhà trường làm sẵn form, gia đình chỉ việc mang ra xã đóng dấu là ngân hàng giải ngân ạ."
+    ]
+  },
+  {
+    "title": "Cam kết việc làm bằng văn bản (mô tả có «cam kết»)",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "cam kết"
+      }
+    ],
+    "strategy": "Thể hiện sự tự tin tuyệt đối của nhà trường. Không hứa suông. Nhấn mạnh vào văn bản hợp đồng ký kết rõ ràng ngày nhập học.",
+    "keySellingPoints": [
+      "Hợp đồng cam kết việc làm ký bằng văn bản pháp lý.",
+      "Hoàn 50% học phí nếu không bố trí được việc làm đúng chuyên ngành (theo điều kiện hợp đồng)."
+    ],
+    "objectionHandling": [
+      "Sợ trường hứa suông: -> Đây là văn bản pháp lý ký có mộc đỏ của Hiệu trưởng, em hoàn toàn yên tâm."
+    ]
+  },
+  {
+    "title": "Lead LOSS – Thử gọi lại lần cuối",
+    "priority": 20,
+    "triggerConditions": [
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "LOSS"
+      }
+    ],
+    "strategy": "Gọi với tâm thế «Không còn gì để mất». Đôi khi khách từ chối do hiểu lầm thông tin. Hỏi một câu chân thành cuối cùng về điều chưa hài lòng để trường cải thiện.",
+    "keySellingPoints": [
+      "Lắng nghe chân thành, không chèo kéo.",
+      "Sẵn sàng mở cửa đón sinh viên quay lại nếu có nhu cầu."
+    ],
+    "objectionHandling": [
+      "(Nếu khách kể khó khăn) -> Đưa ra giải pháp cuối (Học bổng đặc biệt của Trưởng khoa phê duyệt) để cứu lại lead."
+    ]
+  }
+]

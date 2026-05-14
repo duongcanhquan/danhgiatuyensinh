@@ -28,6 +28,7 @@ function mapSnippet(id: string, data: Record<string, unknown>): ScriptSnippet | 
       isActive: data.isActive !== false,
       lastUpdated,
       createdAt: data.createdAt as Timestamp | undefined,
+      seedTag: data.seedTag ? String(data.seedTag) : undefined,
     }
   } catch {
     return null

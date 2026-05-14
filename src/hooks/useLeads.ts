@@ -186,6 +186,19 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.aiSentimentScore !== undefined && data.aiSentimentScore !== null
           ? Number(data.aiSentimentScore)
           : undefined,
+      isAiShortlisted: data.isAiShortlisted === true,
+      aiShortlistReason:
+        data.aiShortlistReason !== undefined && data.aiShortlistReason !== null
+          ? String(data.aiShortlistReason).slice(0, 4000)
+          : undefined,
+      recommendedAction:
+        data.recommendedAction !== undefined && data.recommendedAction !== null
+          ? String(data.recommendedAction).slice(0, 4000)
+          : undefined,
+      aiProcessedAt:
+        data.aiProcessedAt && typeof data.aiProcessedAt === 'object' && 'toMillis' in (data.aiProcessedAt as object)
+          ? (data.aiProcessedAt as Timestamp)
+          : undefined,
     }
   } catch {
     return null
@@ -214,6 +227,8 @@ export type LeadListServerFilters = {
   adminDateField?: 'created' | 'updated' | 'imported'
   adminDateFromMs?: number
   adminDateToMs?: number
+  /** Chỉ lead đã được AI đánh dấu shortlist (`isAiShortlisted === true`). */
+  aiShortlistedOnly?: boolean
 }
 
 export type UseLeadsOptions = {
@@ -272,6 +287,7 @@ function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMy
   }
   if (f.scoreMin != null && Number.isFinite(f.scoreMin)) c.push(where('calculatedScore', '>=', f.scoreMin))
   if (f.scoreMax != null && Number.isFinite(f.scoreMax)) c.push(where('calculatedScore', '<=', f.scoreMax))
+  if (f.aiShortlistedOnly) c.push(where('isAiShortlisted', '==', true))
   if (f.uploadedByIn?.length) {
     const u = f.uploadedByIn.filter(Boolean).slice(0, 10)
     if (u.length === 1) c.push(where('uploadedBy', '==', u[0]))

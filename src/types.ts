@@ -244,6 +244,12 @@ export interface Lead {
   nextFollowUpDate?: Timestamp | null
   aiSentimentScore?: number
   aiInsights?: Record<string, unknown>
+
+  /** AI Lead Miner (stage-2 LLM shortlist) — bổ sung sau khi chạy batch phân tích WARM */
+  isAiShortlisted?: boolean
+  aiShortlistReason?: string
+  recommendedAction?: string
+  aiProcessedAt?: Timestamp
 }
 
 export interface LeadRoutingMeta {
@@ -571,6 +577,8 @@ export interface ScriptSnippet {
   isActive: boolean
   lastUpdated: Timestamp
   createdAt?: Timestamp
+  /** Gắn khi seed hàng loạt — giữ qua lần «Lưu» trong Script Hub để vẫn xóa gọn theo seedTag */
+  seedTag?: string
 }
 
 // -----------------------------------------------------------------------------
