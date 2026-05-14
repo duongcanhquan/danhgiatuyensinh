@@ -31,6 +31,16 @@ import {
 } from '../utils/leadIdentity'
 import { parseScoringSignalsFromFirestore } from '../utils/leadScoringSignals'
 
+function parseScoringCustomSignalsFromFirestore(raw: unknown): Record<string, boolean> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(o)) {
+    if (k && v === true) out[k] = true
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
 /** Số hồ sơ mỗi trang Firestore / bảng. */
 export const LEADS_PAGE_SIZE = 30
 
@@ -218,6 +228,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
           ? (data.aiProcessedAt as Timestamp)
           : undefined,
       scoringSignals: parseScoringSignalsFromFirestore(data.scoringSignals),
+      scoringCustomSignals: parseScoringCustomSignalsFromFirestore(data.scoringCustomSignals),
     }
   } catch {
     return null

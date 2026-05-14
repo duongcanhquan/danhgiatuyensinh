@@ -14,6 +14,7 @@ function emptyProfileDraft(): Omit<ScoringProfile, 'id' | 'createdAt' | 'updated
     description: '',
     rules: [],
     ruleBlocks: [],
+    customScoringSignals: [],
     thresholds: { hotMinScore: 80, warmMinScore: 50 },
     isDefaultForImport: false,
   }
@@ -29,6 +30,7 @@ function cloneProfile(p: ScoringProfile): Omit<ScoringProfile, 'createdAt' | 'up
       ...b,
       rows: b.rows.map((row) => ({ ...row })),
     })),
+    customScoringSignals: (p.customScoringSignals ?? []).map((s) => ({ ...s })),
     thresholds: { ...p.thresholds },
     isDefaultForImport: p.isDefaultForImport,
     createdBy: p.createdBy,
@@ -100,6 +102,14 @@ function ProfileEditorPanel({
             allocationValue: r.allocationValue,
           })),
         })),
+        customScoringSignals: (draft.customScoringSignals ?? [])
+          .filter((s) => s.label.trim())
+          .map((s) => ({
+            id: s.id,
+            label: s.label.trim(),
+            group: s.group,
+            points: Number.isFinite(s.points) ? s.points : 0,
+          })),
         thresholds: {
           hotMinScore: Math.min(100, Math.max(0, draft.thresholds.hotMinScore)),
           warmMinScore: Math.min(100, Math.max(0, draft.thresholds.warmMinScore)),
@@ -300,6 +310,107 @@ function ProfileEditorPanel({
             </div>
           </>
         )}
+      </div>
+
+      <div className="mt-1.5 rounded-md border border-emerald-200/80 bg-gradient-to-r from-emerald-50/80 to-white p-2 shadow-sm">
+        <p className="text-xs font-semibold text-emerald-950">Tín hiệu TVV — Hành vi &amp; Rủi ro (chi tiết hồ sơ)</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
+          TVV tick trên hồ sơ; điểm cộng/trừ theo bảng dưới (không cần kéo khối canvas). Lưu profile để áp dụng.
+        </p>
+        <div className="mt-2 space-y-1.5">
+          {(draft.customScoringSignals ?? []).map((s, idx) => (
+            <div
+              key={s.id}
+              className="flex flex-wrap items-end gap-1.5 rounded-lg border border-emerald-100/90 bg-white/95 px-2 py-1.5"
+            >
+              <label className="min-w-[9rem] flex-[2] text-[10px] font-medium text-slate-700">
+                Nhãn hiển thị
+                <input
+                  value={s.label}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setDraft((d) => {
+                      const list = [...(d.customScoringSignals ?? [])]
+                      list[idx] = { ...list[idx]!, label: v }
+                      return { ...d, customScoringSignals: list }
+                    })
+                  }}
+                  placeholder="VD: Đã đặt lịch campus tour"
+                  className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/40 disabled:opacity-50"
+                />
+              </label>
+              <label className="w-[6.5rem] shrink-0 text-[10px] font-medium text-slate-700">
+                Nhóm
+                <select
+                  value={s.group}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const g = e.target.value === 'risk' ? 'risk' : 'behavior'
+                    setDraft((d) => {
+                      const list = [...(d.customScoringSignals ?? [])]
+                      list[idx] = { ...list[idx]!, group: g }
+                      return { ...d, customScoringSignals: list }
+                    })
+                  }}
+                  className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1 text-xs text-slate-900 disabled:opacity-50"
+                >
+                  <option value="behavior">Hành vi (+)</option>
+                  <option value="risk">Rủi ro (−)</option>
+                </select>
+              </label>
+              <label className="w-16 shrink-0 text-[10px] font-medium text-slate-700">
+                Điểm
+                <input
+                  type="number"
+                  value={s.points}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const n = Number(e.target.value)
+                    setDraft((d) => {
+                      const list = [...(d.customScoringSignals ?? [])]
+                      list[idx] = { ...list[idx]!, points: Number.isFinite(n) ? n : 0 }
+                      return { ...d, customScoringSignals: list }
+                    })
+                  }}
+                  className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1 text-xs tabular-nums text-slate-900 disabled:opacity-50"
+                />
+              </label>
+              {canEdit ? (
+                <button
+                  type="button"
+                  title="Xóa dòng"
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      customScoringSignals: (d.customScoringSignals ?? []).filter((_, i) => i !== idx),
+                    }))
+                  }
+                  className="mb-0.5 h-7 shrink-0 rounded border border-rose-200 bg-rose-50 px-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                >
+                  Xóa
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() =>
+              setDraft((d) => ({
+                ...d,
+                customScoringSignals: [
+                  ...(d.customScoringSignals ?? []),
+                  { id: crypto.randomUUID(), label: '', group: 'behavior', points: 15 },
+                ],
+              }))
+            }
+            className="mt-2 w-full rounded-lg border border-dashed border-emerald-400/70 bg-white/70 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-50/90"
+          >
+            + Thêm tín hiệu
+          </button>
+        ) : null}
       </div>
 
       <div

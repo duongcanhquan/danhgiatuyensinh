@@ -298,6 +298,11 @@ export interface Lead {
    * trong bản ghi đánh giá nội bộ (xem `leadToEvaluationRecord`).
    */
   scoringSignals?: LeadScoringSignals
+  /**
+   * Cờ bổ sung theo `ScoringProfile.customScoringSignals[].id` — TVV bật trên chi tiết hồ sơ;
+   * điểm cộng/trừ do profile định nghĩa (không cần thêm khối canvas).
+   */
+  scoringCustomSignals?: Record<string, boolean>
 }
 
 export interface LeadRoutingMeta {
@@ -416,6 +421,17 @@ export interface ScoringProfileThresholds {
 }
 
 /**
+ * Tín hiệu TVV tùy chỉnh (Hành vi / Rủi ro) — checkbox trên chi tiết hồ sơ, điểm theo profile.
+ */
+export interface ProfileCustomScoringSignal {
+  id: DocumentId
+  label: string
+  group: 'behavior' | 'risk'
+  /** Điểm khi bật (thường dương cho hành vi, âm cho rủi ro). */
+  points: number
+}
+
+/**
  * Bộ quy tắc chấm điểm có tên — cùng một lead có thể được “nhìn” khác nhau theo profile.
  */
 export interface ScoringProfile {
@@ -428,6 +444,8 @@ export interface ScoringProfile {
    * instead of flat `rules`.
    */
   ruleBlocks?: ScoringRuleBlock[]
+  /** Tín hiệu checklist bổ sung (điểm trực tiếp, không qua khối canvas). */
+  customScoringSignals?: ProfileCustomScoringSignal[]
   thresholds: ScoringProfileThresholds
   /** Profile mặc định toàn cục (import + màn hình khi chưa chọn tay) */
   isDefaultForImport?: boolean

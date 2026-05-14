@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { doc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import type { Lead, LeadScoringSignalKey, LeadScoringSignals, ScoringProfile } from '../types'
+import type { Lead, LeadScoringSignalKey, LeadScoringSignals, ProfileCustomScoringSignal, ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
 import { ALL_SCORING_SIGNAL_KEYS, SCORING_SIGNAL_META } from '../utils/leadScoringSignals'
@@ -15,6 +15,17 @@ function buildSignalsPatch(
   const merged: LeadScoringSignals = { ...base }
   if (next) merged[key] = true
   else delete merged[key]
+  return Object.keys(merged).length ? merged : undefined
+}
+
+function buildCustomSignalsPatch(
+  base: Record<string, boolean> | undefined,
+  id: string,
+  next: boolean,
+): Record<string, boolean> | undefined {
+  const merged: Record<string, boolean> = { ...base }
+  if (next) merged[id] = true
+  else delete merged[id]
   return Object.keys(merged).length ? merged : undefined
 }
 
@@ -102,13 +113,61 @@ export function LeadScoringSignalsPanel({
     })()
   }
 
+  const customBehavior = useMemo(() => {
+    const defs = activeScoringProfile?.customScoringSignals
+    if (!defs?.length) return []
+    return defs.filter((d) => d.group === 'behavior')
+  }, [activeScoringProfile])
+
+  const customRisk = useMemo(() => {
+    const defs = activeScoringProfile?.customScoringSignals
+    if (!defs?.length) return []
+    return defs.filter((d) => d.group === 'risk')
+  }, [activeScoringProfile])
+
+  const toggleCustom = (def: ProfileCustomScoringSignal, checked: boolean) => {
+    if (!canEdit || busy) return
+    void (async () => {
+      setBusy(true)
+      setMsg(null)
+      try {
+        const nextCustom = buildCustomSignalsPatch(lead.scoringCustomSignals, def.id, checked)
+        const previewLead: Lead = { ...lead, scoringCustomSignals: nextCustom }
+        const ev = activeScoringProfile
+          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile, masterBuckets)
+          : null
+        const patch: Record<string, unknown> = {
+          scoringCustomSignals: nextCustom ?? null,
+          updatedAt: Timestamp.now(),
+        }
+        if (ev) {
+          patch.calculatedScore = ev.calculatedScore
+          patch.priorityTag = ev.priorityTag
+        }
+        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
+        onUpdated({
+          scoringCustomSignals: nextCustom,
+          ...(ev
+            ? { calculatedScore: ev.calculatedScore, priorityTag: ev.priorityTag }
+            : {}),
+          updatedAt: patch.updatedAt as Timestamp,
+        })
+        setMsg('Đã lưu.')
+      } catch (e) {
+        console.error(e)
+        setMsg('Không lưu được — kiểm tra quyền ghi Firestore.')
+      } finally {
+        setBusy(false)
+      }
+    })()
+  }
+
   return (
     <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
       <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Hành vi &amp; Rủi ro (chấm điểm)</h3>
       <p className="mt-1 text-[11px] leading-snug text-slate-600">
-        Các mục khớp bảng điểm nội bộ: bật khi TVV xác nhận đúng tình huống. Dữ liệu lưu tại{' '}
-        <code className="rounded bg-slate-100 px-0.5 text-[10px]">leads.scoringSignals</code> và tham gia profile chấm
-        điểm qua trường <code className="rounded bg-slate-100 px-0.5 text-[10px]">sig_*</code>.
+        TVV bật khi đúng tình huống. Có mục theo profile đang chọn và mục cố định hệ thống; điểm tính vào bộ chấm điểm
+        hiện tại.
       </p>
       {!canEdit ? (
         <p className="mt-2 text-xs text-amber-800">Bạn không có quyền ghi hồ sơ — chỉ xem.</p>
@@ -133,6 +192,24 @@ export function LeadScoringSignalsPanel({
                 </label>
               </li>
             ))}
+            {customBehavior.map((def) => (
+              <li key={def.id} className="flex items-start gap-2">
+                <input
+                  id={`sigc-${lead.id}-${def.id}`}
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
+                  checked={lead.scoringCustomSignals?.[def.id] === true}
+                  disabled={!canEdit || busy}
+                  onChange={(e) => toggleCustom(def, e.target.checked)}
+                />
+                <label htmlFor={`sigc-${lead.id}-${def.id}`} className="min-w-0 flex-1 cursor-pointer text-xs text-slate-800">
+                  <span className="font-medium">{def.label}</span>
+                  <span className="ml-1 tabular-nums text-emerald-700">
+                    {def.points >= 0 ? `(+${def.points})` : `(${def.points})`}
+                  </span>
+                </label>
+              </li>
+            ))}
           </ul>
         </div>
         <div>
@@ -151,6 +228,22 @@ export function LeadScoringSignalsPanel({
                 <label htmlFor={`sig-${lead.id}-${k}`} className="min-w-0 flex-1 cursor-pointer text-xs text-slate-800">
                   <span className="font-medium">{SCORING_SIGNAL_META[k].label}</span>
                   <span className="ml-1 tabular-nums text-rose-700">({SCORING_SIGNAL_META[k].defaultPoints})</span>
+                </label>
+              </li>
+            ))}
+            {customRisk.map((def) => (
+              <li key={def.id} className="flex items-start gap-2">
+                <input
+                  id={`sigc-${lead.id}-${def.id}`}
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:opacity-50"
+                  checked={lead.scoringCustomSignals?.[def.id] === true}
+                  disabled={!canEdit || busy}
+                  onChange={(e) => toggleCustom(def, e.target.checked)}
+                />
+                <label htmlFor={`sigc-${lead.id}-${def.id}`} className="min-w-0 flex-1 cursor-pointer text-xs text-slate-800">
+                  <span className="font-medium">{def.label}</span>
+                  <span className="ml-1 tabular-nums text-rose-700">({def.points})</span>
                 </label>
               </li>
             ))}

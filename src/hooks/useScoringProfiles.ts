@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore'
 import type {
+  ProfileCustomScoringSignal,
   ProfileScoringCondition,
   RuleCategory,
   ScoringProfile,
@@ -73,6 +74,22 @@ function mapConditionRow(raw: unknown, index: number): ScoringRuleConditionRow |
   }
 }
 
+function mapCustomScoringSignalsFromDoc(raw: unknown): ProfileCustomScoringSignal[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: ProfileCustomScoringSignal[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    const id = String(o.id ?? '').trim()
+    const label = String(o.label ?? '').trim()
+    if (!id || !label) continue
+    const g = o.group === 'risk' ? 'risk' : 'behavior'
+    const points = Number(o.points ?? 0)
+    out.push({ id, label, group: g, points: Number.isFinite(points) ? points : 0 })
+  }
+  return out.length ? out : undefined
+}
+
 function mapScoringRuleBlock(raw: unknown, index: number): ScoringRuleBlock | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
@@ -137,6 +154,7 @@ function mapProfile(id: string, data: Record<string, unknown>): ScoringProfile |
       description: String(data.description ?? ''),
       rules,
       ruleBlocks,
+      customScoringSignals: mapCustomScoringSignalsFromDoc(data.customScoringSignals),
       thresholds: {
         hotMinScore: Number.isFinite(hotMinScore) ? hotMinScore : 80,
         warmMinScore: Number.isFinite(warmMinScore) ? warmMinScore : 50,

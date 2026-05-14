@@ -3,6 +3,7 @@ import type {
   MasterCatalogDefinition,
   MasterDataEntry,
   PriorityTag,
+  ProfileCustomScoringSignal,
   ScoringProfile,
   ScoringProfileThresholds,
   ScoringRule,
@@ -458,19 +459,35 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     assignedCounselorId: lead.assignedTo ?? lead.assignedCounselorId,
     aiSentimentScore: lead.aiSentimentScore,
     ...scoringSignalsToEvaluationFlat(lead.scoringSignals),
+    scoringCustomSignals: lead.scoringCustomSignals ?? {},
   }
+}
+
+function sumCustomScoringSignalPoints(
+  leadData: Record<string, unknown>,
+  defs: ProfileCustomScoringSignal[] | undefined,
+): number {
+  if (!defs?.length) return 0
+  const flags = leadData.scoringCustomSignals as Record<string, unknown> | undefined
+  if (!flags || typeof flags !== 'object') return 0
+  let t = 0
+  for (const d of defs) {
+    if (flags[d.id] === true) t += Number(d.points) || 0
+  }
+  return t
 }
 
 function profileRawScore(
   leadData: Record<string, unknown>,
-  profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks'>,
+  profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'customScoringSignals'>,
   buckets?: MasterDataBuckets,
 ): number {
   const blocks = profile.ruleBlocks
-  if (blocks && blocks.length > 0) {
-    return sumBlockPoints(leadData, blocks, buckets)
-  }
-  return sumRulePoints(leadData, profile.rules ?? [], buckets)
+  const fromBlocks =
+    blocks && blocks.length > 0
+      ? sumBlockPoints(leadData, blocks, buckets)
+      : sumRulePoints(leadData, profile.rules ?? [], buckets)
+  return fromBlocks + sumCustomScoringSignalPoints(leadData, profile.customScoringSignals)
 }
 
 /**
@@ -479,7 +496,7 @@ function profileRawScore(
  */
 export function evaluateLead(
   leadData: Record<string, unknown>,
-  profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'>,
+  profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds' | 'customScoringSignals'>,
   masterBuckets?: MasterDataBuckets,
 ): { calculatedScore: number; priorityTag: PriorityTag } {
   try {
