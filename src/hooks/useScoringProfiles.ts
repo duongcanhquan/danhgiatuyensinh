@@ -10,24 +10,19 @@ import type {
   ScoringRuleBlock,
   ScoringRuleConditionRow,
 } from '../types'
-import { FS_COLLECTIONS, RULE_CATEGORIES } from '../types'
+import { ALL_PROFILE_SCORING_CONDITIONS, FS_COLLECTIONS, RULE_CATEGORIES } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { inferRuleCategory, legacyRulesToBlocks } from '../utils/scoring'
 
-const CONDITIONS: ProfileScoringCondition[] = [
-  'EQUALS',
-  'CONTAINS',
-  'IS_NOT_EMPTY',
-  'IN_LIST',
-  'PHONE_VN_10_DIGITS',
-  'PHONE_VN_NOT_10_DIGITS',
-]
+function isSavedProfileCondition(c: string): c is ProfileScoringCondition {
+  return (ALL_PROFILE_SCORING_CONDITIONS as readonly string[]).includes(c)
+}
 
 function mapEmbeddedRule(raw: unknown, index: number): ScoringRule | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
   const c = o.condition as string
-  if (!CONDITIONS.includes(c as ProfileScoringCondition)) return null
+  if (!isSavedProfileCondition(c)) return null
   const id = String(o.id ?? `rule-${index}`)
   const targetField = String(o.targetField ?? '')
   if (!targetField) return null
@@ -51,7 +46,7 @@ function mapConditionRow(raw: unknown, index: number): ScoringRuleConditionRow |
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
   const c = o.condition as string
-  if (!CONDITIONS.includes(c as ProfileScoringCondition)) return null
+  if (!isSavedProfileCondition(c)) return null
   const id = String(o.id ?? `row-${index}`)
   let value: string | string[] = ''
   if (c === 'IN_LIST' && Array.isArray(o.value)) {

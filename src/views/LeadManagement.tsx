@@ -77,6 +77,9 @@ const EVALUATION_TAGS = [
   'Vấn đề tài chính',
   'Chưa quyết định',
   'Quan tâm cao',
+  'Tiêu cực',
+  'Không quan tâm',
+  'Chưa rõ ràng',
 ] as const
 
 /** Tooltip cột — ngắn; chi tiết công thức nằm trên từng ô (đặt chuột lên gauge). */
@@ -531,7 +534,7 @@ export function LeadManagement() {
       }
       return m
     },
-    [activeScoringProfile, scoreByLeadId],
+    [activeScoringProfile, scoreByLeadId, scoringMasterBuckets],
   )
 
   const toggleSelectId = useCallback((id: string, e?: MouseEvent) => {
@@ -1006,21 +1009,21 @@ export function LeadManagement() {
       <section className="app-card-glass-strong space-y-2 p-2 shadow-md sm:p-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
           <details className="group min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white/50 px-2 py-1 shadow-sm open:bg-white/85 sm:px-2.5">
-            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs font-bold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
               <ChevronDown
                 className="h-4 w-4 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
                 strokeWidth={2}
                 aria-hidden
               />
               <span className="shrink-0">Bộ chấm điểm</span>
-              <span className="min-w-0 flex-1 truncate text-left text-[10px] font-semibold normal-case tracking-normal text-slate-800 group-open:hidden">
+              <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden">
                 {profilesLoading
                   ? 'Đang tải…'
                   : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'Chưa có profile' : '—')}
               </span>
             </summary>
             <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/60 pt-2 sm:flex-row sm:items-end">
-              <label className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <label className="min-w-0 flex-1 text-xs font-bold uppercase tracking-wide text-slate-500">
                 Chọn profile
                 <div className="relative mt-0.5">
                   <select
@@ -1038,7 +1041,7 @@ export function LeadManagement() {
                       </option>
                     ))}
                   </select>
-                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
                     ▾
                   </span>
                 </div>
@@ -1048,7 +1051,7 @@ export function LeadManagement() {
                   type="button"
                   disabled={!activeScoringProfile}
                   onClick={() => setInspectProfileOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
                 >
                   <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Quy tắc
@@ -1057,7 +1060,7 @@ export function LeadManagement() {
                   type="button"
                   disabled={!sortedFiltered.length}
                   onClick={handleExportEvaluated}
-                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
                 >
                   <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Xuất Excel (trang hiện tại)
@@ -1065,7 +1068,7 @@ export function LeadManagement() {
               </div>
             </div>
           </details>
-          <label className="min-w-0 w-full text-[10px] font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
+          <label className="min-w-0 w-full text-xs font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
             Tìm kiếm
             <input
               value={searchParams.get('q') ?? ''}
@@ -1137,7 +1140,7 @@ export function LeadManagement() {
             onChange={setSourceFilter}
             options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
           />
-          <label className="flex shrink-0 flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500">
             Điểm từ
             <input
               type="number"
@@ -1145,10 +1148,10 @@ export function LeadManagement() {
               placeholder="—"
               value={scoreMinInput}
               onChange={(e) => setScoreMinInput(e.target.value)}
-              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-[11px] tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
-          <label className="flex shrink-0 flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500">
             Điểm đến
             <input
               type="number"
@@ -1156,13 +1159,13 @@ export function LeadManagement() {
               placeholder="—"
               value={scoreMaxInput}
               onChange={(e) => setScoreMaxInput(e.target.value)}
-              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-[11px] tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
           <button
             type="button"
             onClick={clearQuickFilters}
-            className="shrink-0 self-end rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
+            className="shrink-0 self-end rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
           >
             Xóa lọc nhanh
           </button>
@@ -1186,7 +1189,7 @@ export function LeadManagement() {
             ⚡ AI Shortlist
           </button>
           {aiShortlistOnly ? (
-            <span className="text-[11px] leading-snug text-slate-600">
+            <span className="text-xs leading-snug text-slate-600">
               Chỉ hồ sơ có <span className="font-semibold text-amber-900">isAiShortlisted</span> trên Firestore.
             </span>
           ) : null}
@@ -1221,7 +1224,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 « Đầu
               </button>
@@ -1229,7 +1232,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(currentPage - 1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Trước
               </button>
@@ -1237,7 +1240,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(currentPage + 1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Sau
               </button>
@@ -1245,7 +1248,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(displayTotalPages)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Cuối »
               </button>
@@ -1253,7 +1256,7 @@ export function LeadManagement() {
           </div>
         ) : null}
         <div className="scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain">
-          <table className="min-w-[1280px] w-full border-collapse text-left text-sm sm:text-[15px]">
+          <table className="min-w-[1280px] w-full border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/85 backdrop-blur-xl">
               <tr className="text-xs font-medium uppercase tracking-wide text-slate-600 sm:text-sm">
                 <th className="w-10 px-2 py-3">
@@ -1625,7 +1628,7 @@ export function LeadManagement() {
                 <div className="rounded-[20px] border border-white/30 bg-gradient-to-b from-white/50 to-white/15 px-6 py-6 sm:px-8 sm:py-7">
                   <p
                     id="gatekeeper-title"
-                    className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-600"
+                    className="text-center text-xs font-bold uppercase tracking-[0.2em] text-slate-600"
                   >
                     AI Gatekeeper · Tiết kiệm token
                   </p>
@@ -1647,7 +1650,7 @@ export function LeadManagement() {
                   ) : null}
                   {gatekeeperModal.passed.length > 0 ? (
                     <>
-                      <p className="mt-4 text-center text-[15px] font-medium text-slate-800">
+                      <p className="mt-4 text-center text-sm font-medium text-slate-800">
                         🚀 Chỉ có{' '}
                         <span className="font-bold text-violet-800 tabular-nums">{gatekeeperModal.passed.length}</span>{' '}
                         hồ sơ đạt chuẩn. Bạn có muốn bắt đầu chạy AI cho{' '}
@@ -1714,7 +1717,7 @@ export function LeadManagement() {
               <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(167,139,250,0.35),transparent_50%),radial-gradient(ellipse_at_70%_80%,rgba(45,212,191,0.25),transparent_45%),radial-gradient(ellipse_at_50%_50%,rgba(251,191,36,0.2),transparent_55%)]" />
               <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/40 bg-gradient-to-br from-white/30 via-violet-100/25 to-teal-100/20 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-2xl">
-                <p className="text-center text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                <p className="text-center text-xs font-bold uppercase tracking-wider text-slate-600">
                   AI Shortlist · theo lô
                 </p>
                 <p className="mt-2 text-center text-base font-semibold text-slate-900">
@@ -1889,7 +1892,7 @@ function FilterSelect({
     <label
       className={
         compact
-          ? 'flex shrink-0 flex-col text-[10px] font-bold uppercase tracking-wide text-slate-500'
+          ? 'flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500'
           : 'flex flex-col text-xs font-medium text-slate-600'
       }
     >
@@ -1899,7 +1902,7 @@ function FilterSelect({
         onChange={(e) => onChange(e.target.value)}
         className={
           compact
-            ? 'mt-0.5 max-w-[7.25rem] min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-[11px] font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            ? 'mt-0.5 max-w-[7.25rem] min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
             : 'mt-1 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
         }
       >
@@ -1994,10 +1997,12 @@ function CounselorLeadProgressForm({
   lead,
   db,
   onUpdated,
+  compact,
 }: {
   lead: Lead
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
   onUpdated: (patch: Partial<Lead>) => void
+  compact?: boolean
 }) {
   const { profile, can } = useAuth()
   const [crmStatus, setCrmStatus] = useState<LeadCounselorStatus>(() => lead.status)
@@ -2074,14 +2079,36 @@ function CounselorLeadProgressForm({
   }
 
   return (
-    <section className="rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-slate-50 p-4 shadow-md ring-1 ring-amber-100/80">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900/90">Tiến độ tư vấn</p>
-      <label className="mt-3 block text-sm font-medium text-slate-800">
+    <section
+      className={
+        compact
+          ? 'rounded-lg border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-slate-50 p-2 shadow-sm ring-1 ring-amber-100/80'
+          : 'rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-slate-50 p-4 shadow-md ring-1 ring-amber-100/80'
+      }
+    >
+      <p
+        className={
+          compact
+            ? 'text-xs font-semibold uppercase tracking-[0.18em] text-amber-900/90'
+            : 'text-xs font-semibold uppercase tracking-[0.2em] text-amber-900/90'
+        }
+      >
+        Tiến độ tư vấn
+      </p>
+      <label
+        className={
+          compact ? 'mt-2 block text-xs font-medium text-slate-800' : 'mt-3 block text-sm font-medium text-slate-800'
+        }
+      >
         Tình trạng (CRM)
         <select
           value={crmStatus}
           onChange={(e) => setCrmStatus(e.target.value as LeadCounselorStatus)}
-          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-300/50"
+          className={
+            compact
+              ? 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400/70 focus:ring-1 focus:ring-amber-300/50'
+              : 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-300/50'
+          }
         >
           {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
             <option key={s} value={s} className="bg-white text-slate-900">
@@ -2090,22 +2117,38 @@ function CounselorLeadProgressForm({
           ))}
         </select>
       </label>
-      <label className="mt-3 block text-sm font-medium text-slate-800">
+      <label
+        className={
+          compact ? 'mt-2 block text-xs font-medium text-slate-800' : 'mt-3 block text-sm font-medium text-slate-800'
+        }
+      >
         Ghi chú nối thêm vào «Mô tả»
         <textarea
           value={noteLine}
           onChange={(e) => setNoteLine(e.target.value)}
-          rows={3}
+          rows={compact ? 2 : 3}
           placeholder="VD: Đã gọi phụ huynh, hẹn campus tour…"
-          className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-200/60"
+          className={
+            compact
+              ? 'mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-400/60 focus:ring-1 focus:ring-amber-200/60'
+              : 'mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-200/60'
+          }
         />
       </label>
-      {msg ? <p className="mt-2 text-sm font-medium text-amber-950">{msg}</p> : null}
+      {msg ? (
+        <p className={compact ? 'mt-1.5 text-xs font-medium text-amber-950' : 'mt-2 text-sm font-medium text-amber-950'}>
+          {msg}
+        </p>
+      ) : null}
       <button
         type="button"
         disabled={busy}
         onClick={() => void save()}
-        className="mt-4 w-full rounded-xl border border-amber-500/80 bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-amber-900/15 transition hover:brightness-105 disabled:opacity-50"
+        className={
+          compact
+            ? 'mt-2 w-full rounded-lg border border-amber-500/80 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm shadow-amber-900/15 transition hover:brightness-105 disabled:opacity-50'
+            : 'mt-4 w-full rounded-xl border border-amber-500/80 bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-amber-900/15 transition hover:brightness-105 disabled:opacity-50'
+        }
       >
         {busy ? 'Đang lưu…' : 'Lưu dữ liệu'}
       </button>
@@ -2121,6 +2164,7 @@ function LeadCrmQuickBlock({
   counselorsLoading,
   reassignElevated,
   onUpdated,
+  compact,
 }: {
   lead: Lead
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
@@ -2131,6 +2175,7 @@ function LeadCrmQuickBlock({
   /** Admin / Trưởng khoa / Trưởng ngành: mọi TVV + có thể bỏ gán. TVV chỉ đổi trong phạm vi quyền đồng nghiệp. */
   reassignElevated: boolean
   onUpdated: (patch: Partial<Lead>) => void
+  compact?: boolean
 }) {
   const { profile, can } = useAuth()
   const peerMode = !reassignElevated && can('leads:reassign:peer')
@@ -2223,21 +2268,49 @@ function LeadCrmQuickBlock({
   }
 
   return (
-    <section className="rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm">
-      <h3 className="app-section-heading">Phân công &amp; CRM</h3>
+    <section
+      className={
+        compact
+          ? 'shrink-0 rounded-lg border border-violet-200/80 bg-violet-50/50 p-2 shadow-sm'
+          : 'rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm'
+      }
+    >
+      <h3
+        className={
+          compact
+            ? 'text-xs font-bold uppercase tracking-wider text-slate-600'
+            : 'app-section-heading'
+        }
+      >
+        Phân công &amp; CRM
+      </h3>
       {peerMode ? (
-        <p className="mt-0.5 text-sm leading-snug text-slate-600">
+        <p
+          className={
+            compact
+              ? 'mt-0.5 text-xs leading-snug text-slate-600'
+              : 'mt-0.5 text-sm leading-snug text-slate-600'
+          }
+        >
           Chuyển hồ sơ của bạn cho đồng nghiệp (danh sách: tên hiển thị · email). Không thể bỏ gán trống — chọn người
           nhận.
         </p>
       ) : null}
-      <label className="mt-2 block text-sm font-medium text-slate-700">
+      <label
+        className={
+          compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
+        }
+      >
         {reassignElevated ? 'Phụ trách (TVV / Admin)' : 'Tư vấn viên'}
         <select
           value={crmAssignUid}
           onChange={(e) => setCrmAssignUid(e.target.value)}
           disabled={counselorsLoading}
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-50"
+          className={
+            compact
+              ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-violet-200 disabled:opacity-50'
+              : 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-50'
+          }
         >
           {reassignElevated ? <option value="">— Chưa gán —</option> : null}
           {assignableCounselors.map((c) => (
@@ -2247,12 +2320,20 @@ function LeadCrmQuickBlock({
           ))}
         </select>
       </label>
-      <label className="mt-2 block text-sm font-medium text-slate-700">
+      <label
+        className={
+          compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
+        }
+      >
         Trạng thái CRM (Kanban)
         <select
           value={crmKanbanStatus}
           onChange={(e) => setCrmKanbanStatus(e.target.value as LeadCounselorStatus)}
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200"
+          className={
+            compact
+              ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-violet-200'
+              : 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200'
+          }
         >
           {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
             <option key={s} value={s} className="bg-white">
@@ -2261,12 +2342,18 @@ function LeadCrmQuickBlock({
           ))}
         </select>
       </label>
-      {crmMsg ? <p className="mt-2 text-sm text-violet-900">{crmMsg}</p> : null}
+      {crmMsg ? (
+        <p className={compact ? 'mt-1.5 text-xs text-violet-900' : 'mt-2 text-sm text-violet-900'}>{crmMsg}</p>
+      ) : null}
       <button
         type="button"
         disabled={crmBusy}
         onClick={() => void save()}
-        className="mt-3 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
+        className={
+          compact
+            ? 'mt-2 w-full rounded-md border border-violet-500 bg-violet-600 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50'
+            : 'mt-3 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50'
+        }
       >
         {crmBusy ? 'Đang lưu…' : 'Lưu phân công'}
       </button>
@@ -2325,6 +2412,13 @@ function LeadDetailPanel({
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
 
   useEffect(() => {
+    setNote('')
+    setEvalTag(EVALUATION_TAGS[0])
+    setStatusDirty(null)
+    setMsg(null)
+  }, [lead.id])
+
+  useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
@@ -2348,6 +2442,11 @@ function LeadDetailPanel({
     const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
     return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
   }, [lead.assignedTo, lead.assignedCounselorId, pickListUsers, counselorUsers])
+
+  const showCounselorProgressForm =
+    isAdminLikeRole(profile?.role) ||
+    (Boolean(can('leads:write:self_assigned')) &&
+      (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
 
   const leadMl = useMemo(() => resolveMlWinDisplay(lead), [lead])
 
@@ -2563,7 +2662,7 @@ function LeadDetailPanel({
                 ))}
               </ul>
             ) : null}
-            <p className="mt-2 text-sm leading-relaxed text-slate-800 sm:text-[15px]">{pb.strategy}</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
             {pb.objectionHandling?.length ? (
               <div className="mt-3 border-t border-slate-200/80 pt-2">
                 <p className="text-xs font-medium text-amber-800 sm:text-sm">Phản đối dự kiến</p>
@@ -2591,10 +2690,10 @@ function LeadDetailPanel({
     >
       <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:px-5 lg:px-6">
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-amber-800">Chi tiết hồ sơ</p>
+          <p className="app-page-kicker text-slate-600">Chi tiết hồ sơ</p>
           <h2
             id="lead-detail-title"
-            className="font-display text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
           >
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
@@ -2610,7 +2709,7 @@ function LeadDetailPanel({
             ].map((row) => (
               <div
                 key={row.k}
-                className="flex max-w-[10.5rem] shrink-0 items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700"
+                className="flex max-w-[10.5rem] shrink-0 items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
                 title={row.t ? row.v : undefined}
               >
                 <span className="shrink-0 text-slate-500">{row.k}</span>
@@ -2668,11 +2767,11 @@ function LeadDetailPanel({
                 <Zap className="h-5 w-5 text-amber-600" fill="currentColor" strokeWidth={1.5} aria-hidden />
               </span>
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-900">
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-900">
                   AI Shortlist · Chiến lược chốt
                 </p>
                 {lead.aiProcessedAt?.toDate ? (
-                  <p className="mt-0.5 text-[10px] text-amber-800/80">
+                  <p className="mt-0.5 text-xs text-amber-800/80">
                     Cập nhật AI: {lead.aiProcessedAt.toDate().toLocaleString('vi-VN')}
                   </p>
                 ) : null}
@@ -2680,13 +2779,13 @@ function LeadDetailPanel({
             </div>
             <div className="min-w-0 flex-1 space-y-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900/90">Phân tích</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-900/90">Phân tích</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-900">
                   {lead.aiShortlistReason?.trim() || '—'}
                 </p>
               </div>
               <div className="rounded-xl border border-amber-300/60 bg-white/70 px-3 py-2.5 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-900">Hành động đề xuất</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">Hành động đề xuất</p>
                 <p className="mt-1 text-sm font-semibold leading-snug text-emerald-950">
                   {lead.recommendedAction?.trim() || '—'}
                 </p>
@@ -2699,10 +2798,10 @@ function LeadDetailPanel({
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              {/* ~2/3: thông tin hồ sơ, tiến độ, CRM, form thêm ghi chú */}
-              <div className="scroll-touch flex min-h-0 flex-col gap-3 border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
-                <aside className="space-y-3 text-sm leading-snug">
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 sm:gap-x-3">
+              {/* Trái: thông tin hồ sơ → tiến độ tư vấn (nếu có) → khối tín hiệu + ghi chú đánh giá */}
+              <div className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
+                <aside className="space-y-2 text-sm leading-snug text-slate-800">
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 sm:grid-cols-3 sm:gap-x-2.5">
                     <Info label="Mã KH" value={lead.customerId} />
                     <Info label="Nguồn" value={lead.source} />
                     <Info label="Hệ đào tạo" value={lead.educationLevel} />
@@ -2713,8 +2812,8 @@ function LeadDetailPanel({
                     <Info label="Điện thoại SV" value={lead.phone} />
                     <Info label="ĐT người liên hệ" value={lead.parentPhone} />
                     <div className="col-span-2 sm:col-span-3">
-                      <p className="text-xs text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
-                      <p className="mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-slate-800">
+                      <p className="text-xs font-medium text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
+                      <p className="mt-0.5 max-h-20 overflow-y-auto whitespace-pre-wrap break-words text-xs text-slate-800">
                         {leadDescriptionForDisplay(lead.description).trim() || '—'}
                       </p>
                     </div>
@@ -2723,112 +2822,147 @@ function LeadDetailPanel({
                       value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
                     />
                     <div>
-                      <p className="text-[10px] text-slate-500">Nhãn</p>
+                      <p className="text-xs font-medium text-slate-500">Nhãn</p>
                       <div className="mt-0.5">
                         <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
                       </div>
                     </div>
                   </div>
 
-                  {db ? (
+                  {db && showCounselorProgressForm ? (
                     <CounselorLeadProgressForm
                       key={`cprog-${lead.id}`}
                       lead={lead}
                       db={db}
                       onUpdated={onUpdated}
+                      compact
                     />
                   ) : null}
 
                   {db ? (
-                    <LeadScoringSignalsPanel
-                      key={`sig-${lead.id}`}
-                      lead={lead}
-                      db={db}
-                      activeScoringProfile={activeScoringProfile}
-                      canEdit={canEditScoringSignals}
-                      onUpdated={onUpdated}
-                    />
-                  ) : null}
+                    <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
+                      <h3 className="app-section-heading text-emerald-900">Tín hiệu, hành vi &amp; ghi chú đánh giá</h3>
+                      <p className="mt-1 text-sm font-medium leading-snug text-slate-800">
+                        Mọi cập nhật ở đây được hệ thống dùng để <strong>đánh giá tiềm năng</strong>, giữ nhất quán nhãn{' '}
+                        <strong>HOT / WARM / COLD</strong> (theo điểm profile đang chọn), hỗ trợ <strong>lọc trên bảng hồ
+                        sơ</strong> và làm giàu dữ liệu cho <strong>AI</strong> sau này (tiền lọc AI Gatekeeper trên lịch
+                        sử ghi chú; các tác vụ <strong>phân tích LLM</strong> có thể đọc tổng hợp ghi chú tương tác).
+                      </p>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                        <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — các tình huống{' '}
+                        <em>hay gặp</em>, bật/tắt nhanh. <strong>Admin / Siêu quản trị</strong> quản lý danh mục tín hiệu
+                        tùy chỉnh trong <strong>Cài đặt → Chấm điểm</strong> (thêm, sửa, xóa theo từng profile); điểm
+                        cộng/trừ chạy ngay theo profile chấm điểm hiện tại.
+                      </p>
+                      <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
+                        <span className="font-semibold text-slate-900">Ghi chú tương tác</span> — phần{' '}
+                        <em>đặc thù</em> có <strong>nhãn đánh giá</strong> và <strong>nội dung giải thích</strong>; mỗi
+                        lần lưu ghi vào <strong>lịch sử bên phải</strong>, đồng thời tham chiếu khi tổng hợp cho AI và
+                        theo dõi diễn biến hồ sơ.
+                      </p>
 
-                  {canReassignLead && db ? (
-                    <LeadCrmQuickBlock
-                      key={`${lead.id}-${lead.updatedAt.toMillis()}`}
-                      lead={lead}
-                      db={db}
-                      counselorUsers={counselorUsers}
-                      pickListUsers={pickListUsers}
-                      counselorsLoading={counselorsLoading}
-                      reassignElevated={reassignElevated}
-                      onUpdated={onUpdated}
-                    />
+                      <div className="mt-2 grid gap-2 lg:grid-cols-2 lg:items-start">
+                        <div className="min-h-0">
+                          <LeadScoringSignalsPanel
+                            key={`sig-${lead.id}`}
+                            lead={lead}
+                            db={db}
+                            activeScoringProfile={activeScoringProfile}
+                            canEdit={canEditScoringSignals}
+                            onUpdated={onUpdated}
+                            compact
+                          />
+                        </div>
+                        <div className="min-h-0 rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                            Ghi chú đặc thù
+                          </h4>
+                          <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                            Nhập mô tả cụ thể; chọn nhãn &amp; pipeline rồi lưu — hiển thị trong lịch sử và dùng cho lọc /
+                            AI.
+                          </p>
+                          <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                            <label className="block text-xs font-medium text-slate-700 sm:col-span-2">
+                              Nội dung ghi chú
+                              <textarea
+                                value={note}
+                                onChange={(e) => setNote(e.target.value)}
+                                rows={2}
+                                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                              />
+                            </label>
+                            <label className="block text-xs font-medium text-slate-700">
+                              Nhãn đánh giá
+                              <select
+                                value={evalTag}
+                                onChange={(e) => setEvalTag(e.target.value)}
+                                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                              >
+                                {EVALUATION_TAGS.map((t) => (
+                                  <option key={t} value={t} className="bg-white">
+                                    {t}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="block text-xs font-medium text-slate-700">
+                              Pipeline
+                              <select
+                                value={statusForForm}
+                                onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
+                              >
+                                {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                                  <option key={k} value={k} className="bg-white">
+                                    {PIPELINE_LABEL[k]}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          {msg ? <p className="mt-1 text-xs text-emerald-700">{msg}</p> : null}
+                          <button
+                            type="button"
+                            disabled={saving || !db || !canSaveInteraction}
+                            onClick={() => void save()}
+                            className="mt-1.5 w-full rounded-md border border-emerald-500 bg-emerald-600 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {saving ? 'Đang lưu…' : 'Lưu tương tác'}
+                          </button>
+                        </div>
+                      </div>
+                    </section>
                   ) : null}
                 </aside>
-
-                <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Thêm ghi chú</h3>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label className="block text-xs font-medium text-slate-700 sm:col-span-2">
-                      Ghi chú
-                      <textarea
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        rows={3}
-                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                      />
-                    </label>
-                    <label className="block text-xs font-medium text-slate-700">
-                      Nhãn
-                      <select
-                        value={evalTag}
-                        onChange={(e) => setEvalTag(e.target.value)}
-                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                      >
-                        {EVALUATION_TAGS.map((t) => (
-                          <option key={t} value={t} className="bg-white">
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block text-xs font-medium text-slate-700">
-                      Pipeline
-                      <select
-                        value={statusForForm}
-                        onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                        className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                      >
-                        {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                          <option key={k} value={k} className="bg-white">
-                            {PIPELINE_LABEL[k]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {msg ? <p className="mt-1.5 text-xs text-emerald-700">{msg}</p> : null}
-                  <button
-                    type="button"
-                    disabled={saving || !db || !canSaveInteraction}
-                    onClick={() => void save()}
-                    className="mt-2 w-full rounded-lg border border-emerald-500 bg-emerald-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {saving ? 'Đang lưu…' : 'Lưu tương tác'}
-                  </button>
-                </section>
               </div>
 
-              {/* ~1/3: chỉ lịch sử ghi chú & đánh giá */}
-              <aside className="scroll-touch flex min-h-0 flex-col border-b border-slate-200/80 p-3 sm:p-4 lg:col-span-4 lg:max-h-full lg:border-b-0 lg:overflow-hidden">
-                <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
-                  <h3 className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              {/* Phải: phân công CRM → lịch sử ghi chú (form ghi chú đã gộp vào khối tín hiệu bên trái) */}
+              <aside className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-5 lg:min-h-0 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
+                {canReassignLead && db ? (
+                  <LeadCrmQuickBlock
+                    key={`${lead.id}-${lead.updatedAt.toMillis()}`}
+                    lead={lead}
+                    db={db}
+                    counselorUsers={counselorUsers}
+                    pickListUsers={pickListUsers}
+                    counselorsLoading={counselorsLoading}
+                    reassignElevated={reassignElevated}
+                    onUpdated={onUpdated}
+                    compact
+                  />
+                ) : null}
+                <section className="flex min-h-[10rem] flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm lg:min-h-0">
+                  <h3 className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-600">
                     Lịch sử ghi chú &amp; đánh giá
                   </h3>
-                  {intLoading ? <p className="mt-1 shrink-0 text-xs text-slate-500">Đang tải…</p> : null}
-                  <ul className="scroll-touch mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain">
+                  {intLoading ? (
+                    <p className="mt-0.5 shrink-0 text-xs text-slate-500">Đang tải…</p>
+                  ) : null}
+                  <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
                     {interactions.map((it) => (
                       <li
                         key={it.id}
-                        className="rounded-lg border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
+                        className="rounded-md border border-slate-200/70 bg-slate-50/90 p-1.5 text-xs text-slate-700"
                       >
                         <p className="font-medium text-slate-900">
                           {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
@@ -2837,11 +2971,11 @@ function LeadDetailPanel({
                           <p className="mt-0.5 whitespace-pre-wrap leading-snug text-slate-700">{it.counselorNote}</p>
                         ) : null}
                         {it.aiSentiment ? (
-                          <p className="mt-0.5 text-[11px] text-violet-800">
+                          <p className="mt-0.5 text-xs leading-snug text-violet-800">
                             AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
                           </p>
                         ) : null}
-                        <p className="mt-0.5 text-[10px] text-slate-500">
+                        <p className="mt-0.5 text-xs text-slate-500">
                           {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
                         </p>
                       </li>
@@ -3044,9 +3178,9 @@ function LeadDetailPanel({
                 >
                   <MlWinGauge value={leadMl.mlWinProbability} title={buildMlWinHoverText(leadMl)} />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900">Điểm thông tin</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Điểm thông tin</p>
                     <span className="text-sm font-bold text-violet-900">{leadMl.mlWinProbability}%</span>
-                    <span className="ml-1.5 rounded bg-violet-200/80 px-1 text-[10px] font-semibold uppercase text-violet-950">
+                    <span className="ml-1.5 rounded bg-violet-200/80 px-1 text-xs font-semibold uppercase text-violet-950">
                       {leadMl.source === 'mvp_mock' ? 'MVP' : 'Đã lưu'}
                     </span>
                   </div>
@@ -3074,8 +3208,8 @@ function LeadDetailPanel({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] font-medium text-slate-500">{label}</p>
-      <p className="mt-0.5 break-words text-xs text-slate-800">{value || '—'}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-0.5 break-words text-sm leading-snug text-slate-800">{value || '—'}</p>
     </div>
   )
 }

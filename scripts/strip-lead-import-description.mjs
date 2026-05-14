@@ -97,7 +97,6 @@ let updated = 0
 let skippedNoString = 0
 
 let last = null
-// eslint-disable-next-line no-constant-condition
 while (true) {
   let q = db.collection(LEADS).orderBy(FieldPath.documentId()).limit(PAGE)
   if (last) q = q.startAfter(last)

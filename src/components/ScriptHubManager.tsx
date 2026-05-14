@@ -432,7 +432,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                     {s.title}
                     {s.seedTag ? (
                       <span
-                        className="ml-1 align-middle rounded bg-violet-500/25 px-1 text-[10px] font-normal uppercase tracking-wide text-violet-200"
+                        className="ml-1 align-middle rounded bg-violet-500/25 px-1 text-xs font-normal uppercase tracking-wide text-violet-200"
                         title={s.seedTag}
                       >
                         seed
@@ -496,7 +496,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                           Giao diện web <strong>không</strong> tự tải file từ GitHub. Bạn cần mở Terminal trong thư mục
                           project, cấu hình <code className="text-amber-200/90">GOOGLE_APPLICATION_CREDENTIALS</code>{' '}
                           trỏ tới JSON service account của <strong>cùng</strong> Firebase project với app, rồi chạy:{' '}
-                          <code className="block mt-2 rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-slate-100">
+                          <code className="block mt-2 rounded bg-black/40 px-2 py-1.5 font-mono text-xs text-slate-100">
                             npm run seed:script-snippets
                           </code>
                         </p>

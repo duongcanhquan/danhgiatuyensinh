@@ -43,6 +43,7 @@ export function saveAIConfigToStorage(config: AIIntegrationConfig): void {
     console.error(e)
     throw new Error(
       'Không ghi được localStorage (đầy bộ nhớ, chế độ ẩn danh, hoặc trình duyệt chặn). Thử tắt Private / dùng cửa sổ thường.',
+      { cause: e },
     )
   }
 }

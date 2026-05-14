@@ -47,8 +47,8 @@ export function AiLabView({ embedded = false }: { embedded?: boolean }) {
       {embedded ? (
         <p className="rounded-xl border border-violet-200/60 bg-violet-50/90 px-3 py-2 text-xs leading-relaxed text-violet-950">
           Phòng thử này <strong>ưu tiên</strong> API đã lưu ở tab <strong>LLM</strong> (localStorage). Nếu chưa lưu, app
-          mới thử <code className="rounded bg-white/80 px-1 font-mono text-[11px]">VITE_AI_API_URL</code> trong file{' '}
-          <code className="font-mono text-[11px]">.env</code>.
+          mới thử <code className="rounded bg-white/80 px-1 font-mono text-xs">VITE_AI_API_URL</code> trong file{' '}
+          <code className="font-mono text-xs">.env</code>.
         </p>
       ) : null}
       {embedded ? null : (

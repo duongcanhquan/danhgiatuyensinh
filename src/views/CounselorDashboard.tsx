@@ -429,7 +429,7 @@ function CounselorPipelineBoard({
               count={fullList.length}
               footer={
                 totalP > 1 ? (
-                  <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-600">
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-600">
                     <span className="tabular-nums">
                       Trang {page}/{totalP} · hiện {slice.length}/{fullList.length}
                     </span>
@@ -701,7 +701,7 @@ export function CounselorDashboard() {
       }
       return m
     },
-    [activeScoringProfile, scoreByLeadId],
+    [activeScoringProfile, scoreByLeadId, scoringMasterBuckets],
   )
 
   const applyBulkReassign = useCallback(async () => {

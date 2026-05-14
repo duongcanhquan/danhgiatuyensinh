@@ -140,7 +140,7 @@ export function AnalyticsAdvancedView() {
 
   if (!can('analytics:advanced')) {
     return (
-      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-6 text-base text-amber-900 shadow-sm backdrop-blur-xl">
+      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 shadow-sm backdrop-blur-xl">
         Bạn không có quyền xem phân tích nâng cao.
       </div>
     )
@@ -161,7 +161,7 @@ export function AnalyticsAdvancedView() {
         </div>
       ) : null}
       {error ? (
-        <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-base text-rose-900 shadow-sm backdrop-blur-xl">
+        <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm backdrop-blur-xl">
           {error}
         </div>
       ) : null}
@@ -185,7 +185,7 @@ export function AnalyticsAdvancedView() {
         </div>
         <div className="app-card-glass p-5 transition-all duration-300">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Bộ chấm điểm</p>
-          <p className="mt-1 truncate text-lg font-semibold text-emerald-800">
+          <p className="mt-1 truncate text-base font-semibold text-emerald-800">
             {activeScoringProfile?.profileName ?? '— (chọn trên Tổng kết)'}
           </p>
         </div>

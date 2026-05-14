@@ -1,4 +1,10 @@
-import type { LeadScoringSignalKey, RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow } from '../types'
+import type {
+  LeadScoringSignalKey,
+  RuleCategory,
+  ScoringRuleBlock,
+  ScoringRuleConditionRow,
+  ScoringRuleTemplateDoc,
+} from '../types'
 import { ALL_SCORING_SIGNAL_KEYS, SCORING_SIGNAL_META } from './leadScoringSignals'
 
 function newId(): string {
@@ -426,11 +432,46 @@ const SIGNAL_RULE_TEMPLATES: RuleLibraryTemplate[] = ALL_SCORING_SIGNAL_KEYS.map
 
 const ALL_RULE_TEMPLATES: RuleLibraryTemplate[] = [...BASE_TEMPLATES, ...SIGNAL_RULE_TEMPLATES]
 
+/** Tiền tố key mẫu lưu Firestore — ghép với doc id. */
+export const CUSTOM_RULE_TEMPLATE_PREFIX = 'custom:' as const
+
+export function buildScoringBlockFromTemplateDoc(doc: ScoringRuleTemplateDoc): ScoringRuleBlock {
+  return {
+    id: newId(),
+    category: doc.category,
+    label: doc.label,
+    targetField: doc.targetField,
+    maxWeight: doc.maxWeight,
+    rows: doc.rows.map((r) => ({
+      id: newId(),
+      condition: r.condition,
+      value: r.value,
+      allocationKind: r.allocationKind,
+      allocationValue: r.allocationValue,
+    })),
+  }
+}
+
+export function customRuleTemplateFromDoc(doc: ScoringRuleTemplateDoc): RuleLibraryTemplate {
+  return {
+    key: `${CUSTOM_RULE_TEMPLATE_PREFIX}${doc.id}`,
+    category: doc.category,
+    title: doc.title,
+    hint: doc.hint.trim() || 'Mẫu tùy chỉnh (thư viện Firestore)',
+    build: () => buildScoringBlockFromTemplateDoc(doc),
+  }
+}
+
 export function getRuleLibraryTemplates(): readonly RuleLibraryTemplate[] {
   return ALL_RULE_TEMPLATES
 }
 
-export function createBlockFromTemplateKey(key: string): ScoringRuleBlock | null {
+export function createBlockFromTemplateKey(
+  key: string,
+  extras?: readonly RuleLibraryTemplate[],
+): ScoringRuleBlock | null {
+  const fromExtra = extras?.find((x) => x.key === key)
+  if (fromExtra) return fromExtra.build()
   const t = ALL_RULE_TEMPLATES.find((x) => x.key === key)
   return t ? t.build() : null
 }

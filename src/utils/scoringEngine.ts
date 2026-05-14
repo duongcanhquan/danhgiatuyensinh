@@ -70,7 +70,7 @@ export type MasterDataBuckets = {
 
 /**
  * Chuẩn hóa để so khớp điều kiện: thường, bỏ dấu (Hà Nội ≡ ha noi), gom khoảng trắng.
- * Dùng cho EQUALS / CONTAINS / IN_LIST và nội dung trường lead.
+ * Dùng cho EQUALS / CONTAINS / CONTAINS_ABBR_NORM / IN_LIST và nội dung trường lead.
  */
 function norm(s: string): string {
   return s
@@ -80,6 +80,33 @@ function norm(s: string): string {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .replace(/\s+/g, ' ')
+}
+
+/** Chữ cái đầu mỗi từ (sau norm, còn khoảng trắng) — dùng khớp viết tắt kiểu CNTT, HN. */
+function wordInitialsNorm(fieldSpacedNorm: string): string {
+  const words = fieldSpacedNorm.split(/\s+/).filter(Boolean)
+  if (words.length < 2) return ''
+  return words.map((w) => w[0]!).join('')
+}
+
+/** CONTAINS + bỏ khoảng trắng toàn chuỗi + khớp chuỗi viết tắt từ chữ đầu các từ (không dấu). */
+function matchesContainsAbbrNorm(fieldValNorm: string, value: string | string[]): boolean {
+  const raw = Array.isArray(value) ? value.join(',') : String(value ?? '')
+  const parts = raw
+    .split(',')
+    .map((p) => norm(p))
+    .filter((p) => p.length > 0)
+  if (parts.length === 0) return false
+  const fieldCompact = fieldValNorm.replace(/\s+/g, '')
+  const initials = wordInitialsNorm(fieldValNorm)
+  return parts.some((part) => {
+    const pc = part.replace(/\s+/g, '')
+    if (!pc) return false
+    if (fieldValNorm.includes(part)) return true
+    if (fieldCompact.includes(pc)) return true
+    if (initials.length >= 2 && pc.length >= 2 && initials.includes(pc)) return true
+    return initials.length >= 2 && pc.length >= 2 && pc === initials
+  })
 }
 
 /** Chuẩn hoá loại trường để rule EQUALS / IN_LIST dùng mã ổn định (bỏ dấu, không phân biệt hoa thường). */
@@ -258,6 +285,10 @@ function ruleMatches(
     return phoneDigitsMatch(leadData, rule, false)
   }
 
+  if (condition === 'HAS_DIGIT') {
+    return /\d/.test(getFieldValue(leadData, rule.targetField))
+  }
+
   const fieldVal = norm(getFieldValue(leadData, rule.targetField))
 
   if (condition === 'IS_NOT_EMPTY') {
@@ -276,6 +307,27 @@ function ruleMatches(
       .filter((p) => p.length > 0)
     if (parts.length === 0) return false
     return parts.some((val) => fieldVal.includes(val))
+  }
+  if (condition === 'CONTAINS_ABBR_NORM') {
+    return matchesContainsAbbrNorm(fieldVal, rule.value)
+  }
+  if (condition === 'CONTAINS_ALL_NORM') {
+    const raw = Array.isArray(rule.value) ? rule.value.join(',') : String(rule.value ?? '')
+    const parts = raw
+      .split(',')
+      .map((p) => norm(p))
+      .filter((p) => p.length > 0)
+    if (parts.length === 0) return false
+    return parts.every((val) => fieldVal.includes(val))
+  }
+  if (condition === 'NOT_CONTAINS_NORM') {
+    const raw = Array.isArray(rule.value) ? rule.value.join(',') : String(rule.value ?? '')
+    const parts = raw
+      .split(',')
+      .map((p) => norm(p))
+      .filter((p) => p.length > 0)
+    if (parts.length === 0) return true
+    return !parts.some((val) => fieldVal.includes(val))
   }
   if (condition === 'IN_LIST') {
     const list = Array.isArray(rule.value) ? rule.value : [String(rule.value)]

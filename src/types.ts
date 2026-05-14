@@ -334,10 +334,32 @@ export type LeadCreateInput = Omit<Lead, 'id' | 'createdAt' | 'updatedAt'> & {
 export type ProfileScoringCondition =
   | 'EQUALS'
   | 'CONTAINS'
+  /** Giống CONTAINS (bỏ dấu, nhiều từ phẩy) + khớp thêm chuỗi không khoảng trắng và chữ cái đầu từng từ (viết tắt). */
+  | 'CONTAINS_ABBR_NORM'
+  /** Nhiều từ cách phẩy — lead phải chứa **tất cả** (AND), đều so sau bỏ dấu / gom khoảng trắng. */
+  | 'CONTAINS_ALL_NORM'
+  /** Nếu trường chứa **bất kỳ** từ khóa nào (phẩy, không dấu) thì không khớp — dùng loại trừ. */
+  | 'NOT_CONTAINS_NORM'
+  /** Trường có ít nhất một chữ số (theo chuỗi gốc). */
+  | 'HAS_DIGIT'
   | 'IS_NOT_EMPTY'
   | 'IN_LIST'
   | 'PHONE_VN_10_DIGITS'
   | 'PHONE_VN_NOT_10_DIGITS'
+
+/** Danh sách đủ điều kiện — dùng validate Firestore & form mẫu quy tắc. */
+export const ALL_PROFILE_SCORING_CONDITIONS: readonly ProfileScoringCondition[] = [
+  'EQUALS',
+  'CONTAINS',
+  'CONTAINS_ABBR_NORM',
+  'CONTAINS_ALL_NORM',
+  'NOT_CONTAINS_NORM',
+  'HAS_DIGIT',
+  'IS_NOT_EMPTY',
+  'IN_LIST',
+  'PHONE_VN_10_DIGITS',
+  'PHONE_VN_NOT_10_DIGITS',
+]
 
 // -----------------------------------------------------------------------------
 // Scoring profile builder — 100-point budget blocks & rule library
@@ -399,6 +421,27 @@ export interface ScoringRuleBlock {
   /** Budget reserved for this block on the 100‑point scale */
   maxWeight: number
   rows: ScoringRuleConditionRow[]
+}
+
+/** Một dòng điều kiện lưu trong mẫu Firestore (không cần `id` — sinh lại khi kéo vào profile). */
+export type ScoringRuleTemplateRowPersist = Omit<ScoringRuleConditionRow, 'id'>
+
+/**
+ * Một khối quy tắc mẫu trong `scoringRuleTemplates/{id}` — kéo sang profile rồi chỉnh / lưu riêng từng profile.
+ */
+export interface ScoringRuleTemplateDoc {
+  id: string
+  /** Thứ tự trong thư viện (sắp xếp tăng dần). */
+  order: number
+  category: RuleCategory
+  /** Tiêu đề hiển thị trong thư viện kéo-thả */
+  title: string
+  hint: string
+  label: string
+  targetField: string
+  maxWeight: number
+  rows: ScoringRuleTemplateRowPersist[]
+  updatedAt?: Timestamp
 }
 
 /**
@@ -845,6 +888,8 @@ export const FS_COLLECTIONS = {
   scoringRuleSets: 'scoringRuleSets',
   /** Mỗi doc = một `ScoringProfile` (rules + thresholds nhúng trong doc) */
   scoringProfiles: 'scoringProfiles',
+  /** Khối quy tắc mẫu — kéo sang canvas profile (Firestore: `scoringRuleTemplates/{id}`). */
+  scoringRuleTemplates: 'scoringRuleTemplates',
   masterData: 'masterData',
   consultingPlaybooks: 'consultingPlaybooks',
   /** Smart Script Hub — modular consulting snippets */

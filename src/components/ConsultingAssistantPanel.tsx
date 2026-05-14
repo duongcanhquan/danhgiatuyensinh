@@ -85,7 +85,7 @@ function SnippetCard({
       ].join(' ')}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className={`font-semibold text-slate-900 ${comfortable ? 'text-base sm:text-lg' : 'text-sm'}`}>{snippet.title}</p>
+        <p className={`font-semibold text-slate-900 text-sm`}>{snippet.title}</p>
         {canConfigureScripts ? (
           <Link
             to={`/settings?editSnippet=${encodeURIComponent(snippet.id)}`}
@@ -98,14 +98,14 @@ function SnippetCard({
       </div>
       {isObjection && parsed ? (
         <div
-          className={`mt-2 space-y-2 leading-relaxed ${comfortable ? 'text-base sm:text-[17px]' : 'text-sm'}`}
+          className={`mt-2 space-y-2 leading-relaxed text-sm`}
         >
           <p className="font-medium text-amber-900">{parsed.concern}</p>
           <p className="border-t border-slate-200/80 pt-2 text-slate-700">{parsed.script}</p>
         </div>
       ) : (
         <p
-          className={`mt-2 whitespace-pre-wrap leading-relaxed text-slate-700 ${comfortable ? 'text-base sm:text-[17px]' : 'text-sm'}`}
+          className={`mt-2 whitespace-pre-wrap leading-relaxed text-slate-700 text-sm`}
         >
           {snippet.content}
         </p>
@@ -162,7 +162,7 @@ export function ConsultingAssistantPanel({
               <Sparkles className="h-5 w-5 text-amber-600" strokeWidth={1.6} />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-semibold uppercase tracking-wide text-slate-900">Trợ lý tư vấn động</h2>
+              <h2 className="app-section-heading text-slate-900">Trợ lý tư vấn động</h2>
               <p className="text-xs text-slate-600">Luồng kịch bản theo hồ sơ (Script Hub)</p>
             </div>
             <div
@@ -175,7 +175,7 @@ export function ConsultingAssistantPanel({
                   Điểm thông tin {ml.source === 'mvp_mock' ? '(MVP)' : '(đã lưu)'}
                 </p>
                 <p className="truncate text-xs font-semibold text-slate-800">{ml.mlWinProbability}%</p>
-                <p className="text-[10px] leading-snug text-violet-800/90">
+                <p className="text-xs leading-snug text-violet-800/90">
                   {ml.source === 'mvp_mock'
                     ? 'Tỷ lệ thông tin có trên hồ sơ (app tính) — không phải xác suất ML.'
                     : 'Giá trị đã lưu — % phản ánh mức thông tin ghi nhận trên một người.'}
@@ -200,7 +200,7 @@ export function ConsultingAssistantPanel({
                 strokeWidth={1.25}
               />
               <p
-                className={`mt-3 leading-relaxed text-slate-700 ${embeddedInDialog ? 'text-base sm:text-lg' : 'text-sm'}`}
+                className={`mt-3 leading-relaxed text-slate-700 text-sm`}
               >
                 Chưa có kịch bản đặc thù cho hồ sơ này, hãy tư vấn theo quy chuẩn chung.
               </p>

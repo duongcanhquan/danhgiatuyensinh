@@ -536,7 +536,7 @@ export function DataIntake() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="app-page-kicker text-xs">Xác nhận nhập</p>
-                <h2 className="font-display mt-0.5 truncate text-base font-semibold text-slate-900 md:text-lg">
+                <h2 className="mt-0.5 truncate text-lg font-semibold tracking-tight text-slate-900 md:text-xl">
                   {preview.fileName}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
@@ -573,15 +573,15 @@ export function DataIntake() {
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-center">
                 <p className="text-lg font-bold text-emerald-800">{previewStats.acceptedNew}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Mới</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mới</p>
               </div>
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2.5 text-center">
                 <p className="text-lg font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Trùng DB</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Trùng DB</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-center">
                 <p className="text-lg font-bold text-slate-800">{previewStats.rejectedInFile}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">Trùng file</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Trùng file</p>
               </div>
             </div>
 

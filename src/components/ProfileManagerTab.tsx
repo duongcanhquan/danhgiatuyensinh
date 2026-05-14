@@ -8,6 +8,8 @@ import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useAuth } from '../hooks/useAuth'
 import { ProfileDropCanvas } from './ProfileDropCanvas'
 import { RuleLibrarySidebar } from './RuleLibrarySidebar'
+import { useScoringRuleTemplates } from '../hooks/useScoringRuleTemplates'
+import type { RuleLibraryTemplate } from '../utils/ruleLibrary'
 function emptyProfileDraft(): Omit<ScoringProfile, 'id' | 'createdAt' | 'updatedAt'> {
   return {
     profileName: '',
@@ -53,6 +55,7 @@ function ProfileEditorPanel({
   workspaceFullscreen,
   setWorkspaceFullscreen,
   onCreateProfile,
+  ruleTemplateExtras,
 }: {
   db: Firestore
   profile: ScoringProfile
@@ -71,6 +74,8 @@ function ProfileEditorPanel({
   workspaceFullscreen: boolean
   setWorkspaceFullscreen: (v: boolean) => void
   onCreateProfile: () => void
+  /** Mẫu quy tắc từ Firestore — hiện trên cùng mỗi nhóm trong thư viện kéo-thả. */
+  ruleTemplateExtras?: readonly RuleLibraryTemplate[]
 }) {
   const [draft, setDraft] = useState(() => cloneProfile(profile))
   /** Thu gọn cột thư viện — canvas rộng hơn; mặc định mở để dễ kéo mẫu. */
@@ -200,7 +205,7 @@ function ProfileEditorPanel({
                 <button
                   type="button"
                   onClick={() => setWorkspaceFullscreen(false)}
-                  className="inline-flex items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-800 shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-xs font-semibold leading-none text-slate-800 shadow-sm transition hover:bg-slate-50"
                   title="Thoát toàn màn (Esc)"
                 >
                   <X className="h-3 w-3 shrink-0" aria-hidden />
@@ -210,7 +215,7 @@ function ProfileEditorPanel({
                 <button
                   type="button"
                   onClick={() => setWorkspaceFullscreen(true)}
-                  className="inline-flex items-center justify-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-amber-950 shadow-sm transition hover:bg-amber-100"
+                  className="inline-flex items-center justify-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-semibold leading-none text-amber-950 shadow-sm transition hover:bg-amber-100"
                   title="Toàn màn"
                 >
                   <Maximize2 className="h-3 w-3 shrink-0" aria-hidden />
@@ -222,7 +227,7 @@ function ProfileEditorPanel({
                   type="button"
                   disabled={busy}
                   onClick={onCreateProfile}
-                  className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-xs font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                   title="Tạo profile mới"
                 >
                   + Tạo
@@ -256,7 +261,7 @@ function ProfileEditorPanel({
                       </option>
                     ))}
                   </select>
-                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
                     ▾
                   </span>
                 </div>
@@ -358,7 +363,7 @@ function ProfileEditorPanel({
                     <button
                       type="button"
                       onClick={() => setWorkspaceFullscreen(false)}
-                      className="inline-flex items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-semibold leading-none text-slate-800 shadow-sm transition hover:bg-slate-50"
+                      className="inline-flex items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs font-semibold leading-none text-slate-800 shadow-sm transition hover:bg-slate-50"
                       title="Thoát toàn màn (Esc)"
                     >
                       <X className="h-3 w-3 shrink-0" aria-hidden />
@@ -368,7 +373,7 @@ function ProfileEditorPanel({
                     <button
                       type="button"
                       onClick={() => setWorkspaceFullscreen(true)}
-                      className="inline-flex items-center justify-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1 text-[11px] font-semibold leading-none text-amber-950 shadow-sm transition hover:bg-amber-100"
+                      className="inline-flex items-center justify-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1 text-xs font-semibold leading-none text-amber-950 shadow-sm transition hover:bg-amber-100"
                       title="Toàn màn"
                     >
                       <Maximize2 className="h-3 w-3 shrink-0" aria-hidden />
@@ -380,7 +385,7 @@ function ProfileEditorPanel({
                       type="button"
                       disabled={busy}
                       onClick={onCreateProfile}
-                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-[11px] font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-xs font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                       title="Tạo profile mới"
                     >
                       + Tạo
@@ -395,7 +400,7 @@ function ProfileEditorPanel({
 
       <div className="mt-1.5 rounded-md border border-emerald-200/80 bg-gradient-to-r from-emerald-50/80 to-white p-2 shadow-sm">
         <p className="text-xs font-semibold text-emerald-950">Tín hiệu TVV — Hành vi &amp; Rủi ro (chi tiết hồ sơ)</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
+        <p className="mt-0.5 text-xs leading-snug text-slate-600">
           TVV tick trên hồ sơ; điểm cộng/trừ theo bảng dưới (không cần kéo khối canvas). Lưu profile để áp dụng.
         </p>
         <div className="mt-2 space-y-1.5">
@@ -404,7 +409,7 @@ function ProfileEditorPanel({
               key={s.id}
               className="flex flex-wrap items-end gap-1.5 rounded-lg border border-emerald-100/90 bg-white/95 px-2 py-1.5"
             >
-              <label className="min-w-[9rem] flex-[2] text-[10px] font-medium text-slate-700">
+              <label className="min-w-[9rem] flex-[2] text-xs font-medium text-slate-700">
                 Nhãn hiển thị
                 <input
                   value={s.label}
@@ -421,7 +426,7 @@ function ProfileEditorPanel({
                   className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/40 disabled:opacity-50"
                 />
               </label>
-              <label className="w-[6.5rem] shrink-0 text-[10px] font-medium text-slate-700">
+              <label className="w-[6.5rem] shrink-0 text-xs font-medium text-slate-700">
                 Nhóm
                 <select
                   value={s.group}
@@ -440,7 +445,7 @@ function ProfileEditorPanel({
                   <option value="risk">Rủi ro (−)</option>
                 </select>
               </label>
-              <label className="w-16 shrink-0 text-[10px] font-medium text-slate-700">
+              <label className="w-16 shrink-0 text-xs font-medium text-slate-700">
                 Điểm
                 <input
                   type="number"
@@ -530,6 +535,7 @@ function ProfileEditorPanel({
               fillHeight={Boolean(workspaceLayout)}
               showCollapseButton
               onCollapseRequest={() => setRuleLibraryCollapsed(true)}
+              extraTemplates={ruleTemplateExtras}
             />
           ) : null}
           <ProfileDropCanvas
@@ -537,6 +543,7 @@ function ProfileEditorPanel({
             onChange={(blocks) => setDraft((d) => ({ ...d, ruleBlocks: blocks }))}
             canEdit={canEdit}
             workspaceLayout={Boolean(workspaceLayout)}
+            ruleTemplateExtras={ruleTemplateExtras}
           />
         </div>
       </div>
@@ -575,6 +582,7 @@ function ProfileEditorPanel({
 export function ProfileManagerTab({ db }: { db: Firestore }) {
   const { can } = useAuth()
   const { profiles, loading, error } = useScoringProfiles()
+  const { ruleLibraryTemplates } = useScoringRuleTemplates()
   const canEdit = can('config:scoring_rules')
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -692,7 +700,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                     <button
                       type="button"
                       onClick={() => setWorkspaceFullscreen(false)}
-                      className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+                      className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                       title="Thoát toàn màn (Esc)"
                     >
                       <X className="h-3 w-3 shrink-0" aria-hidden />
@@ -702,7 +710,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                     <button
                       type="button"
                       onClick={() => setWorkspaceFullscreen(true)}
-                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1 text-[11px] font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
+                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
                       title="Toàn màn"
                     >
                       <Maximize2 className="h-3 w-3 shrink-0" aria-hidden />
@@ -714,7 +722,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                       type="button"
                       disabled={busy}
                       onClick={() => void createProfile()}
-                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                       title="Tạo profile mới"
                     >
                       + Tạo profile
@@ -743,6 +751,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 workspaceFullscreen={workspaceFullscreen}
                 setWorkspaceFullscreen={setWorkspaceFullscreen}
                 onCreateProfile={() => void createProfile()}
+                ruleTemplateExtras={ruleLibraryTemplates}
               />
             )}
           </div>

@@ -5,8 +5,11 @@
 /* -------------------------------------------------------------------------- */
 
 /*
- * Chuẩn cỡ chữ UI (đồng bộ màn hình): dùng lớp Tailwind theo rem — không dùng text-[Npx].
- * Gợi ý: text-xs (nhãn phụ), text-sm (phụ đề / form), text-base (nội dung chính), text-lg+ (tiêu đề).
+ * Thang chữ thống nhất (ưu tiên rem + Tailwind):
+ * - text-xs (0.75rem): nhãn phụ, meta, tiêu đề khối HOA
+ * - text-sm (0.875rem): nội dung chính, form, bảng
+ * - text-base / text-lg: ít dùng; tiêu đề trang dùng VietMyAccentHeading
+ * Tránh text-[Npx] trừ chỗ bất khả kháng (chart, pixel-perfect).
  */
 
 @theme {
@@ -55,8 +58,8 @@
 }
 
 html {
-  /* +1 bước cỡ chữ toàn app (rem); ~18px khi trình duyệt mặc định 16px */
-  font-size: 112.5%;
+  /* 100% = 1rem theo mặc định trình duyệt — đồng bộ Tailwind text-* trên toàn site */
+  font-size: 100%;
 }
 
 html,
@@ -75,55 +78,54 @@ body {
     radial-gradient(70% 50% at 0% 80%, rgba(99, 102, 241, 0.07), transparent 45%),
     linear-gradient(168deg, #eef1f8 0%, #f5f3ef 38%, #e8ecf5 100%);
   background-attachment: fixed;
-  color: var(--color-ink);
+  color: rgb(30 41 59);
   line-height: 1.58;
   letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Tiêu đề màn hình — serif sang trọng */
+/* Tiêu đề semantic trong <main> — cùng font sans với nội dung */
 main h1 {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.12;
+  line-height: 1.2;
+  color: rgb(15 23 42);
 }
 
 main h2 {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.015em;
-  line-height: 1.2;
+  line-height: 1.25;
+  color: rgb(30 41 59);
 }
 
 .font-display {
   font-family: var(--font-display);
 }
 
-/* Tiêu đề phần — đồng bộ display + cỡ (dùng với tiêu đề trang VietMyAccentHeading) */
+/* Tiêu đề khối / biểu đồ — sans, HOA, một cỡ mọi breakpoint */
 .app-section-heading {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 1rem;
-  line-height: 1.25;
-  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-ink);
-}
-@media (min-width: 768px) {
-  .app-section-heading {
-    font-size: 1.125rem;
-  }
+  color: rgb(71 85 105);
 }
 
 .app-page-kicker {
   font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #9f1239;
+  color: rgb(71 85 105);
 }
 
 /* Khung kính — viền ánh đồng, bóng sâu */

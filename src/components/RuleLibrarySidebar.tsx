@@ -19,6 +19,7 @@ export function RuleLibrarySidebar({
   fillHeight,
   showCollapseButton,
   onCollapseRequest,
+  extraTemplates,
 }: {
   canEdit: boolean
   /** Khi true: sidebar kéo cao theo vùng làm việc (toàn màn / panel lớn). */
@@ -26,15 +27,18 @@ export function RuleLibrarySidebar({
   /** Nút thu gọn — nhường chỗ cho canvas. */
   showCollapseButton?: boolean
   onCollapseRequest?: () => void
+  /** Mẫu từ Cài đặt → Quy tắc mẫu (Firestore) — hiển thị trước mẫu có sẵn trong mỗi nhóm. */
+  extraTemplates?: readonly RuleLibraryTemplate[]
 }) {
   const byCategory = useMemo(() => {
     const m = new Map<RuleCategory, RuleLibraryTemplate[]>()
     for (const c of RULE_CATEGORIES) m.set(c, [])
-    for (const t of getRuleLibraryTemplates()) {
+    const merged = [...(extraTemplates ?? []), ...getRuleLibraryTemplates()]
+    for (const t of merged) {
       m.get(t.category)!.push(t)
     }
     return m
-  }, [])
+  }, [extraTemplates])
 
   return (
     <aside
@@ -47,10 +51,10 @@ export function RuleLibrarySidebar({
     >
       <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200/90 pb-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-900">Thư viện quy tắc</p>
-          <p className="mt-0.5 text-[10px] leading-snug text-slate-600">
-            Kéo mẫu sang <span className="font-semibold text-slate-800">canvas bên phải</span>. Max weight cho % trên
-            khối.
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Thư viện quy tắc</p>
+          <p className="mt-0.5 text-xs leading-snug text-slate-600">
+            Mẫu tùy chỉnh (tab «Quy tắc mẫu») hiện <strong>trước</strong> mẫu có sẵn. Kéo sang canvas — chỉnh và{' '}
+            <strong>Lưu profile</strong> để áp dụng riêng từng bộ chấm điểm.
           </p>
         </div>
         {showCollapseButton && onCollapseRequest ? (
@@ -71,7 +75,7 @@ export function RuleLibrarySidebar({
           return (
             <div key={cat}>
               <p
-                className={`sticky top-0 z-[1] -mx-0.5 mb-1.5 rounded border border-slate-200 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-800 shadow-sm ${CATEGORY_BAND[cat]}`}
+                className={`sticky top-0 z-[1] -mx-0.5 mb-1.5 rounded border border-slate-200 px-1.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-800 shadow-sm ${CATEGORY_BAND[cat]}`}
               >
                 {RULE_CATEGORY_LABELS[cat]}
               </p>
@@ -100,7 +104,7 @@ export function RuleLibrarySidebar({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-semibold leading-tight text-slate-900">{t.title}</span>
-                        <span className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-600">{t.hint}</span>
+                        <span className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-600">{t.hint}</span>
                       </span>
                     </button>
                   </li>

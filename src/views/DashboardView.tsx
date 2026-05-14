@@ -207,7 +207,7 @@ export function DashboardView() {
           Tổng kết
         </VietMyAccentHeading>
         {!isAdmin ? (
-          <p className="mt-2 max-w-3xl text-base leading-relaxed text-slate-600">
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
             Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong> dùng đếm Firestore (đúng phạm vi
             quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Hồ sơ
             nếu cần xem thêm bản ghi cho phân tích cục bộ.
@@ -527,7 +527,7 @@ function DashboardKpiTile({
     >
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">{label}</p>
       <p className={`mt-1 text-3xl font-bold tabular-nums leading-none md:text-4xl ${valueClass}`}>{value}</p>
-      {hint ? <p className="mt-1.5 text-[10px] leading-snug text-slate-500">{hint}</p> : null}
+      {hint ? <p className="mt-1.5 text-xs leading-snug text-slate-500">{hint}</p> : null}
     </div>
   )
 }

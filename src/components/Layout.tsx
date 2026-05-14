@@ -65,7 +65,7 @@ export function Layout() {
     [
       compact
         ? 'flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left text-base font-semibold transition'
-        : 'flex shrink-0 flex-row items-center gap-2 rounded-lg border-b-2 border-transparent px-3 py-2 text-sm font-semibold leading-snug tracking-tight transition md:px-3.5 md:py-2.5 md:text-[15px]',
+        : 'flex shrink-0 flex-row items-center gap-2 rounded-lg border-b-2 border-transparent px-3 py-2 text-sm font-semibold leading-snug tracking-tight transition md:px-3.5 md:py-2.5',
       isActive
         ? compact
           ? 'bg-amber-500/20 text-amber-50 ring-1 ring-amber-400/40'
@@ -76,7 +76,7 @@ export function Layout() {
     ].join(' ')
 
   return (
-    <div className="relative min-h-[100dvh] text-slate-900 antialiased">
+    <div className="relative min-h-[100dvh] text-slate-800 antialiased">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="aurora-blob-a absolute -left-[8%] -top-[12%] h-[460px] w-[500px] rounded-full bg-amber-400/14 blur-[110px]" />
         <div className="aurora-blob-b absolute -right-[4%] top-[6%] h-[400px] w-[440px] rounded-full bg-teal-400/12 blur-[100px]" />
@@ -96,14 +96,14 @@ export function Layout() {
               </div>
               <div className="min-w-0">
                 <div className="hidden min-w-0 md:block">
-                  <span className="font-display text-base font-semibold tracking-wide text-amber-100 md:text-lg">
+                  <span className="text-base font-semibold tracking-wide text-amber-100 md:text-lg">
                     VIETMY COLLEGE
                   </span>
                 </div>
                 <div className="flex w-full min-w-0 flex-col gap-1.5 md:hidden">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 self-center">
-                      <p className="truncate font-display text-base font-semibold tracking-wide leading-tight text-amber-100">
+                      <p className="truncate text-base font-semibold tracking-wide leading-tight text-amber-100">
                         VIETMY COLLEGE
                       </p>
                     </div>
@@ -162,7 +162,7 @@ export function Layout() {
             {showSignOut ? (
               <div className="order-2 hidden shrink-0 flex-col items-end gap-0.5 md:flex">
                 <span
-                  className="max-w-[16rem] truncate text-right text-sm font-semibold leading-tight text-amber-50/95 md:text-[15px]"
+                  className="max-w-[16rem] truncate text-right text-sm font-semibold leading-tight text-amber-50/95"
                   title={profile?.displayName ?? 'Khách'}
                 >
                   {profile?.displayName ?? 'Khách'}
@@ -170,7 +170,7 @@ export function Layout() {
                 <button
                   type="button"
                   onClick={() => void signOut()}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/18 bg-white/[0.08] px-3 py-2 text-sm font-semibold text-amber-50/95 shadow-sm transition hover:border-amber-400/40 hover:bg-amber-500/15 md:text-[15px]"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/18 bg-white/[0.08] px-3 py-2 text-sm font-semibold text-amber-50/95 shadow-sm transition hover:border-amber-400/40 hover:bg-amber-500/15"
                 >
                   <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
                   Đăng xuất
@@ -242,7 +242,7 @@ export function Layout() {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[#e8ecf2]">
           <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col px-0 py-0">
-            <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-base font-normal leading-relaxed text-slate-900 sm:px-3 sm:py-2.5 md:px-4 md:py-3 md:leading-relaxed">
+            <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-sm font-normal leading-relaxed text-slate-800 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
               <Outlet />
             </div>
           </main>

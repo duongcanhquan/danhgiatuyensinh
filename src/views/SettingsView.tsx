@@ -40,6 +40,7 @@ import {
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
+import { RuleTemplateLibraryPanel } from '../components/RuleTemplateLibraryPanel'
 import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
@@ -48,7 +49,7 @@ import { AiLabView } from '../views/AiLabView'
 import { StaffManagementView } from '../views/StaffManagementView'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
-type SettingsTabId = 'master' | 'scoring' | 'consulting' | 'knowledge' | 'llm' | 'ai_lab' | 'staff'
+type SettingsTabId = 'master' | 'rule_templates' | 'scoring' | 'consulting' | 'knowledge' | 'llm' | 'ai_lab' | 'staff'
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -67,10 +68,10 @@ function firestoreWriteErrorMessage(e: unknown): string {
   return 'Không lưu được dữ liệu.'
 }
 
-/** Đồng bộ cỡ/khoảng dòng (body Cài đặt). */
-const settingsCopy = 'text-sm leading-relaxed text-slate-800 md:text-[15px]'
-const settingsCopyMuted = 'text-sm leading-relaxed text-slate-600 md:text-[15px]'
-const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight text-slate-900 md:text-[15px]'
+/** Đồng bộ cỡ/khoảng dòng (body Cài đặt) — cùng thang với Layout (text-sm). */
+const settingsCopy = 'text-sm leading-relaxed text-slate-800'
+const settingsCopyMuted = 'text-sm leading-relaxed text-slate-600'
+const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight text-slate-900'
 
 function settingsGuideBody(tab: SettingsTabId): ReactNode {
   switch (tab) {
@@ -79,8 +80,25 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
         <>
           <p className="font-semibold text-slate-900">Danh mục</p>
           <p className="mt-1.5">
-            Giá trị dùng chung cho CRM (lọc hồ sơ, chấm điểm, Script Hub…). Chọn loại ở cột trái, thêm hoặc chỉnh các
-            mục bên phải.
+            Đây là <strong>thư viện giá trị chung</strong> (mỗi loại = một nhóm mục + synonym / cách khớp). Khi chấm điểm,
+            điều kiện <strong>IN_LIST</strong> trên trường trùng id catalog (vd. <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">province</code>,{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">financialStatus</code>) sẽ{' '}
+            <strong>đối chiếu lead với danh sách mục ở đây</strong> — profile không “sao chép” cả catalog, mà chọn những
+            nhãn nào được cộng điểm trong canvas Chấm điểm.
+          </p>
+          <p className={`mt-2 ${settingsCopyMuted}`}>
+            Chọn loại ở cột trái, thêm hoặc chỉnh mục bên phải; thư viện mẫu quy tắc (kéo thả) nằm ở tab Chấm điểm.
+          </p>
+        </>
+      )
+    case 'rule_templates':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Quy tắc mẫu</p>
+          <p className="mt-1.5">
+            Tạo <strong>khối quy tắc gợi ý</strong> lưu trong Firestore; ở tab <strong>Chấm điểm</strong> mẫu xuất hiện
+            trong thư viện kéo-thả (trước mẫu có sẵn). Kéo sang canvas profile, chỉnh điểm / điều kiện rồi{' '}
+            <strong>Lưu profile</strong> — mỗi profile là một bản cấu hình riêng.
           </p>
         </>
       )
@@ -100,9 +118,11 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Bộ chấm điểm (Profiles)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Engine so khớp <strong>bỏ dấu</strong>, gom khoảng trắng (vd. «Hà Nội» ≡ «ha noi»). Với <strong>IN_LIST</strong>{' '}
-            tỉnh/ngành, nếu master có <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">synonyms</code> trên
-            từng mục thì từ đồng nghĩa cũng được tính. Nên tách cột Excel / Firestore: <strong>Ngành quan tâm</strong>,{' '}
-            <strong>Học lực</strong>, <strong>Loại trường</strong> — trường{' '}
+            trên một trường lead, hệ thống lấy <strong>danh mục master</strong> tương ứng (tab Danh mục) để hiểu từng mục,
+            synonym và chế độ khớp — profile chỉ cần chọn <em>nhãn nào trong list</em> được tính điểm. Điều kiện chữ
+            gồm: chứa bất kỳ / chứa tất cả (AND) / không chứa / viết tắt không dấu / có chữ số — xem nhãn đầy đủ trong
+            canvas khi soạn profile. Mẫu khối tùy chỉnh thêm ở tab <strong>Quy tắc mẫu</strong>. Nên tách cột Excel / Firestore:{' '}
+            <strong>Ngành quan tâm</strong>, <strong>Học lực</strong>, <strong>Loại trường</strong> — trường{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">schoolTypeKey</code> (PUBLIC / LIEN_KET / …)
             và <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">majorTrainingAlignment</code> được bổ sung
             khi chấm nếu app truyền master buckets (mặc định đã bật trên bảng hồ sơ).
@@ -199,6 +219,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
 function parseSettingsTab(raw: string | null): SettingsTabId | null {
   if (
     raw === 'master' ||
+    raw === 'rule_templates' ||
     raw === 'scoring' ||
     raw === 'consulting' ||
     raw === 'knowledge' ||
@@ -290,6 +311,7 @@ export function SettingsView() {
   }
 
   const canMaster = can('config:master_data')
+  const canScoringRules = can('config:scoring_rules')
   const canPlaybooks = can('config:playbooks')
   const canAiEngine = can('config:ai_engine')
   const canAiLab = can('ai:use')
@@ -326,6 +348,7 @@ export function SettingsView() {
     if (!activeMasterCatalog) return
     const g = resolvedMasterCatalogGroup(activeMasterCatalog)
     setMasterNavOpenGroups((prev) => ({ ...prev, [g]: true }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ sync khi đổi catalog (theo id)
   }, [activeMasterCatalog?.id])
 
   const queueAddMasterCatalogPreset = (g: RuleCategory | 'other') => {
@@ -375,6 +398,7 @@ export function SettingsView() {
   const tabDefs = useMemo(() => {
     const base: { id: SettingsTabId; label: string; enabled: boolean }[] = [
       { id: 'master', label: 'Danh mục', enabled: Boolean(db) },
+      { id: 'rule_templates', label: 'Quy tắc mẫu', enabled: Boolean(db) },
       { id: 'scoring', label: 'Chấm điểm', enabled: Boolean(db) },
       { id: 'consulting', label: 'Tư vấn', enabled: Boolean(db) },
     ]
@@ -732,6 +756,31 @@ export function SettingsView() {
         </section>
       ) : null}
 
+      {db && activeTab === 'rule_templates' ? (
+        <section
+          role="tabpanel"
+          aria-labelledby="tab-rule-templates"
+          className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8"
+        >
+          <h2 id="tab-rule-templates" className={settingsHeading}>
+            Thư viện quy tắc mẫu (Firestore)
+          </h2>
+          <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
+            Mẫu lưu tại collection <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringRuleTemplates</code>.
+            Cần <strong>Firestore Rules</strong> cho phép đọc/ghi collection này (tương tự chỉnh profile chấm điểm). Tab{' '}
+            <strong>Chấm điểm</strong> tự tải mẫu vào cột thư viện khi soạn profile.
+          </p>
+          {!canScoringRules ? (
+            <p className={`mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ${settingsCopy}`}>
+              Chỉ xem — không có quyền <code className="rounded bg-amber-100 px-1">config:scoring_rules</code>.
+            </p>
+          ) : null}
+          <div className="mt-5 min-h-[320px]">
+            <RuleTemplateLibraryPanel db={db} canEdit={canScoringRules} />
+          </div>
+        </section>
+      ) : null}
+
       {db && activeTab === 'scoring' ? (
         <div role="tabpanel" aria-labelledby="tab-scoring" className="space-y-6">
           <h2 id="tab-scoring" className="sr-only uppercase">
@@ -947,6 +996,7 @@ function PlaybookEditorModal({
     setUspText((playbook.keySellingPoints ?? []).join('\n'))
     setObjText(playbook.objectionHandling.join('\n'))
     setTriggersJson(JSON.stringify(playbook.triggerConditions ?? [], null, 2))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset form khi đổi playbook (theo id)
   }, [playbook.id])
 
   const save = async () => {
@@ -1441,7 +1491,7 @@ function CatalogMatchMetaPanel({
 
   return (
     <div className={`mb-4 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3 text-slate-800 shadow-inner md:p-4 ${settingsCopy}`}>
-      <p className={`mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 ${settingsCopy}`}>
+      <p className={`app-section-heading mb-2`}>
         Chỉnh sửa loại danh mục
       </p>
       <label className={`mb-3 block font-medium text-slate-700 ${settingsCopy}`}>

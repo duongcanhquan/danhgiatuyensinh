@@ -75,7 +75,10 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const localApiReady = useMemo(() => Boolean(loadAIConfigFromStorage()?.apiKey), [cfg.apiKey, cfg.model, cfg.provider])
+  const localApiReady = useMemo(
+    () => Boolean((cfg.apiKey || loadAIConfigFromStorage()?.apiKey || '').trim()),
+    [cfg.apiKey],
+  )
 
   const initialGk = useMemo(() => mergeGatekeeperConfig(loadAiGatekeeperFromStorage()), [])
   const [gkMinLen, setGkMinLen] = useState(() => String(initialGk.minCombinedNoteLength))
@@ -443,7 +446,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                     placeholder="vd. học phí, bố mẹ, phân vân…"
                     className="mt-1.5 w-full rounded-xl border border-white/18 bg-slate-800/50 px-3 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400/35 disabled:opacity-50"
                   />
-                  <span className="mt-1 block text-[11px] text-slate-500">Để trống = tắt lọc theo từ khóa.</span>
+                  <span className="mt-1 block text-xs text-slate-500">Để trống = tắt lọc theo từ khóa.</span>
                 </label>
                 <label className="block text-xs font-medium text-slate-400 sm:col-span-2">
                   Tương tác trong vòng (ngày)
@@ -493,7 +496,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   >
                     <span>
                       <span className="font-semibold text-rose-50/95">{t.name}</span>
-                      <span className="mt-0.5 block text-[11px] text-slate-500">{t.targetFields.join(', ')}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{t.targetFields.join(', ')}</span>
                     </span>
                     {canTasks ? (
                       <button
@@ -555,7 +558,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                 </label>
               </div>
 
-              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-200/85">Trường lead gửi kèm</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-200/85">Trường lead gửi kèm</p>
               <div className="flex flex-wrap gap-1.5">
                 {AI_LEAD_FIELD_OPTIONS.map((f) => {
                   const on = targetFields.includes(f.id)
@@ -566,7 +569,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                       disabled={!canTasks}
                       onClick={() => toggleField(f.id)}
                       className={[
-                        'rounded-full border px-2.5 py-1 text-[11px] transition md:text-xs',
+                        'rounded-full border px-2.5 py-1 text-xs transition',
                         on
                           ? 'border-amber-400/50 bg-amber-500/20 text-amber-50'
                           : 'border-white/10 bg-white/[0.04] text-slate-400 hover:border-white/20',
@@ -580,7 +583,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                 })}
               </div>
 
-              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-200/85">Schema JSON đầu ra</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-200/85">Schema JSON đầu ra</p>
               <div className="space-y-2">
                 {schemaRows.map((row, i) => (
                   <div key={i} className="flex flex-wrap gap-2">

@@ -102,6 +102,140 @@ describe('evaluateLead', () => {
     expect(evaluateLead({ province: 'Đà Nẵng city' }, profile).calculatedScore).toBe(10)
   })
 
+  it('CONTAINS_ABBR_NORM: khớp viết tắt chữ đầu từng từ (không dấu)', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'academic',
+          label: 'major',
+          targetField: 'majorInterest',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'CONTAINS_ABBR_NORM',
+              value: 'cntt',
+              allocationKind: 'absolute',
+              allocationValue: 15,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ majorInterest: 'Công nghệ thông tin' }, profile).calculatedScore).toBe(15)
+    expect(evaluateLead({ majorInterest: 'Kế toán' }, profile).calculatedScore).toBe(0)
+  })
+
+  it('CONTAINS_ABBR_NORM: khớp chuỗi sát không khoảng trắng sau khi bỏ dấu', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'academic',
+          label: 'school',
+          targetField: 'highSchool',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'CONTAINS_ABBR_NORM',
+              value: 'thpt',
+              allocationKind: 'absolute',
+              allocationValue: 8,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ highSchool: 'Trường THPT Chuyên Hà Nội' }, profile).calculatedScore).toBe(8)
+  })
+
+  it('CONTAINS_ALL_NORM: tất cả từ khóa phải có (không dấu)', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'demographics',
+          label: 'addr',
+          targetField: 'address',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'CONTAINS_ALL_NORM',
+              value: 'so 12, ha noi',
+              allocationKind: 'absolute',
+              allocationValue: 20,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ address: 'Số 12 ngõ nhỏ Hà Nội' }, profile).calculatedScore).toBe(20)
+    expect(evaluateLead({ address: 'Hà Nội không có số' }, profile).calculatedScore).toBe(0)
+  })
+
+  it('NOT_CONTAINS_NORM: loại trừ từ khóa', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'psychographics',
+          label: 'desc',
+          targetField: 'description',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'NOT_CONTAINS_NORM',
+              value: 'spam, quang cao',
+              allocationKind: 'absolute',
+              allocationValue: 5,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ description: 'Học sinh năng động' }, profile).calculatedScore).toBe(5)
+    expect(evaluateLead({ description: 'Đây là SPAM tin' }, profile).calculatedScore).toBe(0)
+  })
+
+  it('HAS_DIGIT: có chữ số trong chuỗi', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b1',
+          category: 'demographics',
+          label: 'addr',
+          targetField: 'address',
+          maxWeight: 100,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'HAS_DIGIT',
+              value: '',
+              allocationKind: 'absolute',
+              allocationValue: 3,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ address: 'Ngõ 5 — tầng 2' }, profile).calculatedScore).toBe(3)
+    expect(evaluateLead({ address: 'Không số nhà' }, profile).calculatedScore).toBe(0)
+  })
+
   it('falls back to flat rules when no blocks', () => {
     const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
       rules: [

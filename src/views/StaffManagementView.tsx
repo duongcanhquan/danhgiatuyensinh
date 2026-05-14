@@ -278,7 +278,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                           ) : null}
                         </>
                       ) : (
-                        <span className="self-center rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-600">
+                        <span className="self-center rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
                           Siêu QT
                         </span>
                       )}
@@ -331,12 +331,12 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                   ))}
                 </select>
                 {selfUid === editing.id ? (
-                  <span className="mt-1 block text-[11px] text-amber-800">Không đổi vai trò trên chính bạn từ đây.</span>
+                  <span className="mt-1 block text-xs text-amber-800">Không đổi vai trò trên chính bạn từ đây.</span>
                 ) : null}
               </label>
               <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 px-3 py-2.5">
-                <p className="text-[11px] font-medium text-violet-950">Mật khẩu</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-violet-900/90">
+                <p className="text-xs font-medium text-violet-950">Mật khẩu</p>
+                <p className="mt-0.5 text-xs leading-snug text-violet-900/90">
                   Gửi link đặt lại tới email trên (Firebase). Người dùng mở email và đặt mật khẩu mới.
                 </p>
                 <button
@@ -357,7 +357,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                 />
                 Tài khoản đang hoạt động
                 {selfUid === editing.id ? (
-                  <span className="text-[11px] text-amber-800">(luôn bật với chính bạn)</span>
+                  <span className="text-xs text-amber-800">(luôn bật với chính bạn)</span>
                 ) : null}
               </label>
               {isSuperAdminRole(editing.role) ? (
