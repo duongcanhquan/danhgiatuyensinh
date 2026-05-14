@@ -1,6 +1,6 @@
-import { useCallback, type DragEvent } from 'react'
+import { useCallback, useState, type DragEvent } from 'react'
 import { motion } from 'motion/react'
-import { GripVertical, Trash2 } from 'lucide-react'
+import { ChevronRight, GripVertical, Trash2 } from 'lucide-react'
 import type {
   ProfileScoringCondition,
   ScoringRuleAllocationKind,
@@ -21,6 +21,16 @@ const CONDITION_OPTIONS: { value: ProfileScoringCondition; label: string }[] = [
 
 function conditionUsesNoValueRow(c: ProfileScoringCondition): boolean {
   return c === 'IS_NOT_EMPTY' || c === 'PHONE_VN_10_DIGITS' || c === 'PHONE_VN_NOT_10_DIGITS'
+}
+
+function conditionOptionLabel(c: ProfileScoringCondition): string {
+  return CONDITION_OPTIONS.find((x) => x.value === c)?.label ?? c
+}
+
+function rowValuePreview(r: ScoringRuleConditionRow): string {
+  if (conditionUsesNoValueRow(r.condition)) return '—'
+  if (Array.isArray(r.value)) return r.value.map((s) => String(s).trim()).filter(Boolean).join(', ')
+  return String(r.value ?? '').trim()
 }
 
 const ALLOCATION_OPTIONS: { value: ScoringRuleAllocationKind; label: string }[] = [
@@ -57,8 +67,8 @@ function CumulativeScoringCanvasHeader() {
   return (
     <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200/90 bg-white/95 px-2.5 py-2 shadow-sm backdrop-blur-sm">
       <p className="text-[11px] font-semibold leading-snug text-slate-700">
-        Canvas bên phải · <span className="text-slate-600">mỗi dòng: trái = điều kiện, phải = điểm &amp; phân bổ</span> ·
-        cộng dồn ± theo dòng khớp
+        Canvas bên phải · <span className="text-slate-600">mỗi dòng: bấm thanh tóm tắt để thu gọn / mở chi tiết</span> · cộng
+        dồn ± theo dòng khớp
       </p>
     </header>
   )
@@ -89,6 +99,21 @@ function RuleConfigurationCard({
   onDragOver: (e: DragEvent) => void
   onDropOnCard: (e: DragEvent, index: number) => void
 }) {
+  const [rowExpanded, setRowExpanded] = useState<Record<string, boolean>>({})
+
+  const isRowOpen = (rowId: string) => {
+    const v = rowExpanded[rowId]
+    if (v !== undefined) return v
+    return block.rows.length <= 2
+  }
+
+  const toggleRow = (rowId: string) => {
+    setRowExpanded((prev) => {
+      const cur = prev[rowId] !== undefined ? prev[rowId]! : block.rows.length <= 2
+      return { ...prev, [rowId]: !cur }
+    })
+  }
+
   return (
     <motion.article
       layout
@@ -175,11 +200,51 @@ function RuleConfigurationCard({
           const allocInputClass =
             'mt-0.5 w-full rounded-md border border-amber-200/80 bg-white px-2 py-1.5 text-xs tabular-nums disabled:opacity-50 ' +
             signedPointsOnLight(allocNum)
+          const open = isRowOpen(r.id)
+          const valShort = rowValuePreview(r)
+          const valShown = valShort.length > 56 ? `${valShort.slice(0, 54)}…` : valShort
           return (
           <div
             key={r.id}
             className="rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm ring-1 ring-slate-100/80"
           >
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-1.5">
+              <button
+                type="button"
+                onClick={() => toggleRow(r.id)}
+                aria-expanded={open}
+                aria-label={open ? `Thu gọn dòng ${ri + 1}` : `Mở chi tiết dòng ${ri + 1}`}
+                className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1 text-left hover:bg-slate-50"
+              >
+                <ChevronRight
+                  className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform ${open ? 'rotate-90' : ''}`}
+                  aria-hidden
+                />
+                <span className="shrink-0 text-[10px] font-bold text-slate-600">Dòng {ri + 1}</span>
+                <span className="min-w-0 truncate text-[10px] text-slate-600">
+                  <span className="font-medium text-slate-800">{conditionOptionLabel(r.condition)}</span>
+                  <span className="text-slate-400"> · </span>
+                  <span className="font-mono text-slate-500" title={valShort || undefined}>
+                    {valShown || '—'}
+                  </span>
+                  <span className="text-slate-400"> · </span>
+                  <span className={`tabular-nums ${signedPointsOnLight(previewPts)}`}>
+                    {formatSignedPoints(previewPts)} điểm
+                  </span>
+                </span>
+              </button>
+              <span className="text-[9px] text-slate-400">{open ? 'Thu gọn' : 'Chi tiết'}</span>
+              {canEdit && block.rows.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => onRemoveRow(ri)}
+                  className="shrink-0 rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-rose-700 hover:bg-rose-50"
+                >
+                  Xóa dòng
+                </button>
+              ) : null}
+            </div>
+            {open ? (
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:items-stretch">
               <div className="flex min-h-0 flex-col gap-1.5 rounded-lg border border-sky-200/90 bg-sky-50/50 p-2">
                 <p className="text-[9px] font-bold uppercase tracking-wide text-sky-900">1 · Điều kiện &amp; giá trị</p>
@@ -277,18 +342,10 @@ function RuleConfigurationCard({
                       <span className={signedPointsOnLight(previewPts)}>{formatSignedPoints(previewPts)}</span> điểm
                     </span>
                   )}
-                  {canEdit && block.rows.length > 1 ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveRow(ri)}
-                      className="self-start rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-rose-700 hover:bg-rose-50"
-                    >
-                      Xóa dòng
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </div>
+            ) : null}
           </div>
           )
         })}
