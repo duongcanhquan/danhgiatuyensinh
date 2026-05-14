@@ -74,7 +74,7 @@ function ProfileEditorPanel({
   workspaceFullscreen: boolean
   setWorkspaceFullscreen: (v: boolean) => void
   onCreateProfile: () => void
-  /** Mẫu quy tắc từ Firestore — hiện trên cùng mỗi nhóm trong thư viện kéo-thả. */
+  /** Mẫu trường tự tạo (lưu online) — hiện trên cùng mỗi nhóm trong thư viện kéo-thả. */
   ruleTemplateExtras?: readonly RuleLibraryTemplate[]
 }) {
   const [draft, setDraft] = useState(() => cloneProfile(profile))
@@ -655,19 +655,19 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
 
         {templatesError ? (
           <p className="mt-2 shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-900">
-            <strong>Mẫu Firestore (thư viện kéo):</strong> {templatesError} — kiểm tra Rules collection{' '}
-            <code className="rounded bg-rose-100 px-1">scoringRuleTemplates</code> và tab «Quy tắc mẫu».
+            Không tải được mẫu riêng của trường để hiện trong thư viện kéo: {templatesError}. Hãy thử lại sau, hoặc nhờ
+            quản trị kiểm tra quyền đọc dữ liệu; có thể thử lưu một mẫu ở tab «Quy tắc mẫu».
           </p>
         ) : null}
         {!templatesLoading && !templatesError && ruleLibraryTemplates.length === 0 ? (
           <p className="mt-2 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-            Chưa có mẫu tùy chỉnh trong Firestore. Thêm mẫu tại Cài đặt → tab <strong>Quy tắc mẫu</strong> — sau khi lưu, mẫu
-            sẽ xuất hiện <em>đầu</em> mỗi nhóm trong cột «Thư viện quy tắc» bên trái.
+            Trường chưa có mẫu riêng. Vào <strong>Cài đặt → Quy tắc mẫu</strong> để thêm — sau khi lưu, mẫu sẽ nằm{' '}
+            <em>trên cùng</em> trong từng nhóm ở cột «Thư viện quy tắc» bên trái.
           </p>
         ) : null}
         {!canEdit ? (
           <p className="mt-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Bạn không có quyền <code className="rounded bg-amber-100 px-1 text-amber-900">config:scoring_rules</code> — chỉ xem được danh sách.
+            Bạn chỉ được xem — chưa có quyền chỉnh bộ chấm điểm. Liên hệ quản trị nếu cần chỉnh.
           </p>
         ) : null}
         {error ? (

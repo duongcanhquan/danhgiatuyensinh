@@ -27,7 +27,7 @@ export function RuleLibrarySidebar({
   /** Nút thu gọn — nhường chỗ cho canvas. */
   showCollapseButton?: boolean
   onCollapseRequest?: () => void
-  /** Mẫu từ Cài đặt → Quy tắc mẫu (Firestore) — hiển thị trước mẫu có sẵn trong mỗi nhóm. */
+  /** Mẫu do trường tạo (lưu online) — ghép trước mẫu có sẵn trong mỗi nhóm. */
   extraTemplates?: readonly RuleLibraryTemplate[]
 }) {
   const byCategory = useMemo(() => {
@@ -53,8 +53,8 @@ export function RuleLibrarySidebar({
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Thư viện quy tắc</p>
           <p className="mt-0.5 text-xs leading-snug text-slate-600">
-            Mẫu tùy chỉnh (tab «Quy tắc mẫu») hiện <strong>trước</strong> mẫu có sẵn. Kéo sang canvas — chỉnh và{' '}
-            <strong>Lưu profile</strong> để áp dụng riêng từng bộ chấm điểm.
+            Mẫu trường tự thêm (ở màn <strong>Quy tắc mẫu</strong>) nằm <strong>trên</strong> mẫu có sẵn. Kéo sang ô bên
+            phải, chỉnh xong thì <strong>Lưu bộ chấm điểm</strong>.
           </p>
         </div>
         {showCollapseButton && onCollapseRequest ? (

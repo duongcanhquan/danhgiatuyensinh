@@ -1,0 +1,13 @@
+---
+description: Giao diện VietMy — logic rõ, tiếng Việt đời thường, liên kết chặt
+alwaysApply: true
+---
+
+# Nguyên tắc chữ trên giao diện (VietMy)
+
+- **Logic trước, chữ sau:** mỗi màn hình trả lời được «ở đây làm bước nào trong việc chung», rồi mới đến nút và nhãn.
+- **Tiếng Việt đời thường:** ưu tiên từ như *hồ sơ, mẫu, bảng điểm, danh sách chuẩn, lưu online, kéo thả* — tránh mã kỹ thuật, tên collection, tên quyền dạng `config:…` trên màn người dùng cuối (TVV / quản lý không kỹ thuật).
+- **Liên kết chặt:** luôn nói rõ «A dùng ở B» (ví dụ: mẫu tạo ở đây → xuất hiện khi soạn bộ chấm điểm ở tab kia).
+- **Không nhồi thuật ngữ:** nếu cần chi tiết kỹ thuật cho quản trị hệ thống, để trong ghi chú nhỏ hoặc tài liệu riêng, không chen vào luồng chính.
+
+Khi thêm/chỉnh copy trong `src/views`, `src/components`: áp dụng các điểm trên.

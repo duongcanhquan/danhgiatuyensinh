@@ -96,9 +96,9 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
         <>
           <p className="font-semibold text-slate-900">Quy tắc mẫu</p>
           <p className="mt-1.5">
-            Tạo <strong>khối quy tắc gợi ý</strong> lưu trong Firestore; ở tab <strong>Chấm điểm</strong> mẫu xuất hiện
-            trong thư viện kéo-thả (trước mẫu có sẵn). Kéo sang canvas profile, chỉnh điểm / điều kiện rồi{' '}
-            <strong>Lưu profile</strong> — mỗi profile là một bản cấu hình riêng.
+            Tạo <strong>mẫu cộng điểm</strong> để sau này kéo dùng lại. Ở tab <strong>Chấm điểm</strong>, mẫu của trường nằm
+            phía trên mẫu có sẵn; kéo sang ô bên phải, chỉnh cho khớp ý rồi <strong>Lưu bộ chấm điểm</strong> — mỗi bộ là một
+            cách tính riêng.
           </p>
         </>
       )
@@ -108,8 +108,8 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className="font-semibold text-slate-900">Chấm điểm là gì?</p>
           <p className="mt-1.5">
             Bạn cấu hình <strong>bộ quy tắc + ngưỡng điểm</strong> để CRM tự gán điểm tích lũy và nhãn HOT / WARM / COLD
-            cho mỗi lead. Quy tắc chạy <strong>trên dữ liệu hồ sơ</strong> (vùng, ngành, v.v.) — <strong>không gọi LLM</strong>
-            , không dùng kho tri thức RAG.
+            cho mỗi lead. Quy tắc chỉ dựa <strong>trên dữ liệu đã có trên hồ sơ</strong> (tỉnh, ngành, v.v.) —{' '}
+            <strong>không</strong> dùng chế độ chat AI hay kho tài liệu tra cứu.
           </p>
           <p className="mt-2 text-slate-700">
             <strong>Ứng dụng:</strong> bảng hồ sơ, lọc, ưu tiên làm việc theo nhãn. Khác tab <strong>Tư vấn</strong> (playbook
@@ -117,15 +117,12 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Bộ chấm điểm (Profiles)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Engine so khớp <strong>bỏ dấu</strong>, gom khoảng trắng (vd. «Hà Nội» ≡ «ha noi»). Với <strong>IN_LIST</strong>{' '}
-            trên một trường lead, hệ thống lấy <strong>danh mục master</strong> tương ứng (tab Danh mục) để hiểu từng mục,
-            synonym và chế độ khớp — profile chỉ cần chọn <em>nhãn nào trong list</em> được tính điểm. Điều kiện chữ
-            gồm: chứa bất kỳ / chứa tất cả (AND) / không chứa / viết tắt không dấu / có chữ số — xem nhãn đầy đủ trong
-            canvas khi soạn profile. Mẫu khối tùy chỉnh thêm ở tab <strong>Quy tắc mẫu</strong>. Nên tách cột Excel / Firestore:{' '}
-            <strong>Ngành quan tâm</strong>, <strong>Học lực</strong>, <strong>Loại trường</strong> — trường{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">schoolTypeKey</code> (PUBLIC / LIEN_KET / …)
-            và <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">majorTrainingAlignment</code> được bổ sung
-            khi chấm nếu app truyền master buckets (mặc định đã bật trên bảng hồ sơ).
+            Chữ trên hồ sơ được so <strong>bỏ dấu</strong>, gom khoảng trắng (ví dụ «Hà Nội» giống «ha noi»). Khi bạn chọn
+            kiểu «thuộc một trong các nhóm đã liệt kê» trên một thông tin hồ sơ, hệ thống lấy <strong>Danh mục</strong> trùng
+            tên để hiểu từng nhóm và tên gọi khác (nếu có). Trên bảng chấm điểm có đủ nhãn điều kiện; mẫu khối thêm ở tab{' '}
+            <strong>Quy tắc mẫu</strong>. Nên tách cột Excel / dữ liệu: <strong>Ngành quan tâm</strong>, <strong>Học lực</strong>,{' '}
+            <strong>Loại trường</strong> — các mã nội bộ như loại công / liên kết và mức khớp ngành đào tạo được bổ sung khi
+            chấm nếu hệ thống đã nạp bảng chuẩn (mặc định bật trên bảng hồ sơ).
           </p>
         </>
       )
@@ -763,16 +760,16 @@ export function SettingsView() {
           className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8"
         >
           <h2 id="tab-rule-templates" className={settingsHeading}>
-            Thư viện quy tắc mẫu (Firestore)
+            Quy tắc mẫu — kho mẫu cho bước chấm điểm
           </h2>
           <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
-            Mẫu lưu tại collection <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringRuleTemplates</code>.
-            Cần <strong>Firestore Rules</strong> cho phép đọc/ghi collection này (tương tự chỉnh profile chấm điểm). Tab{' '}
-            <strong>Chấm điểm</strong> tự tải mẫu vào cột thư viện khi soạn profile.
+            Ở đây bạn xem và chỉnh <strong>mẫu riêng của trường</strong> (lưu online). Sang tab <strong>Chấm điểm</strong>, các
+            mẫu đó xuất hiện trong cột «Thư viện quy tắc» để kéo vào bộ điểm. Nếu không lưu được, thường do chưa bật quyền
+            lưu dữ liệu — nhờ người phụ trách hệ thống.
           </p>
           {!canScoringRules ? (
             <p className={`mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ${settingsCopy}`}>
-              Chỉ xem — không có quyền <code className="rounded bg-amber-100 px-1">config:scoring_rules</code>.
+              Bạn chỉ xem được — chưa có quyền chỉnh phần này.
             </p>
           ) : null}
           <div className="mt-5 min-h-[320px]">

@@ -1,13 +1,17 @@
 import { useCallback, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import type { RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow, ScoringRuleTemplateDoc } from '../types'
+import type { ProfileScoringCondition, RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow, ScoringRuleTemplateDoc } from '../types'
 import { FS_COLLECTIONS, RULE_CATEGORIES, RULE_CATEGORY_LABELS } from '../types'
 import { useScoringRuleTemplates } from '../hooks/useScoringRuleTemplates'
 import { buildScoringBlockFromTemplateDoc, getRuleLibraryTemplates, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTemplatesFirestore'
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
+
+function rowConditionLabel(c: ProfileScoringCondition): string {
+  return SCORING_CONDITION_UI_OPTIONS.find((o) => o.value === c)?.label ?? String(c)
+}
 
 type EditSession = {
   id: string
@@ -97,7 +101,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
       id,
       order: nextOrder,
       title: 'Mẫu quy tắc mới',
-      hint: 'Kéo sang tab Chấm điểm → profile, chỉnh và lưu theo từng profile.',
+      hint: 'Sang tab Chấm điểm: kéo mẫu vào bộ điểm, chỉnh rồi lưu.',
       block: emptyBlock(),
     })
     setLocalMsg(null)
@@ -112,7 +116,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
       return
     }
     if (!persist.label || !persist.targetField) {
-      setLocalMsg('Nhãn khối và trường lead không được trống.')
+      setLocalMsg('Tên khối và thông tin trên hồ sơ cần xem không được để trống.')
       return
     }
     if (!persist.rows.length) {
@@ -134,7 +138,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
       setLocalMsg('Đã lưu mẫu.')
     } catch (e) {
       console.error(e)
-      setLocalMsg('Lưu thất bại — kiểm tra Firestore Rules (collection scoringRuleTemplates).')
+      setLocalMsg('Lưu không được — kiểm tra kết nối hoặc nhờ quản trị mở quyền lưu «mẫu quy tắc».')
     } finally {
       setBusy(false)
     }
@@ -199,32 +203,31 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
         className="rounded-xl border border-sky-200/90 bg-sky-50/80 px-3 py-2.5 text-xs leading-relaxed text-slate-800 shadow-sm"
         role="note"
       >
-        <p className="font-semibold text-sky-950">Ba phần khác nhau — dễ nhầm</p>
-        <ul className="mt-1.5 list-disc space-y-1 pl-4 marker:text-sky-700">
+        <p className="font-semibold text-sky-950">Ba phần — làm theo thứ tự sẽ dễ</p>
+        <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 marker:font-semibold marker:text-sky-800">
           <li>
-            <strong>Danh mục</strong> (tab khác): danh sách giá trị chuẩn (tỉnh, nguồn, v.v.) để điền hồ sơ và để điều kiện{' '}
-            <code className="rounded bg-white/90 px-1 font-mono text-[0.85em]">IN_LIST</code> so khớp —{' '}
-            <em>không</em> phải chỗ kéo khối quy tắc.
+            <strong>Danh mục</strong> (màn khác): là <em>bảng chuẩn</em> — ví dụ danh sách tỉnh, nguồn tuyển… để TVV chọn trên
+            hồ sơ cho thống nhất. Khi quy tắc cần «cộng điểm theo nhóm», hệ thống hiểu nhóm đó nhờ bảng chuẩn này. Đây{' '}
+            <em>không phải</em> chỗ kéo mẫu quy tắc.
           </li>
           <li>
-            <strong>Quy tắc mẫu</strong> (tab này): liệt kê <em>mẫu Firestore</em> (thêm / sửa / xóa) và <em>mẫu có sẵn</em> (chỉ
-            xem). Sau khi lưu mẫu Firestore, mẫu xuất hiện ở tab <strong>Chấm điểm</strong> → cột <strong>Thư viện quy tắc</strong>{' '}
-            (trước mẫu có sẵn trong từng nhóm).
+            <strong>Quy tắc mẫu</strong> (màn này): chỗ bạn <em>tạo / sửa / xóa mẫu riêng của trường</em> (lưu online) và xem
+            thử mẫu có sẵn trong phần mềm. Sau khi bấm lưu mẫu riêng, sang tab <strong>Chấm điểm</strong> — cột «Thư viện quy
+            tắc» sẽ có mẫu đó <em>ở trên cùng</em> trong từng nhóm.
           </li>
           <li>
-            <strong>Profile chấm điểm</strong>: kéo mẫu sang canvas bên phải, chỉnh điểm rồi <strong>Lưu profile</strong> — mỗi profile là một bản cấu hình riêng; sửa mẫu Firestore không tự đổi profile đã lưu trước đó.
+            <strong>Chấm điểm</strong>: kéo mẫu sang ô bên phải, chỉnh cho đúng ý trường rồi <strong>Lưu bộ chấm điểm</strong>.
+            Mỗi bộ là một cách tính riêng; sửa mẫu ở bước 2 <em>không tự làm lại</em> các bộ đã lưu trước đó.
           </li>
-        </ul>
+        </ol>
         <div className="mt-3 border-t border-slate-200 pt-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Ví dụ — Danh mục ↔ chấm điểm</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Ví dụ cho dễ hình dung</p>
           <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
-            Giả sử tab <strong>Danh mục</strong> có loại «Nguồn lead» với các mục: <em>Facebook</em>, <em>Zalo</em>,{' '}
-            <em>Giới thiệu</em> (mỗi mục có thể thêm <em>từ đồng nghĩa</em>, ví dụ «fb» → Facebook). Trên hồ sơ, TVV chọn
-            nguồn tương ứng. Trong profile chấm điểm, một dòng điều kiện{' '}
-            <code className="rounded bg-white/90 px-1 font-mono text-[0.85em]">IN_LIST</code> liệt kê «Facebook, Zalo» sẽ
-            cộng điểm khi giá trị trên hồ sơ <strong>khớp một trong các mục đó</strong> nhờ dữ liệu master. Nếu không dùng
-            danh mục, <code className="rounded bg-white/90 px-1 font-mono text-[0.85em]">IN_LIST</code> chỉ so với đúng
-            chuỗi / danh sách bạn gõ trong quy tắc — không có «kho chung» đồng bộ với form lead.
+            Trường tạo trong <strong>Danh mục</strong> một loại «Nguồn tuyển» gồm các dòng: Facebook, Zalo, Giới thiệu (có
+            thể ghi thêm cách gọi khác như «fb» để hệ thống hiểu là Facebook). TVV chọn nguồn trên hồ sơ. Khi soạn{' '}
+            <strong>Chấm điểm</strong>, bạn đặt một dòng kiểu «thuộc một trong các nhóm đã liệt kê» và ghi «Facebook, Zalo»
+            thì hồ sơ có nguồn trùng một trong hai sẽ được cộng điểm theo quy tắc. Nếu không dùng Danh mục, bạn vẫn gõ danh
+            sách trong quy tắc, nhưng lúc đó chỉ so đúng chữ bạn gõ — không «nối» với bảng chuẩn trên hồ sơ.
           </p>
         </div>
       </div>
@@ -234,7 +237,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
             <section>
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Mẫu tùy chỉnh (Firestore)</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Mẫu của trường (thêm, sửa, xóa)</p>
                 {canEdit ? (
                   <button
                     type="button"
@@ -247,7 +250,8 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                 ) : null}
               </div>
               <p className="mt-1.5 text-xs leading-snug text-slate-600">
-                Thêm / sửa / xóa tại đây — mẫu động, không cần cập nhật app. Sau khi lưu, kéo từ tab <strong>Chấm điểm</strong>.
+                Mẫu bạn tạo ở đây được lưu online; không cần cập nhật phần mềm. Bước tiếp theo: sang tab{' '}
+                <strong>Chấm điểm</strong> để kéo mẫu vào bộ điểm.
               </p>
               {loading ? <p className="mt-2 text-xs text-slate-500">Đang tải…</p> : null}
               {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
@@ -278,15 +282,15 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                 ))}
               </ul>
               {!loading && !docs.length ? (
-                <p className="mt-2 text-xs text-slate-500">Chưa có mẫu Firestore — bấm «+ Thêm mẫu».</p>
+                <p className="mt-2 text-xs text-slate-500">Chưa có mẫu riêng — bấm «+ Thêm mẫu».</p>
               ) : null}
             </section>
 
             <section className="border-t border-slate-200 pt-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-800">Mẫu có sẵn (trong app)</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-800">Mẫu có sẵn (chỉ xem)</p>
               <p className="mt-1 text-xs leading-snug text-slate-600">
-                Cố định theo phiên bản app — <strong>không sửa/xóa tại đây</strong>. Bấm để xem trước; kéo từ tab{' '}
-                <strong>Chấm điểm</strong> rồi chỉnh trên profile.
+                Phần mềm đi kèm sẵn các mẫu này — không sửa tại đây. Bấm để xem nhanh; muốn dùng thì sang tab{' '}
+                <strong>Chấm điểm</strong>, kéo vào bộ điểm rồi chỉnh.
               </p>
               <div className="mt-2 max-h-[min(38vh,320px)] space-y-2 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
                 {RULE_CATEGORIES.map((cat) => {
@@ -333,7 +337,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs text-slate-600">
-                Tiêu đề (trong thư viện kéo)
+                Tên hiển thị khi kéo (ở tab Chấm điểm)
                 <input
                   value={session.title}
                   disabled={!canEdit || busy}
@@ -355,7 +359,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
               </label>
             </div>
             <label className="block text-xs text-slate-600">
-              Gợi ý (mô tả ngắn dưới tiêu đề mẫu)
+              Dòng chữ gợi ý nhỏ dưới tên mẫu
               <input
                 value={session.hint}
                 disabled={!canEdit || busy}
@@ -366,7 +370,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
 
             <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
               <label className="block text-xs text-slate-600">
-                Nhóm (canvas / analytics)
+                Nhóm (để phân loại trên bảng)
                 <select
                   value={session.block.category}
                   disabled={!canEdit || busy}
@@ -381,7 +385,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                 </select>
               </label>
               <label className="block text-xs text-slate-600">
-                Ngân sách max khối (gợi ý %)
+                Trần điểm tối đa của khối (gợi ý)
                 <input
                   type="number"
                   value={session.block.maxWeight}
@@ -392,7 +396,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
               </label>
             </div>
             <label className="block text-xs text-slate-600">
-              Nhãn khối (trên canvas profile)
+              Tên khối trên bảng chấm điểm
               <input
                 value={session.block.label}
                 disabled={!canEdit || busy}
@@ -401,7 +405,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
               />
             </label>
             <label className="block text-xs text-slate-600">
-              Trường lead (targetField)
+              Thông tin trên hồ sơ cần soi (ví dụ: tỉnh, nguồn… — gõ đúng mã trong danh sách gợi ý)
               <input
                 value={String(session.block.targetField)}
                 disabled={!canEdit || busy}
@@ -492,7 +496,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                       ) : null}
                     </div>
                     <label className="mt-2 block text-xs text-slate-600">
-                      Giá trị (IN_LIST: nhãn cách phẩy → thành danh sách khi lưu profile)
+                      Giá trị so sánh (nếu chọn «thuộc nhóm đã liệt kê»: ghi các tên cách nhau bởi dấu phẩy)
                       <input
                         value={Array.isArray(r.value) ? r.value.join(', ') : String(r.value ?? '')}
                         disabled={
@@ -534,7 +538,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                   onClick={() => void saveSession()}
                   className="rounded-lg border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {busy ? 'Đang lưu…' : 'Lưu mẫu vào thư viện'}
+                  {busy ? 'Đang lưu…' : 'Lưu mẫu'}
                 </button>
                 <button
                   type="button"
@@ -552,7 +556,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
           </div>
           ) : builtinPreview && builtinBlockSnapshot ? (
             <div className="space-y-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-sky-900">Xem trước — mẫu có sẵn trong app</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-sky-900">Xem trước — mẫu có sẵn</p>
               <p className="text-sm font-semibold text-slate-900">{builtinPreview.title}</p>
               <p className="text-xs text-slate-600">{builtinPreview.hint}</p>
               <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3 text-xs text-slate-800">
@@ -563,17 +567,17 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                   <span className="font-semibold text-slate-700">Nhãn khối:</span> {builtinBlockSnapshot.label}
                 </p>
                 <p className="mt-1">
-                  <span className="font-semibold text-slate-700">Trường lead:</span>{' '}
-                  <code className="rounded bg-white px-1 font-mono">{String(builtinBlockSnapshot.targetField)}</code>
+                  <span className="font-semibold text-slate-700">Soi thông tin:</span>{' '}
+                  <span className="font-mono text-[0.95em]">{String(builtinBlockSnapshot.targetField)}</span>
                 </p>
                 <p className="mt-1">
-                  <span className="font-semibold text-slate-700">Max khối:</span> {builtinBlockSnapshot.maxWeight}
+                  <span className="font-semibold text-slate-700">Trần điểm tối đa:</span> {builtinBlockSnapshot.maxWeight}
                 </p>
-                <p className="mt-2 font-semibold text-slate-800">Các dòng điều kiện (tóm tắt)</p>
+                <p className="mt-2 font-semibold text-slate-800">Từng dòng điều kiện</p>
                 <ol className="mt-1 list-decimal space-y-1.5 pl-4 text-slate-700">
                   {builtinBlockSnapshot.rows.map((r) => (
                     <li key={r.id}>
-                      <code className="rounded bg-white px-1 font-mono">{r.condition}</code>
+                      <span className="text-slate-800">{rowConditionLabel(r.condition)}</span>
                       {r.condition !== 'IS_NOT_EMPTY' &&
                       r.condition !== 'PHONE_VN_10_DIGITS' &&
                       r.condition !== 'PHONE_VN_NOT_10_DIGITS' &&
@@ -595,19 +599,18 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                 </ol>
               </div>
               <p className="text-xs leading-relaxed text-slate-600">
-                Sang tab <strong>Chấm điểm</strong> để <strong>kéo</strong> mẫu này vào canvas profile và chỉnh điểm. Mẫu gốc
-                trong code không sửa tại đây — nếu cần biến thể lưu lâu dài, hãy tạo <strong>mẫu Firestore</strong> tương tự
-                phía danh sách trên.
+                Sang tab <strong>Chấm điểm</strong>, kéo mẫu này vào bộ điểm rồi chỉnh. Muốn có bản riêng lưu lâu dài: tạo
+                mẫu mới ở cột trái phần «Mẫu của trường».
               </p>
             </div>
           ) : (
             <div className="space-y-2 text-sm text-slate-600">
               <p>
-                Chọn một <strong>mẫu Firestore</strong> hoặc <strong>mẫu có sẵn</strong> ở cột trái, hoặc bấm «+ Thêm mẫu».
+                Chọn một mẫu ở <strong>cột trái</strong>, hoặc bấm «+ Thêm mẫu» để tạo mẫu riêng cho trường.
               </p>
               <p className="text-xs leading-relaxed text-slate-500">
-                Luồng đúng như bạn mô tả: quản lý mẫu (thêm / bớt / sửa) ở đây với phần Firestore → sang tab{' '}
-                <strong>Chấm điểm</strong> kéo từ «Thư viện quy tắc» → chỉnh trên canvas → <strong>Lưu profile</strong>.
+                Thứ tự làm việc: soạn mẫu ở đây (nếu cần) → sang tab <strong>Chấm điểm</strong> → kéo từ «Thư viện quy
+                tắc» → chỉnh trên bảng → <strong>Lưu bộ chấm điểm</strong>.
               </p>
             </div>
           )}
