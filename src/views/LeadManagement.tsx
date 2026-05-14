@@ -81,7 +81,7 @@ const EVALUATION_TAGS = [
 
 /** Tooltip cột — ngắn; chi tiết công thức nằm trên từng ô (đặt chuột lên gauge). */
 const ML_WIN_COLUMN_HINT =
-  'Ước lượng / chỉ số: MVP = độ đầy đủ hồ sơ (5–96%); Firestore = mlWinProbability + mlExplanation. Đặt chuột lên vòng % từng dòng để xem bảng điểm.'
+  'Điểm thông tin = tỷ lệ thông tin có trên hồ sơ một người. MVP: app cộng theo các trường điền (kẹp 5–96%); Đã lưu: Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng điểm.'
 
 function isElevatedForAdminFilters(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
@@ -1332,15 +1332,15 @@ export function LeadManagement() {
                     ) : null}
                   </button>
                 </th>
-                <th className="w-14 px-1 py-3 text-center text-xs font-medium normal-case">
+                <th className="w-16 min-w-[3.75rem] px-1 py-3 text-center text-xs font-medium normal-case">
                   <button
                     type="button"
                     onClick={() => toggleSort('mlWin')}
                     className="inline-flex flex-col items-center gap-0.5 text-violet-900 transition hover:text-violet-700"
                     title={ML_WIN_COLUMN_HINT}
                   >
-                    <span className="leading-tight">Ước</span>
-                    <span className="leading-tight">lượng</span>
+                    <span className="leading-tight">Điểm</span>
+                    <span className="leading-tight">thông tin</span>
                     {sortKey === 'mlWin' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
@@ -3044,6 +3044,7 @@ function LeadDetailPanel({
                 >
                   <MlWinGauge value={leadMl.mlWinProbability} title={buildMlWinHoverText(leadMl)} />
                   <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900">Điểm thông tin</p>
                     <span className="text-sm font-bold text-violet-900">{leadMl.mlWinProbability}%</span>
                     <span className="ml-1.5 rounded bg-violet-200/80 px-1 text-[10px] font-semibold uppercase text-violet-950">
                       {leadMl.source === 'mvp_mock' ? 'MVP' : 'Đã lưu'}

@@ -280,7 +280,9 @@ export interface Lead {
   importedAt?: Timestamp
   lastTouchedAt?: Timestamp
   routingMeta?: LeadRoutingMeta
+  /** Điểm thông tin (0–100): tỷ lệ thông tin đã ghi nhận trên hồ sơ; nên đi kèm `mlExplanation` khi lưu. */
   mlWinProbability?: number
+  /** Giải thích đi kèm điểm thông tin (khi đủ cặp với `mlWinProbability`, UI hiển thị bản đã lưu thay MVP). */
   mlExplanation?: string
   nextFollowUpDate?: Timestamp | null
   aiSentimentScore?: number

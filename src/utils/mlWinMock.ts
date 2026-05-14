@@ -40,17 +40,17 @@ function studentPhoneTenDigits(lead: Lead): boolean {
 }
 
 /**
- * Chỉ số MVP — **không phải** xác suất thắng ML.
- * Điểm nền + các tiêu chí độ đầy đủ; **kẹp MVP_CAP_MIN…MVP_CAP_MAX** rồi hiển thị như %.
+ * **Điểm thông tin** (MVP trong app): tỷ lệ mức có thông tin / hồ sơ trên một người —
+ * **không phải** xác suất thắng ML. Điểm nền + từng trường điền; **kẹp MVP_CAP_MIN…MVP_CAP_MAX** rồi hiển thị như %.
  */
 export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlWinProbability' | 'mlExplanation' | 'mvpBreakdown'> {
   const items: MvpBreakdownItem[] = [
     {
       id: 'base',
-      label: 'Điểm nền MVP (cố định)',
+      label: 'Điểm nền (cố định)',
       pointsIfMatch: MVP_BASE,
       matched: true,
-      hint: 'Luôn áp dụng — đại diện “mức khởi điểm” trước khi cộng trường hồ sơ.',
+      hint: 'Luôn áp dụng — mức khởi điểm trước khi cộng các trường thông tin trên hồ sơ.',
     },
     {
       id: 'fullName',
@@ -116,8 +116,8 @@ export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlW
 
   const mlExplanation =
     reasons.length > 0
-      ? `Chỉ số MVP (độ đầy đủ dữ liệu): cộng khi có ${reasons.slice(0, 5).join(', ')}${reasons.length > 5 ? '…' : ''}.`
-      : 'Chỉ số MVP: ít trường được điền — bổ sung hồ sơ để chỉ số phản ánh đủ thông tin hơn.'
+      ? `Điểm thông tin (tỷ lệ hồ sơ đã có trên một người): cộng khi có ${reasons.slice(0, 5).join(', ')}${reasons.length > 5 ? '…' : ''}.`
+      : 'Điểm thông tin: nhiều trường còn trống — bổ sung hồ sơ để % phản ánh đủ thông tin hơn.'
 
   return {
     mlWinProbability: clamped,
@@ -137,8 +137,8 @@ export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlW
 export function buildMlWinHoverText(ml: MlWinDisplay): string {
   if (ml.source === 'firestore') {
     return [
-      'NGUỒN: Giá trị đã lưu trên lead (Firestore: mlWinProbability + mlExplanation).',
-      `Hiển thị: ${ml.mlWinProbability}% (kẹp 0–100).`,
+      'NGUỒN: Điểm thông tin đã lưu trên hồ sơ (Firestore: mlWinProbability + mlExplanation).',
+      `% hiển thị: ${ml.mlWinProbability}% (kẹp 0–100) — phản ánh tỷ lệ thông tin đã ghi nhận trên một người, không phải “ước lượng” ML.`,
       '',
       'Giải thích đi kèm dữ liệu:',
       ml.mlExplanation,
@@ -158,14 +158,14 @@ export function buildMlWinHoverText(ml: MlWinDisplay): string {
     .join('\n')
 
   return [
-    'NGUỒN: Chỉ số MVP trong app — KHÔNG phải xác suất thắng từ mô hình học máy.',
+    'NGUỒN: Điểm thông tin do app tính (MVP) — tỷ lệ mức có thông tin / hồ sơ trên một người; không phải xác suất thắng ML.',
     '',
     'Cách tính:',
     `  1) Cộng điểm các dòng có [✓] trong bảng dưới (điểm nền luôn tính).`,
     `  2) Điểm thô = ${b.rawScore}`,
     `  3) Chuyển thành % hiển thị = kẹp giữa ${b.capMin} và ${b.capMax}  →  ${b.clampedPercent}%`,
     '',
-    'Bảng điểm (dữ kiện trên hồ sơ):',
+    'Bảng điểm (thông tin có trên hồ sơ):',
     table,
     '',
     'Tóm tắt:',

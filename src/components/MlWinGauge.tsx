@@ -2,7 +2,7 @@ import { useId } from 'react'
 
 /**
  * Vòng tròn: độ dài cung màu = `value` trong khoảng 0–100 (tỉ lệ chu vi đã “lấp”).
- * Số ở giữa là `value` làm tròn (không gắn ký hiệu % trong SVG).
+ * Số ở giữa là `value` làm tròn (không gắn ký hiệu % trong SVG). Dùng cho **Điểm thông tin** trên hồ sơ.
  */
 export function MlWinGauge({ value, title }: { value: number; title?: string }) {
   const gid = useId().replace(/:/g, '')
@@ -10,7 +10,7 @@ export function MlWinGauge({ value, title }: { value: number; title?: string }) 
   const r = 17
   const c = 2 * Math.PI * r
   const offset = c - (v / 100) * c
-  const tip = title ?? `Chỉ số ${v}% (0–100). Xem giải thích ở tooltip cột hoặc tiêu đề khối.`
+  const tip = title ?? `Điểm thông tin ${v}% (0–100). Đặt chuột để xem cách tính.`
   return (
     <div
       className="relative flex h-10 w-10 shrink-0 cursor-help items-center justify-center"
