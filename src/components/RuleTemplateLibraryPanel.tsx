@@ -4,7 +4,7 @@ import type { Firestore } from 'firebase/firestore'
 import type { RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow, ScoringRuleTemplateDoc } from '../types'
 import { FS_COLLECTIONS, RULE_CATEGORIES, RULE_CATEGORY_LABELS } from '../types'
 import { useScoringRuleTemplates } from '../hooks/useScoringRuleTemplates'
-import { buildScoringBlockFromTemplateDoc } from '../utils/ruleLibrary'
+import { buildScoringBlockFromTemplateDoc, getRuleLibraryTemplates, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTemplatesFirestore'
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
@@ -67,8 +67,23 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
   const { docs, loading, error } = useScoringRuleTemplates()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [session, setSession] = useState<EditSession | null>(null)
+  const [builtinPreview, setBuiltinPreview] = useState<RuleLibraryTemplate | null>(null)
   const [localMsg, setLocalMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const builtinsByCategory = useMemo(() => {
+    const m = new Map<RuleCategory, RuleLibraryTemplate[]>()
+    for (const c of RULE_CATEGORIES) m.set(c, [])
+    for (const t of getRuleLibraryTemplates()) {
+      m.get(t.category)!.push(t)
+    }
+    return m
+  }, [])
+
+  const builtinBlockSnapshot = useMemo(
+    () => (builtinPreview ? builtinPreview.build() : null),
+    [builtinPreview],
+  )
 
   const nextOrder = useMemo(() => {
     if (!docs.length) return 10
@@ -86,6 +101,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
       block: emptyBlock(),
     })
     setLocalMsg(null)
+    setBuiltinPreview(null)
   }, [nextOrder])
 
   const saveSession = useCallback(async () => {
@@ -191,68 +207,129 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
             <em>không</em> phải chỗ kéo khối quy tắc.
           </li>
           <li>
-            <strong>Quy tắc mẫu</strong> (tab này): tạo / sửa <em>mẫu khối</em> lưu Firestore; sau khi lưu, mẫu xuất hiện ở tab{' '}
-            <strong>Chấm điểm</strong> → cột <strong>Thư viện quy tắc</strong> (đứng <em>trước</em> mẫu có sẵn trong từng nhóm).
+            <strong>Quy tắc mẫu</strong> (tab này): liệt kê <em>mẫu Firestore</em> (thêm / sửa / xóa) và <em>mẫu có sẵn</em> (chỉ
+            xem). Sau khi lưu mẫu Firestore, mẫu xuất hiện ở tab <strong>Chấm điểm</strong> → cột <strong>Thư viện quy tắc</strong>{' '}
+            (trước mẫu có sẵn trong từng nhóm).
           </li>
           <li>
             <strong>Profile chấm điểm</strong>: kéo mẫu sang canvas bên phải, chỉnh điểm rồi <strong>Lưu profile</strong> — mỗi profile là một bản cấu hình riêng; sửa mẫu Firestore không tự đổi profile đã lưu trước đó.
           </li>
         </ul>
+        <div className="mt-3 border-t border-slate-200 pt-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Ví dụ — Danh mục ↔ chấm điểm</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
+            Giả sử tab <strong>Danh mục</strong> có loại «Nguồn lead» với các mục: <em>Facebook</em>, <em>Zalo</em>,{' '}
+            <em>Giới thiệu</em> (mỗi mục có thể thêm <em>từ đồng nghĩa</em>, ví dụ «fb» → Facebook). Trên hồ sơ, TVV chọn
+            nguồn tương ứng. Trong profile chấm điểm, một dòng điều kiện{' '}
+            <code className="rounded bg-white/90 px-1 font-mono text-[0.85em]">IN_LIST</code> liệt kê «Facebook, Zalo» sẽ
+            cộng điểm khi giá trị trên hồ sơ <strong>khớp một trong các mục đó</strong> nhờ dữ liệu master. Nếu không dùng
+            danh mục, <code className="rounded bg-white/90 px-1 font-mono text-[0.85em]">IN_LIST</code> chỉ so với đúng
+            chuỗi / danh sách bạn gõ trong quy tắc — không có «kho chung» đồng bộ với form lead.
+          </p>
+        </div>
       </div>
 
-      <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
-        <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Mẫu đã lưu</p>
-          {canEdit ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={startNew}
-              className="rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              + Thêm mẫu
-            </button>
-          ) : null}
-        </div>
-        {loading ? <p className="mt-2 text-xs text-slate-500">Đang tải…</p> : null}
-        {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
-        <ul className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 text-sm">
-          {docs.map((d) => (
-            <li key={d.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedId(d.id)
-                  setSession(sessionFromDoc(d))
-                  setLocalMsg(null)
-                }}
-                className={[
-                  'w-full rounded-lg border px-2 py-2 text-left transition',
-                  selectedId === d.id
-                    ? 'border-amber-400 bg-amber-50/90 text-slate-900'
-                    : 'border-transparent bg-slate-50/80 text-slate-800 hover:border-slate-200',
-                ].join(' ')}
-              >
-                <span className="block font-semibold leading-tight">{d.title}</span>
-                <span className="mt-0.5 block text-xs text-slate-600">
-                  {RULE_CATEGORY_LABELS[d.category]} · {d.targetField}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {!loading && !docs.length ? (
-          <p className="mt-2 text-xs text-slate-500">
-            Chưa có mẫu — thêm mẫu để xuất hiện trong thư viện kéo-thả profile.
-          </p>
-        ) : null}
+      <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(240px,300px)_1fr]">
+        <div className="flex min-h-0 max-h-[min(78vh,720px)] flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+            <section>
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Mẫu tùy chỉnh (Firestore)</p>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={startNew}
+                    className="rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    + Thêm mẫu
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-1.5 text-xs leading-snug text-slate-600">
+                Thêm / sửa / xóa tại đây — mẫu động, không cần cập nhật app. Sau khi lưu, kéo từ tab <strong>Chấm điểm</strong>.
+              </p>
+              {loading ? <p className="mt-2 text-xs text-slate-500">Đang tải…</p> : null}
+              {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
+              <ul className="mt-2 space-y-1 text-sm">
+                {docs.map((d) => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(d.id)
+                        setSession(sessionFromDoc(d))
+                        setBuiltinPreview(null)
+                        setLocalMsg(null)
+                      }}
+                      className={[
+                        'w-full rounded-lg border px-2 py-2 text-left transition',
+                        selectedId === d.id && !builtinPreview
+                          ? 'border-amber-400 bg-amber-50/90 text-slate-900'
+                          : 'border-transparent bg-slate-50/80 text-slate-800 hover:border-slate-200',
+                      ].join(' ')}
+                    >
+                      <span className="block font-semibold leading-tight">{d.title}</span>
+                      <span className="mt-0.5 block text-xs text-slate-600">
+                        {RULE_CATEGORY_LABELS[d.category]} · {d.targetField}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {!loading && !docs.length ? (
+                <p className="mt-2 text-xs text-slate-500">Chưa có mẫu Firestore — bấm «+ Thêm mẫu».</p>
+              ) : null}
+            </section>
+
+            <section className="border-t border-slate-200 pt-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-800">Mẫu có sẵn (trong app)</p>
+              <p className="mt-1 text-xs leading-snug text-slate-600">
+                Cố định theo phiên bản app — <strong>không sửa/xóa tại đây</strong>. Bấm để xem trước; kéo từ tab{' '}
+                <strong>Chấm điểm</strong> rồi chỉnh trên profile.
+              </p>
+              <div className="mt-2 max-h-[min(38vh,320px)] space-y-2 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+                {RULE_CATEGORIES.map((cat) => {
+                  const items = builtinsByCategory.get(cat) ?? []
+                  if (!items.length) return null
+                  return (
+                    <div key={cat}>
+                      <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
+                        {RULE_CATEGORY_LABELS[cat]}
+                      </p>
+                      <ul className="space-y-0.5">
+                        {items.map((t) => (
+                          <li key={t.key}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBuiltinPreview(t)
+                                setSession(null)
+                                setSelectedId(null)
+                                setLocalMsg(null)
+                              }}
+                              className={[
+                                'w-full rounded-md border px-1.5 py-1.5 text-left text-xs transition',
+                                builtinPreview?.key === t.key
+                                  ? 'border-sky-400 bg-sky-50 text-slate-900'
+                                  : 'border-transparent bg-white text-slate-800 hover:border-slate-200',
+                              ].join(' ')}
+                            >
+                              <span className="font-medium leading-tight">{t.title}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          </div>
         </div>
 
         <div className="min-h-0 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm">
-        {!session ? (
-          <p className="text-sm text-slate-600">Chọn một mẫu bên trái hoặc bấm «Thêm mẫu».</p>
-        ) : (
+          {session ? (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs text-slate-600">
@@ -473,7 +550,67 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
               <p className="text-xs text-slate-500">Chỉ xem — cần quyền chỉnh bộ chấm điểm.</p>
             )}
           </div>
-        )}
+          ) : builtinPreview && builtinBlockSnapshot ? (
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-sky-900">Xem trước — mẫu có sẵn trong app</p>
+              <p className="text-sm font-semibold text-slate-900">{builtinPreview.title}</p>
+              <p className="text-xs text-slate-600">{builtinPreview.hint}</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3 text-xs text-slate-800">
+                <p>
+                  <span className="font-semibold text-slate-700">Nhóm:</span> {RULE_CATEGORY_LABELS[builtinBlockSnapshot.category]}
+                </p>
+                <p className="mt-1">
+                  <span className="font-semibold text-slate-700">Nhãn khối:</span> {builtinBlockSnapshot.label}
+                </p>
+                <p className="mt-1">
+                  <span className="font-semibold text-slate-700">Trường lead:</span>{' '}
+                  <code className="rounded bg-white px-1 font-mono">{String(builtinBlockSnapshot.targetField)}</code>
+                </p>
+                <p className="mt-1">
+                  <span className="font-semibold text-slate-700">Max khối:</span> {builtinBlockSnapshot.maxWeight}
+                </p>
+                <p className="mt-2 font-semibold text-slate-800">Các dòng điều kiện (tóm tắt)</p>
+                <ol className="mt-1 list-decimal space-y-1.5 pl-4 text-slate-700">
+                  {builtinBlockSnapshot.rows.map((r) => (
+                    <li key={r.id}>
+                      <code className="rounded bg-white px-1 font-mono">{r.condition}</code>
+                      {r.condition !== 'IS_NOT_EMPTY' &&
+                      r.condition !== 'PHONE_VN_10_DIGITS' &&
+                      r.condition !== 'PHONE_VN_NOT_10_DIGITS' &&
+                      r.condition !== 'HAS_DIGIT' ? (
+                        <span className="text-slate-600">
+                          {' '}
+                          →{' '}
+                          {Array.isArray(r.value) ? r.value.join(', ') : String(r.value ?? '')}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500"> (không cần giá trị)</span>
+                      )}
+                      <span className="text-slate-600">
+                        {' '}
+                        · {r.allocationKind === 'percent_of_max' ? `${r.allocationValue}% max` : `${r.allocationValue} điểm`}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <p className="text-xs leading-relaxed text-slate-600">
+                Sang tab <strong>Chấm điểm</strong> để <strong>kéo</strong> mẫu này vào canvas profile và chỉnh điểm. Mẫu gốc
+                trong code không sửa tại đây — nếu cần biến thể lưu lâu dài, hãy tạo <strong>mẫu Firestore</strong> tương tự
+                phía danh sách trên.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm text-slate-600">
+              <p>
+                Chọn một <strong>mẫu Firestore</strong> hoặc <strong>mẫu có sẵn</strong> ở cột trái, hoặc bấm «+ Thêm mẫu».
+              </p>
+              <p className="text-xs leading-relaxed text-slate-500">
+                Luồng đúng như bạn mô tả: quản lý mẫu (thêm / bớt / sửa) ở đây với phần Firestore → sang tab{' '}
+                <strong>Chấm điểm</strong> kéo từ «Thư viện quy tắc» → chỉnh trên canvas → <strong>Lưu profile</strong>.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
