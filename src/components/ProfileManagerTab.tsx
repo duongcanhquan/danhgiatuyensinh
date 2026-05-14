@@ -438,9 +438,6 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             <VietMyAccentHeading as="h2" tone="onLight" size="lg">
               Bộ chấm điểm (Profiles)
             </VietMyAccentHeading>
-            <p className="mt-0.5 max-w-2xl text-sm leading-snug text-slate-600">
-              Chọn profile dưới đây; «Toàn màn» để kéo giãn builder.
-            </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {workspaceFullscreen ? (

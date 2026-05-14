@@ -50,15 +50,15 @@ export function Layout() {
   const navLinkClass = (isActive: boolean, compact: boolean) =>
     [
       compact
-        ? 'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition'
-        : 'flex shrink-0 flex-row items-center gap-1 border-b-2 px-2 py-1.5 text-[10px] font-semibold leading-tight transition sm:gap-1.5 sm:px-2 sm:text-[11px] md:px-2.5',
+        ? 'flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left text-base font-semibold transition'
+        : 'flex shrink-0 flex-row items-center gap-2 rounded-lg border-b-2 border-transparent px-3 py-2 text-sm font-semibold leading-snug tracking-tight transition md:px-3.5 md:py-2.5 md:text-[15px]',
       isActive
         ? compact
           ? 'bg-amber-500/20 text-amber-50 ring-1 ring-amber-400/40'
-          : 'border-amber-400 bg-white/[0.06] text-amber-50'
+          : 'border-amber-400 bg-white/[0.08] text-amber-50 shadow-[inset_0_-2px_0_0_rgba(251,191,36,0.45)]'
         : compact
           ? 'text-slate-200 hover:bg-white/10'
-          : 'border-transparent text-slate-400 hover:border-white/15 hover:bg-white/[0.04] hover:text-slate-100',
+          : 'text-slate-300 hover:border-white/20 hover:bg-white/[0.06] hover:text-amber-50',
     ].join(' ')
 
   return (
@@ -72,69 +72,62 @@ export function Layout() {
 
       <div className="relative z-10 flex min-h-[100dvh] flex-col">
         <header className="safe-area-pt sticky top-0 z-50 w-full shrink-0 border-b border-amber-500/25 bg-gradient-to-r from-[#0b0f16] via-[#0e141d] to-[#0a0d14] shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
-          <div className="flex w-full max-w-none flex-wrap items-center gap-x-2 gap-y-2 px-2 py-2 sm:gap-x-3 sm:px-3 md:px-4">
-            <div className="flex min-w-0 shrink-0 items-start gap-2 border-white/10 sm:gap-2.5 md:border-r md:pr-4">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 shadow ring-1 ring-amber-200/30 sm:h-9 sm:w-9">
-                <BarChart3 className="h-4 w-4 text-slate-950 sm:h-[1.05rem] sm:w-[1.05rem]" strokeWidth={2} />
+          <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4 md:flex-nowrap md:gap-x-4 md:py-3 md:px-5">
+            <div className="flex min-w-0 shrink-0 items-center gap-2.5 sm:gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 shadow-md ring-1 ring-amber-200/35 md:h-11 md:w-11">
+                <BarChart3 className="h-5 w-5 text-slate-950 md:h-[1.35rem] md:w-[1.35rem]" strokeWidth={2} />
               </div>
               <div className="min-w-0">
-                <div className="hidden min-w-0 flex-col gap-1 md:flex">
-                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0 leading-tight">
-                    <span className="font-display shrink-0 text-sm font-semibold tracking-tight text-amber-100/95">
+                <div className="hidden min-w-0 flex-col gap-0.5 md:flex">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0 leading-tight">
+                    <span className="font-display shrink-0 text-base font-semibold tracking-tight text-amber-100 md:text-lg">
                       VietMy College
                     </span>
-                    <span className="shrink-0 text-amber-400/50" aria-hidden>
+                    <span className="shrink-0 text-amber-400/45" aria-hidden>
                       ·
                     </span>
-                    <span className="min-w-0 truncate text-xs font-medium text-amber-50/95" title={profile?.displayName ?? ''}>
+                    <span
+                      className="min-w-0 truncate text-sm font-medium text-amber-50/95 md:text-base"
+                      title={profile?.displayName ?? ''}
+                    >
                       {profile?.displayName ?? 'Khách'}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     {profile ? (
                       <span
-                        className="max-w-[14rem] truncate text-[10px] font-medium text-amber-200/75 lg:max-w-[18rem]"
+                        className="max-w-[18rem] truncate text-xs font-medium text-amber-200/85 md:text-sm"
                         title={USER_ROLE_LABELS[profile.role]}
                       >
                         {USER_ROLE_LABELS[profile.role]}
                       </span>
                     ) : (
-                      <span className="text-[10px] font-medium text-amber-200/60">—</span>
+                      <span className="text-xs font-medium text-amber-200/60 md:text-sm">—</span>
                     )}
                     {!firebaseUser && import.meta.env.DEV ? (
-                      <span className="text-[10px] font-medium text-amber-300/80">Bản thử</span>
-                    ) : null}
-                    {showSignOut ? (
-                      <button
-                        type="button"
-                        onClick={() => void signOut()}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/15 bg-white/[0.07] px-2 py-0.5 text-[10px] font-semibold text-amber-50/95 transition hover:border-amber-400/35 hover:bg-amber-500/15 sm:text-[11px]"
-                      >
-                        <LogOut className="h-3 w-3 shrink-0" strokeWidth={1.75} aria-hidden />
-                        Đăng xuất
-                      </button>
+                      <span className="text-xs font-medium text-amber-300/85 md:text-sm">Bản thử</span>
                     ) : null}
                   </div>
                 </div>
-                <div className="flex min-w-0 flex-col gap-1 md:hidden">
-                  <p className="truncate font-display text-sm font-semibold leading-tight text-amber-100/95">VietMy College</p>
+                <div className="flex min-w-0 flex-col gap-0.5 md:hidden">
+                  <p className="truncate font-display text-base font-semibold leading-tight text-amber-100">VietMy College</p>
                   {profile?.displayName ? (
-                    <p className="truncate text-[11px] font-medium text-amber-50/90">{profile.displayName}</p>
+                    <p className="truncate text-sm font-medium text-amber-50/90">{profile.displayName}</p>
                   ) : null}
                   <div className="flex flex-wrap items-center gap-2">
                     {profile ? (
-                      <span className="max-w-[10rem] truncate text-[10px] text-amber-200/75">{USER_ROLE_LABELS[profile.role]}</span>
+                      <span className="max-w-[12rem] truncate text-xs text-amber-200/80">{USER_ROLE_LABELS[profile.role]}</span>
                     ) : null}
                     {!firebaseUser && import.meta.env.DEV ? (
-                      <span className="text-[10px] font-medium text-amber-300/80">Bản thử</span>
+                      <span className="text-xs font-medium text-amber-300/85">Bản thử</span>
                     ) : null}
                     {showSignOut ? (
                       <button
                         type="button"
                         onClick={() => void signOut()}
-                        className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/[0.07] px-2 py-0.5 text-[10px] font-semibold text-amber-50/95"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/18 bg-white/[0.08] px-2.5 py-1 text-xs font-semibold text-amber-50"
                       >
-                        <LogOut className="h-3 w-3 shrink-0" strokeWidth={1.75} aria-hidden />
+                        <LogOut className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
                         Đăng xuất
                       </button>
                     ) : null}
@@ -143,36 +136,45 @@ export function Layout() {
               </div>
             </div>
 
-            <div className="hidden min-h-0 min-w-0 flex-1 md:flex md:justify-end">
-              <nav
-                className="flex max-w-full items-stretch divide-x divide-white/10 overflow-x-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                aria-label="Điều hướng chính"
+            <nav
+              className="order-3 hidden min-h-0 min-w-0 flex-1 basis-[100%] items-center gap-0.5 overflow-x-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:basis-auto sm:gap-1 md:order-none md:flex md:max-w-none md:basis-auto md:justify-start [&::-webkit-scrollbar]:hidden"
+              aria-label="Điều hướng chính"
+            >
+              {navItems.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  title={label}
+                  className={({ isActive }) => navLinkClass(isActive, false)}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={`h-[1.1rem] w-[1.1rem] shrink-0 md:h-5 md:w-5 ${isActive ? 'text-amber-300' : 'text-slate-500'}`}
+                        strokeWidth={2}
+                      />
+                      <span className="max-w-[11rem] truncate sm:max-w-[13rem]">{label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+
+            {showSignOut ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="order-2 hidden shrink-0 items-center gap-2 rounded-lg border border-white/18 bg-white/[0.08] px-3 py-2 text-sm font-semibold text-amber-50/95 shadow-sm transition hover:border-amber-400/40 hover:bg-amber-500/15 md:inline-flex md:text-[15px]"
               >
-                {navItems.map(({ to, label, icon: Icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={to === '/'}
-                    title={label}
-                    className={({ isActive }) => navLinkClass(isActive, false)}
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <Icon
-                          className={`h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4 ${isActive ? 'text-amber-300' : 'text-slate-500'}`}
-                          strokeWidth={2}
-                        />
-                        <span className="max-w-[8.5rem] truncate sm:max-w-[10rem]">{label}</span>
-                      </>
-                    )}
-                  </NavLink>
-                ))}
-              </nav>
-            </div>
+                <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                Đăng xuất
+              </button>
+            ) : null}
 
             <button
               type="button"
-              className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.06] text-amber-100 md:hidden"
+              className="order-2 ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/[0.07] text-amber-100 shadow-sm md:hidden"
               aria-expanded={mobileNavOpen}
               aria-controls="mobile-nav-panel"
               onClick={() => setMobileNavOpen((o) => !o)}

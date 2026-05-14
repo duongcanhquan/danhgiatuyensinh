@@ -120,12 +120,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className={`mt-2 border-t border-slate-200 pt-2 ${settingsCopyMuted}`}>
             <strong>Nạp từ app:</strong> trong khối Playbook — tab <strong>Thiết lập</strong> (tải file mẫu, tải JSON lên, nạp
-            mẫu build, thêm nhanh) và tab <strong>Dữ liệu</strong> (danh sách, tìm kiếm, lọc). File seed:{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">public/seed/consulting-playbooks.json</code> — chạy{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">npm run export:public-seed</code> rồi build/deploy.{' '}
-            <strong>Hoặc từ Terminal</strong> (service account):{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">npm run seed:consulting-playbooks</code>. Xóa đúng bộ đã seed:{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">DELETE_PLAYBOOK_SEED=1 npm run seed:consulting-playbooks</code> rồi chạy lại lệnh seed nếu muốn nạp lại.
+            mẫu build, thêm nhanh) và tab <strong>Dữ liệu</strong> (danh sách, tìm kiếm, lọc).
           </p>
         </>
       )
@@ -1252,11 +1247,7 @@ function CatalogMatchMetaPanel({
 
   return (
     <div className={`mb-4 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3 text-slate-800 shadow-inner md:p-4 ${settingsCopy}`}>
-      <p className={settingsHeading}>Kiểu giá trị &amp; khớp mặc định (IN_LIST)</p>
-      <p className={`mt-1 ${settingsCopyMuted}`}>
-        Áp dụng khi quy tắc chấm điểm so trường lead với danh mục này. Mỗi mục có thể ghi đè chế độ riêng bên dưới.
-      </p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className={`min-w-[10rem] flex-1 font-medium text-slate-700 ${settingsCopy}`}>
           Kiểu danh mục
           <select

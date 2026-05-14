@@ -198,10 +198,6 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               LLM &amp; tác vụ AI
             </VietMyAccentHeading>
           </div>
-          <p className="mt-1.5 text-xs leading-snug text-slate-400 md:text-sm">
-            Cấu hình theo tab — bắt đầu từ <strong className="text-slate-200">Hướng dẫn</strong>. API &amp; Gatekeeper
-            lưu trên trình duyệt; tác vụ lưu Firestore <code className="text-amber-200/90">ai_tasks</code>.
-          </p>
         </div>
 
         {/* Tabs */}
