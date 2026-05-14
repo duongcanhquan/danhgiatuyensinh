@@ -310,17 +310,9 @@ function ProfileEditorPanel({
           .filter(Boolean)
           .join(' ')}
       >
-        <p className="text-xs font-semibold leading-tight text-slate-800">
-          Builder —{' '}
-          <span className="font-normal text-slate-600">
-            {metaCollapsed
-              ? 'kéo mẫu vào canvas. Bấm «Mở rộng» phía trên để sửa tên, ngưỡng và mô tả.'
-              : 'kéo mẫu trái → canvas; cộng dồn dòng; thu gọn thư viện khi cần.'}
-          </span>
-        </p>
         <div
           className={[
-            'mt-1.5 grid min-h-0 flex-1 gap-2',
+            'grid min-h-0 flex-1 gap-2',
             canEdit && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEdit ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
             workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[220px]',
           ].join(' ')}
