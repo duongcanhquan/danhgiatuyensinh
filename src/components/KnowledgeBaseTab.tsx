@@ -170,7 +170,20 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
         </h3>
         {loading ? <p className="mt-2 text-sm text-slate-500">Đang tải…</p> : null}
         {!loading && !documents.length ? (
-          <p className="mt-2 text-sm text-slate-500">Chưa có tài liệu — thêm ít nhất một mục để RAG hoạt động.</p>
+          <div className="mt-2 space-y-2 text-sm text-slate-600">
+            <p>Chưa có tài liệu — thêm ít nhất một mục để RAG hoạt động.</p>
+            <p className="rounded-lg border border-sky-200/80 bg-sky-50/90 px-3 py-2 text-xs leading-relaxed text-slate-700">
+              <strong>Nạp sẵn 50 mục từ code:</strong> trên máy có service account, chạy{' '}
+              <code className="rounded bg-white/90 px-1 font-mono text-[11px] text-slate-900">
+                GOOGLE_APPLICATION_CREDENTIALS=./đường-dẫn.json npm run seed:knowledge-base
+              </code>{' '}
+              (ghi vào Firestore <code className="font-mono text-[11px]">knowledgeDocuments</code>). Dry-run:{' '}
+              <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
+                node scripts/seed-knowledge-base.mjs --dry-run
+              </code>
+              . Hoặc dùng form «Thêm tài liệu mới» phía trên rồi bấm Lưu.
+            </p>
+          </div>
         ) : null}
         <ul className="mt-3 space-y-2">
           {documents.map((d) => (
