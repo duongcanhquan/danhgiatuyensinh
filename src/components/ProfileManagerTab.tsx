@@ -50,6 +50,9 @@ function ProfileEditorPanel({
   setSaveMsg,
   onDeleted,
   workspaceLayout,
+  workspaceFullscreen,
+  setWorkspaceFullscreen,
+  onCreateProfile,
 }: {
   db: Firestore
   profile: ScoringProfile
@@ -65,6 +68,9 @@ function ProfileEditorPanel({
   setSaveMsg: (v: string | null) => void
   onDeleted: () => void
   workspaceLayout?: boolean
+  workspaceFullscreen: boolean
+  setWorkspaceFullscreen: (v: boolean) => void
+  onCreateProfile: () => void
 }) {
   const [draft, setDraft] = useState(() => cloneProfile(profile))
   /** Thu gọn cột thư viện — canvas rộng hơn; mặc định mở để dễ kéo mẫu. */
@@ -167,25 +173,63 @@ function ProfileEditorPanel({
     >
       <div className="rounded-md border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white p-1.5 shadow-sm">
         {metaCollapsed ? (
-          <button
-            type="button"
-            onClick={() => setMetaCollapsed(false)}
-            aria-expanded={false}
-            className="flex w-full items-center gap-2 rounded border border-transparent px-1 py-1 text-left transition hover:border-amber-200/80 hover:bg-white/80"
-          >
-            <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">
-                {draft.profileName.trim() || 'Chưa đặt tên'}
-              </p>
-              <p className="truncate text-xs text-slate-600">
-                HOT ≥{draft.thresholds.hotMinScore} · WARM ≥{draft.thresholds.warmMinScore}
-                {draft.isDefaultForImport ? ' · Mặc định import' : ''}
-                {draft.description.trim() ? ` · ${draft.description.trim().slice(0, 48)}${draft.description.trim().length > 48 ? '…' : ''}` : ''}
-              </p>
+          <div className="flex w-full min-w-0 items-center gap-1.5 rounded border border-transparent px-0.5 py-0.5">
+            <button
+              type="button"
+              onClick={() => setMetaCollapsed(false)}
+              aria-expanded={false}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded border border-transparent px-1 py-0.5 text-left transition hover:border-amber-200/80 hover:bg-white/80"
+            >
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-900">
+                  {draft.profileName.trim() || 'Chưa đặt tên'}
+                </p>
+                <p className="truncate text-xs text-slate-600">
+                  HOT ≥{draft.thresholds.hotMinScore} · WARM ≥{draft.thresholds.warmMinScore}
+                  {draft.isDefaultForImport ? ' · Mặc định import' : ''}
+                  {draft.description.trim()
+                    ? ` · ${draft.description.trim().slice(0, 48)}${draft.description.trim().length > 48 ? '…' : ''}`
+                    : ''}
+                </p>
+              </div>
+              <span className="shrink-0 text-xs font-medium text-amber-900">Mở rộng</span>
+            </button>
+            <div className="flex shrink-0 flex-col gap-0.5 sm:flex-row sm:items-center">
+              {workspaceFullscreen ? (
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceFullscreen(false)}
+                  className="inline-flex items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold leading-none text-slate-800 shadow-sm transition hover:bg-slate-50"
+                  title="Thoát toàn màn (Esc)"
+                >
+                  <X className="h-3 w-3 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">Đóng</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceFullscreen(true)}
+                  className="inline-flex items-center justify-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-amber-950 shadow-sm transition hover:bg-amber-100"
+                  title="Toàn màn"
+                >
+                  <Maximize2 className="h-3 w-3 shrink-0" aria-hidden />
+                  <span className="hidden min-[380px]:inline">Toàn màn</span>
+                </button>
+              )}
+              {canEdit ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onCreateProfile}
+                  className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                  title="Tạo profile mới"
+                >
+                  + Tạo
+                </button>
+              ) : null}
             </div>
-            <span className="shrink-0 text-xs font-medium text-amber-900">Mở rộng</span>
-          </button>
+          </div>
         ) : (
           <>
             {/* Dòng 1: chọn profile (dropdown) + mặc định + ngưỡng + rút gọn */}
@@ -285,9 +329,9 @@ function ProfileEditorPanel({
                 Rút gọn
               </button>
             </div>
-            {/* Dòng 2: tên + mô tả — dùng chiều ngang */}
+            {/* Dòng 2: tên + mô tả (gọn) + toàn màn / tạo profile */}
             <div className="flex w-full min-w-0 flex-wrap items-end gap-x-2 gap-y-1">
-              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[10rem] sm:max-w-[22rem]">
+              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[8rem] sm:max-w-[14rem]">
                 Tên
                 <input
                   value={draft.profileName}
@@ -297,16 +341,53 @@ function ProfileEditorPanel({
                   className="mt-0.5 h-8 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
                 />
               </label>
-              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[12rem]">
-                Mô tả
-                <textarea
-                  value={draft.description}
-                  disabled={!canEdit}
-                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                  rows={1}
-                  className="mt-0.5 max-h-14 min-h-[2rem] w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-sm leading-snug text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
-                />
-              </label>
+              <div className="flex min-w-0 flex-[1.25] basis-[min(100%,12rem)] items-end gap-1">
+                <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700">
+                  Mô tả
+                  <textarea
+                    value={draft.description}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                    rows={1}
+                    title={draft.description.trim() || 'Mô tả profile'}
+                    className="mt-0.5 h-8 max-h-8 w-full resize-none overflow-y-auto rounded border border-slate-200 bg-white px-2 py-1 text-xs leading-tight text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
+                  />
+                </label>
+                <div className="flex shrink-0 flex-col gap-0.5 pb-px sm:flex-row sm:items-end">
+                  {workspaceFullscreen ? (
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceFullscreen(false)}
+                      className="inline-flex items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-semibold leading-none text-slate-800 shadow-sm transition hover:bg-slate-50"
+                      title="Thoát toàn màn (Esc)"
+                    >
+                      <X className="h-3 w-3 shrink-0" aria-hidden />
+                      <span className="hidden sm:inline">Đóng</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceFullscreen(true)}
+                      className="inline-flex items-center justify-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1 text-[11px] font-semibold leading-none text-amber-950 shadow-sm transition hover:bg-amber-100"
+                      title="Toàn màn"
+                    >
+                      <Maximize2 className="h-3 w-3 shrink-0" aria-hidden />
+                      <span className="hidden min-[420px]:inline">Toàn màn</span>
+                    </button>
+                  )}
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onCreateProfile}
+                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-[11px] font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      title="Tạo profile mới"
+                    >
+                      + Tạo
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -563,37 +644,6 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
         ].join(' ')}
       >
         <h2 className="sr-only">Bộ chấm điểm — profiles</h2>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-b border-slate-200 pb-2 md:pb-3">
-          {workspaceFullscreen ? (
-            <button
-              type="button"
-              onClick={() => setWorkspaceFullscreen(false)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-            >
-              <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Đóng (Esc)
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setWorkspaceFullscreen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
-            >
-              <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Toàn màn
-            </button>
-          )}
-          {canEdit ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void createProfile()}
-              className="rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-            >
-              + Tạo profile
-            </button>
-          ) : null}
-        </div>
 
         {!canEdit ? (
           <p className="mt-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -633,9 +683,45 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             ].join(' ')}
           >
             {!selectedProfile ? (
-              <p className="text-sm text-slate-600">
-                {loading ? 'Đang tải…' : 'Chưa có profile — bấm «Tạo profile».'}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="min-w-0 flex-1 text-sm text-slate-600">
+                  {loading ? 'Đang tải…' : 'Chưa có profile — bấm «+ Tạo» hoặc tạo từ Cài đặt.'}
+                </p>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                  {workspaceFullscreen ? (
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceFullscreen(false)}
+                      className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+                      title="Thoát toàn màn (Esc)"
+                    >
+                      <X className="h-3 w-3 shrink-0" aria-hidden />
+                      Đóng
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceFullscreen(true)}
+                      className="inline-flex items-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1 text-[11px] font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
+                      title="Toàn màn"
+                    >
+                      <Maximize2 className="h-3 w-3 shrink-0" aria-hidden />
+                      Toàn màn
+                    </button>
+                  )}
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void createProfile()}
+                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      title="Tạo profile mới"
+                    >
+                      + Tạo profile
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             ) : (
               <ProfileEditorPanel
                 key={`${selectedProfile.id}-${selectedProfile.updatedAt.toMillis()}`}
@@ -654,6 +740,9 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 setSaveMsg={setSaveMsg}
                 onDeleted={() => setSelectedId(null)}
                 workspaceLayout={workspaceFullscreen}
+                workspaceFullscreen={workspaceFullscreen}
+                setWorkspaceFullscreen={setWorkspaceFullscreen}
+                onCreateProfile={() => void createProfile()}
               />
             )}
           </div>
