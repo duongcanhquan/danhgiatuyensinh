@@ -80,17 +80,8 @@ export function Layout() {
               <div className="min-w-0">
                 <div className="hidden min-w-0 flex-col gap-0.5 md:flex">
                   <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0 leading-tight">
-                    <span className="font-display shrink-0 text-base font-semibold tracking-tight text-amber-100 md:text-lg">
-                      VietMy College
-                    </span>
-                    <span className="shrink-0 text-amber-400/45" aria-hidden>
-                      ·
-                    </span>
-                    <span
-                      className="min-w-0 truncate text-sm font-medium text-amber-50/95 md:text-base"
-                      title={profile?.displayName ?? ''}
-                    >
-                      {profile?.displayName ?? 'Khách'}
+                    <span className="font-display shrink-0 text-base font-semibold tracking-wide text-amber-100 md:text-lg">
+                      VIETMY COLLEGE
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -109,27 +100,42 @@ export function Layout() {
                     ) : null}
                   </div>
                 </div>
-                <div className="flex min-w-0 flex-col gap-0.5 md:hidden">
-                  <p className="truncate font-display text-base font-semibold leading-tight text-amber-100">VietMy College</p>
-                  {profile?.displayName ? (
-                    <p className="truncate text-sm font-medium text-amber-50/90">{profile.displayName}</p>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {profile ? (
-                      <span className="max-w-[12rem] truncate text-xs text-amber-200/80">{USER_ROLE_LABELS[profile.role]}</span>
-                    ) : null}
-                    {!firebaseUser && import.meta.env.DEV ? (
-                      <span className="text-xs font-medium text-amber-300/85">Bản thử</span>
-                    ) : null}
+                <div className="flex w-full min-w-0 flex-col gap-1.5 md:hidden">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-display text-base font-semibold tracking-wide leading-tight text-amber-100">
+                        VIETMY COLLEGE
+                      </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        {profile ? (
+                          <span className="max-w-[12rem] truncate text-xs text-amber-200/80">{USER_ROLE_LABELS[profile.role]}</span>
+                        ) : null}
+                        {!firebaseUser && import.meta.env.DEV ? (
+                          <span className="text-xs font-medium text-amber-300/85">Bản thử</span>
+                        ) : null}
+                      </div>
+                    </div>
                     {showSignOut ? (
-                      <button
-                        type="button"
-                        onClick={() => void signOut()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/18 bg-white/[0.08] px-2.5 py-1 text-xs font-semibold text-amber-50"
-                      >
-                        <LogOut className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
-                        Đăng xuất
-                      </button>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <p
+                          className="max-w-[9.5rem] truncate text-right text-sm font-semibold leading-tight text-amber-50/95"
+                          title={profile?.displayName ?? 'Khách'}
+                        >
+                          {profile?.displayName ?? 'Khách'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void signOut()}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/18 bg-white/[0.08] px-2.5 py-1 text-xs font-semibold text-amber-50"
+                        >
+                          <LogOut className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
+                          Đăng xuất
+                        </button>
+                      </div>
+                    ) : profile?.displayName ? (
+                      <p className="max-w-[9.5rem] shrink-0 truncate text-right text-sm font-semibold text-amber-50/95">
+                        {profile.displayName}
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -162,14 +168,22 @@ export function Layout() {
             </nav>
 
             {showSignOut ? (
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="order-2 hidden shrink-0 items-center gap-2 rounded-lg border border-white/18 bg-white/[0.08] px-3 py-2 text-sm font-semibold text-amber-50/95 shadow-sm transition hover:border-amber-400/40 hover:bg-amber-500/15 md:inline-flex md:text-[15px]"
-              >
-                <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-                Đăng xuất
-              </button>
+              <div className="order-2 hidden shrink-0 flex-col items-end gap-0.5 md:flex">
+                <span
+                  className="max-w-[16rem] truncate text-right text-sm font-semibold leading-tight text-amber-50/95 md:text-[15px]"
+                  title={profile?.displayName ?? 'Khách'}
+                >
+                  {profile?.displayName ?? 'Khách'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/18 bg-white/[0.08] px-3 py-2 text-sm font-semibold text-amber-50/95 shadow-sm transition hover:border-amber-400/40 hover:bg-amber-500/15 md:text-[15px]"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                  Đăng xuất
+                </button>
+              </div>
             ) : null}
 
             <button

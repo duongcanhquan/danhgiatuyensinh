@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import { motion, AnimatePresence } from 'motion/react'
 import { ChevronRight, CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
 import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
@@ -9,8 +8,6 @@ import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useAuth } from '../hooks/useAuth'
 import { ProfileDropCanvas } from './ProfileDropCanvas'
 import { RuleLibrarySidebar } from './RuleLibrarySidebar'
-import { VietMyAccentHeading } from './VietMyAccentHeading'
-
 function emptyProfileDraft(): Omit<ScoringProfile, 'id' | 'createdAt' | 'updatedAt'> {
   return {
     profileName: '',
@@ -42,6 +39,9 @@ function ProfileEditorPanel({
   db,
   profile,
   allProfiles,
+  profileList,
+  onSelectProfileId,
+  profilesLoading,
   canEdit,
   busy,
   setBusy,
@@ -53,6 +53,10 @@ function ProfileEditorPanel({
   profile: ScoringProfile
   /** Toàn bộ profile (để gỡ cờ mặc định khác khi lưu). */
   allProfiles: ScoringProfile[]
+  /** Danh sách profile cho dropdown chọn nhanh. */
+  profileList: ScoringProfile[]
+  onSelectProfileId: (id: string) => void
+  profilesLoading: boolean
   canEdit: boolean
   busy: boolean
   setBusy: (v: boolean) => void
@@ -174,33 +178,37 @@ function ProfileEditorPanel({
           </button>
         ) : (
           <>
-            <div className="mb-1 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setMetaCollapsed(true)
-                  setRuleLibraryCollapsed(true)
-                }}
-                aria-expanded={true}
-                title="Thu gọn tên, ngưỡng, mô tả và cột thư viện — canvas rộng hơn"
-                className="rounded px-2 py-0.5 text-xs font-semibold text-amber-900 underline-offset-2 hover:bg-amber-50 hover:underline"
-              >
-                Rút gọn
-              </button>
-            </div>
-            <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-2 sm:gap-y-1">
-              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[8rem] sm:max-w-[14rem]">
-                Tên
-                <input
-                  value={draft.profileName}
-                  disabled={!canEdit}
-                  onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
-                  placeholder="Tên profile"
-                  className="mt-0.5 h-8 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
-                />
+            {/* Dòng 1: chọn profile (dropdown) + mặc định + ngưỡng + rút gọn */}
+            <div className="flex w-full min-w-0 flex-wrap items-end gap-x-2 gap-y-1">
+              <label className="min-w-0 flex-1 basis-[min(100%,14rem)] text-xs font-medium leading-none text-slate-700 sm:min-w-[11rem]">
+                Profile
+                <div className="relative mt-0.5">
+                  <select
+                    value={profile.id}
+                    disabled={profilesLoading || !profileList.length}
+                    onChange={(e) => onSelectProfileId(e.target.value)}
+                    title="Chọn profile để chỉnh sửa"
+                    className="h-8 w-full appearance-none truncate rounded border border-slate-200 bg-white py-1 pl-2 pr-7 text-sm font-semibold text-slate-900 shadow-inner outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
+                  >
+                    {!profileList.length && !profilesLoading ? (
+                      <option value="" disabled>
+                        Chưa có profile
+                      </option>
+                    ) : null}
+                    {profileList.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-white text-slate-900">
+                        {p.profileName.trim() || '—'} · HOT≥{p.thresholds.hotMinScore} · WARM≥{p.thresholds.warmMinScore}
+                        {p.isDefaultForImport ? ' · Mặc định' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">
+                    ▾
+                  </span>
+                </div>
               </label>
               <label
-                className="flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded border border-slate-200/80 bg-white px-2 text-xs font-medium leading-none text-slate-800 sm:mb-0"
+                className="flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded border border-slate-200/80 bg-white px-2 text-xs font-medium leading-none text-slate-800"
                 title={defaultProfileTitle}
               >
                 <input
@@ -212,61 +220,84 @@ function ProfileEditorPanel({
                 />
                 <span className="whitespace-nowrap">Mặc định</span>
               </label>
-              <div className="flex flex-wrap items-end gap-1.5">
-                <label className="w-12 text-xs font-medium leading-none text-slate-700">
-                  HOT
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={draft.thresholds.hotMinScore}
-                    disabled={!canEdit}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        thresholds: { ...draft.thresholds, hotMinScore: Number(e.target.value) },
-                      })
-                    }
-                    className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
-                  />
-                </label>
-                <label className="w-12 text-xs font-medium leading-none text-slate-700">
-                  WARM
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={draft.thresholds.warmMinScore}
-                    disabled={!canEdit}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        thresholds: { ...draft.thresholds, warmMinScore: Number(e.target.value) },
-                      })
-                    }
-                    className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="mb-0.5 flex h-8 items-end pb-0.5 text-slate-400 hover:text-slate-600"
-                  title={thresholdExplainTitle}
-                  aria-label={thresholdExplainTitle}
-                >
-                  <CircleHelp className="h-4 w-4 shrink-0" aria-hidden />
-                </button>
-              </div>
+              <label className="w-12 shrink-0 text-xs font-medium leading-none text-slate-700">
+                HOT
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={draft.thresholds.hotMinScore}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      thresholds: { ...draft.thresholds, hotMinScore: Number(e.target.value) },
+                    })
+                  }
+                  className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
+                />
+              </label>
+              <label className="w-12 shrink-0 text-xs font-medium leading-none text-slate-700">
+                WARM
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={draft.thresholds.warmMinScore}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      thresholds: { ...draft.thresholds, warmMinScore: Number(e.target.value) },
+                    })
+                  }
+                  className="mt-0.5 h-8 w-full rounded border border-amber-200/80 bg-white px-1.5 text-sm tabular-nums text-slate-900 disabled:opacity-50"
+                />
+              </label>
+              <button
+                type="button"
+                className="mb-0.5 flex h-8 shrink-0 items-end pb-0.5 text-slate-400 hover:text-slate-600"
+                title={thresholdExplainTitle}
+                aria-label={thresholdExplainTitle}
+              >
+                <CircleHelp className="h-4 w-4 shrink-0" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMetaCollapsed(true)
+                  setRuleLibraryCollapsed(true)
+                }}
+                aria-expanded={true}
+                title="Thu gọn tên, ngưỡng, mô tả và cột thư viện — canvas rộng hơn"
+                className="ml-auto shrink-0 rounded px-2 py-0.5 text-xs font-semibold text-amber-900 underline-offset-2 hover:bg-amber-50 hover:underline"
+              >
+                Rút gọn
+              </button>
             </div>
-            <label className="mt-1 block text-xs font-medium leading-none text-slate-700">
-              Mô tả
-              <textarea
-                value={draft.description}
-                disabled={!canEdit}
-                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                rows={1}
-                className="mt-0.5 max-h-14 min-h-[2rem] w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-sm leading-snug text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
-              />
-            </label>
+            {/* Dòng 2: tên + mô tả — dùng chiều ngang */}
+            <div className="flex w-full min-w-0 flex-wrap items-end gap-x-2 gap-y-1">
+              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[10rem] sm:max-w-[22rem]">
+                Tên
+                <input
+                  value={draft.profileName}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
+                  placeholder="Tên profile"
+                  className="mt-0.5 h-8 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
+                />
+              </label>
+              <label className="min-w-0 flex-1 text-xs font-medium leading-none text-slate-700 sm:min-w-[12rem]">
+                Mô tả
+                <textarea
+                  value={draft.description}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                  rows={1}
+                  className="mt-0.5 max-h-14 min-h-[2rem] w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-sm leading-snug text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
+                />
+              </label>
+            </div>
           </>
         )}
       </div>
@@ -392,11 +423,6 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
     [profiles, effectiveSelectedId],
   )
 
-  const selectProfile = useCallback((p: ScoringProfile) => {
-    setSelectedId(p.id)
-    setSaveMsg(null)
-  }, [])
-
   const createProfile = useCallback(async () => {
     if (!canEdit) return
     setBusy(true)
@@ -433,43 +459,37 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             : 'rounded-[22px] border bg-white/95 p-3 shadow-sm md:p-4',
         ].join(' ')}
       >
-        <div className="flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-slate-200 pb-2 md:pb-3">
-          <div className="min-w-0">
-            <VietMyAccentHeading as="h2" tone="onLight" size="lg">
-              Bộ chấm điểm (Profiles)
-            </VietMyAccentHeading>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {workspaceFullscreen ? (
-              <button
-                type="button"
-                onClick={() => setWorkspaceFullscreen(false)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-              >
-                <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Đóng (Esc)
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setWorkspaceFullscreen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
-              >
-                <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Toàn màn
-              </button>
-            )}
-            {canEdit ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void createProfile()}
-                className="rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-              >
-                + Tạo profile
-              </button>
-            ) : null}
-          </div>
+        <h2 className="sr-only">Bộ chấm điểm — profiles</h2>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-b border-slate-200 pb-2 md:pb-3">
+          {workspaceFullscreen ? (
+            <button
+              type="button"
+              onClick={() => setWorkspaceFullscreen(false)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+            >
+              <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Đóng (Esc)
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setWorkspaceFullscreen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
+            >
+              <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Toàn màn
+            </button>
+          )}
+          {canEdit ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void createProfile()}
+              className="rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+            >
+              + Tạo profile
+            </button>
+          ) : null}
         </div>
 
         {!canEdit ? (
@@ -503,62 +523,6 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             workspaceFullscreen ? 'min-h-0 overflow-hidden' : 'min-h-[240px]',
           ].join(' ')}
         >
-          <div className="flex shrink-0 items-stretch gap-1.5 rounded-lg border border-slate-200 bg-white/90 p-1 shadow-inner">
-            <p className="flex w-[5.5rem] shrink-0 items-center justify-center rounded border border-slate-100 bg-slate-50 px-0.5 py-0.5 text-center text-xs font-bold uppercase leading-tight tracking-tight text-slate-600">
-              Chọn profile
-            </p>
-            <div className="scroll-touch flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden py-0.5 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1">
-              {loading ? (
-                <p className="shrink-0 self-center text-xs text-slate-600">Đang tải…</p>
-              ) : !profiles.length ? (
-                <p className="min-w-0 shrink-0 self-center rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
-                  Chưa có profile — bấm «Tạo profile».
-                </p>
-              ) : (
-                <AnimatePresence initial={false} mode="popLayout">
-                  {profiles.map((p) => {
-                    const meta = `${(p.ruleBlocks?.length ?? 0) || p.rules.length} · ${p.thresholds.hotMinScore}/${p.thresholds.warmMinScore}`
-                    const title = [p.profileName.trim() || '—', p.description?.trim() || '—', meta].join(' · ')
-                    return (
-                    <motion.button
-                      key={p.id}
-                      type="button"
-                      layout
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      title={title}
-                      onClick={() => selectProfile(p)}
-                      className={[
-                        'flex h-9 max-w-[12.5rem] shrink-0 items-center gap-2 rounded border px-2 text-left transition-all duration-200',
-                        p.id === effectiveSelectedId
-                          ? 'border-amber-400 bg-amber-50 shadow-sm ring-1 ring-amber-200/80'
-                          : 'border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50/40',
-                      ].join(' ')}
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-slate-900">
-                        {p.profileName.trim() || '—'}
-                      </span>
-                      {p.isDefaultForImport ? (
-                        <span
-                          className="shrink-0 rounded bg-amber-500 px-1 py-0.5 text-[10px] font-extrabold uppercase text-white"
-                          title="Mặc định"
-                        >
-                          D
-                        </span>
-                      ) : null}
-                      <span className="shrink-0 font-mono text-xs tabular-nums leading-none text-slate-500">
-                        {meta}
-                      </span>
-                    </motion.button>
-                    )
-                  })}
-                </AnimatePresence>
-              )}
-            </div>
-          </div>
-
           <div
             className={[
               'flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-gradient-to-br from-sky-50/40 via-white to-amber-50/30 p-2 shadow-inner md:p-2',
@@ -566,13 +530,21 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             ].join(' ')}
           >
             {!selectedProfile ? (
-              <p className="text-sm text-slate-600">Chưa có profile hoặc đang tải.</p>
+              <p className="text-sm text-slate-600">
+                {loading ? 'Đang tải…' : 'Chưa có profile — bấm «Tạo profile».'}
+              </p>
             ) : (
               <ProfileEditorPanel
                 key={`${selectedProfile.id}-${selectedProfile.updatedAt.toMillis()}`}
                 db={db}
                 profile={selectedProfile}
                 allProfiles={profiles}
+                profileList={profiles}
+                profilesLoading={loading}
+                onSelectProfileId={(id) => {
+                  setSelectedId(id)
+                  setSaveMsg(null)
+                }}
                 canEdit={canEdit}
                 busy={busy}
                 setBusy={setBusy}
