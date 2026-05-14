@@ -62,7 +62,11 @@ export function AnalyticsAdvancedView() {
     totalLeadCountError,
     scopeTagCounts,
     scopeFetchTruncated,
-  } = useLeads({ dataMode: 'fullScope' })
+  } = useLeads({
+    dataMode: 'fullScope',
+    maxFullScopeLeads: MAX_FULL_SCOPE_LEADS,
+    includeScopeTagCounts: true,
+  })
   const { activeScoringProfile, scoreByLeadId } = useLeadScoring(leads)
 
   const funnelData = useMemo(() => {

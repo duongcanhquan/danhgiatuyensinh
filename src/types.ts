@@ -112,6 +112,11 @@ export const PERMISSIONS = [
   'dashboard:head_of_profession',
   'dashboard:head_of_department',
   'config:scoring_rules',
+  /**
+   * TVV: tạo / sửa / xóa profile chấm điểm **do chính mình tạo** (`createdBy` = uid).
+   * Profile toàn trường (không `createdBy` hoặc `createdBy` khác) chỉ xem — không ghi đè profile người khác.
+   */
+  'config:scoring_profiles_own',
   'config:master_data',
   'config:playbooks',
   'config:routing_policies',
@@ -299,7 +304,7 @@ export interface Lead {
    */
   scoringSignals?: LeadScoringSignals
   /**
-   * Cờ bổ sung theo `ScoringProfile.customScoringSignals[].id` — TVV bật trên chi tiết hồ sơ;
+   * Cờ bổ sung theo id tín hiệu TVV tùy chỉnh (toàn trường trong `scoringAux/tvvSignalDefinitions` và/hoặc legacy trên profile);
    * điểm cộng/trừ do profile định nghĩa (không cần thêm khối canvas).
    */
   scoringCustomSignals?: Record<string, boolean>
@@ -492,7 +497,7 @@ export interface ScoringProfile {
    * instead of flat `rules`.
    */
   ruleBlocks?: ScoringRuleBlock[]
-  /** Tín hiệu checklist bổ sung (điểm trực tiếp, không qua khối canvas). */
+  /** @deprecated Dùng `scoringAux/tvvSignalDefinitions` (Cài đặt → Quy tắc mẫu). Giữ để tương thích — gộp với bản toàn trường khi chấm điểm. */
   customScoringSignals?: ProfileCustomScoringSignal[]
   thresholds: ScoringProfileThresholds
   /** Profile mặc định toàn cục (import + màn hình khi chưa chọn tay) */
@@ -783,6 +788,12 @@ export interface Interaction {
   aiSentiment?: AiSentimentAnalysis
   /** Optional evaluation tag for QA (Head of Profession) */
   evaluationTag?: string
+  /** Snapshot CRM (TVV) tại lúc lưu — hiển thị lịch sử đầy đủ trên client mới */
+  snapshotCrmStatus?: LeadCounselorStatus
+  /** Snapshot funnel tuyển sinh */
+  snapshotPipelineStatus?: LeadPipelineStatus
+  /** Snapshot nhãn ưu tiên (HOT/WARM/…) sau tính điểm */
+  snapshotPriorityTag?: PriorityTag
 }
 
 // -----------------------------------------------------------------------------
@@ -895,6 +906,8 @@ export const FS_COLLECTIONS = {
   scoringProfiles: 'scoringProfiles',
   /** Khối quy tắc mẫu — kéo sang canvas profile (Firestore: `scoringRuleTemplates/{id}`). */
   scoringRuleTemplates: 'scoringRuleTemplates',
+  /** Cấu hình phụ chấm điểm (vd. tín hiệu TVV toàn trường — doc cố định). */
+  scoringAux: 'scoringAux',
   masterData: 'masterData',
   consultingPlaybooks: 'consultingPlaybooks',
   /** Smart Script Hub — modular consulting snippets */
@@ -913,3 +926,6 @@ export const FS_COLLECTIONS = {
 } as const
 
 export type FsCollectionKey = keyof typeof FS_COLLECTIONS
+
+/** Doc cố định: `scoringAux/tvvSignalDefinitions` — checklist tùy chỉnh (Hành vi / Rủi ro) cho chi tiết hồ sơ. */
+export const SCORING_AUX_TVV_SIGNALS_DOC_ID = 'tvvSignalDefinitions' as const

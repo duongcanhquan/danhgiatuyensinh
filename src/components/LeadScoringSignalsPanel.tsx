@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { doc, Timestamp, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import type { Lead, LeadScoringSignalKey, LeadScoringSignals, ProfileCustomScoringSignal, ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
-import { ALL_SCORING_SIGNAL_KEYS, SCORING_SIGNAL_META } from '../utils/leadScoringSignals'
+import { leadTouchPatch } from '../utils/leadTouch'
+import { ALL_SCORING_SIGNAL_KEYS, mergeSchoolAndProfileCustomSignals, SCORING_SIGNAL_META } from '../utils/leadScoringSignals'
 import { useMasterData } from '../hooks/useMasterData'
+import { useSchoolTvvSignalDefinitions } from '../hooks/useSchoolTvvSignalDefinitions'
 
 function buildSignalsPatch(
   base: LeadScoringSignals | undefined,
@@ -53,6 +55,7 @@ export function LeadScoringSignalsPanel({
     academicPerformanceLabels,
     catalogs,
   } = useMasterData()
+  const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
   const masterBuckets = useMemo(
     () => ({
       regionLabels,
@@ -88,11 +91,12 @@ export function LeadScoringSignalsPanel({
         const nextSignals = buildSignalsPatch(lead.scoringSignals, key, checked)
         const previewLead: Lead = { ...lead, scoringSignals: nextSignals }
         const ev = activeScoringProfile
-          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile, masterBuckets)
+          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile, masterBuckets, schoolTvvSignalDefs)
           : null
+        const touch = leadTouchPatch()
         const patch: Record<string, unknown> = {
           scoringSignals: nextSignals ?? null,
-          updatedAt: Timestamp.now(),
+          ...touch,
         }
         if (ev) {
           patch.calculatedScore = ev.calculatedScore
@@ -104,7 +108,8 @@ export function LeadScoringSignalsPanel({
           ...(ev
             ? { calculatedScore: ev.calculatedScore, priorityTag: ev.priorityTag }
             : {}),
-          updatedAt: patch.updatedAt as Timestamp,
+          updatedAt: touch.updatedAt,
+          lastTouchedAt: touch.lastTouchedAt,
         })
         setMsg('Đã lưu.')
       } catch (e) {
@@ -117,16 +122,16 @@ export function LeadScoringSignalsPanel({
   }
 
   const customBehavior = useMemo(() => {
-    const defs = activeScoringProfile?.customScoringSignals
+    const defs = mergeSchoolAndProfileCustomSignals(schoolTvvSignalDefs, activeScoringProfile?.customScoringSignals)
     if (!defs?.length) return []
     return defs.filter((d) => d.group === 'behavior')
-  }, [activeScoringProfile])
+  }, [activeScoringProfile, schoolTvvSignalDefs])
 
   const customRisk = useMemo(() => {
-    const defs = activeScoringProfile?.customScoringSignals
+    const defs = mergeSchoolAndProfileCustomSignals(schoolTvvSignalDefs, activeScoringProfile?.customScoringSignals)
     if (!defs?.length) return []
     return defs.filter((d) => d.group === 'risk')
-  }, [activeScoringProfile])
+  }, [activeScoringProfile, schoolTvvSignalDefs])
 
   const toggleCustom = (def: ProfileCustomScoringSignal, checked: boolean) => {
     if (!canEdit || busy) return
@@ -137,11 +142,12 @@ export function LeadScoringSignalsPanel({
         const nextCustom = buildCustomSignalsPatch(lead.scoringCustomSignals, def.id, checked)
         const previewLead: Lead = { ...lead, scoringCustomSignals: nextCustom }
         const ev = activeScoringProfile
-          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile, masterBuckets)
+          ? evaluateLead(leadToEvaluationRecord(previewLead), activeScoringProfile, masterBuckets, schoolTvvSignalDefs)
           : null
+        const touch = leadTouchPatch()
         const patch: Record<string, unknown> = {
           scoringCustomSignals: nextCustom ?? null,
-          updatedAt: Timestamp.now(),
+          ...touch,
         }
         if (ev) {
           patch.calculatedScore = ev.calculatedScore
@@ -153,7 +159,8 @@ export function LeadScoringSignalsPanel({
           ...(ev
             ? { calculatedScore: ev.calculatedScore, priorityTag: ev.priorityTag }
             : {}),
-          updatedAt: patch.updatedAt as Timestamp,
+          updatedAt: touch.updatedAt,
+          lastTouchedAt: touch.lastTouchedAt,
         })
         setMsg('Đã lưu.')
       } catch (e) {
@@ -190,8 +197,8 @@ export function LeadScoringSignalsPanel({
     <section className={shell}>
       <h3 className={titleCls}>Hành vi &amp; Rủi ro (chấm điểm)</h3>
       <p className={introCls}>
-        TVV bật khi đúng tình huống. Có mục theo profile đang chọn và mục cố định hệ thống; điểm tính vào bộ chấm điểm
-        hiện tại.
+        TVV bật khi đúng tình huống — <strong>mỗi lần bật/tắt là lưu ngay</strong> lên hệ thống và cập nhật điểm/nhãn theo
+        bộ chấm điểm đang chọn (nếu có). Có mục cố định và mục tùy chỉnh (Cài đặt → Quy tắc mẫu → tín hiệu TVV).
       </p>
       {!canEdit ? <p className={warnCls}>Bạn không có quyền ghi hồ sơ — chỉ xem.</p> : null}
       <div className={groupsWrap}>

@@ -82,7 +82,7 @@ export function BulkLeadActionBar({
                 className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900 transition hover:border-amber-400 hover:bg-amber-100 sm:flex-initial sm:min-h-0 sm:py-2"
               >
                 <GitBranch className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                Đổi giai đoạn CRM
+                Đổi tình trạng tư vấn
               </button>
               <button
                 type="button"

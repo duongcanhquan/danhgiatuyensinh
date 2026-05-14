@@ -4,12 +4,23 @@ import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Sparkles, Wand2, X, Zap } from 'lucide-react'
-import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  deleteField,
+  doc,
+  getDoc,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore'
 import type {
   Lead,
   LeadCounselorStatus,
   LeadPipelineStatus,
   PriorityTag,
+  ProfileCustomScoringSignal,
   ScoringProfile,
   VietMyUserProfile,
 } from '../types'
@@ -20,7 +31,7 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { useLeads, type LeadListServerFilters } from '../hooks/useLeads'
+import { useLeads, mapDoc, type LeadListServerFilters, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
@@ -30,7 +41,12 @@ import { isAdminLikeRole } from '../auth/roleUtils'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
 import { playbooksMatchingLead } from '../utils/playbookMatch'
-import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
+import {
+  evaluateLead,
+  leadToEvaluationRecord,
+  persistedLeadScoringFields,
+  type MasterDataBuckets,
+} from '../utils/scoring'
 import {
   exportEvaluatedLeadsToXlsx,
   exportSelectedEvaluatedLeadsToXlsx,
@@ -55,7 +71,7 @@ import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
-import { counselorStatusToPipeline } from '../utils/leadIdentity'
+import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/leadIdentity'
 import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
@@ -67,6 +83,19 @@ const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
   ENROLLED: 'Đã ghi danh',
   LOST: 'Không còn tiềm năng',
   ARCHIVED: 'Lưu trữ',
+}
+
+function interactionChannelVi(ch: string): string {
+  const m: Record<string, string> = {
+    NOTE: 'Ghi chú',
+    CALL: 'Gọi',
+    SMS: 'SMS',
+    EMAIL: 'Email',
+    ZALO: 'Zalo',
+    IN_PERSON: 'Trực tiếp',
+    SYSTEM: 'Hệ thống',
+  }
+  return m[ch] ?? ch
 }
 
 const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
@@ -184,6 +213,9 @@ export function LeadManagement() {
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
 
+  /** Lọc HOT/WARM/COLD theo điểm profile hiện tại — không dùng `where(priorityTag)`; cần quét gần đây (fullScope). */
+  const tagClientEval = tagFilter !== 'ALL' && !urlQuery.trim()
+
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
     for (const c of directoryUsers) {
@@ -210,7 +242,7 @@ export function LeadManagement() {
     if (scoreMaxParsed != null) o.scoreMax = scoreMaxParsed
     if (statusFilter !== 'ALL') o.pipelineStatus = statusFilter as LeadPipelineStatus
     if (crmStatusFilter !== 'ALL') o.crmStatus = crmStatusFilter as LeadCounselorStatus
-    if (tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
+    if (!tagClientEval && tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
@@ -218,10 +250,12 @@ export function LeadManagement() {
     if (showAdminGlobalFilters) {
       if (adminUploaderIds.length) o.uploadedByIn = adminUploaderIds.slice(0, 10)
       if (adminRegions.length) o.provinceIn = adminRegions.slice(0, 10)
-      if (adminTags.length === 1) {
-        o.priorityTag = adminTags[0]
-      } else if (adminTags.length > 1) {
-        o.priorityTagsIn = adminTags.slice(0, 10) as PriorityTag[]
+      if (!tagClientEval) {
+        if (adminTags.length === 1) {
+          o.priorityTag = adminTags[0]
+        } else if (adminTags.length > 1) {
+          o.priorityTagsIn = adminTags.slice(0, 10) as PriorityTag[]
+        }
       }
       if (adminSchools.length) o.highSchoolIn = adminSchools.slice(0, 10)
       if (adminAssignedCounselorIds.length) o.assignedCounselorIn = adminAssignedCounselorIds.slice(0, 10)
@@ -253,7 +287,10 @@ export function LeadManagement() {
     scoreMinInput,
     scoreMaxInput,
     aiShortlistOnly,
+    tagClientEval,
   ])
+
+  const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
 
   const {
     leads,
@@ -263,11 +300,15 @@ export function LeadManagement() {
     currentPage,
     totalPages: firestoreTotalPages,
     setPage,
+    scopeFetchTruncated,
+    applyLocalLeadPatch,
+    refetchLeads,
   } = useLeads({
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: 'paged',
+    dataMode: tagClientEval ? 'fullScope' : 'paged',
+    maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -291,12 +332,22 @@ export function LeadManagement() {
     resolvedScoringProfileId,
     activeScoringProfile,
     scoreByLeadId,
+    schoolTvvSignalDefs,
   } = useLeadScoring(leads)
 
   const effectiveLeadTag = useCallback(
     (l: Lead) => (activeScoringProfile ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag),
     [activeScoringProfile, scoreByLeadId],
   )
+
+  const tagQuickCounts = useMemo(() => {
+    const m: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
+    for (const l of leads) {
+      const t = effectiveLeadTag(l)
+      if (t in m) m[t]++
+    }
+    return m
+  }, [leads, effectiveLeadTag])
 
   const {
     snippets: scriptSnippets,
@@ -353,7 +404,10 @@ export function LeadManagement() {
     }
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [showAdminGlobalFilters, regionLabels, leads])
+
   const [selected, setSelected] = useState<Lead | null>(null)
+  /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
+  const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
@@ -368,6 +422,66 @@ export function LeadManagement() {
     skipped: number
     passed: Lead[]
   }>(null)
+
+  const openLeadIdFromUrl = (searchParams.get('open') ?? '').trim()
+
+  useEffect(() => {
+    leadDetailUnsavedRef.current = false
+  }, [selected?.id])
+
+  const closeLeadDetailPanel = useCallback(() => {
+    if (leadDetailUnsavedRef.current) {
+      const ok = window.confirm(
+        'Có thay đổi chưa lưu (funnel, ghi chú hoặc tình trạng TVV nếu chỉnh ở cột trái). Đóng chi tiết và bỏ các thay đổi?',
+      )
+      if (!ok) return
+    }
+    leadDetailUnsavedRef.current = false
+    setSelected(null)
+  }, [])
+
+  useEffect(() => {
+    setPage(1)
+  }, [leadServerFiltersKey, setPage])
+
+  useEffect(() => {
+    if (!openLeadIdFromUrl || !db || !configured) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, openLeadIdFromUrl))
+        if (!cancelled) {
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev)
+              next.delete('open')
+              return next
+            },
+            { replace: true },
+          )
+        }
+        if (cancelled) return
+        if (!snap.exists()) return
+        const row = mapDoc(openLeadIdFromUrl, snap.data() as Record<string, unknown>)
+        if (row) setSelected(row)
+      } catch (e) {
+        console.error(e)
+        if (!cancelled) {
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev)
+              next.delete('open')
+              return next
+            },
+            { replace: true },
+          )
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [openLeadIdFromUrl, db, configured, setSearchParams])
 
   const isElevatedLeadScope = isElevatedForAdminFilters(profile?.role)
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
@@ -415,16 +529,31 @@ export function LeadManagement() {
       scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
     const maxScore =
       scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput)) ? null : Number(scoreMaxInput)
-    if (minScore == null && maxScore == null) return leads
-    return leads.filter((l) => {
-      const displayScore = activeScoringProfile
-        ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
-        : l.calculatedScore
-      if (minScore != null && displayScore < minScore) return false
-      if (maxScore != null && displayScore > maxScore) return false
-      return true
-    })
-  }, [leads, scoreMinInput, scoreMaxInput, activeScoringProfile, scoreByLeadId])
+    let rows = leads
+    if (minScore != null || maxScore != null) {
+      rows = leads.filter((l) => {
+        const displayScore = activeScoringProfile
+          ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
+          : l.calculatedScore
+        if (minScore != null && displayScore < minScore) return false
+        if (maxScore != null && displayScore > maxScore) return false
+        return true
+      })
+    }
+    if (tagClientEval && tagFilter !== 'ALL') {
+      rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
+    }
+    return rows
+  }, [
+    leads,
+    scoreMinInput,
+    scoreMaxInput,
+    activeScoringProfile,
+    scoreByLeadId,
+    tagClientEval,
+    tagFilter,
+    effectiveLeadTag,
+  ])
 
   const sortedFiltered = useMemo(() => {
     const rows = [...filtered]
@@ -434,8 +563,7 @@ export function LeadManagement() {
       activeScoringProfile
         ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
         : l.calculatedScore
-    const tagOf = (l: Lead) =>
-      activeScoringProfile ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag
+    const tagOf = (l: Lead) => effectiveLeadTag(l)
     const mlOf = (l: Lead) => resolveMlWinDisplay(l).mlWinProbability
     rows.sort((a, b) => {
       switch (sortKey) {
@@ -460,7 +588,7 @@ export function LeadManagement() {
       }
     })
     return rows
-  }, [filtered, sortKey, sortDir, activeScoringProfile, scoreByLeadId])
+  }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId])
 
   /** Phân trang theo Firestore / bucket tìm kiếm — hook đã trả đúng một trang (≤30 dòng). */
   const displayTotalPages = Math.max(1, firestoreTotalPages)
@@ -487,6 +615,7 @@ export function LeadManagement() {
     if (t) next.set('q', t)
     else next.delete('q')
     setSearchParams(next, { replace: true })
+    setPage(1)
   }
 
   const clearQuickFilters = useCallback(() => {
@@ -499,6 +628,13 @@ export function LeadManagement() {
     setScoreMinInput('')
     setScoreMaxInput('')
     setAiShortlistOnly(false)
+    setAdminUploaderIds([])
+    setAdminRegions([])
+    setAdminTags([])
+    setAdminSchools([])
+    setAdminAssignedCounselorIds([])
+    setAdminDateFrom('')
+    setAdminDateTo('')
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -510,11 +646,173 @@ export function LeadManagement() {
     setPage(1)
   }, [setSearchParams, setPage])
 
+  const activeFilterChips = useMemo(() => {
+    type Chip = { id: string; label: string; onClear: () => void }
+    const out: Chip[] = []
+    const qRaw = (searchParams.get('q') ?? '').trim()
+    if (qRaw) {
+      const short = qRaw.length > 26 ? `${qRaw.slice(0, 26)}…` : qRaw
+      out.push({
+        id: 'q',
+        label: `Tìm «${short}»`,
+        onClear: () => {
+          setSearchParams(
+            (prev) => {
+              const n = new URLSearchParams(prev)
+              n.delete('q')
+              return n
+            },
+            { replace: true },
+          )
+          setPage(1)
+        },
+      })
+    }
+    if (tagFilter !== 'ALL') {
+      out.push({
+        id: 'tag',
+        label: `Nhãn: ${tagFilter}`,
+        onClear: () => {
+          setTagFilter('ALL')
+          setPage(1)
+        },
+      })
+    }
+    if (regionFilter !== 'ALL') {
+      out.push({
+        id: 'region',
+        label: `Vùng: ${regionFilter}`,
+        onClear: () => {
+          setRegionFilter('ALL')
+          setPage(1)
+        },
+      })
+    }
+    if (majorFilter !== 'ALL') {
+      out.push({
+        id: 'major',
+        label: `Hệ: ${majorFilter.length > 20 ? `${majorFilter.slice(0, 20)}…` : majorFilter}`,
+        onClear: () => {
+          setMajorFilter('ALL')
+          setPage(1)
+        },
+      })
+    }
+    if (statusFilter !== 'ALL') {
+      out.push({
+        id: 'pipeline',
+        label: `Funnel: ${PIPELINE_LABEL[statusFilter as LeadPipelineStatus]}`,
+        onClear: () => {
+          setStatusFilter('ALL')
+          setPage(1)
+        },
+      })
+    }
+    if (crmStatusFilter !== 'ALL') {
+      out.push({
+        id: 'crm',
+        label: `Tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[crmStatusFilter as LeadCounselorStatus]}`,
+        onClear: () => {
+          setCrmStatusFilter('ALL')
+          setPage(1)
+        },
+      })
+    }
+    if (sourceFilter !== 'ALL') {
+      out.push({
+        id: 'source',
+        label: `Nguồn: ${sourceFilter.length > 18 ? `${sourceFilter.slice(0, 18)}…` : sourceFilter}`,
+        onClear: () => {
+          setSourceFilter('ALL')
+          setPage(1)
+        },
+      })
+    }
+    const smin = scoreMinInput.trim()
+    const smax = scoreMaxInput.trim()
+    const minN = smin === '' || Number.isNaN(Number(smin)) ? null : Number(smin)
+    const maxN = smax === '' || Number.isNaN(Number(smax)) ? null : Number(smax)
+    if (minN != null || maxN != null) {
+      out.push({
+        id: 'score',
+        label:
+          minN != null && maxN != null
+            ? `Điểm: ${minN}–${maxN}`
+            : minN != null
+              ? `Điểm ≥ ${minN}`
+              : `Điểm ≤ ${maxN}`,
+        onClear: () => {
+          setScoreMinInput('')
+          setScoreMaxInput('')
+          setPage(1)
+        },
+      })
+    }
+    if (aiShortlistOnly) {
+      out.push({
+        id: 'ai',
+        label: 'AI Shortlist',
+        onClear: () => {
+          setAiShortlistOnly(false)
+          setPage(1)
+        },
+      })
+    }
+    const adminHas =
+      showAdminGlobalFilters &&
+      (adminUploaderIds.length > 0 ||
+        adminRegions.length > 0 ||
+        adminTags.length > 0 ||
+        adminSchools.length > 0 ||
+        adminAssignedCounselorIds.length > 0 ||
+        Boolean(adminDateFrom.trim()) ||
+        Boolean(adminDateTo.trim()))
+    if (adminHas) {
+      out.push({
+        id: 'admin',
+        label: 'Bộ lọc Admin',
+        onClear: () => {
+          setAdminUploaderIds([])
+          setAdminRegions([])
+          setAdminTags([])
+          setAdminSchools([])
+          setAdminAssignedCounselorIds([])
+          setAdminDateFrom('')
+          setAdminDateTo('')
+          setPage(1)
+        },
+      })
+    }
+    return out
+  }, [
+    searchParams,
+    tagFilter,
+    regionFilter,
+    majorFilter,
+    statusFilter,
+    crmStatusFilter,
+    sourceFilter,
+    scoreMinInput,
+    scoreMaxInput,
+    aiShortlistOnly,
+    showAdminGlobalFilters,
+    adminUploaderIds,
+    adminRegions,
+    adminTags,
+    adminSchools,
+    adminAssignedCounselorIds,
+    adminDateFrom,
+    adminDateTo,
+    setSearchParams,
+    setPage,
+  ])
+
   const handleExportEvaluated = () => {
     const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
     for (const l of sortedFiltered) {
       const ev = activeScoringProfile
-        ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets)
+        ? scoreByLeadId.get(l.id) ??
+          evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs)
         : { calculatedScore: l.calculatedScore, priorityTag: l.priorityTag }
       m.set(l.id, ev)
     }
@@ -528,13 +826,14 @@ export function LeadManagement() {
       const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
       for (const l of rows) {
         const ev = activeScoringProfile
-          ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets)
+          ? scoreByLeadId.get(l.id) ??
+            evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs)
           : { calculatedScore: l.calculatedScore, priorityTag: l.priorityTag }
         m.set(l.id, ev)
       }
       return m
     },
-    [activeScoringProfile, scoreByLeadId, scoringMasterBuckets],
+    [activeScoringProfile, scoreByLeadId, scoringMasterBuckets, schoolTvvSignalDefs],
   )
 
   const toggleSelectId = useCallback((id: string, e?: MouseEvent) => {
@@ -587,11 +886,21 @@ export function LeadManagement() {
       for (const id of selectedIds) {
         const ref = doc(db, FS_COLLECTIONS.leads, id)
         const prev = leads.find((x) => x.id === id)
-        await updateDoc(ref, {
-          assignedCounselorId: bulkReassignUid,
-          assignedTo: bulkReassignUid,
-          ...leadTouchPatch(),
-        })
+        const assignPatch = assigneeFirestoreMirror(bulkReassignUid) as Partial<Lead>
+        const scoreFields = prev
+          ? persistedLeadScoringFields(
+              prev,
+              assignPatch,
+              activeScoringProfile,
+              scoringMasterBuckets,
+              schoolTvvSignalDefs,
+            )
+          : {}
+        const touch = leadTouchPatch()
+        const localPatch = { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>
+        await updateDoc(ref, localPatch)
+        applyLocalLeadPatch(id, localPatch)
+        setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
@@ -602,6 +911,7 @@ export function LeadManagement() {
       }
       setBulkModal(null)
       setSelectedIds(new Set())
+      refetchLeads()
     } catch (e) {
       console.error(e)
     } finally {
@@ -616,6 +926,11 @@ export function LeadManagement() {
     reassignPickList,
     isElevatedLeadScope,
     canPeerReassignLeads,
+    activeScoringProfile,
+    scoringMasterBuckets,
+    schoolTvvSignalDefs,
+    applyLocalLeadPatch,
+    refetchLeads,
   ])
 
   const applyBulkCrmStatus = useCallback(async () => {
@@ -626,27 +941,41 @@ export function LeadManagement() {
       for (const id of selectedIds) {
         const prev = leads.find((x) => x.id === id)
         const ref = doc(db, FS_COLLECTIONS.leads, id)
-        await updateDoc(ref, {
+        const dataPatch: Partial<Lead> = {
           status: bulkCrmStatus,
           pipelineStatus: counselorStatusToPipeline(bulkCrmStatus),
-          ...leadTouchPatch(),
-        })
+        }
+        const scoreFields = prev
+          ? persistedLeadScoringFields(
+              prev,
+              dataPatch,
+              activeScoringProfile,
+              scoringMasterBuckets,
+              schoolTvvSignalDefs,
+            )
+          : {}
+        const touch = leadTouchPatch()
+        const localPatch = { ...dataPatch, ...scoreFields, ...touch } as Partial<Lead>
+        await updateDoc(ref, localPatch)
+        applyLocalLeadPatch(id, localPatch)
+        setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'STATUS_CHANGE',
-          description: `CRM/Kanban (hàng loạt): ${prev ? LEAD_COUNSELOR_STATUS_LABELS[prev.status] : '—'} → ${LEAD_COUNSELOR_STATUS_LABELS[bulkCrmStatus]}`,
+          description: `Tình trạng tư vấn (hàng loạt): ${prev ? LEAD_COUNSELOR_STATUS_LABELS[prev.status] : '—'} → ${LEAD_COUNSELOR_STATUS_LABELS[bulkCrmStatus]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
       }
       setBulkModal(null)
       setSelectedIds(new Set())
+      refetchLeads()
     } catch (e) {
       console.error(e)
     } finally {
       setBulkBusy(false)
     }
-  }, [db, profile, selectedIds, leads, bulkCrmStatus])
+  }, [db, profile, selectedIds, leads, bulkCrmStatus, activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs, applyLocalLeadPatch, refetchLeads])
 
   const executeBulkAiMiner = useCallback(
     async (warmPassed: Lead[]) => {
@@ -697,6 +1026,39 @@ export function LeadManagement() {
           }
         }
         if (ops) await batch.commit()
+        const processedAt = Timestamp.now()
+        const touchAfter = leadTouchPatch()
+        for (const r of results) {
+          const localPatch: Partial<Lead> = {
+            isAiShortlisted: r.isShortlisted,
+            aiShortlistReason:
+              r.reasoning ||
+              (r.isShortlisted ? 'Được AI đánh dấu shortlist — xem nhật ký tương tác.' : 'Không đủ tín hiệu shortlist.'),
+            recommendedAction:
+              r.nextBestAction ||
+              (r.isShortlisted ? 'Liên hệ ngay theo kênh ưu tiên của phụ huynh.' : 'Tiếp tục nuôi lead trong nhóm WARM.'),
+            aiProcessedAt: processedAt,
+            ...touchAfter,
+          }
+          applyLocalLeadPatch(r.leadId, localPatch)
+        }
+        setSelected((p) => {
+          if (!p) return p
+          const r = results.find((x) => x.leadId === p.id)
+          if (!r) return p
+          return {
+            ...p,
+            isAiShortlisted: r.isShortlisted,
+            aiShortlistReason:
+              r.reasoning ||
+              (r.isShortlisted ? 'Được AI đánh dấu shortlist — xem nhật ký tương tác.' : 'Không đủ tín hiệu shortlist.'),
+            recommendedAction:
+              r.nextBestAction ||
+              (r.isShortlisted ? 'Liên hệ ngay theo kênh ưu tiên của phụ huynh.' : 'Tiếp tục nuôi lead trong nhóm WARM.'),
+            aiProcessedAt: processedAt,
+            ...touchAfter,
+          }
+        })
         const performer = profile.displayName?.trim() || profile.email || profile.id
         const shorted = results.filter((x) => x.isShortlisted).length
         await commitAuditLog(db, {
@@ -706,6 +1068,7 @@ export function LeadManagement() {
           performedBy: profile.id,
           performedByName: performer,
         })
+        refetchLeads()
       } catch (e) {
         console.error(e)
         setAiMinerError(e instanceof Error ? e.message : 'Không chạy được AI Lead Miner.')
@@ -714,7 +1077,7 @@ export function LeadManagement() {
         setSelectedIds(new Set())
       }
     },
-    [db, profile, canRunLlmAnalysis],
+    [db, profile, canRunLlmAnalysis, applyLocalLeadPatch, refetchLeads],
   )
 
   const openAiMinerGatekeeper = useCallback(async () => {
@@ -1067,13 +1430,86 @@ export function LeadManagement() {
                 </button>
               </div>
             </div>
+            <div className="mt-2 flex flex-col gap-1.5 border-t border-amber-100/90 pt-2">
+              <p className="text-xs leading-snug text-slate-600">
+                <span className="font-semibold text-slate-800">Lọc nhanh theo nhãn (profile đang chọn)</span>
+                {urlQuery.trim() ? (
+                  <>
+                    {' '}
+                    — khi đang <strong>tìm kiếm</strong>, cột «Nhãn» bên dưới lọc theo <strong>nhãn đã lưu</strong> trên
+                    hồ sơ.
+                  </>
+                ) : (
+                  <>
+                    {' '}
+                    — HOT / WARM / COLD / LOSS được <strong>tính lại</strong> theo bộ điểm đang chọn (tối đa{' '}
+                    {LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ cập nhật gần đây).
+                  </>
+                )}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc nhanh nhãn chấm điểm">
+                <button
+                  type="button"
+                  disabled={!scoringProfiles.length}
+                  onClick={() => {
+                    setTagFilter('ALL')
+                    setPage(1)
+                  }}
+                  className={[
+                    'rounded-full border px-2.5 py-1 text-xs font-semibold transition',
+                    tagFilter === 'ALL'
+                      ? 'border-slate-700 bg-slate-800 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+                  ].join(' ')}
+                >
+                  Tất cả
+                </button>
+                {TAG_OPTIONS.map((tg) => {
+                  const on = tagFilter === tg
+                  const cnt = tagQuickCounts[tg]
+                  return (
+                    <button
+                      key={tg}
+                      type="button"
+                      disabled={!scoringProfiles.length}
+                      onClick={() => {
+                        setTagFilter(tg)
+                        setPage(1)
+                      }}
+                      className={[
+                        'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition',
+                        on
+                          ? tg === 'HOT'
+                            ? 'border-rose-500 bg-rose-600 text-white shadow-sm'
+                            : tg === 'WARM'
+                              ? 'border-amber-500 bg-amber-500 text-amber-950 shadow-sm'
+                              : tg === 'COLD'
+                                ? 'border-sky-400 bg-sky-600 text-white shadow-sm'
+                                : 'border-slate-600 bg-slate-700 text-white shadow-sm'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+                      ].join(' ')}
+                    >
+                      <span className="font-bold tracking-wide">{tg}</span>
+                      <span className="tabular-nums opacity-90">({cnt})</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {tagClientEval && scopeFetchTruncated ? (
+                <p className="text-xs font-medium text-amber-900">
+                  Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
+                  phần ở đuôi danh sách.
+                </p>
+              ) : null}
+            </div>
           </details>
           <label className="min-w-0 w-full text-xs font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
             Tìm kiếm
             <input
               value={searchParams.get('q') ?? ''}
               onChange={(e) => setUrlQuery(e.target.value)}
-              placeholder="Tên, SĐT, email, TVV…"
+              placeholder="Tên, SĐT, mã KH, TVV…"
+              title="Lọc theo chuỗi trên nhiều trường (tên, SĐT, mã KH, mô tả, TVV…). Kết hợp với các lọc bên dưới."
               className="mt-0.5 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
@@ -1083,6 +1519,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Nhãn"
+            title="HOT/WARM/COLD theo profile chấm điểm đang chọn (hoặc nhãn đã lưu khi đang tìm kiếm)."
             value={tagFilter}
             onChange={setTagFilter}
             options={[
@@ -1093,6 +1530,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Vùng"
+            title="Tỉnh / thành trên hồ sơ."
             value={regionFilter}
             onChange={setRegionFilter}
             options={[
@@ -1103,6 +1541,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Hệ ĐT"
+            title="Hệ đào tạo / ngành (educationLevel)."
             value={majorFilter}
             onChange={setMajorFilter}
             options={[
@@ -1112,7 +1551,8 @@ export function LeadManagement() {
           />
           <FilterSelect
             compact
-            label="Pipeline"
+            label="Funnel"
+            title="Giai đoạn tuyển sinh (pipeline) — khác với tình trạng tư vấn TVV."
             value={statusFilter}
             onChange={setStatusFilter}
             options={[
@@ -1125,7 +1565,8 @@ export function LeadManagement() {
           />
           <FilterSelect
             compact
-            label="CRM"
+            label="Tư vấn"
+            title="Tình trạng làm việc của TVV (trường status)."
             value={crmStatusFilter}
             onChange={setCrmStatusFilter}
             options={[
@@ -1136,11 +1577,12 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Nguồn"
+            title="Nguồn lead (source)."
             value={sourceFilter}
             onChange={setSourceFilter}
             options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
           />
-          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500">
+          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
             Điểm từ
             <input
               type="number"
@@ -1151,7 +1593,7 @@ export function LeadManagement() {
               className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
-          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500">
+          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
             Điểm đến
             <input
               type="number"
@@ -1170,6 +1612,28 @@ export function LeadManagement() {
             Xóa lọc nhanh
           </button>
         </div>
+
+        {activeFilterChips.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Đang lọc</span>
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              {activeFilterChips.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => c.onClear()}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50/95 px-2.5 py-1 text-xs font-medium text-amber-950 shadow-sm transition hover:border-amber-500 hover:bg-amber-100"
+                  title="Bỏ lọc này"
+                >
+                  <span className="min-w-0 truncate">{c.label}</span>
+                  <span className="shrink-0 font-bold text-amber-800" aria-hidden>
+                    ×
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-2">
           <button
@@ -1364,16 +1828,22 @@ export function LeadManagement() {
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
+                    title="Giai đoạn tuyển sinh (pipeline) — khác tình trạng TVV."
                     onClick={() => toggleSort('pipelineStatus')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Pipeline
+                    Funnel
                     {sortKey === 'pipelineStatus' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
                   </button>
                 </th>
-                <th className="max-w-[7rem] px-2 py-3 text-sm font-medium normal-case">CRM</th>
+                <th
+                  className="max-w-[7rem] px-2 py-3 text-sm font-medium normal-case"
+                  title="Tình trạng làm việc TVV (tư vấn)"
+                >
+                  Tư vấn
+                </th>
                 <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-sm font-medium normal-case">TVV</th>
               </tr>
             </thead>
@@ -1567,10 +2037,10 @@ export function LeadManagement() {
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="app-section-heading">Đổi trạng thái CRM (Kanban)</h3>
+            <h3 className="app-section-heading">Đổi tình trạng tư vấn</h3>
             <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
             <label className="mt-4 block text-sm font-medium text-slate-700">
-              Trạng thái mới
+              Tình trạng tư vấn mới
               <select
                 value={bulkCrmStatus}
                 onChange={(e) => setBulkCrmStatus(e.target.value as LeadCounselorStatus)}
@@ -1749,7 +2219,12 @@ export function LeadManagement() {
               scoringPreview={
                 activeScoringProfile
                   ? scoreByLeadId.get(selected.id) ??
-                    evaluateLead(leadToEvaluationRecord(selected), activeScoringProfile, scoringMasterBuckets)
+                    evaluateLead(
+                      leadToEvaluationRecord(selected),
+                      activeScoringProfile,
+                      scoringMasterBuckets,
+                      schoolTvvSignalDefs,
+                    )
                   : undefined
               }
               db={db}
@@ -1759,6 +2234,8 @@ export function LeadManagement() {
               counselorsLoading={counselorsLoading}
               canReassignLead={showBulkReassign}
               reassignElevated={isElevatedLeadScope}
+              scoringMasterBuckets={scoringMasterBuckets}
+              schoolTvvSignalDefs={schoolTvvSignalDefs}
               dynamicAssistantSlot={
                 <ConsultingAssistantPanel
                   variant="embedded"
@@ -1769,8 +2246,14 @@ export function LeadManagement() {
                   error={scriptSnippetsErr}
                 />
               }
-              onClose={() => setSelected(null)}
-              onUpdated={(patch) => setSelected({ ...selected, ...patch })}
+              onClose={closeLeadDetailPanel}
+              onUnsavedChange={(dirty) => {
+                leadDetailUnsavedRef.current = dirty
+              }}
+              onUpdated={(patch) => {
+                applyLocalLeadPatch(selected.id, patch)
+                setSelected((prev) => (prev ? { ...prev, ...patch } : prev))
+              }}
             />,
             document.body,
           )
@@ -1877,12 +2360,15 @@ function ScoringProfileInspectModal({
 
 function FilterSelect({
   label,
+  title,
   value,
   onChange,
   options,
   compact,
 }: {
   label: string
+  /** Tooltip — giải thích ngắn khi rê chuột lên nhãn lọc. */
+  title?: string
   value: string
   onChange: (v: string) => void
   options: { v: string; t: string }[]
@@ -1890,6 +2376,7 @@ function FilterSelect({
 }) {
   return (
     <label
+      title={title}
       className={
         compact
           ? 'flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500'
@@ -1993,169 +2480,6 @@ function formatAiRunAt(runAt: unknown): string {
   return ''
 }
 
-function CounselorLeadProgressForm({
-  lead,
-  db,
-  onUpdated,
-  compact,
-}: {
-  lead: Lead
-  db: NonNullable<ReturnType<typeof getFirestoreDb>>
-  onUpdated: (patch: Partial<Lead>) => void
-  compact?: boolean
-}) {
-  const { profile, can } = useAuth()
-  const [crmStatus, setCrmStatus] = useState<LeadCounselorStatus>(() => lead.status)
-  const [noteLine, setNoteLine] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-
-  useEffect(() => {
-    setCrmStatus(lead.status)
-  }, [lead.id, lead.status])
-
-  const canEdit =
-    isAdminLikeRole(profile?.role) ||
-    (Boolean(can('leads:write:self_assigned')) &&
-      (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
-
-  if (!canEdit) return null
-
-  const save = async () => {
-    if (!profile) return
-    const statusChanged = crmStatus !== lead.status
-    const note = noteLine.trim()
-    if (!statusChanged && !note) {
-      setMsg('Không có thay đổi.')
-      return
-    }
-    setBusy(true)
-    setMsg(null)
-    try {
-      const touch = leadTouchPatch()
-      const performer = profile.displayName?.trim() || profile.email || profile.id
-      const stamp = new Date().toLocaleString('vi-VN')
-      const append = note ? `\n\n[${stamp}] ${performer}:\n${note}` : ''
-      const nextDesc = note ? `${lead.description ?? ''}${append}`.trim() : lead.description
-      const patch: Record<string, unknown> = { ...touch }
-      if (statusChanged) {
-        patch.status = crmStatus
-        patch.pipelineStatus = counselorStatusToPipeline(crmStatus)
-      }
-      if (note) patch.description = nextDesc
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
-      if (statusChanged) {
-        await commitAuditLog(db, {
-          leadId: lead.id,
-          actionType: 'STATUS_CHANGE',
-          description: `CRM/Kanban: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[crmStatus]}`,
-          performedBy: profile.id,
-          performedByName: performer,
-        })
-      }
-      if (note) {
-        await commitAuditLog(db, {
-          leadId: lead.id,
-          actionType: 'NOTE_ADDED',
-          description: `Mô tả (nối ghi chú): ${note.slice(0, 280)}${note.length > 280 ? '…' : ''}`,
-          performedBy: profile.id,
-          performedByName: performer,
-        })
-      }
-      onUpdated({
-        ...(statusChanged ? { status: crmStatus, pipelineStatus: counselorStatusToPipeline(crmStatus) } : {}),
-        ...(note ? { description: nextDesc } : {}),
-        updatedAt: touch.updatedAt,
-        lastTouchedAt: touch.lastTouchedAt,
-      })
-      setNoteLine('')
-      setMsg('Đã lưu dữ liệu.')
-    } catch (e) {
-      console.error(e)
-      setMsg('Không lưu được — kiểm tra quyền.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <section
-      className={
-        compact
-          ? 'rounded-lg border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-slate-50 p-2 shadow-sm ring-1 ring-amber-100/80'
-          : 'rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-slate-50 p-4 shadow-md ring-1 ring-amber-100/80'
-      }
-    >
-      <p
-        className={
-          compact
-            ? 'text-xs font-semibold uppercase tracking-[0.18em] text-amber-900/90'
-            : 'text-xs font-semibold uppercase tracking-[0.2em] text-amber-900/90'
-        }
-      >
-        Tiến độ tư vấn
-      </p>
-      <label
-        className={
-          compact ? 'mt-2 block text-xs font-medium text-slate-800' : 'mt-3 block text-sm font-medium text-slate-800'
-        }
-      >
-        Tình trạng (CRM)
-        <select
-          value={crmStatus}
-          onChange={(e) => setCrmStatus(e.target.value as LeadCounselorStatus)}
-          className={
-            compact
-              ? 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400/70 focus:ring-1 focus:ring-amber-300/50'
-              : 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-300/50'
-          }
-        >
-          {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
-            <option key={s} value={s} className="bg-white text-slate-900">
-              {LEAD_COUNSELOR_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label
-        className={
-          compact ? 'mt-2 block text-xs font-medium text-slate-800' : 'mt-3 block text-sm font-medium text-slate-800'
-        }
-      >
-        Ghi chú nối thêm vào «Mô tả»
-        <textarea
-          value={noteLine}
-          onChange={(e) => setNoteLine(e.target.value)}
-          rows={compact ? 2 : 3}
-          placeholder="VD: Đã gọi phụ huynh, hẹn campus tour…"
-          className={
-            compact
-              ? 'mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-400/60 focus:ring-1 focus:ring-amber-200/60'
-              : 'mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-200/60'
-          }
-        />
-      </label>
-      {msg ? (
-        <p className={compact ? 'mt-1.5 text-xs font-medium text-amber-950' : 'mt-2 text-sm font-medium text-amber-950'}>
-          {msg}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void save()}
-        className={
-          compact
-            ? 'mt-2 w-full rounded-lg border border-amber-500/80 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm shadow-amber-900/15 transition hover:brightness-105 disabled:opacity-50'
-            : 'mt-4 w-full rounded-xl border border-amber-500/80 bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-amber-900/15 transition hover:brightness-105 disabled:opacity-50'
-        }
-      >
-        {busy ? 'Đang lưu…' : 'Lưu dữ liệu'}
-      </button>
-    </section>
-  )
-}
-
 function LeadCrmQuickBlock({
   lead,
   db,
@@ -2165,6 +2489,7 @@ function LeadCrmQuickBlock({
   reassignElevated,
   onUpdated,
   compact,
+  leadScoringContext,
 }: {
   lead: Lead
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
@@ -2176,6 +2501,11 @@ function LeadCrmQuickBlock({
   reassignElevated: boolean
   onUpdated: (patch: Partial<Lead>) => void
   compact?: boolean
+  leadScoringContext?: {
+    profile: ScoringProfile | null
+    buckets?: MasterDataBuckets
+    schoolDefs: ProfileCustomScoringSignal[] | null
+  }
 }) {
   const { profile, can } = useAuth()
   const peerMode = !reassignElevated && can('leads:reassign:peer')
@@ -2188,13 +2518,13 @@ function LeadCrmQuickBlock({
   }, [pickListUsers, counselorUsers, peerMode, profile?.id])
 
   const [crmAssignUid, setCrmAssignUid] = useState(() => lead.assignedTo ?? lead.assignedCounselorId ?? '')
-  const [crmKanbanStatus, setCrmKanbanStatus] = useState<LeadCounselorStatus>(() => lead.status)
+  const [crmCounselorStatus, setCrmCounselorStatus] = useState<LeadCounselorStatus>(() => lead.status)
   const [crmBusy, setCrmBusy] = useState(false)
   const [crmMsg, setCrmMsg] = useState<string | null>(null)
 
   useEffect(() => {
     setCrmAssignUid(lead.assignedTo ?? lead.assignedCounselorId ?? '')
-    setCrmKanbanStatus(lead.status)
+    setCrmCounselorStatus(lead.status)
   }, [lead.id, lead.assignedTo, lead.assignedCounselorId, lead.status])
 
   const labelForUid = (uid: string | null) => {
@@ -2211,7 +2541,7 @@ function LeadCrmQuickBlock({
     const prevAssign = lead.assignedTo ?? lead.assignedCounselorId ?? null
     const prevStatus = lead.status
     const sameAssign = (prevAssign ?? '') === (nextUid ?? '')
-    const sameStatus = prevStatus === crmKanbanStatus
+    const sameStatus = prevStatus === crmCounselorStatus
     if (sameAssign && sameStatus) {
       setCrmMsg('Không có thay đổi.')
       return
@@ -2224,11 +2554,23 @@ function LeadCrmQuickBlock({
     setCrmMsg(null)
     try {
       const touch = leadTouchPatch()
+      const assignPatch = {
+        ...assigneeFirestoreMirror(nextUid),
+        status: crmCounselorStatus,
+        pipelineStatus: counselorStatusToPipeline(crmCounselorStatus),
+      } as Partial<Lead>
+      const scoreFields = leadScoringContext
+        ? persistedLeadScoringFields(
+            lead,
+            assignPatch,
+            leadScoringContext.profile,
+            leadScoringContext.buckets,
+            leadScoringContext.schoolDefs,
+          )
+        : {}
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
-        assignedCounselorId: nextUid,
-        assignedTo: nextUid,
-        status: crmKanbanStatus,
-        pipelineStatus: counselorStatusToPipeline(crmKanbanStatus),
+        ...assignPatch,
+        ...scoreFields,
         ...touch,
       })
       const performer = profile.displayName?.trim() || profile.email || profile.id
@@ -2245,16 +2587,14 @@ function LeadCrmQuickBlock({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
-          description: `CRM/Kanban: ${LEAD_COUNSELOR_STATUS_LABELS[prevStatus]} → ${LEAD_COUNSELOR_STATUS_LABELS[crmKanbanStatus]}`,
+          description: `Tình trạng tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[prevStatus]} → ${LEAD_COUNSELOR_STATUS_LABELS[crmCounselorStatus]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
       }
       onUpdated({
-        assignedCounselorId: nextUid,
-        assignedTo: nextUid,
-        status: crmKanbanStatus,
-        pipelineStatus: counselorStatusToPipeline(crmKanbanStatus),
+        ...assignPatch,
+        ...scoreFields,
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
@@ -2282,7 +2622,7 @@ function LeadCrmQuickBlock({
             : 'app-section-heading'
         }
       >
-        Phân công &amp; CRM
+        Phân công &amp; tình trạng
       </h3>
       {peerMode ? (
         <p
@@ -2325,10 +2665,10 @@ function LeadCrmQuickBlock({
           compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
         }
       >
-        Trạng thái CRM (Kanban)
+        Tình trạng tư vấn
         <select
-          value={crmKanbanStatus}
-          onChange={(e) => setCrmKanbanStatus(e.target.value as LeadCounselorStatus)}
+          value={crmCounselorStatus}
+          onChange={(e) => setCrmCounselorStatus(e.target.value as LeadCounselorStatus)}
           className={
             compact
               ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-violet-200'
@@ -2365,6 +2705,8 @@ function LeadDetailPanel({
   lead,
   activeScoringProfile,
   scoringPreview,
+  scoringMasterBuckets,
+  schoolTvvSignalDefs,
   db,
   institutionalRagBlock,
   counselorUsers,
@@ -2373,12 +2715,15 @@ function LeadDetailPanel({
   canReassignLead,
   reassignElevated,
   onClose,
+  onUnsavedChange,
   onUpdated,
   dynamicAssistantSlot,
 }: {
   lead: Lead
   activeScoringProfile: ScoringProfile | null
   scoringPreview?: { calculatedScore: number; priorityTag: PriorityTag }
+  scoringMasterBuckets?: MasterDataBuckets
+  schoolTvvSignalDefs?: ProfileCustomScoringSignal[] | null
   db: ReturnType<typeof getFirestoreDb>
   /** Nội dung RAG từ Knowledge Base (có thể rỗng). */
   institutionalRagBlock: string
@@ -2389,13 +2734,19 @@ function LeadDetailPanel({
   canReassignLead: boolean
   /** Admin / Trưởng khoa / Trưởng ngành: toàn quyền gán; TVV: chỉ chuyển trong team với quyền peer. */
   reassignElevated: boolean
+  /** Đóng panel — parent có thể bọc confirm khi còn dirty (đồng bộ qua onUnsavedChange). */
   onClose: () => void
+  /** Báo parent có thay đổi chưa lưu (funnel / ghi chú / CRM trái) để onClose hỏi xác nhận. */
+  onUnsavedChange?: (dirty: boolean) => void
   onUpdated: (patch: Partial<Lead>) => void
   /** Trợ lý kịch bản (nhúng trong layout fullscreen). */
   dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can, canRunLlmAnalysis } = useAuth()
-  const canEditScoringSignals = can('leads:write:self_assigned')
+  const canEditScoringSignals =
+    isAdminLikeRole(profile?.role) ||
+    (Boolean(can('leads:write:self_assigned')) &&
+      (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
@@ -2403,6 +2754,8 @@ function LeadDetailPanel({
 
   const [note, setNote] = useState('')
   const [evalTag, setEvalTag] = useState<string>(EVALUATION_TAGS[0])
+  const [crmDirty, setCrmDirty] = useState<LeadCounselorStatus | null>(null)
+  const crmForForm = crmDirty ?? lead.status
   const [statusDirty, setStatusDirty] = useState<LeadPipelineStatus | null>(null)
   const statusForForm = statusDirty ?? lead.pipelineStatus
   const [saving, setSaving] = useState(false)
@@ -2415,6 +2768,7 @@ function LeadDetailPanel({
   useEffect(() => {
     setNote('')
     setEvalTag(EVALUATION_TAGS[0])
+    setCrmDirty(null)
     setStatusDirty(null)
     setMsg(null)
     signalsHelpRef.current?.close()
@@ -2427,6 +2781,38 @@ function LeadDetailPanel({
       document.body.style.overflow = prev
     }
   }, [])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (e.defaultPrevented) return
+      if (playbookPopupOpen) {
+        e.preventDefault()
+        setPlaybookPopupOpen(false)
+        return
+      }
+      if (llmPopupOpen) {
+        e.preventDefault()
+        setLlmPopupOpen(false)
+        return
+      }
+      if (assistantPopupOpen) {
+        e.preventDefault()
+        setAssistantPopupOpen(false)
+        return
+      }
+      const help = signalsHelpRef.current
+      if (help?.open) {
+        help.close()
+        e.preventDefault()
+        return
+      }
+      e.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [playbookPopupOpen, llmPopupOpen, assistantPopupOpen, onClose])
 
   const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks()
   const notesAgg = useMemo(
@@ -2449,6 +2835,45 @@ function LeadDetailPanel({
     isAdminLikeRole(profile?.role) ||
     (Boolean(can('leads:write:self_assigned')) &&
       (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
+
+  /** Khối phân công bên phải ẩn khi TVV peer xem hồ sơ không phải của mình — khi đó không gỡ CRM bên trái. */
+  const peerModeForCrmBlock = !reassignElevated && Boolean(can('leads:reassign:peer'))
+  const leadIsMineForCrm = (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id
+  const crmQuickBlockVisible =
+    canReassignLead && Boolean(db) && !(peerModeForCrmBlock && !leadIsMineForCrm)
+
+  /** Một nguồn sự thật: khi khối phân công hiển thị thì chỉnh tình trạng TVV ở đó. */
+  const crmEditOnRight = crmQuickBlockVisible
+  const crmEditOnLeft = showCounselorProgressForm && !crmEditOnRight
+
+  const hasUnsavedProgress = useMemo(
+    () =>
+      (crmEditOnLeft && crmForForm !== lead.status) ||
+      statusForForm !== lead.pipelineStatus ||
+      note.trim().length > 0,
+    [crmEditOnLeft, crmForForm, lead.status, statusForForm, lead.pipelineStatus, note],
+  )
+
+  useEffect(() => {
+    onUnsavedChange?.(hasUnsavedProgress)
+    return () => {
+      onUnsavedChange?.(false)
+    }
+  }, [hasUnsavedProgress, onUnsavedChange])
+
+  useEffect(() => {
+    if (crmEditOnRight) setCrmDirty(null)
+  }, [crmEditOnRight, lead.id])
+
+  useEffect(() => {
+    if (!hasUnsavedProgress || saving) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [hasUnsavedProgress, saving])
 
   const leadMl = useMemo(() => resolveMlWinDisplay(lead), [lead])
 
@@ -2498,65 +2923,135 @@ function LeadDetailPanel({
   const canSaveInteraction = can('interactions:create:self_assigned')
   const canRunAi = canRunLlmAnalysis
 
-  const save = async () => {
+  const labelUid = useCallback(
+    (uid: string) => {
+      if (!uid) return '—'
+      const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
+      return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
+    },
+    [pickListUsers, counselorUsers],
+  )
+
+  const saveUnified = async () => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
       return
     }
-    if (!canSaveInteraction) {
+    const canMutateLead = showCounselorProgressForm
+    const noteTrim = note.trim()
+    const crmChanged = crmEditOnLeft && crmForForm !== lead.status
+    const pipeChanged = statusForForm !== lead.pipelineStatus
+
+    if (!crmChanged && !pipeChanged && !noteTrim) {
+      setMsg('Không có thay đổi.')
+      return
+    }
+    if (crmChanged && !canMutateLead) {
+      setMsg('Bạn không có quyền đổi tình trạng tư vấn trên hồ sơ này.')
+      return
+    }
+    if (pipeChanged && !noteTrim && !canMutateLead) {
+      setMsg(
+        'Để chỉnh funnel không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc nhập ghi chú rồi bấm «Lưu cập nhật»).',
+      )
+      return
+    }
+    if (noteTrim && !canSaveInteraction) {
       setMsg('Bạn không có quyền ghi tương tác.')
       return
     }
-    if (!note.trim()) {
-      setMsg('Vui lòng nhập ghi chú.')
-      return
-    }
+
     setSaving(true)
     setMsg(null)
     try {
-      const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
-      await addDoc(sub, {
-        leadId: lead.id,
-        channel: 'NOTE',
-        authorUid: profile.id,
-        authorRole: profile.role,
-        counselorNote: note.trim(),
-        evaluationTag: evalTag,
-        timestamp: Timestamp.now(),
-      })
+      const nextCrm = crmChanged ? crmForForm : lead.status
+      let nextPipeFinal = lead.pipelineStatus
+      if (pipeChanged) nextPipeFinal = statusForForm
+      else if (crmChanged) nextPipeFinal = counselorStatusToPipeline(crmForForm)
+
+      const dataPatch: Partial<Lead> = {}
+      if (crmChanged) dataPatch.status = nextCrm
+      if (pipeChanged) dataPatch.pipelineStatus = statusForForm
+      else if (crmChanged) dataPatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
+
+      const scoreFields = persistedLeadScoringFields(
+        lead,
+        dataPatch,
+        activeScoringProfile,
+        scoringMasterBuckets,
+        schoolTvvSignalDefs,
+      )
+
       const touch = leadTouchPatch()
       const performer = profile.displayName?.trim() || profile.email || profile.id
-      await commitAuditLog(db, {
-        leadId: lead.id,
-        actionType: 'NOTE_ADDED',
-        description: `Ghi chú tương tác (${evalTag}): ${note.trim().slice(0, 280)}`,
-        performedBy: profile.id,
-        performedByName: performer,
-      })
-      if (statusForForm !== lead.pipelineStatus) {
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
-          pipelineStatus: statusForForm,
-          ...touch,
-        })
+
+      const leadFirestorePatch: Record<string, unknown> = { ...touch, ...scoreFields }
+      if (crmChanged || pipeChanged) {
+        if (crmChanged) leadFirestorePatch.status = nextCrm
+        if (pipeChanged) leadFirestorePatch.pipelineStatus = statusForForm
+        else if (crmChanged) leadFirestorePatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
+      }
+
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadFirestorePatch)
+
+      if (crmChanged) {
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
-          description: `Pipeline funnel: ${PIPELINE_LABEL[lead.pipelineStatus]} → ${PIPELINE_LABEL[statusForForm]}`,
+          description: `Tình trạng tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[nextCrm]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
-        onUpdated({
-          pipelineStatus: statusForForm,
-          updatedAt: touch.updatedAt,
-          lastTouchedAt: touch.lastTouchedAt,
-        })
-      } else {
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), touch)
-        onUpdated({ updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt })
       }
+      if (nextPipeFinal !== lead.pipelineStatus) {
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'STATUS_CHANGE',
+          description: `Pipeline funnel: ${PIPELINE_LABEL[lead.pipelineStatus]} → ${PIPELINE_LABEL[nextPipeFinal]}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+
+      if (noteTrim) {
+        const nextPriority: PriorityTag =
+          (scoreFields.priorityTag as PriorityTag | undefined) ??
+          scoringPreview?.priorityTag ??
+          lead.priorityTag
+        const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
+        await addDoc(sub, {
+          leadId: lead.id,
+          channel: 'NOTE',
+          authorUid: profile.id,
+          authorRole: profile.role,
+          counselorNote: noteTrim,
+          evaluationTag: evalTag,
+          snapshotCrmStatus: nextCrm,
+          snapshotPipelineStatus: nextPipeFinal,
+          snapshotPriorityTag: nextPriority,
+          timestamp: Timestamp.now(),
+        })
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'NOTE_ADDED',
+          description: `Ghi chú tương tác (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+
+      onUpdated({
+        ...(crmChanged ? { status: nextCrm } : {}),
+        ...(nextPipeFinal !== lead.pipelineStatus ? { pipelineStatus: nextPipeFinal } : {}),
+        ...scoreFields,
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      })
+
       setNote('')
       setStatusDirty(null)
-      setMsg('Đã lưu tương tác.')
+      setCrmDirty(null)
+      setMsg('Đã lưu cập nhật.')
     } catch (e) {
       console.error(e)
       setMsg('Không lưu được. Kiểm tra Firestore Rules.')
@@ -2700,19 +3195,31 @@ function LeadDetailPanel({
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
           <div className="mt-2 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
-            {[
-              { k: 'SĐT', v: lead.phone || '—', t: false },
-              { k: 'SĐT PH', v: lead.parentPhone || '—', t: false },
-              { k: 'Mã KH', v: lead.customerId || '—', t: false },
-              { k: 'Nguồn', v: lead.source || '—', t: true },
-              { k: 'CRM', v: LEAD_COUNSELOR_STATUS_LABELS[lead.status], t: false },
-              { k: 'Pipeline', v: PIPELINE_LABEL[lead.pipelineStatus], t: false },
-              { k: 'TVV', v: assigneeHeaderLabel, t: true },
-            ].map((row) => (
+            {(
+              [
+                { k: 'SĐT', v: lead.phone || '—', t: false },
+                { k: 'SĐT PH', v: lead.parentPhone || '—', t: false },
+                { k: 'Mã KH', v: lead.customerId || '—', t: false },
+                { k: 'Nguồn', v: lead.source || '—', t: true },
+                {
+                  k: 'Tư vấn',
+                  v: LEAD_COUNSELOR_STATUS_LABELS[lead.status],
+                  t: false,
+                  hint: 'Tình trạng làm việc TVV (tư vấn)',
+                },
+                {
+                  k: 'Funnel',
+                  v: PIPELINE_LABEL[lead.pipelineStatus],
+                  t: false,
+                  hint: 'Giai đoạn tuyển sinh (pipeline)',
+                },
+                { k: 'TVV', v: assigneeHeaderLabel, t: true },
+              ] satisfies Array<{ k: string; v: string; t: boolean; hint?: string }>
+            ).map((row) => (
               <div
                 key={row.k}
+                title={row.hint ?? (row.t ? row.v : undefined)}
                 className="flex max-w-[10.5rem] shrink-0 items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
-                title={row.t ? row.v : undefined}
               >
                 <span className="shrink-0 text-slate-500">{row.k}</span>
                 <span className="min-w-0 truncate font-medium text-slate-900">{row.v}</span>
@@ -2800,7 +3307,7 @@ function LeadDetailPanel({
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              {/* Trái: thông tin hồ sơ → tiến độ tư vấn (nếu có) → khối tín hiệu + ghi chú đánh giá */}
+              {/* Trái: thông tin hồ sơ → (sticky) tiến độ & ghi chú + thẻ tín hiệu đánh giá tách biệt */}
               <div className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
                 <aside className="space-y-2 text-sm leading-snug text-slate-800">
                   <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 sm:grid-cols-3 sm:gap-x-2.5">
@@ -2831,78 +3338,177 @@ function LeadDetailPanel({
                     </div>
                   </div>
 
-                  {db && showCounselorProgressForm ? (
-                    <CounselorLeadProgressForm
-                      key={`cprog-${lead.id}`}
-                      lead={lead}
-                      db={db}
-                      onUpdated={onUpdated}
-                      compact
-                    />
-                  ) : null}
-
                   {db ? (
-                    <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
-                      <div className="flex items-start gap-1.5">
-                        <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
-                          Tín hiệu, hành vi &amp; ghi chú đánh giá
-                        </h3>
-                        <button
-                          type="button"
-                          className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
-                          aria-label="Giải thích khối tín hiệu và ghi chú"
-                          title="Giải thích"
-                          onClick={() => signalsHelpRef.current?.showModal()}
-                        >
-                          <CircleHelp className="h-3.5 w-3.5" aria-hidden />
-                        </button>
-                      </div>
-
-                      <dialog
-                        ref={signalsHelpRef}
-                        className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
-                        onClick={(e) => {
-                          if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
-                        }}
-                      >
-                        <div className="flex max-h-[min(85vh,32rem)] flex-col">
-                          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
-                            <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
+                    <div className="space-y-2">
+                      {showCounselorProgressForm || canSaveInteraction ? (
+                        <div className="sticky top-0 z-20 space-y-1.5 border-b border-slate-200/70 bg-white/95 pb-1.5 pt-0.5 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-white/90">
+                          {hasUnsavedProgress ? (
+                            <div
+                              role="status"
+                              className="rounded-lg border border-amber-300/90 bg-amber-50/95 px-2.5 py-2 text-xs font-semibold leading-snug text-amber-950 shadow-sm"
+                            >
+                              Có thay đổi chưa lưu — bấm «Lưu cập nhật». Đóng panel sẽ hỏi xác nhận; đóng tab trình
+                              duyệt cũng có thể được hỏi trước khi rời trang.
+                            </div>
+                          ) : null}
+                          <div className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 p-2 shadow-md ring-1 ring-amber-200/70 sm:p-2.5">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
+                              Tiến độ tư vấn &amp; ghi chú
+                            </p>
+                            <p className="mt-1 text-xs leading-snug text-slate-600">
+                              {crmEditOnRight ? (
+                                <>
+                                  <strong>Tình trạng TVV</strong> chỉnh ở khối «Phân công &amp; tình trạng» bên phải (nút
+                                  «Lưu phân công»). Tại đây: funnel tuyển sinh, nhãn đánh giá, ghi chú tương tác — bấm{' '}
+                                  <strong>Lưu cập nhật</strong>
+                                  {canSaveInteraction ? '; có ghi chú thì ghi thêm vào lịch sử kèm snapshot.' : '.'}
+                                </>
+                              ) : (
+                                <>
+                                  Một lần lưu: đồng bộ <strong>tình trạng TVV</strong>, funnel (theo quyền) và — nếu có
+                                  ghi chú — thêm dòng lịch sử kèm tình trạng &amp; nhãn tại thời điểm đó.
+                                </>
+                              )}
+                            </p>
+                            <div
+                              className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+                            >
+                              {crmEditOnLeft ? (
+                                <label className="block text-xs font-medium text-slate-800">
+                                  Tình trạng tư vấn
+                                  <select
+                                    value={crmForForm}
+                                    onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
+                                    className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                  >
+                                    {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
+                                      <option key={s} value={s} className="bg-white">
+                                        {LEAD_COUNSELOR_STATUS_LABELS[s]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ) : null}
+                              <label className="block text-xs font-medium text-slate-800">
+                                Funnel tuyển sinh
+                                <select
+                                  value={statusForForm}
+                                  onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                >
+                                  {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                                    <option key={k} value={k} className="bg-white">
+                                      {PIPELINE_LABEL[k]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="block text-xs font-medium text-slate-800">
+                                Nhãn đánh giá
+                                <select
+                                  value={evalTag}
+                                  onChange={(e) => setEvalTag(e.target.value)}
+                                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                >
+                                  {EVALUATION_TAGS.map((t) => (
+                                    <option key={t} value={t} className="bg-white">
+                                      {t}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <label className="mt-2 block text-xs font-medium text-slate-800">
+                              Ghi chú tương tác
+                              <textarea
+                                value={note}
+                                onChange={(e) => setNote(e.target.value)}
+                                rows={3}
+                                placeholder={
+                                  crmEditOnRight
+                                    ? 'Ghi nhận buổi làm việc — lưu kèm funnel / nhãn phía trên…'
+                                    : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / funnel phía trên…'
+                                }
+                                className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
+                              />
+                            </label>
+                            {msg ? <p className="mt-1 text-xs font-medium text-amber-900">{msg}</p> : null}
                             <button
                               type="button"
-                              className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
-                              aria-label="Đóng"
-                              onClick={() => signalsHelpRef.current?.close()}
+                              disabled={
+                                saving ||
+                                !db ||
+                                (!showCounselorProgressForm && !canSaveInteraction) ||
+                                !hasUnsavedProgress
+                              }
+                              onClick={() => void saveUnified()}
+                              className="mt-2 w-full rounded-md border border-amber-600 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
                             >
-                              <X className="h-4 w-4" aria-hidden />
+                              {saving ? 'Đang lưu…' : 'Lưu cập nhật'}
                             </button>
                           </div>
-                          <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
-                            <p>
-                              Mọi cập nhật ở đây được hệ thống dùng để <strong>đánh giá tiềm năng</strong>, giữ nhất quán
-                              nhãn <strong>HOT / WARM / COLD</strong> (theo điểm profile đang chọn), hỗ trợ{' '}
-                              <strong>lọc trên bảng hồ sơ</strong> và làm giàu dữ liệu cho <strong>AI</strong> sau này (tiền
-                              lọc AI Gatekeeper trên lịch sử ghi chú; các tác vụ <strong>phân tích LLM</strong> có thể đọc
-                              tổng hợp ghi chú tương tác).
-                            </p>
-                            <p className="mt-2">
-                              <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — các tình huống{' '}
-                              <em>hay gặp</em>, bật/tắt nhanh. <strong>Admin / Siêu quản trị</strong> quản lý danh mục tín
-                              hiệu tùy chỉnh trong <strong>Cài đặt → Chấm điểm</strong> (thêm, sửa, xóa theo từng profile);
-                              điểm cộng/trừ chạy ngay theo profile chấm điểm hiện tại.
-                            </p>
-                            <p className="mt-2">
-                              <span className="font-semibold text-slate-900">Ghi chú tương tác</span> — phần{' '}
-                              <em>đặc thù</em> có <strong>nhãn đánh giá</strong> và <strong>nội dung giải thích</strong>; mỗi
-                              lần lưu ghi vào <strong>lịch sử bên phải</strong>, đồng thời tham chiếu khi tổng hợp cho AI
-                              và theo dõi diễn biến hồ sơ.
-                            </p>
-                          </div>
                         </div>
-                      </dialog>
+                      ) : null}
 
-                      <div className="mt-2 grid gap-2 lg:grid-cols-2 lg:items-start">
-                        <div className="min-h-0">
+                      <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
+                        <div className="flex items-start gap-1.5">
+                          <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
+                            Tín hiệu &amp; đánh giá tiềm năng
+                          </h3>
+                          <button
+                            type="button"
+                            className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
+                            aria-label="Giải thích khối tín hiệu đánh giá"
+                            title="Giải thích"
+                            onClick={() => signalsHelpRef.current?.showModal()}
+                          >
+                            <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs leading-snug text-slate-600">
+                          Cờ hành vi / rủi ro — mỗi thay đổi <strong>lưu ngay</strong> vào hồ sơ; điểm &amp; nhãn HOT/WARM/COLD
+                          theo profile chấm điểm đang chọn.
+                        </p>
+
+                        <dialog
+                          ref={signalsHelpRef}
+                          className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
+                          onClick={(e) => {
+                            if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
+                          }}
+                        >
+                          <div className="flex max-h-[min(85vh,32rem)] flex-col">
+                            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
+                              <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
+                              <button
+                                type="button"
+                                className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
+                                aria-label="Đóng"
+                                onClick={() => signalsHelpRef.current?.close()}
+                              >
+                                <X className="h-4 w-4" aria-hidden />
+                              </button>
+                            </div>
+                            <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
+                              <p>
+                                Khối <strong>Tín hiệu &amp; đánh giá tiềm năng</strong> phục vụ chấm điểm profile, nhãn{' '}
+                                <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
+                                <strong>AI</strong> (Gatekeeper, phân tích LLM đọc tổng hợp ghi chú tương tác).
+                              </p>
+                              <p className="mt-2">
+                                <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
+                                <strong>lưu ngay</strong> từng mục (không dùng chung nút «Lưu cập nhật» của khối tiến độ).
+                              </p>
+                              <p className="mt-2">
+                                <span className="font-semibold text-slate-900">Tiến độ &amp; ghi chú</span> — thẻ màu
+                                cam phía trên: funnel, nhãn đánh giá, ghi chú tương tác và nút <strong>Lưu cập nhật</strong>
+                                . Khi có khối phân công bên phải, <strong>tình trạng TVV</strong> chỉnh ở đó để tránh trùng.
+                              </p>
+                            </div>
+                          </div>
+                        </dialog>
+
+                        <div className="mt-2 min-h-0">
                           <LeadScoringSignalsPanel
                             key={`sig-${lead.id}`}
                             lead={lead}
@@ -2913,72 +3519,15 @@ function LeadDetailPanel({
                             compact
                           />
                         </div>
-                        <div className="min-h-0 rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                            Ghi chú đặc thù
-                          </h4>
-                          <p className="mt-0.5 text-xs leading-snug text-slate-500">
-                            Nhập mô tả cụ thể; chọn nhãn &amp; pipeline rồi lưu — hiển thị trong lịch sử và dùng cho lọc /
-                            AI.
-                          </p>
-                          <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
-                            <label className="block text-xs font-medium text-slate-700 sm:col-span-2">
-                              Nội dung ghi chú
-                              <textarea
-                                value={note}
-                                onChange={(e) => setNote(e.target.value)}
-                                rows={2}
-                                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                              />
-                            </label>
-                            <label className="block text-xs font-medium text-slate-700">
-                              Nhãn đánh giá
-                              <select
-                                value={evalTag}
-                                onChange={(e) => setEvalTag(e.target.value)}
-                                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                              >
-                                {EVALUATION_TAGS.map((t) => (
-                                  <option key={t} value={t} className="bg-white">
-                                    {t}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="block text-xs font-medium text-slate-700">
-                              Pipeline
-                              <select
-                                value={statusForForm}
-                                onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                                className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/50"
-                              >
-                                {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                                  <option key={k} value={k} className="bg-white">
-                                    {PIPELINE_LABEL[k]}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                          {msg ? <p className="mt-1 text-xs text-emerald-700">{msg}</p> : null}
-                          <button
-                            type="button"
-                            disabled={saving || !db || !canSaveInteraction}
-                            onClick={() => void save()}
-                            className="mt-1.5 w-full rounded-md border border-emerald-500 bg-emerald-600 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-                          >
-                            {saving ? 'Đang lưu…' : 'Lưu tương tác'}
-                          </button>
-                        </div>
-                      </div>
-                    </section>
+                      </section>
+                    </div>
                   ) : null}
                 </aside>
               </div>
 
-              {/* Phải: phân công CRM → lịch sử ghi chú (form ghi chú đã gộp vào khối tín hiệu bên trái) */}
+              {/* Phải: phân công & tình trạng → lịch sử ghi chú (tiến độ & ghi chú đã gộp bên trái) */}
               <aside className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-5 lg:min-h-0 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
-                {canReassignLead && db ? (
+                {crmQuickBlockVisible && db ? (
                   <LeadCrmQuickBlock
                     key={`${lead.id}-${lead.updatedAt.toMillis()}`}
                     lead={lead}
@@ -2989,6 +3538,11 @@ function LeadDetailPanel({
                     reassignElevated={reassignElevated}
                     onUpdated={onUpdated}
                     compact
+                    leadScoringContext={{
+                      profile: activeScoringProfile,
+                      buckets: scoringMasterBuckets,
+                      schoolDefs: schoolTvvSignalDefs ?? null,
+                    }}
                   />
                 ) : null}
                 <section className="flex min-h-[10rem] flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm lg:min-h-0">
@@ -2998,26 +3552,59 @@ function LeadDetailPanel({
                   {intLoading ? (
                     <p className="mt-0.5 shrink-0 text-xs text-slate-500">Đang tải…</p>
                   ) : null}
-                  <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
+                  <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
                     {interactions.map((it) => (
                       <li
                         key={it.id}
-                        className="rounded-md border border-slate-200/70 bg-slate-50/90 p-1.5 text-xs text-slate-700"
+                        className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
                       >
-                        <p className="font-medium text-slate-900">
-                          {it.channel} {it.evaluationTag ? `· ${it.evaluationTag}` : ''}
-                        </p>
+                        <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-200/60 pb-1">
+                          <p className="font-semibold text-slate-900">
+                            {interactionChannelVi(it.channel)}
+                            {it.evaluationTag ? (
+                              <span className="font-normal text-slate-600"> · {it.evaluationTag}</span>
+                            ) : null}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {labelUid(it.authorUid)} · {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
+                          </p>
+                        </div>
+                        {(it.snapshotCrmStatus || it.snapshotPipelineStatus || it.snapshotPriorityTag) && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {it.snapshotCrmStatus ? (
+                              <span
+                                className="inline-flex max-w-full items-center rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-950"
+                                title="Tình trạng CRM tại lúc lưu"
+                              >
+                                TVV: {LEAD_COUNSELOR_STATUS_LABELS[it.snapshotCrmStatus]}
+                              </span>
+                            ) : null}
+                            {it.snapshotPipelineStatus ? (
+                              <span
+                                className="inline-flex max-w-full items-center rounded border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-950"
+                                title="Funnel tại lúc lưu"
+                              >
+                                Funnel: {PIPELINE_LABEL[it.snapshotPipelineStatus]}
+                              </span>
+                            ) : null}
+                            {it.snapshotPriorityTag ? (
+                              <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-800">
+                                Nhãn: <TagBadge tag={it.snapshotPriorityTag} />
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
                         {it.counselorNote ? (
-                          <p className="mt-0.5 whitespace-pre-wrap leading-snug text-slate-700">{it.counselorNote}</p>
+                          <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
+                        ) : null}
+                        {it.callOutcome ? (
+                          <p className="mt-1 text-[11px] font-medium text-slate-600">Kết quả: {it.callOutcome}</p>
                         ) : null}
                         {it.aiSentiment ? (
-                          <p className="mt-0.5 text-xs leading-snug text-violet-800">
+                          <p className="mt-1 text-[11px] leading-snug text-violet-800">
                             AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
                           </p>
                         ) : null}
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
-                        </p>
                       </li>
                     ))}
                     {!intLoading && !interactions.length ? (

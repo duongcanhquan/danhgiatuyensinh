@@ -53,6 +53,12 @@ const MAX_LIST_BULK_FETCH = 3600
 /** Giới hạn an toàn khi `dataMode: 'fullScope'` — đọc toàn bộ phạm vi theo lô Firestore. */
 export const MAX_FULL_SCOPE_LEADS = 25_000
 
+/**
+ * Giới hạn đọc fullScope trên UI Kanban / lọc nhãn theo profile (tránh đọc hàng chục nghìn doc một lần).
+ * Phân tích nâng cao có thể truyền `maxFullScopeLeads` cao hơn.
+ */
+export const LEADS_UI_FULL_SCOPE_MAX = 4000
+
 /** Kích thước mỗi lần đọc Firestore trong `fullScope`. */
 export const FULL_SCOPE_CHUNK_SIZE = 400
 
@@ -272,6 +278,11 @@ export type UseLeadsOptions = {
   fullScopeChunkSize?: number
   /** Mặc định {@link MAX_FULL_SCOPE_LEADS}. */
   maxFullScopeLeads?: number
+  /**
+   * Khi true: gọi thêm getCount theo từng nhãn `priorityTag` (4 lần) — tốn chi phí aggregation.
+   * Chỉ bật nơi thật sự dùng `scopeTagCounts` (vd. Phân tích nâng cao). Mặc định false.
+   */
+  includeScopeTagCounts?: boolean
 }
 
 function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryFilterConstraint | null {
@@ -440,6 +451,15 @@ export function leadMatchesClientSearch(
 
 const TAG_KEYS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
+function deriveStoredPriorityTagCounts(rows: Lead[]): { HOT: number; WARM: number; COLD: number; LOSS: number } {
+  const c = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
+  for (const l of rows) {
+    const t = l.priorityTag
+    if (t === 'HOT' || t === 'WARM' || t === 'COLD' || t === 'LOSS') c[t]++
+  }
+  return c
+}
+
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile } = useAuth()
   const { byKind } = useMasterData()
@@ -450,6 +470,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const batchLimit = Math.min(500, Math.max(LEADS_PAGE_SIZE, opts?.batchLimit ?? 120))
   const fullScopeChunkSize = Math.min(500, Math.max(50, opts?.fullScopeChunkSize ?? FULL_SCOPE_CHUNK_SIZE))
   const maxFullScopeLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxFullScopeLeads ?? MAX_FULL_SCOPE_LEADS))
+  const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
 
   const hoDQueryLabels = useMemo(() => {
     const ids = profile?.managedMajorIds ?? []
@@ -498,6 +519,14 @@ export function useLeads(opts?: UseLeadsOptions) {
   const [searchScanTruncated, setSearchScanTruncated] = useState(false)
   const [searchHitTotal, setSearchHitTotal] = useState<number | null>(null)
   const [scopeFetchTruncated, setScopeFetchTruncated] = useState(false)
+  /** Tăng khi gọi `refetchLeads` — ép chạy lại tải danh sách cùng bộ lọc (sau bulk, v.v.). */
+  const [manualRefreshKey, setManualRefreshKey] = useState(0)
+  const pendingManualRefetchRef = useRef(false)
+
+  const refetchLeads = useCallback(() => {
+    pendingManualRefetchRef.current = true
+    setManualRefreshKey((k) => k + 1)
+  }, [])
 
   const configured = useMemo(() => isFirebaseConfigured(), [])
   const pageEndSnaps = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([])
@@ -551,6 +580,8 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     let cancelled = false
     const fkChanged = lastDataFilterKey.current !== filterKey
+    const manualRefetch = pendingManualRefetchRef.current
+    if (manualRefetch) pendingManualRefetchRef.current = false
     if (fkChanged) {
       lastDataFilterKey.current = filterKey
       pageEndSnaps.current = []
@@ -610,7 +641,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     const runAggregations = async (): Promise<number | null> => {
       const total = await fetchTotalOnly()
       if (cancelled || total == null) return null
-      await fetchTagCountsOnly()
+      if (includeScopeTagCounts) await fetchTagCountsOnly()
       return total
     }
 
@@ -773,6 +804,12 @@ export function useLeads(opts?: UseLeadsOptions) {
       }
       setLeads(mapped)
       setTotalPages(1)
+      if (includeScopeTagCounts) {
+        if (!hitCap) setScopeTagCounts(deriveStoredPriorityTagCounts(mapped))
+        else if (!cancelled) await fetchTagCountsOnly()
+      } else if (!cancelled) {
+        setScopeTagCounts(null)
+      }
     }
 
     void (async () => {
@@ -792,8 +829,8 @@ export function useLeads(opts?: UseLeadsOptions) {
         }
 
         if (dataMode === 'fullScope') {
-          if (fkChanged || totalRef.current == null) {
-            await runAggregations()
+          if (fkChanged || totalRef.current == null || manualRefetch) {
+            await fetchTotalOnly()
             if (cancelled) return
           }
           await loadFullScope()
@@ -807,9 +844,10 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (fkChanged || totalRef.current == null) {
             await Promise.all([fetchTotalOnly(), loadSearchBucketAndSlice(pageToLoad, fkChanged)])
             if (cancelled) return
-            void fetchTagCountsOnly()
+            if (includeScopeTagCounts) void fetchTagCountsOnly()
           } else {
-            await loadSearchBucketAndSlice(pageToLoad, false)
+            await loadSearchBucketAndSlice(pageToLoad, manualRefetch)
+            if (manualRefetch && includeScopeTagCounts) void fetchTagCountsOnly()
           }
           setLoading(false)
           setLoadingPage(false)
@@ -817,7 +855,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         }
 
         let total = totalRef.current
-        if (fkChanged || total == null) {
+        if (fkChanged || total == null || manualRefetch) {
           const tentativePage = fkChanged ? 1 : Math.max(1, pageToLoad)
           await Promise.all([fetchTotalOnly(), loadFirestorePage(tentativePage, null)])
           if (cancelled) return
@@ -829,7 +867,7 @@ export function useLeads(opts?: UseLeadsOptions) {
             setCurrentPageState(safePage)
             await loadFirestorePage(safePage, total)
           }
-          void fetchTagCountsOnly()
+          if (includeScopeTagCounts) void fetchTagCountsOnly()
         } else {
           const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
           setTotalPages(tp)
@@ -869,6 +907,8 @@ export function useLeads(opts?: UseLeadsOptions) {
     directoryLabels,
     hoDQueryLabels,
     pagedFirestoreDep,
+    includeScopeTagCounts,
+    manualRefreshKey,
   ])
 
   const refreshTotalLeadCount = useCallback(async () => {
@@ -887,16 +927,35 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
   }, [profile, hoDQueryLabels, serverFilters])
 
+  const applyLocalLeadPatch = useCallback((id: string, patch: Partial<Lead>) => {
+    setLeads((rows) => {
+      const idx = rows.findIndex((r) => r.id === id)
+      if (idx === -1) return rows
+      const next = [...rows]
+      next[idx] = { ...next[idx]!, ...patch }
+      return next
+    })
+    const bucket = searchBucketRef.current
+    if (bucket?.length) {
+      const idx = bucket.findIndex((r) => r.id === id)
+      if (idx !== -1) {
+        searchBucketRef.current = bucket.map((r, i) => (i === idx ? { ...r, ...patch } : r))
+      }
+    }
+  }, [])
+
   return {
     leads,
     rawLeads: leads,
     totalLeadCount,
     totalLeadCountError,
     refreshTotalLeadCount,
+    refetchLeads,
     scopeTagCounts,
     searchScanTruncated,
     searchHitTotal,
     scopeFetchTruncated,
+    applyLocalLeadPatch,
     currentPage,
     totalPages,
     setPage,

@@ -22,6 +22,7 @@ export function defaultPermissionsForRole(role: UserRole): readonly Permission[]
         'leads:reassign:peer',
         'interactions:create:self_assigned',
         'dashboard:counselor',
+        'config:scoring_profiles_own',
         'ai:use',
       ]
     case 'head_of_profession':

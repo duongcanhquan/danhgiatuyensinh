@@ -4,6 +4,7 @@ import type { Firestore } from 'firebase/firestore'
 import type { RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow, ScoringRuleTemplateDoc } from '../types'
 import { FS_COLLECTIONS, RULE_CATEGORIES, RULE_CATEGORY_LABELS } from '../types'
 import { useScoringRuleTemplates } from '../hooks/useScoringRuleTemplates'
+import { inferRuleCategory } from '../utils/scoringEngine'
 import { buildScoringBlockFromTemplateDoc, getRuleLibraryTemplates, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTemplatesFirestore'
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
@@ -218,39 +219,6 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
 
   return (
     <div className="space-y-4">
-      <div
-        className="rounded-xl border border-sky-200/90 bg-sky-50/80 px-3 py-2.5 text-xs leading-relaxed text-slate-800 shadow-sm"
-        role="note"
-      >
-        <p className="font-semibold text-sky-950">Ba phần — làm theo thứ tự sẽ dễ</p>
-        <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 marker:font-semibold marker:text-sky-800">
-          <li>
-            <strong>Danh mục</strong> (màn khác): là <em>bảng chuẩn</em> — ví dụ danh sách tỉnh, nguồn tuyển… để TVV chọn trên
-            hồ sơ cho thống nhất. Khi quy tắc cần «cộng điểm theo nhóm», hệ thống hiểu nhóm đó nhờ bảng chuẩn này. Đây{' '}
-            <em>không phải</em> chỗ kéo mẫu quy tắc.
-          </li>
-          <li>
-            <strong>Quy tắc mẫu</strong> (màn này): <em>mẫu riêng</em> (thêm / sửa / xóa) và <em>mẫu có sẵn</em> (cũng có thể
-            chỉnh — lưu online sẽ thay bản gốc trên thư viện kéo; xóa bản đã lưu thì trở lại mẫu phần mềm). Sang tab{' '}
-            <strong>Chấm điểm</strong> — cột «Thư viện quy tắc».
-          </li>
-          <li>
-            <strong>Chấm điểm</strong>: kéo mẫu sang ô bên phải, chỉnh cho đúng ý trường rồi <strong>Lưu bộ chấm điểm</strong>.
-            Mỗi bộ là một cách tính riêng; sửa mẫu ở bước 2 <em>không tự làm lại</em> các bộ đã lưu trước đó.
-          </li>
-        </ol>
-        <div className="mt-3 border-t border-slate-200 pt-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Ví dụ cho dễ hình dung</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
-            Trường tạo trong <strong>Danh mục</strong> một loại «Nguồn tuyển» gồm các dòng: Facebook, Zalo, Giới thiệu (có
-            thể ghi thêm cách gọi khác như «fb» để hệ thống hiểu là Facebook). TVV chọn nguồn trên hồ sơ. Khi soạn{' '}
-            <strong>Chấm điểm</strong>, bạn đặt một dòng kiểu «thuộc một trong các nhóm đã liệt kê» và ghi «Facebook, Zalo»
-            thì hồ sơ có nguồn trùng một trong hai sẽ được cộng điểm theo quy tắc. Nếu không dùng Danh mục, bạn vẫn gõ danh
-            sách trong quy tắc, nhưng lúc đó chỉ so đúng chữ bạn gõ — không «nối» với bảng chuẩn trên hồ sơ.
-          </p>
-        </div>
-      </div>
-
       <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(240px,300px)_1fr]">
         <div className="flex min-h-0 max-h-[min(78vh,720px)] flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
@@ -268,10 +236,6 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                   </button>
                 ) : null}
               </div>
-              <p className="mt-1.5 text-xs leading-snug text-slate-600">
-                Mẫu bạn tạo ở đây được lưu online; không cần cập nhật phần mềm. Bước tiếp theo: sang tab{' '}
-                <strong>Chấm điểm</strong> để kéo mẫu vào bộ điểm.
-              </p>
               {loading ? <p className="mt-2 text-xs text-slate-500">Đang tải…</p> : null}
               {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
               <ul className="mt-2 space-y-1 text-sm">
@@ -306,10 +270,6 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
 
             <section className="border-t border-slate-200 pt-2">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-800">Mẫu có sẵn (chỉnh được)</p>
-              <p className="mt-1 text-xs leading-snug text-slate-600">
-                Bấm mẫu để sửa rồi <strong>Lưu mẫu</strong> — toàn trường dùng bản đã chỉnh khi kéo thả.{' '}
-                <strong>Xóa mẫu</strong> (sau khi đã lưu) để trả lại bản phần mềm. «Đã chỉnh» = đang dùng bản trường.
-              </p>
               <div className="mt-2 max-h-[min(38vh,320px)] space-y-2 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
                 {RULE_CATEGORIES.map((cat) => {
                   const items = builtinsByCategory.get(cat) ?? []
@@ -410,21 +370,10 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
             </label>
 
             <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
-              <label className="block text-xs text-slate-600">
-                Nhóm (để phân loại trên bảng)
-                <select
-                  value={session.block.category}
-                  disabled={!canEdit || busy}
-                  onChange={(e) => patchBlock({ category: e.target.value as RuleCategory })}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
-                >
-                  {RULE_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {RULE_CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="text-xs text-slate-600">
+                <p className="font-medium text-slate-700">Danh mục</p>
+                <p className="mt-1 text-sm text-slate-900">{RULE_CATEGORY_LABELS[session.block.category]}</p>
+              </div>
               <label className="block text-xs text-slate-600">
                 Trần điểm tối đa của khối (gợi ý)
                 <input
@@ -450,7 +399,10 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
               <input
                 value={String(session.block.targetField)}
                 disabled={!canEdit || busy}
-                onChange={(e) => patchBlock({ targetField: e.target.value })}
+                onChange={(e) => {
+                  const tf = e.target.value
+                  patchBlock({ targetField: tf, category: inferRuleCategory(tf) })
+                }}
                 list="rule-template-lead-fields"
                 className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 font-mono text-sm"
               />

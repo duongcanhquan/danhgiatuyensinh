@@ -3,6 +3,7 @@ import type { Lead, PriorityTag, ScoringProfile } from '../types'
 import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
 import { useScoringProfiles } from './useScoringProfiles'
 import { useMasterData } from './useMasterData'
+import { useSchoolTvvSignalDefinitions } from './useSchoolTvvSignalDefinitions'
 
 export type LeadScorePreview = { calculatedScore: number; priorityTag: PriorityTag }
 
@@ -13,6 +14,7 @@ const SCORING_PROFILE_LS = 'vietmy_selected_scoring_profile_id'
  */
 export function useLeadScoring(leads: Lead[]) {
   const { profiles: scoringProfiles, loading: profilesLoading } = useScoringProfiles()
+  const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
   const {
     regionLabels,
     highSchoolLabels,
@@ -75,14 +77,14 @@ export function useLeadScoring(leads: Lead[]) {
       try {
         m.set(
           l.id,
-          evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, masterBuckets),
+          evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, masterBuckets, schoolTvvSignalDefs),
         )
       } catch {
         m.set(l.id, { calculatedScore: 0, priorityTag: 'COLD' })
       }
     }
     return m
-  }, [leads, activeScoringProfile, masterBuckets])
+  }, [leads, activeScoringProfile, masterBuckets, schoolTvvSignalDefs])
 
   return {
     scoringProfiles,
@@ -92,5 +94,6 @@ export function useLeadScoring(leads: Lead[]) {
     resolvedScoringProfileId,
     activeScoringProfile,
     scoreByLeadId,
+    schoolTvvSignalDefs,
   }
 }

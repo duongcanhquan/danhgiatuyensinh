@@ -41,6 +41,7 @@ import {
 import { CircleHelp, Maximize2, X } from 'lucide-react'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { RuleTemplateLibraryPanel } from '../components/RuleTemplateLibraryPanel'
+import { TvvSignalDefinitionsPanel } from '../components/TvvSignalDefinitionsPanel'
 import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
@@ -95,11 +96,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
       return (
         <>
           <p className="font-semibold text-slate-900">Quy tắc mẫu</p>
-          <p className="mt-1.5">
-            Tạo <strong>mẫu cộng điểm</strong> để sau này kéo dùng lại. Ở tab <strong>Chấm điểm</strong>, mẫu của trường nằm
-            phía trên mẫu có sẵn; kéo sang ô bên phải, chỉnh cho khớp ý rồi <strong>Lưu bộ chấm điểm</strong> — mỗi bộ là một
-            cách tính riêng.
-          </p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>Thêm / sửa / xóa mẫu; lưu online.</p>
         </>
       )
     case 'scoring':
@@ -760,13 +757,8 @@ export function SettingsView() {
           className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8"
         >
           <h2 id="tab-rule-templates" className={settingsHeading}>
-            Quy tắc mẫu — kho mẫu cho bước chấm điểm
+            Quy tắc mẫu
           </h2>
-          <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
-            Ở đây bạn xem và chỉnh <strong>mẫu riêng của trường</strong> (lưu online). Sang tab <strong>Chấm điểm</strong>, các
-            mẫu đó xuất hiện trong cột «Thư viện quy tắc» để kéo vào bộ điểm. Nếu không lưu được, thường do chưa bật quyền
-            lưu dữ liệu — nhờ người phụ trách hệ thống.
-          </p>
           {!canScoringRules ? (
             <p className={`mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ${settingsCopy}`}>
               Bạn chỉ xem được — chưa có quyền chỉnh phần này.
@@ -774,6 +766,7 @@ export function SettingsView() {
           ) : null}
           <div className="mt-5 min-h-[320px]">
             <RuleTemplateLibraryPanel db={db} canEdit={canScoringRules} />
+            {db ? <TvvSignalDefinitionsPanel db={db} canEdit={canScoringRules} /> : null}
           </div>
         </section>
       ) : null}

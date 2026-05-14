@@ -87,6 +87,16 @@ export function pipelineToCounselorStatus(p: Lead['pipelineStatus']): LeadCounse
   }
 }
 
+/**
+ * Ghi đồng bộ `assignedTo` + `assignedCounselorId` lên Firestore — tránh chỉ cập nhật một trường.
+ */
+export function assigneeFirestoreMirror(uid: string | null): {
+  assignedTo: string | null
+  assignedCounselorId: string | null
+} {
+  return { assignedTo: uid, assignedCounselorId: uid }
+}
+
 /** When only counselor `status` exists, infer admission funnel for analytics & legacy UI. */
 export function counselorStatusToPipeline(s: LeadCounselorStatus): Lead['pipelineStatus'] {
   switch (s) {

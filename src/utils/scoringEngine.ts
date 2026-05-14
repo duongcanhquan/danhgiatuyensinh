@@ -12,7 +12,7 @@ import type {
   ScoringRuleConditionRow,
   RuleCategory,
 } from '../types'
-import { inferSignalRuleCategory, scoringSignalsToEvaluationFlat } from './leadScoringSignals'
+import { inferSignalRuleCategory, mergeSchoolAndProfileCustomSignals, scoringSignalsToEvaluationFlat } from './leadScoringSignals'
 import { entryMatchesMasterValue, findMasterEntryForListItem } from './masterDataMatch'
 
 /** Ngưỡng mặc định khi profile không cấu hình hoặc giá trị không hợp lệ. */
@@ -550,16 +550,54 @@ export function evaluateLead(
   leadData: Record<string, unknown>,
   profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds' | 'customScoringSignals'>,
   masterBuckets?: MasterDataBuckets,
+  schoolCustomScoringSignals?: ProfileCustomScoringSignal[] | null,
 ): { calculatedScore: number; priorityTag: PriorityTag } {
   try {
     const merged = augmentLeadDataForScoring(leadData, masterBuckets)
-    const raw = profileRawScore(merged, profile, masterBuckets)
+    const mergedCustom = mergeSchoolAndProfileCustomSignals(schoolCustomScoringSignals, profile.customScoringSignals)
+    const profileForBlocks: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'customScoringSignals'> = {
+      rules: profile.rules,
+      ruleBlocks: profile.ruleBlocks,
+      customScoringSignals: mergedCustom,
+    }
+    const raw = profileRawScore(merged, profileForBlocks, masterBuckets)
     const calculatedScore = Number.isFinite(raw) ? raw : 0
     const priorityTag = scoreToPriorityTag(calculatedScore, profile.thresholds)
     return { calculatedScore, priorityTag }
   } catch {
     return { calculatedScore: 0, priorityTag: 'COLD' }
   }
+}
+
+/**
+ * Tính lại điểm/nhãn sau khi merge `patch` vào lead (Firestore / UI).
+ * Bỏ `calculatedScore` / `priorityTag` khỏi record đầu vào để rule không đọc nhầm điểm cũ khi chấm lại.
+ */
+export function computeStoredScoringForLeadPatch(
+  before: Lead,
+  patch: Partial<Lead>,
+  profile: ScoringProfile | null,
+  masterBuckets?: MasterDataBuckets,
+  schoolCustomScoringSignals?: ProfileCustomScoringSignal[] | null,
+): { calculatedScore: number; priorityTag: PriorityTag } | null {
+  if (!profile) return null
+  const merged = { ...before, ...patch } as Lead
+  const rec = leadToEvaluationRecord(merged)
+  delete rec.calculatedScore
+  delete rec.priorityTag
+  return evaluateLead(rec, profile, masterBuckets, schoolCustomScoringSignals)
+}
+
+/** Partial ghi Firestore: chỉ điểm + nhãn; rỗng nếu không có profile chấm. */
+export function persistedLeadScoringFields(
+  before: Lead,
+  patch: Partial<Lead>,
+  profile: ScoringProfile | null,
+  masterBuckets?: MasterDataBuckets,
+  schoolCustomScoringSignals?: ProfileCustomScoringSignal[] | null,
+): Partial<Pick<Lead, 'calculatedScore' | 'priorityTag'>> {
+  const ev = computeStoredScoringForLeadPatch(before, patch, profile, masterBuckets, schoolCustomScoringSignals)
+  return ev ? { calculatedScore: ev.calculatedScore, priorityTag: ev.priorityTag } : {}
 }
 
 export function isKnownHighSchool(name: string, highSchoolLabels: string[]): boolean {

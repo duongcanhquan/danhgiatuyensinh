@@ -32,6 +32,9 @@ function mapInteraction(
         data.durationSeconds !== undefined ? Number(data.durationSeconds) : undefined,
       aiSentiment: data.aiSentiment as Interaction['aiSentiment'],
       evaluationTag: data.evaluationTag !== undefined ? String(data.evaluationTag) : undefined,
+      snapshotCrmStatus: data.snapshotCrmStatus as Interaction['snapshotCrmStatus'],
+      snapshotPipelineStatus: data.snapshotPipelineStatus as Interaction['snapshotPipelineStatus'],
+      snapshotPriorityTag: data.snapshotPriorityTag as Interaction['snapshotPriorityTag'],
     }
   } catch {
     return null

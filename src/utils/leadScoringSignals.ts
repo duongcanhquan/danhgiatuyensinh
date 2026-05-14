@@ -2,7 +2,7 @@
  * Tín hiệu «Hành vi» / «Rủi ro» cho chấm điểm — lưu trên `leads.scoringSignals` (object, chỉ các khóa = true).
  * Engine đọc qua các trường phẳng `sig_*` do {@link scoringSignalsToEvaluationFlat} sinh ra.
  */
-import type { LeadScoringSignalKey, LeadScoringSignals } from '../types'
+import type { LeadScoringSignalKey, LeadScoringSignals, ProfileCustomScoringSignal } from '../types'
 
 export const SCORING_SIGNAL_META: Record<
   LeadScoringSignalKey,
@@ -97,4 +97,26 @@ export function inferSignalRuleCategory(targetField: string): 'behavior' | 'risk
     if (SCORING_SIGNAL_META[key].evalField === f) return SCORING_SIGNAL_META[key].group
   }
   return null
+}
+
+/**
+ * Gộp định nghĩa tín hiệu TVV tùy chỉnh: bản toàn trường (`scoringAux`) thắng trùng `id` với bản còn trên profile.
+ */
+export function mergeSchoolAndProfileCustomSignals(
+  school: ProfileCustomScoringSignal[] | null | undefined,
+  profile: ProfileCustomScoringSignal[] | null | undefined,
+): ProfileCustomScoringSignal[] | undefined {
+  const schoolArr = (school ?? []).filter((x) => x?.id && String(x.label ?? '').trim())
+  const profileArr = (profile ?? []).filter((x) => x?.id && String(x.label ?? '').trim())
+  if (!schoolArr.length && !profileArr.length) return undefined
+  const byId = new Map<string, ProfileCustomScoringSignal>()
+  for (const x of profileArr) {
+    const group = x.group === 'risk' ? 'risk' : 'behavior'
+    byId.set(x.id, { ...x, group, points: Number.isFinite(x.points) ? x.points : 0 })
+  }
+  for (const x of schoolArr) {
+    const group = x.group === 'risk' ? 'risk' : 'behavior'
+    byId.set(x.id, { ...x, group, points: Number.isFinite(x.points) ? x.points : 0 })
+  }
+  return [...byId.values()]
 }

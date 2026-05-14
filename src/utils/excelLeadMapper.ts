@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { Lead, LeadCounselorStatus, PriorityTag } from '../types'
-import { coerceLeadCounselorStatus, counselorStatusToPipeline } from './leadIdentity'
+import { assigneeFirestoreMirror, coerceLeadCounselorStatus, counselorStatusToPipeline } from './leadIdentity'
 
 /** Map tiêu đề cột Excel (sau chuẩn hoá) → khóa parser. Giữ alias cũ để file mẫu cũ vẫn đọc được. */
 const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
@@ -181,8 +181,7 @@ export function buildLeadFirestorePayload(
     parentPhone: row.parentPhone ?? '',
     source: row.source ?? '',
     educationLevel: row.educationLevel ?? '',
-    assignedTo: assignee,
-    assignedCounselorId: assignee,
+    ...assigneeFirestoreMirror(assignee),
     status,
     pipelineStatus,
     description: row.description ?? '',

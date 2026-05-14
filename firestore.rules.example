@@ -8,6 +8,10 @@ service cloud.firestore {
 
     // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
     // write: admin only) — collection used by RAG / Settings → Kho tri thức.
+    //
+    // `scoringProfiles`: gợi ý — đọc: mọi user đã đăng nhập (để chọn profile chấm điểm).
+    // Ghi: admin (mọi doc); TVV chỉ doc có `createdBy == request.auth.uid` và không được
+    // ghi `isDefaultForImport` / batch gỡ cờ profile khác (chỉ quản trị).
 
     // =====================================================================
     // CHỈ MẪU CHO GIAI ĐOẠN DEV / GỠ LỖI "chưa có hồ sơ users/{uid}"

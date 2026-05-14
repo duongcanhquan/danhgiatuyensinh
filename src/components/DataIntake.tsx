@@ -25,6 +25,7 @@ import { FS_COLLECTIONS, type VietMyUserProfile } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { pickProfileForImport, useScoringProfiles } from '../hooks/useScoringProfiles'
+import { useSchoolTvvSignalDefinitions } from '../hooks/useSchoolTvvSignalDefinitions'
 import { useMasterData } from '../hooks/useMasterData'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useAuth } from '../hooks/useAuth'
@@ -140,6 +141,7 @@ export function DataIntake() {
   const configured = isFirebaseConfigured()
   const { profile, can } = useAuth()
   const { profiles } = useScoringProfiles()
+  const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
   const { regionLabels, highSchoolLabels, majorLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
   const { counselors, users: directoryUsers } = useCounselorDirectory()
 
@@ -375,7 +377,7 @@ export function DataIntake() {
           address: pr.row.address,
           description: pr.row.description,
         } as Record<string, unknown>
-        const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets)
+        const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets, schoolTvvSignalDefs)
 
         const base = buildLeadFirestorePayload(pr.row, calculatedScore, priorityTag, counselorId, ownership, {
           uniqueHash: pr.hash,
@@ -420,7 +422,17 @@ export function DataIntake() {
     } finally {
       setBusy(false)
     }
-  }, [preview, db, profile, profiles, masterBuckets, counselors, directoryUsers, matchStaffForImport])
+  }, [
+    preview,
+    db,
+    profile,
+    profiles,
+    masterBuckets,
+    counselors,
+    directoryUsers,
+    matchStaffForImport,
+    schoolTvvSignalDefs,
+  ])
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault()

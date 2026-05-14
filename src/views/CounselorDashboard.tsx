@@ -1,14 +1,4 @@
-import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
-import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { addDoc, collection, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import {
@@ -16,13 +6,13 @@ import {
   ChevronDown,
   Filter,
   Flame,
-  GripVertical,
+  FolderOpen,
   MessageSquare,
   Phone,
   Search,
   ThermometerSun,
 } from 'lucide-react'
-import type { Lead, LeadCounselorStatus, PriorityTag } from '../types'
+import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from '../types'
 import {
   FS_COLLECTIONS,
   LEAD_COUNSELOR_STATUS_LABELS,
@@ -34,7 +24,7 @@ import { useAuth } from '../hooks/useAuth'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import {
   leadMatchesClientSearch,
-  MAX_FULL_SCOPE_LEADS,
+  LEADS_UI_FULL_SCOPE_MAX,
   useLeads,
 } from '../hooks/useLeads'
 import { useLeadScoring, type LeadScorePreview } from '../hooks/useLeadScoring'
@@ -43,22 +33,12 @@ import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
-import { counselorStatusToPipeline } from '../utils/leadIdentity'
+import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/leadIdentity'
 import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { exportSelectedEvaluatedLeadsToXlsx } from '../utils/exportEvaluatedLeads'
-import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
+import { evaluateLead, leadToEvaluationRecord, persistedLeadScoringFields } from '../utils/scoring'
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
-
-const COL_SURFACE: Record<LeadCounselorStatus, string> = {
-  NEW: 'border-amber-200/90 bg-gradient-to-b from-amber-50/95 via-white/85 to-white/45',
-  INTERESTED: 'border-violet-200/90 bg-gradient-to-b from-violet-50/95 via-white/85 to-white/45',
-  DEPOSIT_PAID:
-    'border-emerald-200/90 bg-gradient-to-b from-emerald-50/95 via-white/85 to-white/45',
-  ENROLLED: 'border-teal-200/90 bg-gradient-to-b from-teal-50/95 via-white/85 to-white/45',
-  SUMMER_MELT: 'border-orange-300/90 bg-gradient-to-b from-orange-50/95 via-white/85 to-white/45',
-  DEAD: 'border-rose-200/90 bg-gradient-to-b from-rose-50/95 via-white/85 to-white/45',
-}
 
 const TAG_BADGE: Record<PriorityTag, string> = {
   HOT: 'bg-rose-100 text-rose-900 ring-1 ring-rose-300/80',
@@ -67,20 +47,19 @@ const TAG_BADGE: Record<PriorityTag, string> = {
   LOSS: 'bg-slate-700 text-slate-200 ring-1 ring-slate-500/70',
 }
 
-/** Số thẻ tối đa mỗi cột CRM mỗi trang (lật trang trong cột). */
-const KANBAN_PAGE_SIZE = 40
+const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
+  NEW: 'Mới',
+  CONTACTED: 'Đã liên hệ',
+  QUALIFIED: 'Đủ điều kiện',
+  APPLIED: 'Đã nộp hồ sơ',
+  ENROLLED: 'Đã ghi danh',
+  LOST: 'Không còn tiềm năng',
+  ARCHIVED: 'Lưu trữ',
+}
+
+const LIST_PAGE_SIZE = 40
 
 type Toast = { id: string; text: string }
-
-function colId(s: LeadCounselorStatus) {
-  return `col-${s}`
-}
-
-function parseColId(overId: string | undefined): LeadCounselorStatus | null {
-  if (!overId?.startsWith('col-')) return null
-  const s = overId.slice(4) as LeadCounselorStatus
-  return LEAD_COUNSELOR_STATUS_ORDER.includes(s) ? s : null
-}
 
 function formatFollowUp(next: Timestamp | null | undefined): string {
   if (!next) return '—'
@@ -142,42 +121,7 @@ function isElevatedForBulk(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
 }
 
-function KanbanColumn({
-  status,
-  count,
-  children,
-  footer,
-}: {
-  status: LeadCounselorStatus
-  count: number
-  children: ReactNode
-  footer?: ReactNode
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: colId(status), data: { status } })
-  return (
-    <div
-      ref={setNodeRef}
-      className={[
-        'flex min-h-[min(70vh,520px)] min-w-[10.5rem] flex-1 basis-0 flex-col rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-all duration-300',
-        COL_SURFACE[status],
-        isOver ? 'ring-2 ring-amber-400/50 ring-offset-2 ring-offset-white/90' : '',
-      ].join(' ')}
-    >
-      <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-          {LEAD_COUNSELOR_STATUS_LABELS[status]}
-        </h3>
-        <span className="rounded-full border border-slate-200/90 bg-white/90 px-2 py-0.5 text-xs font-medium text-slate-700 shadow-sm">
-          {count}
-        </span>
-      </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-0.5">{children}</div>
-      {footer ? <div className="mt-2 shrink-0 border-t border-slate-200/70 pt-2">{footer}</div> : null}
-    </div>
-  )
-}
-
-function KanbanLeadCard({
+function CounselorLeadListRow({
   lead,
   priorityTag,
   onToast,
@@ -185,6 +129,8 @@ function KanbanLeadCard({
   canInteract,
   selected,
   onToggleSelect,
+  rowCrmBusy,
+  onCrmChange,
 }: {
   lead: Lead
   priorityTag: PriorityTag
@@ -193,24 +139,14 @@ function KanbanLeadCard({
   canInteract: boolean
   selected: boolean
   onToggleSelect: (id: string, e?: MouseEvent) => void
+  rowCrmBusy: boolean
+  onCrmChange: (lead: Lead, next: LeadCounselorStatus) => void
 }) {
   const db = getFirestoreDb()
   const { profile } = useAuth()
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: lead.id,
-    data: { lead },
-  })
-
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.55 : 1,
-  }
-
   const slaNewStale = isStaleNewSla(lead)
   const followToday = isFollowUpTodayLocal(lead.nextFollowUpDate)
-
   const performerName = profile?.displayName?.trim() || profile?.email || profile?.id || ''
-
   const logCall = async (e: MouseEvent) => {
     e.stopPropagation()
     if (!db || !profile || !canInteract) return
@@ -221,7 +157,7 @@ function KanbanLeadCard({
         authorUid: profile.id,
         authorRole: profile.role,
         timestamp: Timestamp.now(),
-        counselorNote: 'Ghi nhanh: Cuộc gọi (Pipeline)',
+        counselorNote: 'Ghi nhanh: Cuộc gọi (danh sách TVV)',
         callOutcome: 'CONNECTED',
       })
       const touch = leadTouchPatch()
@@ -301,162 +237,177 @@ function KanbanLeadCard({
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
+    <tr
       className={[
-        'relative rounded-xl border bg-white/85 p-2.5 shadow-sm backdrop-blur-md transition-shadow duration-300',
-        selected ? 'border-amber-400 ring-2 ring-amber-200/80' : 'border-slate-200/90',
-        followToday ? 'shadow-[0_0_20px_rgba(251,191,36,0.35)] ring-1 ring-amber-400/50' : '',
+        'border-b border-slate-100/90 transition-colors',
+        selected ? 'bg-amber-50/95' : 'bg-white/70 hover:bg-slate-50/90',
+        followToday ? 'ring-1 ring-inset ring-amber-300/60' : '',
       ].join(' ')}
     >
-      {slaNewStale && lead.status === 'NEW' ? (
-        <span
-          className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center"
-          title="SLA: hồ sơ ở cột Mới chưa được chạm trên 24 giờ"
-        >
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e]" />
-        </span>
-      ) : null}
-      <div className="flex items-start gap-2">
+      <td className="px-2 py-2 align-middle">
         <input
           type="checkbox"
           checked={selected}
-          onClick={(e) => e.stopPropagation()}
           onChange={() => onToggleSelect(lead.id)}
-          className="mt-2 h-4 w-4 shrink-0 rounded border-slate-300 bg-white accent-amber-500"
+          className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
           aria-label={`Chọn ${lead.fullName}`}
         />
-        <button
-          type="button"
-          className="mt-0.5 shrink-0 cursor-grab touch-none rounded-md border border-slate-200 bg-white p-1 text-slate-500 transition hover:border-amber-300 hover:text-amber-700"
-          aria-label="Kéo thả thẻ hồ sơ"
-          {...listeners}
-          {...attributes}
-        >
-          <GripVertical className="h-4 w-4" strokeWidth={1.75} />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-slate-900">{lead.fullName || '—'}</p>
-          <p className="truncate text-xs text-slate-600">{lead.phone || lead.parentPhone || '—'}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${TAG_BADGE[priorityTag]}`}>
-              {priorityTag}
+      </td>
+      <td className="max-w-[14rem] px-2 py-2 align-middle">
+        <div className="relative min-w-0">
+          {slaNewStale && lead.status === 'NEW' ? (
+            <span
+              className="absolute -left-1 -top-1 flex h-2.5 w-2.5"
+              title="SLA: giai đoạn Mới chưa được chạm trên 24 giờ"
+            >
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
             </span>
-            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
-              <CalendarClock className="h-3 w-3" />
-              {formatFollowUp(lead.nextFollowUpDate)}
-            </span>
-          </div>
-          <div className="mt-2 flex gap-1 border-t border-slate-100 pt-2">
-            <button
-              type="button"
-              disabled={!canInteract}
-              onClick={(e) => void logCall(e)}
-              title="Ghi cuộc gọi"
-              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-30"
-            >
-              <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </button>
-            <button
-              type="button"
-              disabled={!canInteract}
-              onClick={(e) => void addNote(e)}
-              title="Thêm ghi chú"
-              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 disabled:opacity-30"
-            >
-              <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </button>
-            <button
-              type="button"
-              disabled={!canWrite}
-              onClick={(e) => void setFollowUp(e)}
-              title="Đặt follow-up"
-              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
-            >
-              <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </button>
-          </div>
+          ) : null}
+          <p className="truncate pl-1 text-sm font-semibold text-slate-900">{lead.fullName || '—'}</p>
+          <p className="truncate text-xs text-slate-500">{lead.province?.trim() || '—'} · {lead.highSchool?.trim() || '—'}</p>
         </div>
-      </div>
-    </div>
+      </td>
+      <td className="whitespace-nowrap px-2 py-2 align-middle text-xs text-slate-700">{lead.phone || lead.parentPhone || '—'}</td>
+      <td className="px-2 py-2 align-middle">
+        <select
+          value={lead.status}
+          disabled={!canWrite || rowCrmBusy}
+          onChange={(e) => onCrmChange(lead, e.target.value as LeadCounselorStatus)}
+          className="max-w-[11rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200 disabled:opacity-45"
+          aria-label={`Tình trạng CRM — ${lead.fullName}`}
+        >
+          {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
+            <option key={s} value={s}>
+              {LEAD_COUNSELOR_STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="hidden px-2 py-2 align-middle text-xs text-slate-600 lg:table-cell">{PIPELINE_LABEL[lead.pipelineStatus]}</td>
+      <td className="px-2 py-2 align-middle">
+        <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold uppercase ${TAG_BADGE[priorityTag]}`}>
+          {priorityTag}
+        </span>
+      </td>
+      <td className="hidden whitespace-nowrap px-2 py-2 align-middle text-xs text-slate-600 sm:table-cell">
+        <span className="inline-flex items-center gap-1">
+          <CalendarClock className="h-3 w-3 shrink-0 text-slate-400" aria-hidden />
+          {formatFollowUp(lead.nextFollowUpDate)}
+        </span>
+      </td>
+      <td className="px-2 py-2 align-middle">
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            disabled={!canInteract}
+            onClick={(e) => void logCall(e)}
+            title="Ghi cuộc gọi"
+            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-30"
+          >
+            <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            disabled={!canInteract}
+            onClick={(e) => void addNote(e)}
+            title="Ghi chú nhanh"
+            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 disabled:opacity-30"
+          >
+            <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            disabled={!canWrite}
+            onClick={(e) => void setFollowUp(e)}
+            title="Đặt follow-up"
+            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
+          >
+            <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+          <Link
+            to={`/leads?open=${encodeURIComponent(lead.id)}`}
+            className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
+            title="Mở chi tiết hồ sơ trên trang Hồ sơ (đồng bộ pipeline, mô tả, tín hiệu)"
+          >
+            <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <span className="hidden xl:inline">Hồ sơ</span>
+          </Link>
+        </div>
+      </td>
+    </tr>
   )
 }
 
-function CounselorPipelineBoard({
-  byStatus,
+function CounselorLeadWorklist({
+  rows,
+  total,
+  page,
+  pageSize,
+  onPageChange,
   scoreByLeadId,
-  sensors,
-  onDragEnd,
-  pushToast,
-  canWrite,
-  canInteract,
   selectedIds,
   toggleSelectId,
+  toggleSelectAllOnPage,
+  allOnPageSelected,
+  canWrite,
+  canInteract,
+  pushToast,
+  onRowCrmChange,
+  rowCrmBusyId,
 }: {
-  byStatus: Map<LeadCounselorStatus, Lead[]>
+  rows: Lead[]
+  total: number
+  page: number
+  pageSize: number
+  onPageChange: (p: number) => void
   scoreByLeadId: Map<string, LeadScorePreview>
-  sensors: ReturnType<typeof useSensors>
-  onDragEnd: (e: DragEndEvent) => void
-  pushToast: (text: string) => void
-  canWrite: boolean
-  canInteract: boolean
   selectedIds: Set<string>
   toggleSelectId: (id: string, e?: MouseEvent) => void
+  toggleSelectAllOnPage: () => void
+  allOnPageSelected: boolean
+  canWrite: boolean
+  canInteract: boolean
+  pushToast: (text: string) => void
+  onRowCrmChange: (lead: Lead, next: LeadCounselorStatus) => void
+  rowCrmBusyId: string | null
 }) {
-  const [kanbanPageByCol, setKanbanPageByCol] = useState<Partial<Record<LeadCounselorStatus, number>>>({})
+  const maxPage = Math.max(1, Math.ceil(total / pageSize))
   return (
-    <DndContext sensors={sensors} onDragEnd={(e) => void onDragEnd(e)}>
-      <div className="scroll-touch flex w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-4 pt-1 sm:gap-3 md:gap-3">
-        {LEAD_COUNSELOR_STATUS_ORDER.map((status) => {
-          const fullList = byStatus.get(status) ?? []
-          const totalP = Math.max(1, Math.ceil(fullList.length / KANBAN_PAGE_SIZE))
-          const rawPage = kanbanPageByCol[status] ?? 1
-          const page = Math.min(Math.max(1, rawPage), totalP)
-          const start = (page - 1) * KANBAN_PAGE_SIZE
-          const slice = fullList.slice(start, start + KANBAN_PAGE_SIZE)
-          const bumpPage = (next: number) => {
-            setKanbanPageByCol((prev) => ({
-              ...prev,
-              [status]: Math.min(Math.max(1, next), totalP),
-            }))
-          }
-          return (
-            <KanbanColumn
-              key={status}
-              status={status}
-              count={fullList.length}
-              footer={
-                totalP > 1 ? (
-                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-600">
-                    <span className="tabular-nums">
-                      Trang {page}/{totalP} · hiện {slice.length}/{fullList.length}
-                    </span>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        disabled={page <= 1}
-                        onClick={() => bumpPage(page - 1)}
-                        className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        disabled={page >= totalP}
-                        onClick={() => bumpPage(page + 1)}
-                        className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                ) : null
-              }
-            >
-              {slice.map((lead) => (
-                <KanbanLeadCard
+    <section className="rounded-2xl border border-slate-200/90 bg-white/35 shadow-md backdrop-blur-xl">
+      <div className="scroll-touch overflow-x-auto">
+        <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200/90 bg-slate-50/90 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <th className="w-10 px-2 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={() => toggleSelectAllOnPage()}
+                  disabled={!rows.length}
+                  className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                  aria-label="Chọn tất cả trên trang"
+                />
+              </th>
+              <th className="px-2 py-2.5">Hồ sơ</th>
+              <th className="px-2 py-2.5">Liên hệ</th>
+              <th className="px-2 py-2.5">Tình trạng CRM</th>
+              <th className="hidden px-2 py-2.5 lg:table-cell">Funnel</th>
+              <th className="px-2 py-2.5">Nhãn</th>
+              <th className="hidden px-2 py-2.5 sm:table-cell">Hẹn</th>
+              <th className="px-2 py-2.5">Tiến độ nhanh</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-600">
+                  Không có hồ sơ khớp bộ lọc. Thử đổi từ khóa hoặc xóa bộ lọc mở rộng.
+                </td>
+              </tr>
+            ) : (
+              rows.map((lead) => (
+                <CounselorLeadListRow
                   key={lead.id}
                   lead={lead}
                   priorityTag={scoreByLeadId.get(lead.id)?.priorityTag ?? lead.priorityTag}
@@ -465,13 +416,43 @@ function CounselorPipelineBoard({
                   canInteract={canInteract}
                   selected={selectedIds.has(lead.id)}
                   onToggleSelect={toggleSelectId}
+                  rowCrmBusy={rowCrmBusyId === lead.id}
+                  onCrmChange={onRowCrmChange}
                 />
-              ))}
-            </KanbanColumn>
-          )
-        })}
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
-    </DndContext>
+      {total > pageSize ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 bg-white/60 px-3 py-2.5 text-xs text-slate-700">
+          <span className="tabular-nums">
+            {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} / {total.toLocaleString('vi-VN')}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+            >
+              ← Trước
+            </button>
+            <span className="tabular-nums text-slate-600">
+              Trang {page}/{maxPage}
+            </span>
+            <button
+              type="button"
+              disabled={page >= maxPage}
+              onClick={() => onPageChange(page + 1)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+            >
+              Sau →
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -491,6 +472,7 @@ export function CounselorDashboard() {
 
   const { leads, loading, error, scopeFetchTruncated } = useLeads({
     dataMode: 'fullScope',
+    maxFullScopeLeads: LEADS_UI_FULL_SCOPE_MAX,
     directoryLabels: counselorDirectoryLabelById,
   })
   const scoringMasterBuckets = useMemo(
@@ -506,7 +488,7 @@ export function CounselorDashboard() {
     }),
     [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
   )
-  const { scoreByLeadId, activeScoringProfile } = useLeadScoring(leads)
+  const { scoreByLeadId, activeScoringProfile, schoolTvvSignalDefs } = useLeadScoring(leads)
 
   const [needle, setNeedle] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
@@ -527,6 +509,9 @@ export function CounselorDashboard() {
   const [dateTo, setDateTo] = useState('')
   /** '' = mọi TVV; '__UNASSIGNED__' = chưa gán */
   const [counselorFilterUid, setCounselorFilterUid] = useState('')
+  const [crmStageFilter, setCrmStageFilter] = useState<'ALL' | LeadCounselorStatus>('ALL')
+  const [listPage, setListPage] = useState(1)
+  const [rowCrmBusyId, setRowCrmBusyId] = useState<string | null>(null)
 
   const pushToast = useCallback((text: string) => {
     const id = crypto.randomUUID()
@@ -554,12 +539,6 @@ export function CounselorDashboard() {
       formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
     )
   }, [counselorUsers, directoryUsers, isElevatedLeadScope])
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
-  )
 
   const followUpCount = useMemo(
     () => leads.filter((l) => isDueTodayOrOverdue(l.nextFollowUpDate)).length,
@@ -614,6 +593,7 @@ export function CounselorDashboard() {
         dateAxis,
         dateFrom,
         dateTo,
+        crmStageFilter,
       ].join('|'),
     [
       needle,
@@ -627,8 +607,13 @@ export function CounselorDashboard() {
       dateAxis,
       dateFrom,
       dateTo,
+      crmStageFilter,
     ],
   )
+
+  useEffect(() => {
+    setListPage(1)
+  }, [pipelineFilterSig])
 
   const filtered = useMemo(() => {
     const q = needle.trim().toLowerCase()
@@ -670,15 +655,35 @@ export function CounselorDashboard() {
     dateTo,
   ])
 
-  const byStatus = useMemo(() => {
-    const m = new Map<LeadCounselorStatus, Lead[]>()
-    for (const s of LEAD_COUNSELOR_STATUS_ORDER) m.set(s, [])
-    for (const l of filtered) {
-      const list = m.get(l.status)
-      if (list) list.push(l)
-    }
-    return m
-  }, [filtered])
+  const listRows = useMemo(() => {
+    let rows = filtered
+    if (crmStageFilter !== 'ALL') rows = rows.filter((l) => l.status === crmStageFilter)
+    return [...rows].sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+  }, [filtered, crmStageFilter])
+
+  const maxListPage = Math.max(1, Math.ceil(listRows.length / LIST_PAGE_SIZE))
+  const effectiveListPage = Math.min(Math.max(1, listPage), maxListPage)
+  const pageSlice = useMemo(() => {
+    const start = (effectiveListPage - 1) * LIST_PAGE_SIZE
+    return listRows.slice(start, start + LIST_PAGE_SIZE)
+  }, [listRows, effectiveListPage])
+
+  useEffect(() => {
+    setListPage((p) => Math.min(Math.max(1, p), Math.max(1, Math.ceil(listRows.length / LIST_PAGE_SIZE))))
+  }, [listRows.length])
+
+  const allOnPageSelected =
+    pageSlice.length > 0 && pageSlice.every((l) => selectedIds.has(l.id))
+
+  const toggleSelectAllOnPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      const all = pageSlice.length > 0 && pageSlice.every((l) => n.has(l.id))
+      if (all) for (const l of pageSlice) n.delete(l.id)
+      else for (const l of pageSlice) n.add(l.id)
+      return n
+    })
+  }, [pageSlice])
 
   const toggleSelectId = useCallback((id: string, e?: MouseEvent) => {
     e?.stopPropagation()
@@ -695,13 +700,14 @@ export function CounselorDashboard() {
       const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
       for (const l of rows) {
         const ev = activeScoringProfile
-          ? scoreByLeadId.get(l.id) ?? evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets)
+          ? scoreByLeadId.get(l.id) ??
+            evaluateLead(leadToEvaluationRecord(l), activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs)
           : { calculatedScore: l.calculatedScore, priorityTag: l.priorityTag }
         m.set(l.id, ev)
       }
       return m
     },
-    [activeScoringProfile, scoreByLeadId, scoringMasterBuckets],
+    [activeScoringProfile, scoreByLeadId, scoringMasterBuckets, schoolTvvSignalDefs],
   )
 
   const applyBulkReassign = useCallback(async () => {
@@ -725,9 +731,19 @@ export function CounselorDashboard() {
         bulkReassignUid
       for (const id of selectedIds) {
         const prev = leads.find((x) => x.id === id)
+        const assignPatch = assigneeFirestoreMirror(bulkReassignUid) as Partial<Lead>
+        const scoreFields = prev
+          ? persistedLeadScoringFields(
+              prev,
+              assignPatch,
+              activeScoringProfile,
+              scoringMasterBuckets,
+              schoolTvvSignalDefs,
+            )
+          : {}
         await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
-          assignedCounselorId: bulkReassignUid,
-          assignedTo: bulkReassignUid,
+          ...assignPatch,
+          ...scoreFields,
           ...leadTouchPatch(),
         })
         await commitAuditLog(db, {
@@ -757,6 +773,9 @@ export function CounselorDashboard() {
     pushToast,
     isElevatedLeadScope,
     canPeerReassignLeads,
+    activeScoringProfile,
+    scoringMasterBuckets,
+    schoolTvvSignalDefs,
   ])
 
   const applyBulkCrmStatus = useCallback(async () => {
@@ -766,15 +785,28 @@ export function CounselorDashboard() {
       const performer = profile.displayName?.trim() || profile.email || profile.id
       for (const id of selectedIds) {
         const prev = leads.find((x) => x.id === id)
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
+        const dataPatch: Partial<Lead> = {
           status: bulkCrmStatus,
           pipelineStatus: counselorStatusToPipeline(bulkCrmStatus),
+        }
+        const scoreFields = prev
+          ? persistedLeadScoringFields(
+              prev,
+              dataPatch,
+              activeScoringProfile,
+              scoringMasterBuckets,
+              schoolTvvSignalDefs,
+            )
+          : {}
+        await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
+          ...dataPatch,
+          ...scoreFields,
           ...leadTouchPatch(),
         })
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'STATUS_CHANGE',
-          description: `CRM/Kanban (hàng loạt): ${prev ? LEAD_COUNSELOR_STATUS_LABELS[prev.status] : '—'} → ${LEAD_COUNSELOR_STATUS_LABELS[bulkCrmStatus]}`,
+          description: `CRM (hàng loạt, danh sách TVV): ${prev ? LEAD_COUNSELOR_STATUS_LABELS[prev.status] : '—'} → ${LEAD_COUNSELOR_STATUS_LABELS[bulkCrmStatus]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -788,7 +820,7 @@ export function CounselorDashboard() {
     } finally {
       setBulkBusy(false)
     }
-  }, [db, profile, selectedIds, leads, bulkCrmStatus, pushToast])
+  }, [db, profile, selectedIds, leads, bulkCrmStatus, pushToast, activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs])
 
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
@@ -797,35 +829,55 @@ export function CounselorDashboard() {
     })
   }, [leads, selectedIds, evalMapForExport, activeScoringProfile])
 
-  const onDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!db || !canWrite || !profile) return
-    const next = parseColId(over?.id as string | undefined)
-    if (!next) return
-    const leadId = String(active.id)
-    const lead = leads.find((l) => l.id === leadId)
-    if (!lead || lead.status === next) return
-    try {
-      const touch = leadTouchPatch()
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, leadId), {
-        status: next,
-        pipelineStatus: counselorStatusToPipeline(next),
-        ...touch,
-      })
-      const performer = profile.displayName?.trim() || profile.email || profile.id
-      await commitAuditLog(db, {
-        leadId,
-        actionType: 'STATUS_CHANGE',
-        description: `Kanban: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[next]}`,
-        performedBy: profile.id,
-        performedByName: performer,
-      })
-      pushToast(`Đã chuyển sang «${LEAD_COUNSELOR_STATUS_LABELS[next]}».`)
-    } catch (e) {
-      console.error(e)
-      pushToast('Không thể cập nhật trạng thái.')
-    }
-  }
+  const applyRowCrmChange = useCallback(
+    async (lead: Lead, next: LeadCounselorStatus) => {
+      if (!db || !canWrite || !profile) return
+      if (lead.status === next) return
+      setRowCrmBusyId(lead.id)
+      try {
+        const touch = leadTouchPatch()
+        const dataPatch: Partial<Lead> = {
+          status: next,
+          pipelineStatus: counselorStatusToPipeline(next),
+        }
+        const scoreFields = persistedLeadScoringFields(
+          lead,
+          dataPatch,
+          activeScoringProfile,
+          scoringMasterBuckets,
+          schoolTvvSignalDefs,
+        )
+        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
+          ...dataPatch,
+          ...scoreFields,
+          ...touch,
+        })
+        const performer = profile.displayName?.trim() || profile.email || profile.id
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'STATUS_CHANGE',
+          description: `CRM (danh sách TVV): ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[next]}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+        pushToast(`Đã cập nhật «${LEAD_COUNSELOR_STATUS_LABELS[next]}».`)
+      } catch (e) {
+        console.error(e)
+        pushToast('Không thể cập nhật trạng thái.')
+      } finally {
+        setRowCrmBusyId(null)
+      }
+    },
+    [
+      db,
+      canWrite,
+      profile,
+      activeScoringProfile,
+      scoringMasterBuckets,
+      schoolTvvSignalDefs,
+      pushToast,
+    ],
+  )
 
   if (!canBoard) {
     return (
@@ -845,6 +897,10 @@ export function CounselorDashboard() {
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
             Tư vấn
           </VietMyAccentHeading>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            Làm việc trên <strong>danh sách hồ sơ</strong> có bộ lọc — đổi <strong>tình trạng CRM</strong>, ghi chú / gọi /
+            follow-up nhanh, rồi mở <Link to="/leads" className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950">Hồ sơ</Link> để cập nhật pipeline, mô tả và tín hiệu đầy đủ. Kanban kéo-thả tạm ẩn để thao tác thống nhất, dễ kiểm soát hơn.
+          </p>
         </div>
       </header>
 
@@ -873,7 +929,7 @@ export function CounselorDashboard() {
                 aria-expanded={filtersExpanded}
               >
                 <Filter className="h-3.5 w-3.5 text-amber-700" strokeWidth={2} />
-                Lọc khu vực · trường · ngành · ngày · TVV
+                Lọc nâng cao (CRM · khu vực · …)
                 <ChevronDown
                   className={[
                     'h-3.5 w-3.5 text-slate-500 transition-transform',
@@ -885,6 +941,24 @@ export function CounselorDashboard() {
             </div>
             {filtersExpanded ? (
               <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <label className="block text-xs font-medium text-slate-600">
+                  Giai đoạn tư vấn (CRM)
+                  <select
+                    value={crmStageFilter}
+                    onChange={(e) => {
+                      setListPage(1)
+                      setCrmStageFilter(e.target.value as 'ALL' | LeadCounselorStatus)
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  >
+                    <option value="ALL">Tất cả giai đoạn</option>
+                    {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
+                      <option key={s} value={s}>
+                        {LEAD_COUNSELOR_STATUS_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="block text-xs font-medium text-slate-600">
                   Khu vực
                   <select
@@ -988,6 +1062,8 @@ export function CounselorDashboard() {
                       setDateFrom('')
                       setDateTo('')
                       setCounselorFilterUid('')
+                      setCrmStageFilter('ALL')
+                      setListPage(1)
                     }}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                   >
@@ -1054,7 +1130,7 @@ export function CounselorDashboard() {
               ].join(' ')}
             >
               <span aria-hidden>⚠️</span>{' '}
-              <span className="font-semibold">{hotSlaCount}</span> HOT cột Mới &gt;24h chưa chạm
+              <span className="font-semibold">{hotSlaCount}</span> HOT giai đoạn Mới &gt;24h chưa chạm
             </button>
           </div>
         </div>
@@ -1068,7 +1144,7 @@ export function CounselorDashboard() {
 
       {scopeFetchTruncated ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm">
-          Pipeline chỉ tải tối đa <strong>{MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
+          Danh sách này chỉ tải tối đa <strong>{LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
           quyền — có thể còn trên server. Dùng{' '}
           <Link to="/leads" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
             Hồ sơ
@@ -1084,26 +1160,30 @@ export function CounselorDashboard() {
       ) : null}
 
       {loading ? (
-        <div className="scroll-touch flex w-full min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:gap-3">
-          {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
-            <div
-              key={s}
-              className="h-64 min-w-[10.5rem] flex-1 basis-0 animate-pulse rounded-2xl border border-slate-200/80 bg-white/60"
-            />
-          ))}
+        <div className="space-y-2 rounded-2xl border border-slate-200/80 bg-white/50 p-4 shadow-inner">
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200/80" />
+          <div className="h-10 w-full animate-pulse rounded-lg bg-slate-200/60" />
+          <div className="h-10 w-full animate-pulse rounded-lg bg-slate-200/60" />
+          <div className="h-10 w-full animate-pulse rounded-lg bg-slate-200/60" />
         </div>
       ) : (
-        <CounselorPipelineBoard
+        <CounselorLeadWorklist
           key={pipelineFilterSig}
-          byStatus={byStatus}
+          rows={pageSlice}
+          total={listRows.length}
+          page={effectiveListPage}
+          pageSize={LIST_PAGE_SIZE}
+          onPageChange={setListPage}
           scoreByLeadId={scoreByLeadId}
-          sensors={sensors}
-          onDragEnd={onDragEnd}
-          pushToast={pushToast}
-          canWrite={canWrite}
-          canInteract={canInteract}
           selectedIds={selectedIds}
           toggleSelectId={toggleSelectId}
+          toggleSelectAllOnPage={toggleSelectAllOnPage}
+          allOnPageSelected={allOnPageSelected}
+          canWrite={canWrite}
+          canInteract={canInteract}
+          pushToast={pushToast}
+          onRowCrmChange={applyRowCrmChange}
+          rowCrmBusyId={rowCrmBusyId}
         />
       )}
 

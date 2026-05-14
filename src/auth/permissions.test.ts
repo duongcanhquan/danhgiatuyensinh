@@ -27,6 +27,8 @@ describe('defaultPermissionsForRole', () => {
     expect(hasPermission(perms, 'dashboard:counselor')).toBe(true)
     expect(hasPermission(perms, 'leads:write:self_assigned')).toBe(true)
     expect(hasPermission(perms, 'leads:reassign:peer')).toBe(true)
+    expect(hasPermission(perms, 'config:scoring_profiles_own')).toBe(true)
+    expect(hasPermission(perms, 'config:scoring_rules')).toBe(false)
     expect(hasPermission(perms, 'config:users')).toBe(false)
     expect(hasPermission(perms, 'data:intake')).toBe(false)
   })

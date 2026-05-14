@@ -46,7 +46,7 @@ function ProfileEditorPanel({
   profileList,
   onSelectProfileId,
   profilesLoading,
-  canEdit,
+  canEditProfile,
   busy,
   setBusy,
   setSaveMsg,
@@ -56,6 +56,9 @@ function ProfileEditorPanel({
   setWorkspaceFullscreen,
   onCreateProfile,
   ruleTemplateExtras,
+  canCreateProfile,
+  canSetDefaultImport,
+  sessionUid,
 }: {
   db: Firestore
   profile: ScoringProfile
@@ -65,7 +68,14 @@ function ProfileEditorPanel({
   profileList: ScoringProfile[]
   onSelectProfileId: (id: string) => void
   profilesLoading: boolean
-  canEdit: boolean
+  /** Sửa / lưu / xóa profile hiện tại (profile của mình hoặc quản trị toàn phần). */
+  canEditProfile: boolean
+  /** Hiện nút «+ Tạo» profile mới. */
+  canCreateProfile: boolean
+  /** Chỉ quản trị: đặt profile mặc định import (ảnh hưởng mọi profile khác). */
+  canSetDefaultImport: boolean
+  /** UID đăng nhập — ghi `createdBy` khi TVV lưu profile cá nhân. */
+  sessionUid: string | null
   busy: boolean
   setBusy: (v: boolean) => void
   setSaveMsg: (v: string | null) => void
@@ -85,7 +95,11 @@ function ProfileEditorPanel({
   const isDefaultProfile = Boolean(profile.isDefaultForImport)
 
   const saveProfile = useCallback(async () => {
-    if (!canEdit) return
+    if (!canEditProfile) return
+    if (!canSetDefaultImport && !sessionUid?.trim()) {
+      setSaveMsg('Không xác định được tài khoản — không thể lưu profile cá nhân.')
+      return
+    }
     if (!draft.profileName.trim()) {
       setSaveMsg('Vui lòng nhập tên profile.')
       return
@@ -95,6 +109,12 @@ function ProfileEditorPanel({
     try {
       const t = Timestamp.now()
       const ref = doc(db, FS_COLLECTIONS.scoringProfiles, draft.id)
+      const isDefaultForImport = canSetDefaultImport && Boolean(draft.isDefaultForImport)
+      const createdByPayload = canSetDefaultImport
+        ? draft.createdBy?.trim()
+          ? { createdBy: draft.createdBy.trim() }
+          : {}
+        : { createdBy: sessionUid!.trim() }
       const payload = {
         profileName: draft.profileName.trim(),
         description: draft.description.trim(),
@@ -125,12 +145,13 @@ function ProfileEditorPanel({
           hotMinScore: Math.min(100, Math.max(0, draft.thresholds.hotMinScore)),
           warmMinScore: Math.min(100, Math.max(0, draft.thresholds.warmMinScore)),
         },
-        isDefaultForImport: Boolean(draft.isDefaultForImport),
+        isDefaultForImport,
         updatedAt: t,
+        ...createdByPayload,
       }
 
       const batch = writeBatch(db)
-      if (draft.isDefaultForImport) {
+      if (isDefaultForImport) {
         for (const p of allProfiles) {
           if (p.id === draft.id) continue
           batch.update(doc(db, FS_COLLECTIONS.scoringProfiles, p.id), {
@@ -148,10 +169,10 @@ function ProfileEditorPanel({
     } finally {
       setBusy(false)
     }
-  }, [db, draft, allProfiles, canEdit, setBusy, setSaveMsg])
+  }, [db, draft, allProfiles, canEditProfile, canSetDefaultImport, sessionUid, setBusy, setSaveMsg])
 
   const deleteProfile = useCallback(async () => {
-    if (!canEdit || isDefaultProfile) return
+    if (!canEditProfile || isDefaultProfile) return
     if (!window.confirm(`Xóa profile «${draft.profileName}»?`)) return
     setBusy(true)
     try {
@@ -160,7 +181,7 @@ function ProfileEditorPanel({
     } finally {
       setBusy(false)
     }
-  }, [db, draft, canEdit, isDefaultProfile, setBusy, onDeleted])
+  }, [db, draft, canEditProfile, isDefaultProfile, setBusy, onDeleted])
 
   const defaultProfileTitle =
     'Chỉ một profile mặc định. Khi lưu, hệ thống gỡ cờ ở profile khác — dùng import Excel và khi lead chưa chọn profile.'
@@ -176,6 +197,11 @@ function ProfileEditorPanel({
         .filter(Boolean)
         .join(' ')}
     >
+      {canCreateProfile && !canEditProfile ? (
+        <p className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs leading-snug text-sky-950">
+          Đang xem profile toàn trường hoặc của đồng nghiệp — chỉ xem; vẫn chọn profile này trên màn hồ sơ để chấm điểm. Không lưu hay xóa tại đây.
+        </p>
+      ) : null}
       <div className="rounded-md border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white p-1.5 shadow-sm">
         {metaCollapsed ? (
           <div className="flex w-full min-w-0 items-center gap-1.5 rounded border border-transparent px-0.5 py-0.5">
@@ -222,7 +248,7 @@ function ProfileEditorPanel({
                   <span className="hidden min-[380px]:inline">Toàn màn</span>
                 </button>
               )}
-              {canEdit ? (
+              {canCreateProfile ? (
                 <button
                   type="button"
                   disabled={busy}
@@ -256,8 +282,7 @@ function ProfileEditorPanel({
                     ) : null}
                     {profileList.map((p) => (
                       <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                        {p.profileName.trim() || '—'} · HOT≥{p.thresholds.hotMinScore} · WARM≥{p.thresholds.warmMinScore}
-                        {p.isDefaultForImport ? ' · Mặc định' : ''}
+                        {profileSelectLabel(p, sessionUid)}
                       </option>
                     ))}
                   </select>
@@ -273,7 +298,7 @@ function ProfileEditorPanel({
                 <input
                   type="checkbox"
                   checked={Boolean(draft.isDefaultForImport)}
-                  disabled={!canEdit}
+                  disabled={!canEditProfile || !canSetDefaultImport}
                   onChange={(e) => setDraft({ ...draft, isDefaultForImport: e.target.checked })}
                   className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 bg-white accent-amber-600"
                 />
@@ -286,7 +311,7 @@ function ProfileEditorPanel({
                   min={0}
                   max={100}
                   value={draft.thresholds.hotMinScore}
-                  disabled={!canEdit}
+                  disabled={!canEditProfile}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
@@ -303,7 +328,7 @@ function ProfileEditorPanel({
                   min={0}
                   max={100}
                   value={draft.thresholds.warmMinScore}
-                  disabled={!canEdit}
+                  disabled={!canEditProfile}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
@@ -340,7 +365,7 @@ function ProfileEditorPanel({
                 Tên
                 <input
                   value={draft.profileName}
-                  disabled={!canEdit}
+                  disabled={!canEditProfile}
                   onChange={(e) => setDraft({ ...draft, profileName: e.target.value })}
                   placeholder="Tên profile"
                   className="mt-0.5 h-8 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none ring-amber-400/15 focus:ring-1 disabled:opacity-50"
@@ -351,7 +376,7 @@ function ProfileEditorPanel({
                   Mô tả
                   <textarea
                     value={draft.description}
-                    disabled={!canEdit}
+                    disabled={!canEditProfile}
                     onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                     rows={1}
                     title={draft.description.trim() || 'Mô tả profile'}
@@ -380,7 +405,7 @@ function ProfileEditorPanel({
                       <span className="hidden min-[420px]:inline">Toàn màn</span>
                     </button>
                   )}
-                  {canEdit ? (
+                  {canCreateProfile ? (
                     <button
                       type="button"
                       disabled={busy}
@@ -398,107 +423,6 @@ function ProfileEditorPanel({
         )}
       </div>
 
-      <div className="mt-1.5 rounded-md border border-emerald-200/80 bg-gradient-to-r from-emerald-50/80 to-white p-2 shadow-sm">
-        <p className="text-xs font-semibold text-emerald-950">Tín hiệu TVV — Hành vi &amp; Rủi ro (chi tiết hồ sơ)</p>
-        <p className="mt-0.5 text-xs leading-snug text-slate-600">
-          TVV tick trên hồ sơ; điểm cộng/trừ theo bảng dưới (không cần kéo khối canvas). Lưu profile để áp dụng.
-        </p>
-        <div className="mt-2 space-y-1.5">
-          {(draft.customScoringSignals ?? []).map((s, idx) => (
-            <div
-              key={s.id}
-              className="flex flex-wrap items-end gap-1.5 rounded-lg border border-emerald-100/90 bg-white/95 px-2 py-1.5"
-            >
-              <label className="min-w-[9rem] flex-[2] text-xs font-medium text-slate-700">
-                Nhãn hiển thị
-                <input
-                  value={s.label}
-                  disabled={!canEdit}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setDraft((d) => {
-                      const list = [...(d.customScoringSignals ?? [])]
-                      list[idx] = { ...list[idx]!, label: v }
-                      return { ...d, customScoringSignals: list }
-                    })
-                  }}
-                  placeholder="VD: Đã đặt lịch campus tour"
-                  className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-emerald-400/40 disabled:opacity-50"
-                />
-              </label>
-              <label className="w-[6.5rem] shrink-0 text-xs font-medium text-slate-700">
-                Nhóm
-                <select
-                  value={s.group}
-                  disabled={!canEdit}
-                  onChange={(e) => {
-                    const g = e.target.value === 'risk' ? 'risk' : 'behavior'
-                    setDraft((d) => {
-                      const list = [...(d.customScoringSignals ?? [])]
-                      list[idx] = { ...list[idx]!, group: g }
-                      return { ...d, customScoringSignals: list }
-                    })
-                  }}
-                  className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1 text-xs text-slate-900 disabled:opacity-50"
-                >
-                  <option value="behavior">Hành vi (+)</option>
-                  <option value="risk">Rủi ro (−)</option>
-                </select>
-              </label>
-              <label className="w-16 shrink-0 text-xs font-medium text-slate-700">
-                Điểm
-                <input
-                  type="number"
-                  value={s.points}
-                  disabled={!canEdit}
-                  onChange={(e) => {
-                    const n = Number(e.target.value)
-                    setDraft((d) => {
-                      const list = [...(d.customScoringSignals ?? [])]
-                      list[idx] = { ...list[idx]!, points: Number.isFinite(n) ? n : 0 }
-                      return { ...d, customScoringSignals: list }
-                    })
-                  }}
-                  className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1 text-xs tabular-nums text-slate-900 disabled:opacity-50"
-                />
-              </label>
-              {canEdit ? (
-                <button
-                  type="button"
-                  title="Xóa dòng"
-                  onClick={() =>
-                    setDraft((d) => ({
-                      ...d,
-                      customScoringSignals: (d.customScoringSignals ?? []).filter((_, i) => i !== idx),
-                    }))
-                  }
-                  className="mb-0.5 h-7 shrink-0 rounded border border-rose-200 bg-rose-50 px-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
-                >
-                  Xóa
-                </button>
-              ) : null}
-            </div>
-          ))}
-        </div>
-        {canEdit ? (
-          <button
-            type="button"
-            onClick={() =>
-              setDraft((d) => ({
-                ...d,
-                customScoringSignals: [
-                  ...(d.customScoringSignals ?? []),
-                  { id: crypto.randomUUID(), label: '', group: 'behavior', points: 15 },
-                ],
-              }))
-            }
-            className="mt-2 w-full rounded-lg border border-dashed border-emerald-400/70 bg-white/70 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-50/90"
-          >
-            + Thêm tín hiệu
-          </button>
-        ) : null}
-      </div>
-
       <div
         className={[
           'border-t border-slate-200 pt-1.5',
@@ -510,11 +434,11 @@ function ProfileEditorPanel({
         <div
           className={[
             'grid min-h-0 flex-1 gap-2',
-            canEdit && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEdit ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
+            canEditProfile && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEditProfile ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
             workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[220px]',
           ].join(' ')}
         >
-          {canEdit && ruleLibraryCollapsed ? (
+          {canEditProfile && ruleLibraryCollapsed ? (
             <div className="flex min-h-[10rem] w-full flex-col items-center gap-1.5 self-stretch rounded-lg border border-amber-200/90 bg-gradient-to-b from-amber-50 via-white to-slate-50 py-2 shadow-sm">
               <button
                 type="button"
@@ -529,9 +453,9 @@ function ProfileEditorPanel({
               </span>
             </div>
           ) : null}
-          {canEdit && !ruleLibraryCollapsed ? (
+          {canEditProfile && !ruleLibraryCollapsed ? (
             <RuleLibrarySidebar
-              canEdit={canEdit}
+              canEdit={canEditProfile}
               fillHeight={Boolean(workspaceLayout)}
               showCollapseButton
               onCollapseRequest={() => setRuleLibraryCollapsed(true)}
@@ -541,14 +465,14 @@ function ProfileEditorPanel({
           <ProfileDropCanvas
             blocks={draft.ruleBlocks ?? []}
             onChange={(blocks) => setDraft((d) => ({ ...d, ruleBlocks: blocks }))}
-            canEdit={canEdit}
+            canEdit={canEditProfile}
             workspaceLayout={Boolean(workspaceLayout)}
             ruleTemplateExtras={ruleTemplateExtras}
           />
         </div>
       </div>
 
-      {canEdit ? (
+      {canEditProfile ? (
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1.5">
           <button
             type="button"
@@ -579,11 +503,22 @@ function ProfileEditorPanel({
   )
 }
 
+function profileSelectLabel(p: ScoringProfile, sessionUid: string | null) {
+  const base = `${p.profileName.trim() || '—'} · HOT≥${p.thresholds.hotMinScore} · WARM≥${p.thresholds.warmMinScore}${p.isDefaultForImport ? ' · Mặc định' : ''}`
+  if (!sessionUid) return base
+  if (p.createdBy === sessionUid) return `${base} · Của bạn`
+  if (!p.createdBy?.trim()) return `${base} · Toàn trường`
+  return `${base} · Người khác`
+}
+
 export function ProfileManagerTab({ db }: { db: Firestore }) {
-  const { can } = useAuth()
+  const { can, profile } = useAuth()
   const { profiles, loading, error } = useScoringProfiles()
-  const { ruleLibraryTemplates, loading: templatesLoading, error: templatesError } = useScoringRuleTemplates()
-  const canEdit = can('config:scoring_rules')
+  const { ruleLibraryTemplates, error: templatesError } = useScoringRuleTemplates()
+  const canManageAll = can('config:scoring_rules')
+  const canManageOwn = can('config:scoring_profiles_own')
+  const canAccessProfiles = canManageAll || canManageOwn
+  const sessionUid = profile?.id ?? null
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -615,8 +550,17 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
     [profiles, effectiveSelectedId],
   )
 
+  const canEditSelected = Boolean(
+    selectedProfile &&
+      (canManageAll || (canManageOwn && sessionUid && selectedProfile.createdBy === sessionUid)),
+  )
+
   const createProfile = useCallback(async () => {
-    if (!canEdit) return
+    if (!canAccessProfiles) return
+    if (!canManageAll && !sessionUid?.trim()) {
+      setSaveMsg('Chưa xác định được tài khoản — không thể tạo profile cá nhân.')
+      return
+    }
     setBusy(true)
     setSaveMsg(null)
     try {
@@ -626,13 +570,14 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
         ...emptyProfileDraft(),
         createdAt: t,
         updatedAt: t,
+        ...(canManageAll ? {} : { createdBy: sessionUid!.trim() }),
       }
       await setDoc(doc(db, FS_COLLECTIONS.scoringProfiles, id), payload)
       setSelectedId(id)
     } finally {
       setBusy(false)
     }
-  }, [db, canEdit])
+  }, [db, canAccessProfiles, canManageAll, sessionUid])
 
   return (
     <section
@@ -659,15 +604,14 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             quản trị kiểm tra quyền đọc dữ liệu; có thể thử lưu một mẫu ở tab «Quy tắc mẫu».
           </p>
         ) : null}
-        {!templatesLoading && !templatesError && ruleLibraryTemplates.length === 0 ? (
-          <p className="mt-2 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-            Trường chưa có mẫu riêng. Vào <strong>Cài đặt → Quy tắc mẫu</strong> để thêm — sau khi lưu, mẫu sẽ nằm{' '}
-            <em>trên cùng</em> trong từng nhóm ở cột «Thư viện quy tắc» bên trái.
+        {!canAccessProfiles ? (
+          <p className="mt-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Bạn chỉ được xem — chưa có quyền tạo hay chỉnh bộ chấm điểm. Liên hệ quản trị nếu cần quyền TVV (profile riêng) hoặc quản trị toàn phần.
           </p>
         ) : null}
-        {!canEdit ? (
-          <p className="mt-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Bạn chỉ được xem — chưa có quyền chỉnh bộ chấm điểm. Liên hệ quản trị nếu cần chỉnh.
+        {canAccessProfiles && canManageOwn && !canManageAll ? (
+          <p className="mt-3 shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs leading-snug text-sky-950">
+            Profile <strong>toàn trường</strong> (không gắn chủ) hoặc của đồng nghiệp: chỉ xem và áp dụng khi chấm điểm — không lưu hay xóa. Bạn chỉnh được các profile <strong>do bạn tạo</strong> (nhãn «Của bạn» trong danh sách).
           </p>
         ) : null}
         {error ? (
@@ -705,7 +649,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             {!selectedProfile ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="min-w-0 flex-1 text-sm text-slate-600">
-                  {loading ? 'Đang tải…' : 'Chưa có profile — bấm «+ Tạo» hoặc tạo từ Cài đặt.'}
+                  {loading ? 'Đang tải…' : 'Chưa có profile — bấm «+ Tạo» hoặc nhờ quản trị.'}
                 </p>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                   {workspaceFullscreen ? (
@@ -729,7 +673,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                       Toàn màn
                     </button>
                   )}
-                  {canEdit ? (
+                  {canAccessProfiles ? (
                     <button
                       type="button"
                       disabled={busy}
@@ -754,7 +698,10 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                   setSelectedId(id)
                   setSaveMsg(null)
                 }}
-                canEdit={canEdit}
+                canEditProfile={canEditSelected}
+                canCreateProfile={canAccessProfiles}
+                canSetDefaultImport={canManageAll}
+                sessionUid={sessionUid}
                 busy={busy}
                 setBusy={setBusy}
                 setSaveMsg={setSaveMsg}

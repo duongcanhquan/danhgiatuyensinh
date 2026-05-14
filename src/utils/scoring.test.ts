@@ -687,6 +687,18 @@ describe('evaluateLead', () => {
     }
     expect(evaluateLead({ custom_volunteer_tier: 'A' }, profile, buckets).calculatedScore).toBe(5)
   })
+
+  it('merges school TVV signal defs over profile on id clash', () => {
+    const profile = {
+      rules: [],
+      ruleBlocks: [],
+      customScoringSignals: [{ id: 'sig1', label: 'Profile', group: 'behavior' as const, points: 3 }],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const school = [{ id: 'sig1', label: 'School', group: 'behavior' as const, points: 10 }]
+    const r = evaluateLead({ scoringCustomSignals: { sig1: true } }, profile, undefined, school)
+    expect(r.calculatedScore).toBe(10)
+  })
 })
 
 describe('sumBlockMaxWeights', () => {
