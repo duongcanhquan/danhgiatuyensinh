@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -40,6 +40,20 @@ export function Layout() {
   const showSignOut = Boolean(isFirebaseConfigured() && getFirebaseAuth() && firebaseUser)
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+  /** Chiều cao thanh điều hướng (kể cả panel mobile mở) — dùng spacer để nội dung không chui dưới header fixed. */
+  const [headerBlockHeight, setHeaderBlockHeight] = useState(64)
+
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const measure = () => setHeaderBlockHeight(Math.ceil(el.getBoundingClientRect().height))
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     setMobileNavOpen(false)
@@ -62,7 +76,7 @@ export function Layout() {
     ].join(' ')
 
   return (
-    <div className="relative min-h-[100dvh] overflow-x-hidden text-slate-900 antialiased">
+    <div className="relative min-h-[100dvh] text-slate-900 antialiased">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="aurora-blob-a absolute -left-[8%] -top-[12%] h-[460px] w-[500px] rounded-full bg-amber-400/14 blur-[110px]" />
         <div className="aurora-blob-b absolute -right-[4%] top-[6%] h-[400px] w-[440px] rounded-full bg-teal-400/12 blur-[100px]" />
@@ -71,7 +85,10 @@ export function Layout() {
       </div>
 
       <div className="relative z-10 flex min-h-[100dvh] flex-col">
-        <header className="safe-area-pt sticky top-0 z-50 w-full shrink-0 border-b border-amber-500/25 bg-gradient-to-r from-[#0b0f16] via-[#0e141d] to-[#0a0d14] shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
+        <header
+          ref={headerRef}
+          className="safe-area-pt fixed inset-x-0 top-0 z-50 w-full border-b border-amber-500/25 bg-gradient-to-r from-[#0b0f16] via-[#0e141d] to-[#0a0d14] shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+        >
           <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4 md:flex-nowrap md:gap-x-4 md:py-3 md:px-5">
             <div className="flex min-w-0 shrink-0 items-center gap-2.5 sm:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 shadow-md ring-1 ring-amber-200/35 md:h-11 md:w-11">
@@ -217,7 +234,13 @@ export function Layout() {
           </div>
         </header>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#e8ecf2]">
+        <div
+          aria-hidden
+          className="shrink-0"
+          style={{ height: `${headerBlockHeight}px` }}
+        />
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[#e8ecf2]">
           <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col px-0 py-0">
             <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-base font-normal leading-relaxed text-slate-900 sm:px-3 sm:py-2.5 md:px-4 md:py-3 md:leading-relaxed">
               <Outlet />
