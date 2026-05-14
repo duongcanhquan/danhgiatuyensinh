@@ -147,17 +147,6 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
         </header>
       )}
 
-      <p className="rounded-xl border border-sky-200/80 bg-sky-50/90 px-4 py-3 text-xs leading-relaxed text-slate-800">
-        <strong>Sửa / vô hiệu:</strong> cập nhật <code className="rounded bg-white/90 px-1">users/&#123;uid&#125;</code> trên
-        Firestore. <strong>Đổi mật khẩu:</strong> trong form «Sửa» dùng nút gửi email đặt lại (Firebase) — app{' '}
-        <strong>không</strong> gán mật khẩu trực tiếp cho user khác từ trình duyệt (cần Admin SDK / Cloud Function).{' '}
-        <strong>Xóa Auth:</strong> Firebase Console → Authentication hoặc Cloud Function.
-        <span className="mt-2 block text-slate-700">
-          <strong>LLM:</strong> chỉ <strong>Siêu quản trị</strong> lưu khóa API (Cài đặt → LLM). Bật «Cho phép dùng
-          LLM và tác vụ AI» bên dưới để TVV / Admin được chạy phân tích trên CRM.
-        </span>
-      </p>
-
       {directoryError ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
           Không đọc được danh sách users: {directoryError}. Kiểm tra Firestore Rules cho collection{' '}

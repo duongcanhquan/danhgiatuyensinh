@@ -30,13 +30,12 @@ import {
   normalizeCatalogSlug,
   parseCatalogsFromRegistryData,
 } from '../utils/masterDataRegistry'
-import { Maximize2, X } from 'lucide-react'
+import { CircleHelp, Maximize2, X } from 'lucide-react'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
-import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { AiLabView } from '../views/AiLabView'
 import { StaffManagementView } from '../views/StaffManagementView'
 
@@ -59,22 +58,143 @@ function firestoreWriteErrorMessage(e: unknown): string {
   return 'Không lưu được dữ liệu.'
 }
 
-/** Hộp mô tả ngắn đầu mỗi tab Cài đặt — tránh nhầm giữa Chấm điểm / Tư vấn / RAG / LLM / Phòng thử. */
-function SettingsTabHint({ children }: { children: ReactNode }) {
-  return (
-    <div
-      role="note"
-      className="rounded-xl border border-sky-200/90 bg-gradient-to-br from-sky-50/95 via-white to-indigo-50/50 px-4 py-3 text-sm leading-relaxed text-slate-800 shadow-sm md:px-5 md:py-3.5 md:text-[15px]"
-    >
-      {children}
-    </div>
-  )
-}
-
-/** Đồng bộ cỡ/khoảng dòng với nội dung trong `SettingsTabHint` (vd. đoạn Tư vấn / Playbook). */
+/** Đồng bộ cỡ/khoảng dòng (body Cài đặt). */
 const settingsCopy = 'text-sm leading-relaxed text-slate-800 md:text-[15px]'
 const settingsCopyMuted = 'text-sm leading-relaxed text-slate-600 md:text-[15px]'
 const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight text-slate-900 md:text-[15px]'
+
+function settingsGuideBody(tab: SettingsTabId): ReactNode {
+  switch (tab) {
+    case 'master':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Danh mục</p>
+          <p className="mt-1.5">
+            Giá trị dùng chung cho CRM (lọc hồ sơ, chấm điểm, Script Hub…). Chọn loại ở cột trái, chỉnh danh sách mục
+            bên phải. Giữ ổn định <strong>mã nội bộ (id)</strong> sau khi đã dùng trong quy tắc hoặc tích hợp.
+          </p>
+          <p className={`mt-2 ${settingsCopyMuted}`}>
+            Có thể cấu hình kiểu khớp (chính xác / tương đối chữ, khoảng số…) cho từng loại và từng mục — dùng khi quy
+            tắc chấm điểm so <strong>IN_LIST</strong> với trường lead tương ứng.
+          </p>
+        </>
+      )
+    case 'scoring':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Chấm điểm là gì?</p>
+          <p className="mt-1.5">
+            Bạn cấu hình <strong>bộ quy tắc + ngưỡng điểm</strong> để CRM tự gán điểm tích lũy và nhãn HOT / WARM / COLD
+            cho mỗi lead. Quy tắc chạy <strong>trên dữ liệu hồ sơ</strong> (vùng, ngành, v.v.) — <strong>không gọi LLM</strong>
+            , không dùng kho tri thức RAG.
+          </p>
+          <p className="mt-2 text-slate-700">
+            <strong>Ứng dụng:</strong> bảng hồ sơ, lọc, ưu tiên làm việc theo nhãn. Khác tab <strong>Tư vấn</strong> (playbook
+            / kịch bản thoại cho TVV đọc) và khác <strong>LLM</strong> (phân tích bằng API).
+          </p>
+          <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Bộ chấm điểm (Profiles)</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Engine so khớp <strong>bỏ dấu</strong>, gom khoảng trắng (vd. «Hà Nội» ≡ «ha noi»). Với <strong>IN_LIST</strong>{' '}
+            tỉnh/ngành, nếu master có <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">synonyms</code> trên
+            từng mục thì từ đồng nghĩa cũng được tính. Nên tách cột Excel / Firestore: <strong>Ngành quan tâm</strong>,{' '}
+            <strong>Học lực</strong>, <strong>Loại trường</strong> — trường{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">schoolTypeKey</code> (PUBLIC / LIEN_KET / …)
+            và <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">majorTrainingAlignment</code> được bổ sung
+            khi chấm nếu app truyền master buckets (mặc định đã bật trên bảng hồ sơ).
+          </p>
+        </>
+      )
+    case 'consulting':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Tư vấn (Playbook + Script Hub) là gì?</p>
+          <p className="mt-1.5">
+            <strong>Playbook</strong>: kịch bản chiến lược theo <em>điều kiện lead</em> (vùng, ngành, nhãn…) — TVV mở hồ
+            sơ sẽ thấy gợi ý USP / xử lý từ chối. <strong>Script Hub</strong>: các đoạn thoại theo từng bước (chào → USP → …)
+            trong panel «Trợ lý tư vấn động». Toàn bộ là <strong>nội dung soạn sẵn</strong>, <strong>không tốn token</strong>{' '}
+            LLM.
+          </p>
+          <p className="mt-2 text-slate-700">
+            <strong>Ứng dụng:</strong> hỗ trợ TVV gọi điện / chat đúng tình huống. <strong>Không thay</strong> kho tri thức RAG
+            (dành cho LLM đọc học phí — quy chế) và <strong>không thay</strong> tab LLM hay Phòng thử AI.
+          </p>
+          <p className={`mt-2 border-t border-slate-200 pt-2 ${settingsCopyMuted}`}>
+            <strong>Nạp từ app:</strong> trong khối Playbook — tab <strong>Thiết lập</strong> (tải file mẫu, tải JSON lên, nạp
+            mẫu build, thêm nhanh) và tab <strong>Dữ liệu</strong> (danh sách, tìm kiếm, lọc). File seed:{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">public/seed/consulting-playbooks.json</code> — chạy{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">npm run export:public-seed</code> rồi build/deploy.{' '}
+            <strong>Hoặc từ Terminal</strong> (service account):{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">npm run seed:consulting-playbooks</code>. Xóa đúng bộ đã seed:{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">DELETE_PLAYBOOK_SEED=1 npm run seed:consulting-playbooks</code> rồi chạy lại lệnh seed nếu muốn nạp lại.
+          </p>
+        </>
+      )
+    case 'knowledge':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Kho tri thức (RAG) là gì?</p>
+          <p className="mt-1.5">
+            Nơi lưu <strong>văn bản đã duyệt</strong> (học phí, lệ phí, quy chế, thông tin ngành…). Khi ai đó chạy{' '}
+            <strong>tác vụ AI trên một lead</strong> (màn chi tiết hồ sơ → nút phân tích LLM), hệ thống{' '}
+            <strong>ghép nội dung kho này vào prompt</strong> để model bám số liệu / quy định, hạn chế bịa.
+          </p>
+          <p className="mt-2 text-slate-700">
+            <strong>Ứng dụng:</strong> chỉ đi cùng luồng <strong>LLM trên lead</strong>. <strong>Không</strong> tự hiện trong
+            Playbook / Script Hub; <strong>không</strong> nạp vào ô «Phòng thử AI». Khác <strong>Chấm điểm</strong> (công thức
+            điểm, không phải văn bản cho LLM).
+          </p>
+          <p className={`mt-2 ${settingsCopyMuted}`}>
+            Trong khối dưới: tab <strong>Thiết lập</strong> (nạp mẫu, thêm/sửa) và tab <strong>Dữ liệu</strong> (danh sách, tìm
+            kiếm, lọc theo danh mục).
+          </p>
+        </>
+      )
+    case 'llm':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">LLM &amp; tác vụ AI</p>
+          <p className={`mt-1.5 ${settingsCopy}`}>
+            Khối bên dưới có các tab: <strong>Hướng dẫn</strong> (cách setup &amp; dùng), <strong>API</strong>,{' '}
+            <strong>Gatekeeper</strong>, <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Bắt đầu từ tab Hướng dẫn
+            nếu lần đầu cấu hình.
+          </p>
+        </>
+      )
+    case 'ai_lab':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Phòng thử AI là gì?</p>
+          <p className="mt-1.5">
+            Ô chat <strong>thử API</strong>: nhập câu hỏi, nhận câu trả lời để kiểm tra khóa / mạng. <strong>Không ghi</strong> lên
+            lead, <strong>không</strong> dùng Playbook / Script Hub, <strong>không</strong> nạp kho tri thức RAG (khác với khi chạy
+            tác vụ LLM trên hồ sơ).
+          </p>
+          <p className="mt-2 text-slate-700">
+            <strong>Ứng dụng:</strong> thử nghiệm nhanh trước khi cấu hình tác vụ ở tab <strong>LLM</strong>. Đừng nhầm với phân
+            tích AI trong chi tiết lead.
+          </p>
+        </>
+      )
+    case 'staff':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Quản lý nhân sự</p>
+          <p className="mt-1.5">
+            <strong>Sửa / vô hiệu:</strong> cập nhật <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">users/{'{uid}'}</code> trên Firestore.{' '}
+            <strong>Đổi mật khẩu:</strong> trong form «Sửa» dùng nút gửi email đặt lại (Firebase) — app <strong>không</strong> gán
+            mật khẩu trực tiếp cho user khác từ trình duyệt (cần Admin SDK / Cloud Function). <strong>Xóa Auth:</strong> Firebase
+            Console → Authentication hoặc Cloud Function.
+          </p>
+          <p className={`mt-2 ${settingsCopyMuted}`}>
+            <strong>LLM:</strong> chỉ <strong>Siêu quản trị</strong> lưu khóa API (Cài đặt → LLM). Bật «Cho phép dùng LLM và tác
+            vụ AI» trong form sửa user để TVV / Admin được chạy phân tích trên CRM.
+          </p>
+        </>
+      )
+    default:
+      return null
+  }
+}
 
 function parseSettingsTab(raw: string | null): SettingsTabId | null {
   if (
@@ -109,6 +229,7 @@ export function SettingsView() {
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
   const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const settingsWorkspaceOpen = masterWorkspaceOpen || consultingWorkspaceOpen || llmWorkspaceOpen
 
@@ -118,6 +239,7 @@ export function SettingsView() {
     document.body.style.overflow = 'hidden'
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setGuideOpen(false)
         setMasterWorkspaceOpen(false)
         setConsultingWorkspaceOpen(false)
         setLlmWorkspaceOpen(false)
@@ -240,7 +362,17 @@ export function SettingsView() {
     setMasterWorkspaceOpen(false)
     setConsultingWorkspaceOpen(false)
     setLlmWorkspaceOpen(false)
+    setGuideOpen(false)
   }, [activeTab])
+
+  useEffect(() => {
+    if (!guideOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setGuideOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [guideOpen])
 
   useEffect(() => {
     if (!db) return
@@ -282,12 +414,7 @@ export function SettingsView() {
 
   return (
     <div className={`space-y-4 md:space-y-5 ${settingsCopy}`}>
-      <header>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-          Cài đặt
-        </VietMyAccentHeading>
-      </header>
-
+      <h1 className="sr-only">Cài đặt</h1>
       {!configured || !db ? (
         <div className={`rounded-2xl border border-rose-300/70 bg-rose-50 px-5 py-4 text-rose-900 backdrop-blur-xl ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
@@ -296,35 +423,59 @@ export function SettingsView() {
 
       {db ? (
         <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-2 shadow-lg backdrop-blur-xl md:p-3">
-          <nav
-            className="scroll-touch flex flex-wrap justify-end gap-1 overflow-x-auto overscroll-x-contain pb-1 md:gap-1.5 md:overflow-visible md:pb-0"
-            role="tablist"
-            aria-label="Nhóm cấu hình"
-          >
-            {tabDefs.map((t) => {
-              const selected = activeTab === t.id
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  disabled={!t.enabled}
-                  onClick={() => setTab(t.id)}
-                  className={[
-                    'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
-                    settingsCopy,
-                    selected
-                      ? 'border-amber-500/45 bg-amber-50/95 text-slate-900 shadow-sm ring-1 ring-amber-900/5'
-                      : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50',
-                    !t.enabled ? 'cursor-not-allowed opacity-50' : '',
-                  ].join(' ')}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
-          </nav>
+          <div className="scroll-touch flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain pb-1 md:gap-1.5 md:pb-0">
+            <nav
+              className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 md:gap-1.5"
+              role="tablist"
+              aria-label="Nhóm cấu hình"
+            >
+              {tabDefs.map((t) => {
+                const selected = activeTab === t.id
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    id={t.id === 'master' ? 'tab-master' : undefined}
+                    aria-selected={selected}
+                    disabled={!t.enabled}
+                    onClick={() => setTab(t.id)}
+                    className={[
+                      'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
+                      settingsCopy,
+                      selected
+                        ? 'border-amber-500/45 bg-amber-50/95 text-slate-900 shadow-sm ring-1 ring-amber-900/5'
+                        : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50',
+                      !t.enabled ? 'cursor-not-allowed opacity-50' : '',
+                    ].join(' ')}
+                  >
+                    {t.label}
+                  </button>
+                )
+              })}
+            </nav>
+            {db && activeTab === 'master' && !masterWorkspaceOpen ? (
+              <button
+                type="button"
+                onClick={() => setMasterWorkspaceOpen(true)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+              >
+                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                Toàn màn
+              </button>
+            ) : null}
+            <button
+              type="button"
+              id="settings-guide-trigger"
+              className="ml-auto inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200/90 bg-white p-1.5 text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+              aria-label="Mô tả tab Cài đặt"
+              aria-expanded={guideOpen}
+              aria-controls="settings-guide-dialog"
+              onClick={() => setGuideOpen(true)}
+            >
+              <CircleHelp className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -338,36 +489,18 @@ export function SettingsView() {
               : ''
           }
         >
-          <div
-            className={[
-              'flex flex-wrap items-start justify-between gap-3',
-              masterWorkspaceOpen ? 'shrink-0 border-b border-slate-200/90 pb-3' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <h2 id="tab-master" className={settingsHeading}>
-              Danh mục dùng chung
-            </h2>
-            <button
-              type="button"
-              onClick={() => setMasterWorkspaceOpen((v) => !v)}
-              className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
-              aria-pressed={masterWorkspaceOpen}
-            >
-              {masterWorkspaceOpen ? (
-                <>
-                  <X className="h-4 w-4 shrink-0" aria-hidden />
-                  Đóng (Esc)
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-                  Toàn màn
-                </>
-              )}
-            </button>
-          </div>
+          {masterWorkspaceOpen ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 pb-3">
+              <button
+                type="button"
+                onClick={() => setMasterWorkspaceOpen(false)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
+              >
+                <X className="h-4 w-4 shrink-0" aria-hidden />
+                Đóng (Esc)
+              </button>
+            </div>
+          ) : null}
           <div
             className={
               masterWorkspaceOpen
@@ -397,25 +530,6 @@ export function SettingsView() {
             >
               <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:overflow-hidden">
                 <aside className="flex max-h-[min(42vh,22rem)] shrink-0 flex-col gap-3 rounded-xl border border-slate-200/90 bg-white/85 p-3 shadow-sm md:p-4 lg:max-h-none lg:w-[min(100%,19rem)] xl:w-80">
-                  <div className={`shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-amber-950 ${settingsCopy}`}>
-                    <p className="font-semibold text-amber-950">Lưu ý về danh mục</p>
-                    <p className="mt-1.5 text-amber-900/95">
-                      Đây là <strong>dữ liệu dùng chung</strong> cho CRM (lọc hồ sơ, chấm điểm, Script Hub…). Mỗi loại có{' '}
-                      <strong>mã nội bộ</strong> (<code className="rounded bg-white/80 px-0.5 font-mono text-[0.85em]">id</code>
-                      ) — nên giữ ổn định sau khi đã dùng trong quy tắc hoặc tích hợp.
-                    </p>
-                    <p className="mt-1.5 text-amber-900/90">
-                      Chọn một danh mục trong danh sách bên dưới; cột phải hiện các giá trị — thêm hoặc xóa mục ở trên
-                      danh sách đó.
-                    </p>
-                    <p className="mt-1.5 text-amber-900/85">
-                      Có thể cấu hình <strong>kiểu khớp</strong> (chính xác / tương đối chữ, khoảng số từ–đến, ≥, ≤) cho
-                      từng loại và cho từng mục — dùng khi quy tắc chấm điểm dùng điều kiện <strong>IN_LIST</strong> trên
-                      trường lead tương ứng (ví dụ tỉnh → <code className="rounded bg-white/80 px-0.5 font-mono text-[0.85em]">regions</code>
-                      , học lực → <code className="rounded bg-white/80 px-0.5 font-mono text-[0.85em]">academic_performance</code>
-                      ).
-                    </p>
-                  </div>
                   <p className={`shrink-0 font-semibold uppercase tracking-wide text-slate-600 ${settingsCopy}`}>
                     Chọn danh mục
                   </p>
@@ -515,18 +629,6 @@ export function SettingsView() {
           <h2 id="tab-scoring" className="sr-only uppercase">
             Chấm điểm
           </h2>
-          <SettingsTabHint>
-            <p className="font-semibold text-slate-900">Chấm điểm là gì?</p>
-            <p className="mt-1.5">
-              Bạn cấu hình <strong>bộ quy tắc + ngưỡng điểm</strong> để CRM tự gán điểm tích lũy và nhãn HOT / WARM / COLD cho
-              mỗi lead. Quy tắc chạy <strong>trên dữ liệu hồ sơ</strong> (vùng, ngành, v.v.) —{' '}
-              <strong>không gọi LLM</strong>, không dùng kho tri thức RAG.
-            </p>
-            <p className="mt-2 text-slate-700">
-              <strong>Ứng dụng:</strong> bảng hồ sơ, lọc, ưu tiên làm việc theo nhãn. Khác tab <strong>Tư vấn</strong>{' '}
-              (playbook / kịch bản thoại cho TVV đọc) và khác <strong>LLM</strong> (phân tích bằng API).
-            </p>
-          </SettingsTabHint>
           <ProfileManagerTab db={db} />
           <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
             <h3 className={settingsHeading}>
@@ -605,32 +707,6 @@ export function SettingsView() {
                 : 'space-y-6'
             }
           >
-            <SettingsTabHint>
-              <p className="font-semibold text-slate-900">Tư vấn (Playbook + Script Hub) là gì?</p>
-              <p className="mt-1.5">
-                <strong>Playbook</strong>: kịch bản chiến lược theo <em>điều kiện lead</em> (vùng, ngành, nhãn…) — TVV
-                mở hồ sơ sẽ thấy gợi ý USP / xử lý từ chối. <strong>Script Hub</strong>: các đoạn thoại theo từng bước
-                (chào → USP → …) trong panel «Trợ lý tư vấn động». Toàn bộ là <strong>nội dung soạn sẵn</strong>,{' '}
-                <strong>không tốn token</strong> LLM.
-              </p>
-              <p className="mt-2 text-slate-700">
-                <strong>Ứng dụng:</strong> hỗ trợ TVV gọi điện / chat đúng tình huống.{' '}
-                <strong>Không thay</strong> kho tri thức RAG (dành cho LLM đọc học phí — quy chế) và{' '}
-                <strong>không thay</strong> tab LLM hay Phòng thử AI.
-              </p>
-              <p className={`mt-2 border-t border-sky-200/60 pt-2 ${settingsCopyMuted}`}>
-                <strong>Nạp từ app:</strong> trong khối Playbook bên dưới — tab <strong>Thiết lập</strong> (tải file mẫu,
-                tải JSON lên, nạp mẫu build, thêm nhanh) và tab <strong>Dữ liệu</strong> (danh sách, tìm kiếm, lọc). File
-                seed:{' '}
-                <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>public/seed/consulting-playbooks.json</code>{' '}
-                — chạy <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>npm run export:public-seed</code> rồi
-                build/deploy. <strong>Hoặc từ Terminal</strong> (service account):{' '}
-                <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>npm run seed:consulting-playbooks</code>. Xóa
-                đúng bộ đã seed:{' '}
-                <code className={`rounded bg-white/80 px-1 font-mono text-[0.85em] ${settingsCopy}`}>DELETE_PLAYBOOK_SEED=1 npm run seed:consulting-playbooks</code>{' '}
-                rồi chạy lại lệnh seed nếu muốn nạp lại.
-              </p>
-            </SettingsTabHint>
             <ConsultingPlaybookSection
               db={db}
               playbooks={playbooks}
@@ -654,25 +730,6 @@ export function SettingsView() {
           <h2 id="tab-knowledge" className="sr-only uppercase">
             Kho tri thức RAG
           </h2>
-          <div className="mb-5 space-y-3">
-            <SettingsTabHint>
-              <p className="font-semibold text-slate-900">Kho tri thức (RAG) là gì?</p>
-              <p className="mt-1.5">
-                Nơi lưu <strong>văn bản đã duyệt</strong> (học phí, lệ phí, quy chế, thông tin ngành…). Khi ai đó chạy{' '}
-                <strong>tác vụ AI trên một lead</strong> (màn chi tiết hồ sơ → nút phân tích LLM), hệ thống{' '}
-                <strong>ghép nội dung kho này vào prompt</strong> để model bám số liệu / quy định, hạn chế bịa.
-              </p>
-              <p className="mt-2 text-slate-700">
-                <strong>Ứng dụng:</strong> chỉ đi cùng luồng <strong>LLM trên lead</strong>.{' '}
-                <strong>Không</strong> tự hiện trong Playbook / Script Hub; <strong>không</strong> nạp vào ô «Phòng thử
-                AI». Khác <strong>Chấm điểm</strong> (công thức điểm, không phải văn bản cho LLM).
-              </p>
-              <p className={`mt-2 ${settingsCopyMuted}`}>
-                Trong khối dưới: tab <strong>Thiết lập</strong> (nạp mẫu, thêm/sửa) và tab <strong>Dữ liệu</strong> (danh
-                sách, tìm kiếm, lọc theo danh mục).
-              </p>
-            </SettingsTabHint>
-          </div>
           <KnowledgeBaseTab db={db} />
         </div>
       ) : null}
@@ -724,16 +781,6 @@ export function SettingsView() {
                 : ''
             }
           >
-            <div className="mb-3 space-y-2">
-              <SettingsTabHint>
-                <p className="font-semibold text-slate-900">LLM &amp; tác vụ AI</p>
-                <p className={`mt-1.5 ${settingsCopy}`}>
-                  Khối bên dưới có các tab: <strong>Hướng dẫn</strong> (cách setup &amp; dùng), <strong>API</strong>,{' '}
-                  <strong>Gatekeeper</strong>, <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Bắt đầu từ
-                  tab Hướng dẫn nếu lần đầu cấu hình.
-                </p>
-              </SettingsTabHint>
-            </div>
             <AISettingsTab db={db} />
           </div>
         </div>
@@ -744,18 +791,6 @@ export function SettingsView() {
           <h2 id="tab-ai-lab" className="sr-only">
             Phòng thử AI
           </h2>
-          <SettingsTabHint>
-            <p className="font-semibold text-slate-900">Phòng thử AI là gì?</p>
-            <p className="mt-1.5">
-              Ô chat <strong>thử API</strong>: nhập câu hỏi, nhận câu trả lời để kiểm tra khóa / mạng.{' '}
-              <strong>Không ghi</strong> lên lead, <strong>không</strong> dùng Playbook / Script Hub,{' '}
-              <strong>không</strong> nạp kho tri thức RAG (khác với khi chạy tác vụ LLM trên hồ sơ).
-            </p>
-            <p className="mt-2 text-slate-700">
-              <strong>Ứng dụng:</strong> thử nghiệm nhanh trước khi cấu hình tác vụ ở tab <strong>LLM</strong>. Đừng nhầm
-              với phân tích AI trong chi tiết lead.
-            </p>
-          </SettingsTabHint>
           <AiLabView embedded />
         </div>
       ) : null}
@@ -766,6 +801,44 @@ export function SettingsView() {
             Quản lý nhân sự
           </h2>
           <StaffManagementView embedded />
+        </div>
+      ) : null}
+
+      {guideOpen ? (
+        <div className="fixed inset-0 z-[210] flex items-end justify-center sm:items-center sm:p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+            aria-label="Đóng hướng dẫn"
+            onClick={() => setGuideOpen(false)}
+          />
+          <div
+            id="settings-guide-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-guide-title"
+            className="relative z-10 mt-auto w-full max-h-[min(88dvh,540px)] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200/90 bg-white px-4 pb-5 pt-4 shadow-2xl sm:mt-0 sm:max-w-lg sm:rounded-2xl md:max-w-xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="min-w-0">
+                <h2 id="settings-guide-title" className={settingsHeading}>
+                  Hướng dẫn
+                </h2>
+                <p className={`mt-0.5 ${settingsCopyMuted}`}>
+                  {tabDefs.find((t) => t.id === activeTab)?.label ?? activeTab}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                onClick={() => setGuideOpen(false)}
+                aria-label="Đóng"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <div className={`space-y-3 pt-4 ${settingsCopy}`}>{settingsGuideBody(activeTab)}</div>
+          </div>
         </div>
       ) : null}
 
