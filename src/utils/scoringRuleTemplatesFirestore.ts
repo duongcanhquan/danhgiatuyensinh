@@ -59,6 +59,9 @@ export function parseScoringRuleTemplateDoc(
     }
   }
   if (!rows.length) return null
+  const rbk = data.replacesBuiltinKey
+  const replacesBuiltinKey =
+    typeof rbk === 'string' && rbk.trim().length > 0 ? rbk.trim() : null
   return {
     id,
     order: Number.isFinite(order) ? order : 0,
@@ -69,11 +72,12 @@ export function parseScoringRuleTemplateDoc(
     targetField,
     maxWeight: Number.isFinite(maxWeight) ? maxWeight : 0,
     rows,
+    replacesBuiltinKey,
   }
 }
 
 export function scoringRuleTemplateDocToFirestorePayload(doc: Omit<ScoringRuleTemplateDoc, 'updatedAt'>): Record<string, unknown> {
-  return {
+  const base: Record<string, unknown> = {
     order: doc.order,
     category: doc.category,
     title: doc.title.trim(),
@@ -88,4 +92,8 @@ export function scoringRuleTemplateDocToFirestorePayload(doc: Omit<ScoringRuleTe
       allocationValue: Number.isFinite(r.allocationValue) ? r.allocationValue : 0,
     })),
   }
+  if (doc.replacesBuiltinKey?.trim()) {
+    base.replacesBuiltinKey = doc.replacesBuiltinKey.trim()
+  }
+  return base
 }

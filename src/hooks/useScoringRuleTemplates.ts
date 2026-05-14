@@ -3,7 +3,7 @@ import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
 import type { ScoringRuleTemplateDoc } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { customRuleTemplateFromDoc } from '../utils/ruleLibrary'
+import { ruleLibraryTemplateFromFirestoreDoc } from '../utils/ruleLibrary'
 import { parseScoringRuleTemplateDoc } from '../utils/scoringRuleTemplatesFirestore'
 
 export function useScoringRuleTemplates() {
@@ -40,7 +40,7 @@ export function useScoringRuleTemplates() {
     return () => unsub()
   }, [])
 
-  const ruleLibraryTemplates = useMemo(() => docs.map((d) => customRuleTemplateFromDoc(d)), [docs])
+  const ruleLibraryTemplates = useMemo(() => docs.map((d) => ruleLibraryTemplateFromFirestoreDoc(d)), [docs])
 
   return { docs, ruleLibraryTemplates, loading, error }
 }

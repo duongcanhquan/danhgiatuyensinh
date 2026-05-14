@@ -442,6 +442,11 @@ export interface ScoringRuleTemplateDoc {
   maxWeight: number
   rows: ScoringRuleTemplateRowPersist[]
   updatedAt?: Timestamp
+  /**
+   * Khi có giá trị: mẫu này thay thế mẫu có sẵn trong app trùng `key` (kéo-thả vẫn dùng đúng key đó).
+   * Xóa document → trở lại mẫu gốc trong code.
+   */
+  replacesBuiltinKey?: string | null
 }
 
 /**

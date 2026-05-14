@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import type { ProfileScoringCondition, RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow, ScoringRuleTemplateDoc } from '../types'
+import type { RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow, ScoringRuleTemplateDoc } from '../types'
 import { FS_COLLECTIONS, RULE_CATEGORIES, RULE_CATEGORY_LABELS } from '../types'
 import { useScoringRuleTemplates } from '../hooks/useScoringRuleTemplates'
 import { buildScoringBlockFromTemplateDoc, getRuleLibraryTemplates, type RuleLibraryTemplate } from '../utils/ruleLibrary'
@@ -9,16 +9,32 @@ import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTe
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
 
-function rowConditionLabel(c: ProfileScoringCondition): string {
-  return SCORING_CONDITION_UI_OPTIONS.find((o) => o.value === c)?.label ?? String(c)
-}
-
 type EditSession = {
   id: string
   order: number
   title: string
   hint: string
   block: ScoringRuleBlock
+  /** Khi chỉnh mẫu có sẵn — lưu online sẽ ghi đè mẫu gốc trùng key. */
+  replacesBuiltinKey?: string | null
+}
+
+function stableOverrideDocId(builtinKey: string): string {
+  const slug = builtinKey.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_')
+  const trimmed = slug.slice(0, 100)
+  return `ovr__${trimmed || 'tpl'}`
+}
+
+function sessionFromBuiltinTemplate(t: RuleLibraryTemplate, order: number): EditSession {
+  const blk = t.build()
+  return {
+    id: stableOverrideDocId(t.key),
+    order,
+    title: t.title,
+    hint: t.hint,
+    block: blk,
+    replacesBuiltinKey: t.key,
+  }
 }
 
 function emptyBlock(category: RuleCategory = 'demographics'): ScoringRuleBlock {
@@ -47,6 +63,7 @@ function sessionFromDoc(d: ScoringRuleTemplateDoc): EditSession {
     title: d.title,
     hint: d.hint,
     block: buildScoringBlockFromTemplateDoc(d),
+    replacesBuiltinKey: d.replacesBuiltinKey ?? null,
   }
 }
 
@@ -64,6 +81,7 @@ function toPersist(s: EditSession): ScoringRuleTemplateDoc {
       void id
       return r
     }),
+    replacesBuiltinKey: s.replacesBuiltinKey?.trim() || null,
   }
 }
 
@@ -71,9 +89,10 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
   const { docs, loading, error } = useScoringRuleTemplates()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [session, setSession] = useState<EditSession | null>(null)
-  const [builtinPreview, setBuiltinPreview] = useState<RuleLibraryTemplate | null>(null)
   const [localMsg, setLocalMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const pureCustomDocs = useMemo(() => docs.filter((d) => !d.replacesBuiltinKey), [docs])
 
   const builtinsByCategory = useMemo(() => {
     const m = new Map<RuleCategory, RuleLibraryTemplate[]>()
@@ -83,11 +102,6 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
     }
     return m
   }, [])
-
-  const builtinBlockSnapshot = useMemo(
-    () => (builtinPreview ? builtinPreview.build() : null),
-    [builtinPreview],
-  )
 
   const nextOrder = useMemo(() => {
     if (!docs.length) return 10
@@ -103,9 +117,9 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
       title: 'Mẫu quy tắc mới',
       hint: 'Sang tab Chấm điểm: kéo mẫu vào bộ điểm, chỉnh rồi lưu.',
       block: emptyBlock(),
+      replacesBuiltinKey: null,
     })
     setLocalMsg(null)
-    setBuiltinPreview(null)
   }, [nextOrder])
 
   const saveSession = useCallback(async () => {
@@ -146,7 +160,12 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
 
   const removeTemplate = useCallback(async () => {
     if (!canEdit || !session || !db) return
-    if (!window.confirm(`Xóa mẫu «${session.title}» khỏi thư viện?`)) return
+    const persisted = docs.some((d) => d.id === session.id)
+    if (!persisted) return
+    const confirmMsg = session.replacesBuiltinKey?.trim()
+      ? 'Xóa bản chỉnh mẫu có sẵn? Phần mềm sẽ dùng lại mẫu gốc.'
+      : `Xóa mẫu «${session.title}» khỏi thư viện?`
+    if (!window.confirm(confirmMsg)) return
     setBusy(true)
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.scoringRuleTemplates, session.id))
@@ -159,7 +178,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
     } finally {
       setBusy(false)
     }
-  }, [canEdit, db, session])
+  }, [canEdit, db, session, docs])
 
   const patchBlock = useCallback((patch: Partial<ScoringRuleBlock>) => {
     setSession((s) => (s ? { ...s, block: { ...s.block, ...patch } } : s))
@@ -195,7 +214,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
   }, [])
 
   const fieldIds = useMemo(() => AI_LEAD_FIELD_OPTIONS.map((o) => o.id), [])
-  const isSaved = session && docs.some((d) => d.id === session.id)
+  const isPersisted = Boolean(session && docs.some((d) => d.id === session.id))
 
   return (
     <div className="space-y-4">
@@ -211,9 +230,9 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
             <em>không phải</em> chỗ kéo mẫu quy tắc.
           </li>
           <li>
-            <strong>Quy tắc mẫu</strong> (màn này): chỗ bạn <em>tạo / sửa / xóa mẫu riêng của trường</em> (lưu online) và xem
-            thử mẫu có sẵn trong phần mềm. Sau khi bấm lưu mẫu riêng, sang tab <strong>Chấm điểm</strong> — cột «Thư viện quy
-            tắc» sẽ có mẫu đó <em>ở trên cùng</em> trong từng nhóm.
+            <strong>Quy tắc mẫu</strong> (màn này): <em>mẫu riêng</em> (thêm / sửa / xóa) và <em>mẫu có sẵn</em> (cũng có thể
+            chỉnh — lưu online sẽ thay bản gốc trên thư viện kéo; xóa bản đã lưu thì trở lại mẫu phần mềm). Sang tab{' '}
+            <strong>Chấm điểm</strong> — cột «Thư viện quy tắc».
           </li>
           <li>
             <strong>Chấm điểm</strong>: kéo mẫu sang ô bên phải, chỉnh cho đúng ý trường rồi <strong>Lưu bộ chấm điểm</strong>.
@@ -256,19 +275,18 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
               {loading ? <p className="mt-2 text-xs text-slate-500">Đang tải…</p> : null}
               {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
               <ul className="mt-2 space-y-1 text-sm">
-                {docs.map((d) => (
+                {pureCustomDocs.map((d) => (
                   <li key={d.id}>
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedId(d.id)
                         setSession(sessionFromDoc(d))
-                        setBuiltinPreview(null)
                         setLocalMsg(null)
                       }}
                       className={[
                         'w-full rounded-lg border px-2 py-2 text-left transition',
-                        selectedId === d.id && !builtinPreview
+                        selectedId === d.id && session && !session.replacesBuiltinKey
                           ? 'border-amber-400 bg-amber-50/90 text-slate-900'
                           : 'border-transparent bg-slate-50/80 text-slate-800 hover:border-slate-200',
                       ].join(' ')}
@@ -281,16 +299,16 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                   </li>
                 ))}
               </ul>
-              {!loading && !docs.length ? (
+              {!loading && !pureCustomDocs.length ? (
                 <p className="mt-2 text-xs text-slate-500">Chưa có mẫu riêng — bấm «+ Thêm mẫu».</p>
               ) : null}
             </section>
 
             <section className="border-t border-slate-200 pt-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-800">Mẫu có sẵn (chỉ xem)</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-800">Mẫu có sẵn (chỉnh được)</p>
               <p className="mt-1 text-xs leading-snug text-slate-600">
-                Phần mềm đi kèm sẵn các mẫu này — không sửa tại đây. Bấm để xem nhanh; muốn dùng thì sang tab{' '}
-                <strong>Chấm điểm</strong>, kéo vào bộ điểm rồi chỉnh.
+                Bấm mẫu để sửa rồi <strong>Lưu mẫu</strong> — toàn trường dùng bản đã chỉnh khi kéo thả.{' '}
+                <strong>Xóa mẫu</strong> (sau khi đã lưu) để trả lại bản phần mềm. «Đã chỉnh» = đang dùng bản trường.
               </p>
               <div className="mt-2 max-h-[min(38vh,320px)] space-y-2 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
                 {RULE_CATEGORIES.map((cat) => {
@@ -302,27 +320,43 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                         {RULE_CATEGORY_LABELS[cat]}
                       </p>
                       <ul className="space-y-0.5">
-                        {items.map((t) => (
-                          <li key={t.key}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setBuiltinPreview(t)
-                                setSession(null)
-                                setSelectedId(null)
-                                setLocalMsg(null)
-                              }}
-                              className={[
-                                'w-full rounded-md border px-1.5 py-1.5 text-left text-xs transition',
-                                builtinPreview?.key === t.key
-                                  ? 'border-sky-400 bg-sky-50 text-slate-900'
-                                  : 'border-transparent bg-white text-slate-800 hover:border-slate-200',
-                              ].join(' ')}
-                            >
-                              <span className="font-medium leading-tight">{t.title}</span>
-                            </button>
-                          </li>
-                        ))}
+                        {items.map((t) => {
+                          const hasOverride = docs.some((d) => d.replacesBuiltinKey === t.key)
+                          const selectedBuiltin = session?.replacesBuiltinKey === t.key
+                          return (
+                            <li key={t.key}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const ov = docs.find((d) => d.replacesBuiltinKey === t.key)
+                                  if (ov) {
+                                    setSelectedId(ov.id)
+                                    setSession(sessionFromDoc(ov))
+                                  } else {
+                                    setSelectedId(null)
+                                    setSession(sessionFromBuiltinTemplate(t, nextOrder))
+                                  }
+                                  setLocalMsg(null)
+                                }}
+                                className={[
+                                  'w-full rounded-md border px-1.5 py-1.5 text-left text-xs transition',
+                                  selectedBuiltin
+                                    ? 'border-sky-400 bg-sky-50 text-slate-900'
+                                    : 'border-transparent bg-white text-slate-800 hover:border-slate-200',
+                                ].join(' ')}
+                              >
+                                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                  <span className="font-medium leading-tight">{t.title}</span>
+                                  {hasOverride ? (
+                                    <span className="rounded bg-emerald-100 px-1 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-emerald-900">
+                                      Đã chỉnh
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
                       </ul>
                     </div>
                   )
@@ -335,6 +369,13 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
         <div className="min-h-0 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm">
           {session ? (
           <div className="space-y-4">
+            {session.replacesBuiltinKey ? (
+              <p className="rounded-lg border border-sky-200 bg-sky-50/90 px-2.5 py-2 text-xs leading-snug text-sky-950">
+                Bạn đang chỉnh <strong>mẫu có sẵn</strong> của phần mềm — <strong>Lưu mẫu</strong> để cả trường dùng bản này
+                khi kéo thả. <strong>Xóa mẫu</strong> (sau khi đã lưu) để trả lại bản gốc. Chưa lưu thì bấm{' '}
+                <strong>Huỷ nháp</strong>.
+              </p>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs text-slate-600">
                 Tên hiển thị khi kéo (ở tab Chấm điểm)
@@ -542,67 +583,32 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                 </button>
                 <button
                   type="button"
-                  disabled={busy || !isSaved}
+                  disabled={busy || !isPersisted}
                   onClick={() => void removeTemplate()}
                   className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-40"
-                  title="Chỉ xóa được sau khi mẫu đã lưu ít nhất một lần"
+                  title={isPersisted ? 'Xóa khỏi thư viện (mẫu có sẵn: trả lại bản phần mềm)' : 'Chỉ xóa được sau khi đã lưu'}
                 >
                   Xóa mẫu
                 </button>
+                {session.replacesBuiltinKey && !isPersisted ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setSession(null)
+                      setSelectedId(null)
+                      setLocalMsg(null)
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Huỷ nháp
+                  </button>
+                ) : null}
               </div>
             ) : (
               <p className="text-xs text-slate-500">Chỉ xem — cần quyền chỉnh bộ chấm điểm.</p>
             )}
           </div>
-          ) : builtinPreview && builtinBlockSnapshot ? (
-            <div className="space-y-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-sky-900">Xem trước — mẫu có sẵn</p>
-              <p className="text-sm font-semibold text-slate-900">{builtinPreview.title}</p>
-              <p className="text-xs text-slate-600">{builtinPreview.hint}</p>
-              <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3 text-xs text-slate-800">
-                <p>
-                  <span className="font-semibold text-slate-700">Nhóm:</span> {RULE_CATEGORY_LABELS[builtinBlockSnapshot.category]}
-                </p>
-                <p className="mt-1">
-                  <span className="font-semibold text-slate-700">Nhãn khối:</span> {builtinBlockSnapshot.label}
-                </p>
-                <p className="mt-1">
-                  <span className="font-semibold text-slate-700">Soi thông tin:</span>{' '}
-                  <span className="font-mono text-[0.95em]">{String(builtinBlockSnapshot.targetField)}</span>
-                </p>
-                <p className="mt-1">
-                  <span className="font-semibold text-slate-700">Trần điểm tối đa:</span> {builtinBlockSnapshot.maxWeight}
-                </p>
-                <p className="mt-2 font-semibold text-slate-800">Từng dòng điều kiện</p>
-                <ol className="mt-1 list-decimal space-y-1.5 pl-4 text-slate-700">
-                  {builtinBlockSnapshot.rows.map((r) => (
-                    <li key={r.id}>
-                      <span className="text-slate-800">{rowConditionLabel(r.condition)}</span>
-                      {r.condition !== 'IS_NOT_EMPTY' &&
-                      r.condition !== 'PHONE_VN_10_DIGITS' &&
-                      r.condition !== 'PHONE_VN_NOT_10_DIGITS' &&
-                      r.condition !== 'HAS_DIGIT' ? (
-                        <span className="text-slate-600">
-                          {' '}
-                          →{' '}
-                          {Array.isArray(r.value) ? r.value.join(', ') : String(r.value ?? '')}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500"> (không cần giá trị)</span>
-                      )}
-                      <span className="text-slate-600">
-                        {' '}
-                        · {r.allocationKind === 'percent_of_max' ? `${r.allocationValue}% max` : `${r.allocationValue} điểm`}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-              <p className="text-xs leading-relaxed text-slate-600">
-                Sang tab <strong>Chấm điểm</strong>, kéo mẫu này vào bộ điểm rồi chỉnh. Muốn có bản riêng lưu lâu dài: tạo
-                mẫu mới ở cột trái phần «Mẫu của trường».
-              </p>
-            </div>
           ) : (
             <div className="space-y-2 text-sm text-slate-600">
               <p>

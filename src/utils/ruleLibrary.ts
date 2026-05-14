@@ -452,14 +452,24 @@ export function buildScoringBlockFromTemplateDoc(doc: ScoringRuleTemplateDoc): S
   }
 }
 
-export function customRuleTemplateFromDoc(doc: ScoringRuleTemplateDoc): RuleLibraryTemplate {
+export function ruleLibraryTemplateFromFirestoreDoc(doc: ScoringRuleTemplateDoc): RuleLibraryTemplate {
+  const rk = doc.replacesBuiltinKey?.trim()
+  const key = rk || `${CUSTOM_RULE_TEMPLATE_PREFIX}${doc.id}`
+  const hint =
+    doc.hint.trim() ||
+    (rk ? 'Bản trường chỉnh từ mẫu có sẵn' : 'Mẫu tùy chỉnh (lưu online)')
   return {
-    key: `${CUSTOM_RULE_TEMPLATE_PREFIX}${doc.id}`,
+    key,
     category: doc.category,
     title: doc.title,
-    hint: doc.hint.trim() || 'Mẫu tùy chỉnh (thư viện Firestore)',
+    hint,
     build: () => buildScoringBlockFromTemplateDoc(doc),
   }
+}
+
+/** @deprecated Dùng `ruleLibraryTemplateFromFirestoreDoc` — giữ tên cũ cho import cũ. */
+export function customRuleTemplateFromDoc(doc: ScoringRuleTemplateDoc): RuleLibraryTemplate {
+  return ruleLibraryTemplateFromFirestoreDoc(doc)
 }
 
 export function getRuleLibraryTemplates(): readonly RuleLibraryTemplate[] {

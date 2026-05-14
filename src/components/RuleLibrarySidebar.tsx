@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { ChevronsLeft, GripVertical } from 'lucide-react'
 import type { RuleCategory } from '../types'
 import { RULE_CATEGORY_LABELS, RULE_CATEGORIES } from '../types'
-import { getRuleLibraryTemplates, RULE_TEMPLATE_DRAG_MIME, type RuleLibraryTemplate } from '../utils/ruleLibrary'
+import { CUSTOM_RULE_TEMPLATE_PREFIX, getRuleLibraryTemplates, RULE_TEMPLATE_DRAG_MIME, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 
 const CATEGORY_BAND: Record<RuleCategory, string> = {
   demographics: 'border-l-4 border-l-amber-500 bg-amber-50/70',
@@ -33,7 +33,12 @@ export function RuleLibrarySidebar({
   const byCategory = useMemo(() => {
     const m = new Map<RuleCategory, RuleLibraryTemplate[]>()
     for (const c of RULE_CATEGORIES) m.set(c, [])
-    const merged = [...(extraTemplates ?? []), ...getRuleLibraryTemplates()]
+    const fromExtras = [...(extraTemplates ?? [])]
+    const replacedBuiltinKeys = new Set(
+      fromExtras.filter((t) => !t.key.startsWith(CUSTOM_RULE_TEMPLATE_PREFIX)).map((t) => t.key),
+    )
+    const builtinsFiltered = getRuleLibraryTemplates().filter((t) => !replacedBuiltinKeys.has(t.key))
+    const merged = [...fromExtras, ...builtinsFiltered]
     for (const t of merged) {
       m.get(t.category)!.push(t)
     }
@@ -53,8 +58,8 @@ export function RuleLibrarySidebar({
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Thư viện quy tắc</p>
           <p className="mt-0.5 text-xs leading-snug text-slate-600">
-            Mẫu trường tự thêm (ở màn <strong>Quy tắc mẫu</strong>) nằm <strong>trên</strong> mẫu có sẵn. Kéo sang ô bên
-            phải, chỉnh xong thì <strong>Lưu bộ chấm điểm</strong>.
+            Mẫu trường tự thêm hoặc <strong>chỉnh mẫu có sẵn</strong> (ở màn <strong>Quy tắc mẫu</strong>) nằm <strong>trên</strong>{' '}
+            mẫu gốc còn lại. Kéo sang ô bên phải, chỉnh xong thì <strong>Lưu bộ chấm điểm</strong>.
           </p>
         </div>
         {showCollapseButton && onCollapseRequest ? (
