@@ -124,6 +124,46 @@ export function normalizeCatalogSlug(raw: string): string {
     .slice(0, 64)
 }
 
+const CATALOG_ID_PATTERN = /^([a-z][a-z0-9_]{0,63})$/
+
+/**
+ * Tạo id document `masterData/{id}` **duy nhất** từ tên hiển thị (chuẩn hoá giống slug),
+ * để không cần nhập mã tay. Trả về `null` nếu tên không đủ để tạo id hợp lệ.
+ */
+export function uniqueCatalogIdFromLabel(
+  rawLabel: string,
+  existingCatalogIds: Iterable<string>,
+): string | null {
+  const trimmed = rawLabel.trim()
+  if (!trimmed) return null
+  let base = normalizeCatalogSlug(trimmed)
+  if (base.length < 2) return null
+  if (!/^[a-z]/.test(base)) {
+    base = `dm_${base}`
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .replace(/_+/g, '_')
+      .slice(0, 64)
+    if (!/^[a-z]/.test(base) || base.length < 2) return null
+  }
+  const existing = new Set(
+    Array.from(existingCatalogIds, (id) => String(id).trim().toLowerCase()).filter(Boolean),
+  )
+
+  let candidate = base.slice(0, 64)
+  let n = 2
+  for (;;) {
+    if (CATALOG_ID_PATTERN.test(candidate) && !isReservedCatalogSlug(candidate) && !existing.has(candidate)) {
+      return candidate
+    }
+    const suffix = `_${n}`
+    const headLen = Math.max(1, 64 - suffix.length)
+    candidate = `${base.slice(0, headLen)}${suffix}`.replace(/_+/g, '_').slice(0, 64)
+    n += 1
+    if (n > 1000) return null
+  }
+}
+
 export function defaultLabelForCatalogId(id: string): string {
   const d = DEFAULT_MASTER_CATALOGS.find((c) => c.id === id)
   return d?.label ?? id.replace(/_/g, ' ')

@@ -25,10 +25,9 @@ import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
 import { evaluateLead, resolveTagBands } from '../utils/scoring'
 import {
-  isReservedCatalogSlug,
   masterDataEntriesForFirestore,
-  normalizeCatalogSlug,
   parseCatalogsFromRegistryData,
+  uniqueCatalogIdFromLabel,
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
@@ -1029,6 +1028,20 @@ function PlaybookEditorModal({
   )
 }
 
+const MATCH_MODE_LABELS: Record<MasterEntryMatchMode, string> = {
+  exact_norm: 'Chính xác (chuẩn hoá, bỏ dấu)',
+  fuzzy_contains: 'Tương đối (chuỗi chứa nhau)',
+  gte: 'Số: lớn hơn hoặc bằng ngưỡng',
+  lte: 'Số: bé hơn hoặc bằng ngưỡng',
+  between: 'Số: từ … đến … (khoảng)',
+}
+
+function matchModesForCatalogValueKind(vk: MasterCatalogValueKind): MasterEntryMatchMode[] {
+  return vk === 'number'
+    ? ['exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
+    : ['exact_norm', 'fuzzy_contains']
+}
+
 function AddMasterCatalogForm({
   db,
   catalogs,
@@ -1040,28 +1053,25 @@ function AddMasterCatalogForm({
   onCatalogAdded?: (catalogId: string) => void
   compact?: boolean
 }) {
-  const [slugRaw, setSlugRaw] = useState('')
   const [label, setLabel] = useState('')
+  const [valueKind, setValueKind] = useState<MasterCatalogValueKind>('text')
+  const [defaultMatchMode, setDefaultMatchMode] = useState<MasterEntryMatchMode>('exact_norm')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  const existingIds = useMemo(() => catalogs.map((c) => c.id), [catalogs])
+  const allowedModes = matchModesForCatalogValueKind(valueKind)
+
+  const idPreview = useMemo(
+    () => uniqueCatalogIdFromLabel(label, existingIds),
+    [label, existingIds],
+  )
+
   const submit = async () => {
-    const slug = normalizeCatalogSlug(slugRaw)
     setMsg(null)
-    if (slug.length < 2) {
-      setMsg('Mã danh mục quá ngắn (tối thiểu 2 ký tự sau chuẩn hoá).')
-      return
-    }
-    if (!/^[a-z]/.test(slug)) {
-      setMsg('Mã phải bắt đầu bằng chữ cái Latin thường (a–z).')
-      return
-    }
-    if (isReservedCatalogSlug(slug)) {
-      setMsg('Mã này dành cho hệ thống hoặc dữ liệu cũ — chọn mã khác.')
-      return
-    }
-    if (catalogs.some((c) => c.id === slug)) {
-      setMsg('Mã danh mục đã tồn tại.')
+    const trimmed = label.trim()
+    if (trimmed.length < 2) {
+      setMsg('Nhập tên hiển thị đủ dài để tạo mã lưu trữ (ít nhất 2 ký tự có nghĩa).')
       return
     }
     setBusy(true)
@@ -1071,22 +1081,35 @@ function AddMasterCatalogForm({
       const base =
         parseCatalogsFromRegistryData(regSnap.data() as Record<string, unknown>) ??
         (catalogs.length ? [...catalogs] : DEFAULT_MASTER_CATALOGS.map((c) => ({ ...c })))
+      const catalogId = uniqueCatalogIdFromLabel(trimmed, base.map((c) => c.id))
+      if (!catalogId) {
+        setMsg('Không tạo được mã danh mục hợp lệ từ tên — đổi tên hoặc thử tên khác.')
+        return
+      }
       const maxOrder = base.reduce((m, x) => Math.max(m, x.order), 0)
-      const next = [...base, { id: slug, label: label.trim() || slug, order: maxOrder + 10 }].sort(
-        (a, b) => a.order - b.order || a.id.localeCompare(b.id),
-      )
+      const next = [
+        ...base,
+        {
+          id: catalogId,
+          label: trimmed,
+          order: maxOrder + 10,
+          valueKind,
+          defaultMatchMode,
+        },
+      ].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
       const batch = writeBatch(db)
       batch.set(regRef, { catalogs: next, updatedAt: Timestamp.now() }, { merge: true })
-      batch.set(doc(db, FS_COLLECTIONS.masterData, slug), {
-        id: slug,
+      batch.set(doc(db, FS_COLLECTIONS.masterData, catalogId), {
+        id: catalogId,
         entries: [],
         updatedAt: Timestamp.now(),
       })
       await batch.commit()
-      setSlugRaw('')
       setLabel('')
-      setMsg('Đã thêm danh mục.')
-      onCatalogAdded?.(slug)
+      setValueKind('text')
+      setDefaultMatchMode('exact_norm')
+      setMsg(`Đã thêm danh mục «${trimmed}» (mã lưu: ${catalogId}).`)
+      onCatalogAdded?.(catalogId)
     } catch (e) {
       console.error(e)
       setMsg(firestoreWriteErrorMessage(e))
@@ -1106,6 +1129,11 @@ function AddMasterCatalogForm({
       <h3 className={settingsHeading}>
         {compact ? 'Thêm loại mới' : 'Thêm loại danh mục mới'}
       </h3>
+      <p className={`mt-2 text-xs leading-snug text-slate-600 ${settingsCopy}`}>
+        Chỉ cần đặt <strong>tên</strong> và chọn <strong>kiểu + cách khớp</strong>. Mã lưu Firestore (đường dẫn{' '}
+        <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">masterData/…</code>) được tạo tự động từ
+        tên — dùng trong chấm điểm IN_LIST khi <code className="font-mono">targetField</code> trùng mã đó.
+      </p>
       <div
         className={
           compact
@@ -1117,27 +1145,7 @@ function AddMasterCatalogForm({
           className={
             compact
               ? `w-full font-medium text-slate-700 ${settingsCopy}`
-              : `min-w-[12rem] flex-1 font-medium text-slate-700 ${settingsCopy}`
-          }
-        >
-          Mã (slug)
-          <input
-            value={slugRaw}
-            onChange={(e) => setSlugRaw(e.target.value)}
-            disabled={busy}
-            placeholder="vi_du_danh_muc"
-            className={
-              compact
-                ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
-                : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
-            }
-          />
-        </label>
-        <label
-          className={
-            compact
-              ? `w-full font-medium text-slate-700 ${settingsCopy}`
-              : `min-w-[12rem] flex-1 font-medium text-slate-700 ${settingsCopy}`
+              : `min-w-[14rem] flex-[1.2] font-medium text-slate-700 ${settingsCopy}`
           }
         >
           Tên hiển thị
@@ -1145,13 +1153,78 @@ function AddMasterCatalogForm({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             disabled={busy}
-            placeholder="Nguồn lead"
+            placeholder="Ví dụ: Nguồn lead, Nhóm ưu tiên…"
             className={
               compact
                 ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
                 : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
             }
           />
+          {idPreview ? (
+            <span className={`mt-1 block font-mono text-[0.8rem] text-slate-500 ${settingsCopy}`}>
+              → Mã lưu: <strong className="text-slate-700">{idPreview}</strong>
+            </span>
+          ) : label.trim() ? (
+            <span className={`mt-1 block text-[0.8rem] text-amber-800 ${settingsCopy}`}>
+              Gõ thêm ký tự — chưa tạo được mã hợp lệ.
+            </span>
+          ) : null}
+        </label>
+        <label
+          className={
+            compact
+              ? `w-full font-medium text-slate-700 ${settingsCopy}`
+              : `min-w-[10rem] flex-1 font-medium text-slate-700 ${settingsCopy}`
+          }
+        >
+          Kiểu danh mục
+          <select
+            value={valueKind}
+            onChange={(e) => {
+              const vk = e.target.value as MasterCatalogValueKind
+              setValueKind(vk)
+              if (
+                vk === 'text' &&
+                (defaultMatchMode === 'gte' || defaultMatchMode === 'lte' || defaultMatchMode === 'between')
+              ) {
+                setDefaultMatchMode('exact_norm')
+              }
+            }}
+            disabled={busy}
+            className={
+              compact
+                ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+                : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+            }
+          >
+            <option value="text">Văn bản</option>
+            <option value="number">Số (khoảng / so sánh)</option>
+          </select>
+        </label>
+        <label
+          className={
+            compact
+              ? `w-full font-medium text-slate-700 ${settingsCopy}`
+              : `min-w-[12rem] flex-[1.1] font-medium text-slate-700 ${settingsCopy}`
+          }
+        >
+          Khớp mặc định (cả danh mục)
+          <select
+            value={allowedModes.includes(defaultMatchMode) ? defaultMatchMode : 'exact_norm'}
+            onChange={(e) => setDefaultMatchMode(e.target.value as MasterEntryMatchMode)}
+            disabled={busy}
+            className={
+              compact
+                ? `mt-1 w-full rounded-lg border border-slate-200/80 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+                : `mt-1 w-full rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/45 ${settingsCopy}`
+            }
+          >
+            {allowedModes.map((m) => (
+              <option key={m} value={m}>
+                {MATCH_MODE_LABELS[m]}
+              </option>
+            ))}
+          </select>
         </label>
         <button
           type="button"
@@ -1178,14 +1251,6 @@ function AddMasterCatalogForm({
   )
 }
 
-const MATCH_MODE_LABELS: Record<MasterEntryMatchMode, string> = {
-  exact_norm: 'Chính xác (chuẩn hoá, bỏ dấu)',
-  fuzzy_contains: 'Tương đối (chuỗi chứa nhau)',
-  gte: 'Số: lớn hơn hoặc bằng ngưỡng',
-  lte: 'Số: bé hơn hoặc bằng ngưỡng',
-  between: 'Số: từ … đến … (khoảng)',
-}
-
 function CatalogMatchMetaPanel({
   db,
   catalogs,
@@ -1208,10 +1273,7 @@ function CatalogMatchMetaPanel({
     setMsg(null)
   }, [active.id, active.valueKind, active.defaultMatchMode])
 
-  const allowedModes: MasterEntryMatchMode[] =
-    valueKind === 'number'
-      ? ['exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
-      : ['exact_norm', 'fuzzy_contains']
+  const allowedModes = matchModesForCatalogValueKind(valueKind)
 
   const save = async () => {
     setBusy(true)
@@ -1364,10 +1426,7 @@ function MasterEntriesEditor({
   const [editing, setEditing] = useState<MasterDataEntry | null>(null)
   const pendingServerMatch = useRef<MasterDataEntry[] | null>(null)
 
-  const addAllowedModes: MasterEntryMatchMode[] =
-    catalogDef.valueKind === 'number'
-      ? ['exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
-      : ['exact_norm', 'fuzzy_contains']
+  const addAllowedModes = matchModesForCatalogValueKind(catalogDef.valueKind ?? 'text')
 
   function snapshotIncludesWrite(want: MasterDataEntry[], snap: MasterDataEntry[]): boolean {
     return want.every((w) => snap.some((e) => entryPersistFingerprint(e) === entryPersistFingerprint(w)))
@@ -1584,7 +1643,12 @@ function MasterEntriesEditor({
         <div
           className={`mt-3 shrink-0 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 text-slate-700 ${settingsCopy}`}
         >
-          <p className={settingsHeading}>Tùy chọn khi thêm mục</p>
+          <p className={settingsHeading}>Khớp cho từng mục mới (tùy chọn)</p>
+          <p className={`text-xs leading-relaxed text-slate-600 ${settingsCopy}`}>
+            Mặc định mỗi mục dùng <strong>chế độ khớp của danh mục</strong> (khối «Kiểu danh mục / Khớp mặc định» phía
+            trên). Chỉ chỉnh các ô dưới khi <strong>một mục</strong> cần quy tắc khác (ví dụ một khoảng điểm riêng,
+            hoặc tên khác viết tắt trong synonyms).
+          </p>
           <label className={`block font-medium text-slate-700 ${settingsCopy}`}>
             Tên khác (synonyms), cách nhau bởi dấu phẩy
             <input
@@ -1597,7 +1661,7 @@ function MasterEntriesEditor({
           </label>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <label className={`min-w-0 flex-1 font-medium text-slate-700 ${settingsCopy}`}>
-              Chế độ khớp (để trống = theo mặc định catalog)
+              Ghi đè chế độ khớp (để trống = theo danh mục)
               <select
                 value={addMatchMode}
                 onChange={(e) => setAddMatchMode((e.target.value || '') as '' | MasterEntryMatchMode)}
