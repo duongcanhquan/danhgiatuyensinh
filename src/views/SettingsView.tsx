@@ -556,7 +556,7 @@ export function SettingsView() {
                     Chọn danh mục
                   </p>
                   <nav
-                    className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5"
+                    className="min-h-0 flex-1 select-none space-y-1 overflow-y-auto overscroll-contain pr-0.5"
                     aria-label="Danh mục master data"
                   >
                     {catalogs.map((c) => {
@@ -1816,15 +1816,15 @@ function MasterEntriesEditor({
       <div
         className={
           showHeading
-            ? 'mt-3 max-h-[min(52vh,28rem)] min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y'
+            ? 'mt-3 max-h-[min(52vh,28rem)] min-h-0 overflow-y-auto overscroll-y-contain'
             : 'mt-3 flex min-h-0 flex-1 flex-col overflow-hidden'
         }
       >
         <div
           className={
             showHeading
-              ? 'flex flex-col gap-2 pr-0.5'
-              : 'min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y pr-0.5'
+              ? 'flex select-none flex-col gap-2 pr-0.5'
+              : 'min-h-0 flex-1 select-none overflow-y-auto overscroll-y-contain pr-0.5'
           }
         >
         {localEntries.map((x) => {
