@@ -18,6 +18,7 @@ import {
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { useAuth } from '../hooks/useAuth'
 import { useMasterData } from '../hooks/useMasterData'
+import { importVietMyScriptSnippetsFromPublic } from '../utils/clientFirestoreSeedImport'
 
 const FIELD_OPTIONS: { value: PlaybookConditionField; label: string }[] = [
   { value: 'region', label: 'Vùng (region)' },
@@ -99,6 +100,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
   const [isActive, setIsActive] = useState(true)
   const [conditionRows, setConditionRows] = useState<ConditionRow[]>([newConditionRow()])
   const [busy, setBusy] = useState(false)
+  const [seedBusy, setSeedBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
   const majorFilterOptions = useMemo(() => {
@@ -285,8 +287,10 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
               Các đoạn kịch bản ghép nối — hệ thống tự ráp luồng tư vấn theo từng hồ sơ (trợ lý trên màn chi tiết).
             </p>
             <p className="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">
-              <strong className="text-slate-300">Lưu ý:</strong> lệnh seed chạy trên <strong>máy bạn (Terminal)</strong>,
-              cần file service account —{' '}
+              <strong className="text-slate-300">Nạp mẫu từ app:</strong> bấm «Nạp 20 snippet mẫu» (cần{' '}
+              <code className="rounded bg-black/30 px-1 text-slate-300">public/seed/vietmy-script-snippets.json</code>{' '}
+              — <code className="rounded bg-black/30 px-1 text-slate-300">npm run export:public-seed</code> rồi build).{' '}
+              <strong className="text-slate-300">Hoặc từ Terminal</strong> (service account):{' '}
               <code className="rounded bg-black/30 px-1 text-slate-300">GOOGLE_APPLICATION_CREDENTIALS=./secrets/…json</code>{' '}
               rồi <code className="rounded bg-black/30 px-1 text-slate-300">npm run seed:script-snippets</code>. Xóa
               bộ đã seed:{' '}
@@ -294,19 +298,49 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                 DELETE_SCRIPT_SNIPPET_SEED=1 npm run seed:script-snippets
               </code>
               . Sửa nội dung: chỉnh trong bảng hoặc file{' '}
-              <code className="text-slate-400">scripts/data/vietmy-script-snippet-seed-entries.mjs</code> rồi chạy lại
-              seed.
+              <code className="text-slate-400">scripts/data/vietmy-script-snippet-seed-entries.mjs</code> rồi export
+              lại hoặc chạy lại seed.
             </p>
           </div>
           {canEdit ? (
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-50 hover:bg-amber-500/30"
-            >
-              <Plus className="h-4 w-4" />
-              Snippet mới
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={seedBusy || loading}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      'Nạp 20 snippet mẫu (id vietmy_seed_script_01 … 20) vào Firestore? Dùng quyền đăng nhập hiện tại; ghi đè nếu trùng id.',
+                    )
+                  )
+                    return
+                  void (async () => {
+                    setSeedBusy(true)
+                    setMsg(null)
+                    try {
+                      const n = await importVietMyScriptSnippetsFromPublic(db)
+                      setMsg(`Đã ghi ${n} snippet.`)
+                    } catch (e) {
+                      console.error(e)
+                      setMsg(e instanceof Error ? e.message : 'Không nạp được — kiểm tra Rules và file public/seed.')
+                    } finally {
+                      setSeedBusy(false)
+                    }
+                  })()
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-500/25 disabled:opacity-50"
+              >
+                {seedBusy ? 'Đang nạp…' : 'Nạp 20 snippet mẫu'}
+              </button>
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-50 hover:bg-amber-500/30"
+              >
+                <Plus className="h-4 w-4" />
+                Snippet mới
+              </button>
+            </div>
           ) : null}
         </div>
 

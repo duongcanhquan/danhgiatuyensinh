@@ -28,6 +28,7 @@ import {
   counselorStatusToPipeline,
   pipelineToCounselorStatus,
 } from '../utils/leadIdentity'
+import { parseScoringSignalsFromFirestore } from '../utils/leadScoringSignals'
 
 /** Số hồ sơ mỗi trang Firestore / bảng. */
 export const LEADS_PAGE_SIZE = 30
@@ -199,6 +200,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.aiProcessedAt && typeof data.aiProcessedAt === 'object' && 'toMillis' in (data.aiProcessedAt as object)
           ? (data.aiProcessedAt as Timestamp)
           : undefined,
+      scoringSignals: parseScoringSignalsFromFirestore(data.scoringSignals),
     }
   } catch {
     return null

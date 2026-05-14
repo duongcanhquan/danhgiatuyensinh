@@ -1,4 +1,5 @@
-import type { RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow } from '../types'
+import type { LeadScoringSignalKey, RuleCategory, ScoringRuleBlock, ScoringRuleConditionRow } from '../types'
+import { ALL_SCORING_SIGNAL_KEYS, SCORING_SIGNAL_META } from './leadScoringSignals'
 
 function newId(): string {
   return crypto.randomUUID()
@@ -22,7 +23,7 @@ export type RuleLibraryTemplate = {
 
 export const RULE_TEMPLATE_DRAG_MIME = 'application/x-vietmy-rule-template'
 
-const TEMPLATES: RuleLibraryTemplate[] = [
+const BASE_TEMPLATES: RuleLibraryTemplate[] = [
   {
     key: 'demo-region',
     category: 'demographics',
@@ -176,22 +177,55 @@ const TEMPLATES: RuleLibraryTemplate[] = [
       }),
   },
   {
+    key: 'phone-vn-10',
+    category: 'demographics',
+    title: 'SĐT sinh viên — đúng 10 số (VN)',
+    hint: 'Cộng khi đủ 10 số sau chuẩn hoá; trừ khi trống / thiếu / thừa số',
+    build: () =>
+      makeBlock({
+        category: 'demographics',
+        label: 'SĐT sinh viên (độ dài VN)',
+        targetField: 'phone',
+        maxWeight: 15,
+        rows: [
+          row({
+            condition: 'PHONE_VN_10_DIGITS',
+            value: '',
+            allocationKind: 'absolute',
+            allocationValue: 15,
+          }),
+          row({
+            condition: 'PHONE_VN_NOT_10_DIGITS',
+            value: '',
+            allocationKind: 'absolute',
+            allocationValue: -12,
+          }),
+        ],
+      }),
+  },
+  {
     key: 'src-parent-phone',
     category: 'source_engagement',
-    title: 'Có SĐT phụ huynh',
-    hint: 'IS_NOT_EMPTY — tăng điểm tương tác',
+    title: 'SĐT phụ huynh — đúng 10 số (VN)',
+    hint: 'Cộng khi đủ 10 số; trừ khi trống / sai độ dài (không còn chỉ «có nhập»)',
     build: () =>
       makeBlock({
         category: 'source_engagement',
-        label: 'SĐT phụ huynh',
+        label: 'SĐT phụ huynh (độ dài VN)',
         targetField: 'parentPhone',
         maxWeight: 12,
         rows: [
           row({
-            condition: 'IS_NOT_EMPTY',
+            condition: 'PHONE_VN_10_DIGITS',
             value: '',
             allocationKind: 'absolute',
             allocationValue: 12,
+          }),
+          row({
+            condition: 'PHONE_VN_NOT_10_DIGITS',
+            value: '',
+            allocationKind: 'absolute',
+            allocationValue: -10,
           }),
         ],
       }),
@@ -294,11 +328,42 @@ const TEMPLATES: RuleLibraryTemplate[] = [
   },
 ]
 
+function signalRuleTemplate(key: LeadScoringSignalKey): RuleLibraryTemplate {
+  const m = SCORING_SIGNAL_META[key]
+  const pts = m.defaultPoints
+  const ptsLabel = pts >= 0 ? `+${pts}` : String(pts)
+  return {
+    key: `sig-${key}`,
+    category: m.group as RuleCategory,
+    title: `${m.label} (${ptsLabel})`,
+    hint: 'Cờ trên hồ sơ (màn chi tiết → Hành vi & Rủi ro). TVV bật khi đúng tình huống.',
+    build: () =>
+      makeBlock({
+        category: m.group as RuleCategory,
+        label: m.label,
+        targetField: m.evalField,
+        maxWeight: Math.max(Math.abs(pts), 1),
+        rows: [
+          row({
+            condition: 'IS_NOT_EMPTY',
+            value: '',
+            allocationKind: 'absolute',
+            allocationValue: pts,
+          }),
+        ],
+      }),
+  }
+}
+
+const SIGNAL_RULE_TEMPLATES: RuleLibraryTemplate[] = ALL_SCORING_SIGNAL_KEYS.map(signalRuleTemplate)
+
+const ALL_RULE_TEMPLATES: RuleLibraryTemplate[] = [...BASE_TEMPLATES, ...SIGNAL_RULE_TEMPLATES]
+
 export function getRuleLibraryTemplates(): readonly RuleLibraryTemplate[] {
-  return TEMPLATES
+  return ALL_RULE_TEMPLATES
 }
 
 export function createBlockFromTemplateKey(key: string): ScoringRuleBlock | null {
-  const t = TEMPLATES.find((x) => x.key === key)
+  const t = ALL_RULE_TEMPLATES.find((x) => x.key === key)
   return t ? t.build() : null
 }

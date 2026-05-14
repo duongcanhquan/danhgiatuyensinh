@@ -13,7 +13,14 @@ import { FS_COLLECTIONS, RULE_CATEGORIES } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { inferRuleCategory, legacyRulesToBlocks } from '../utils/scoring'
 
-const CONDITIONS: ProfileScoringCondition[] = ['EQUALS', 'CONTAINS', 'IS_NOT_EMPTY', 'IN_LIST']
+const CONDITIONS: ProfileScoringCondition[] = [
+  'EQUALS',
+  'CONTAINS',
+  'IS_NOT_EMPTY',
+  'IN_LIST',
+  'PHONE_VN_10_DIGITS',
+  'PHONE_VN_NOT_10_DIGITS',
+]
 
 function mapEmbeddedRule(raw: unknown, index: number): ScoringRule | null {
   if (!raw || typeof raw !== 'object') return null

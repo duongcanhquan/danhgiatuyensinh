@@ -26,6 +26,7 @@ import {
   normalizeCatalogSlug,
   parseCatalogsFromRegistryData,
 } from '../utils/masterDataRegistry'
+import { importVietMyPlaybooksFromPublic } from '../utils/clientFirestoreSeedImport'
 import { ChevronDown, ChevronUp, GripVertical, Maximize2, X } from 'lucide-react'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { AISettingsTab } from '../components/AISettingsTab'
@@ -111,6 +112,7 @@ export function SettingsView() {
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
   const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
+  const [playbookSeedBusy, setPlaybookSeedBusy] = useState(false)
 
   const settingsWorkspaceOpen = masterWorkspaceOpen || consultingWorkspaceOpen || llmWorkspaceOpen
 
@@ -527,9 +529,11 @@ export function SettingsView() {
                 <strong>không thay</strong> tab LLM hay Phòng thử AI.
               </p>
               <p className="mt-2 border-t border-sky-200/60 pt-2 text-xs text-slate-600">
-                <strong>Nhập hàng loạt playbook (50 mục):</strong> chạy{' '}
-                <code className="rounded bg-white/80 px-1">npm run seed:consulting-playbooks</code> (cần service
-                account). Xóa đúng bộ đã seed:{' '}
+                <strong>Nạp từ app:</strong> bấm «Nạp 50 playbook mẫu» cạnh danh sách (cần file{' '}
+                <code className="rounded bg-white/80 px-1">public/seed/consulting-playbooks.json</code> — chạy{' '}
+                <code className="rounded bg-white/80 px-1">npm run export:public-seed</code> rồi build/deploy).{' '}
+                <strong>Hoặc từ Terminal</strong> (service account):{' '}
+                <code className="rounded bg-white/80 px-1">npm run seed:consulting-playbooks</code>. Xóa đúng bộ đã seed:{' '}
                 <code className="rounded bg-white/80 px-1">DELETE_PLAYBOOK_SEED=1 npm run seed:consulting-playbooks</code>{' '}
                 rồi chạy lại lệnh seed nếu muốn nạp lại.
               </p>
@@ -539,7 +543,38 @@ export function SettingsView() {
                 <h3 className="app-section-heading">
                   Danh sách playbook
                 </h3>
-                {pbLoading ? <span className="text-sm text-slate-500">Đang tải…</span> : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {pbLoading ? <span className="text-sm text-slate-500">Đang tải…</span> : null}
+                  {db && canPlaybooks ? (
+                    <button
+                      type="button"
+                      disabled={playbookSeedBusy}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            'Nạp 50 playbook mẫu (id vietmy_seed_playbook_01 … 50) vào Firestore? Dùng quyền tài khoản đang đăng nhập; có thể ghi đè bản seed cùng id.',
+                          )
+                        )
+                          return
+                        void (async () => {
+                          setPlaybookSeedBusy(true)
+                          try {
+                            const n = await importVietMyPlaybooksFromPublic(db)
+                            window.alert(`Đã ghi ${n} playbook. Danh sách cập nhật theo thời gian thực.`)
+                          } catch (e) {
+                            console.error(e)
+                            window.alert(firestoreWriteErrorMessage(e))
+                          } finally {
+                            setPlaybookSeedBusy(false)
+                          }
+                        })()
+                      }}
+                      className="min-h-10 rounded-lg border border-emerald-600/80 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
+                    >
+                      {playbookSeedBusy ? 'Đang nạp…' : 'Nạp 50 playbook mẫu'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {!canPlaybooks ? (
                 <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:text-base">
@@ -802,6 +837,7 @@ function PlaybookEditorModal({
           .filter(Boolean),
         triggerConditions,
         updatedAt: Timestamp.now(),
+        ...(playbook.seedTag ? { seedTag: playbook.seedTag } : {}),
       })
       onClose()
     } catch (e) {

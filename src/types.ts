@@ -127,6 +127,25 @@ export type RolePermissionMatrix = Record<UserRole, readonly Permission[]>
 /** Nhãn ưu tiên — gán theo điểm tích lũy và ngưỡng HOT/WARM trong từng bộ profile (COLD 0…warm−1, LOSS &lt;0). */
 export type PriorityTag = 'HOT' | 'WARM' | 'COLD' | 'LOSS'
 
+// -----------------------------------------------------------------------------
+// Lead scoring signals — Hành vi / Rủi ro (checklist TVV, `leads.scoringSignals`)
+// -----------------------------------------------------------------------------
+
+/** Khóa cờ lưu Firestore; chỉ giá trị `true` được lưu (thiếu = không bật). */
+export type LeadScoringSignalKey =
+  | 'askedTuition'
+  | 'askedCareerAfterGrad'
+  | 'addedZalo'
+  | 'sentTranscript'
+  | 'consultedParents'
+  | 'filledRegistrationForm'
+  | 'silentOver7Days'
+  | 'wantsUniversityAtAllCosts'
+  | 'parentsWantUniversityOnly'
+  | 'enrolledElsewhere'
+
+export type LeadScoringSignals = Partial<Record<LeadScoringSignalKey, true>>
+
 export type LeadPipelineStatus =
   | 'NEW'
   | 'CONTACTED'
@@ -250,6 +269,11 @@ export interface Lead {
   aiShortlistReason?: string
   recommendedAction?: string
   aiProcessedAt?: Timestamp
+  /**
+   * Checklist «Hành vi» / «Rủi ro» do TVV bật trên màn chi tiết — đưa vào chấm điểm qua các trường `sig_*`
+   * trong bản ghi đánh giá nội bộ (xem `leadToEvaluationRecord`).
+   */
+  scoringSignals?: LeadScoringSignals
 }
 
 export interface LeadRoutingMeta {
@@ -273,8 +297,18 @@ export type LeadCreateInput = Omit<Lead, 'id' | 'createdAt' | 'updatedAt'> & {
 // Scoring — multiple profiles (Firestore: `scoringProfiles/{profileId}`)
 // -----------------------------------------------------------------------------
 
-/** Điều kiện trên một trường lead (dùng trong `ScoringProfile.rules`) */
-export type ProfileScoringCondition = 'EQUALS' | 'CONTAINS' | 'IS_NOT_EMPTY' | 'IN_LIST'
+/**
+ * Điều kiện trên một trường lead (dùng trong `ScoringProfile.rules`).
+ * `PHONE_VN_*`: chỉ áp dụng ý nghĩa đúng khi `targetField` là chuỗi SĐT (vd. `phone`, `parentPhone`);
+ * engine lấy chỉ các chữ số, chuẩn hoá `+84`/`84` → `0…` rồi so sánh độ dài 10.
+ */
+export type ProfileScoringCondition =
+  | 'EQUALS'
+  | 'CONTAINS'
+  | 'IS_NOT_EMPTY'
+  | 'IN_LIST'
+  | 'PHONE_VN_10_DIGITS'
+  | 'PHONE_VN_NOT_10_DIGITS'
 
 // -----------------------------------------------------------------------------
 // Scoring profile builder — 100-point budget blocks & rule library
@@ -286,6 +320,8 @@ export const RULE_CATEGORIES = [
   'academic',
   'source_engagement',
   'psychographics',
+  'behavior',
+  'risk',
   'ai_insights',
 ] as const
 
@@ -296,6 +332,8 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   academic: 'Học thuật',
   source_engagement: 'Nguồn & tương tác',
   psychographics: 'Tâm lý / định tính',
+  behavior: 'Hành vi',
+  risk: 'Rủi ro',
   ai_insights: 'AI & insight',
 }
 
@@ -534,6 +572,8 @@ export interface ConsultingPlaybook {
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy?: UserId
+  /** Gắn khi seed — giữ khi «Sửa» để xóa hàng loạt theo seedTag vẫn khớp */
+  seedTag?: string
 }
 
 // -----------------------------------------------------------------------------

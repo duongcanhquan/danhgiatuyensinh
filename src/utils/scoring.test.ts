@@ -140,6 +140,108 @@ describe('evaluateLead', () => {
     expect(r.priorityTag).toBe('LOSS')
   })
 
+  it('PHONE_VN: đúng 10 số cộng điểm; thiếu/thừa/trống trừ điểm (khối)', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b-phone',
+          category: 'demographics',
+          label: 'SĐT',
+          targetField: 'phone',
+          maxWeight: 20,
+          rows: [
+            {
+              id: 'ok',
+              condition: 'PHONE_VN_10_DIGITS',
+              value: '',
+              allocationKind: 'absolute',
+              allocationValue: 10,
+            },
+            {
+              id: 'bad',
+              condition: 'PHONE_VN_NOT_10_DIGITS',
+              value: '',
+              allocationKind: 'absolute',
+              allocationValue: -8,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ phone: '0912345678' }, profile).calculatedScore).toBe(10)
+    expect(evaluateLead({ phone: '+84 912 345 678' }, profile).calculatedScore).toBe(10)
+    expect(evaluateLead({ phone: '091234567' }, profile).calculatedScore).toBe(-8)
+    expect(evaluateLead({ phone: '091234567890' }, profile).calculatedScore).toBe(-8)
+    expect(evaluateLead({ phone: '' }, profile).calculatedScore).toBe(-8)
+  })
+
+  it('scoringSignals: cờ Hành vi / Rủi ro qua sig_* (+ và −)', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b-beh',
+          category: 'behavior',
+          label: 'Hỏi học phí',
+          targetField: 'sig_askedTuition',
+          maxWeight: 25,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'IS_NOT_EMPTY',
+              value: '',
+              allocationKind: 'absolute',
+              allocationValue: 25,
+            },
+          ],
+        },
+        {
+          id: 'b-risk',
+          category: 'risk',
+          label: 'Silent',
+          targetField: 'sig_silentOver7Days',
+          maxWeight: 15,
+          rows: [
+            {
+              id: 'r2',
+              condition: 'IS_NOT_EMPTY',
+              value: '',
+              allocationKind: 'absolute',
+              allocationValue: -15,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    const rec = {
+      province: 'HN',
+      sig_askedTuition: '1',
+      sig_silentOver7Days: '',
+    }
+    expect(evaluateLead(rec, profile).calculatedScore).toBe(25)
+    expect(evaluateLead({ ...rec, sig_silentOver7Days: '1' }, profile).calculatedScore).toBe(10)
+  })
+
+  it('PHONE_VN: quy tắc phẳng (rules) vẫn khớp', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [
+        {
+          id: 'p1',
+          targetField: 'phone',
+          condition: 'PHONE_VN_10_DIGITS',
+          value: '',
+          points: 5,
+        },
+      ],
+      ruleBlocks: [],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ phone: '84912345678' }, profile).calculatedScore).toBe(5)
+  })
+
   it('allows negative percent_of_max row points', () => {
     const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
       rules: [],

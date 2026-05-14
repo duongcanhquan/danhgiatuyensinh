@@ -49,6 +49,7 @@ import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
+import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
@@ -1702,6 +1703,7 @@ export function LeadManagement() {
             <LeadDetailPanel
               key={selected.id}
               lead={selected}
+              activeScoringProfile={activeScoringProfile}
               scoringPreview={
                 activeScoringProfile
                   ? scoreByLeadId.get(selected.id) ??
@@ -2235,6 +2237,7 @@ function LeadCrmQuickBlock({
 
 function LeadDetailPanel({
   lead,
+  activeScoringProfile,
   scoringPreview,
   db,
   institutionalRagBlock,
@@ -2248,6 +2251,7 @@ function LeadDetailPanel({
   dynamicAssistantSlot,
 }: {
   lead: Lead
+  activeScoringProfile: ScoringProfile | null
   scoringPreview?: { calculatedScore: number; priorityTag: PriorityTag }
   db: ReturnType<typeof getFirestoreDb>
   /** Nội dung RAG từ Knowledge Base (có thể rỗng). */
@@ -2265,6 +2269,7 @@ function LeadDetailPanel({
   dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can } = useAuth()
+  const canEditScoringSignals = can('leads:write:self_assigned')
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
@@ -2685,6 +2690,17 @@ function LeadDetailPanel({
                       key={`cprog-${lead.id}`}
                       lead={lead}
                       db={db}
+                      onUpdated={onUpdated}
+                    />
+                  ) : null}
+
+                  {db ? (
+                    <LeadScoringSignalsPanel
+                      key={`sig-${lead.id}`}
+                      lead={lead}
+                      db={db}
+                      activeScoringProfile={activeScoringProfile}
+                      canEdit={canEditScoringSignals}
                       onUpdated={onUpdated}
                     />
                   ) : null}

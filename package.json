@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:seed": "npm run export:public-seed && npm run build",
+    "build:hosting": "VITE_BASE=/ npm run export:public-seed && npm run build",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "seed:super-admin": "node scripts/create-super-admin.mjs",
+    "export:public-seed": "node scripts/export-public-seed-assets.mjs",
     "seed:knowledge-base": "node scripts/seed-knowledge-base.mjs",
     "seed:consulting-playbooks": "node scripts/seed-consulting-playbooks.mjs",
     "seed:script-snippets": "node scripts/seed-script-snippets.mjs",

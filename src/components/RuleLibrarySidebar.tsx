@@ -9,6 +9,8 @@ const CATEGORY_BAND: Record<RuleCategory, string> = {
   academic: 'border-l-4 border-l-sky-500 bg-sky-50/70',
   source_engagement: 'border-l-4 border-l-teal-500 bg-teal-50/60',
   psychographics: 'border-l-4 border-l-violet-500 bg-violet-50/60',
+  behavior: 'border-l-4 border-l-emerald-600 bg-emerald-50/65',
+  risk: 'border-l-4 border-l-rose-600 bg-rose-50/65',
   ai_insights: 'border-l-4 border-l-rose-500 bg-rose-50/60',
 }
 

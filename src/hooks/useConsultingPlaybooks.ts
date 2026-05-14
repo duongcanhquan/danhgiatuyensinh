@@ -24,6 +24,7 @@ function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlayb
       createdAt: (data.createdAt as Timestamp) ?? now,
       updatedAt: (data.updatedAt as Timestamp) ?? now,
       createdBy: data.createdBy ? String(data.createdBy) : undefined,
+      seedTag: data.seedTag ? String(data.seedTag) : undefined,
     }
   } catch {
     return null

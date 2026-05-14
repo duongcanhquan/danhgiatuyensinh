@@ -4,6 +4,7 @@ import type { KnowledgeDocumentType } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import type { Firestore } from 'firebase/firestore'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
+import { importVietMyKnowledgeFromPublic } from '../utils/clientFirestoreSeedImport'
 
 const TYPES: { v: KnowledgeDocumentType; label: string }[] = [
   { v: 'TUITION', label: 'Học phí / lệ phí' },
@@ -17,6 +18,7 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
   const [type, setType] = useState<KnowledgeDocumentType>('POLICY')
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
+  const [seedBusy, setSeedBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
 
@@ -88,6 +90,40 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
           Tài liệu nội bộ được đưa vào <strong>system prompt</strong> trước mỗi lần gọi LLM — giảm bịa đặt học phí /
           quy chế. Copilot chỉ nên trích dẫn nội dung đã nhập tại đây.
         </p>
+        <div className="mt-3">
+          <button
+            type="button"
+            disabled={seedBusy || loading}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  'Nạp bộ mẫu kho tri thức (id vietmy_seed_knowledge_001 …) vào Firestore? Dùng quyền đăng nhập hiện tại; ghi đè nếu trùng id.',
+                )
+              )
+                return
+              void (async () => {
+                setSeedBusy(true)
+                setMsg(null)
+                try {
+                  const n = await importVietMyKnowledgeFromPublic(db)
+                  setMsg(`Đã ghi ${n} tài liệu mẫu. Danh sách cập nhật theo thời gian thực.`)
+                } catch (e) {
+                  console.error(e)
+                  setMsg(
+                    e instanceof Error
+                      ? e.message
+                      : 'Không nạp được — kiểm tra Rules và file public/seed/knowledge-documents.json (chạy npm run export:public-seed).',
+                  )
+                } finally {
+                  setSeedBusy(false)
+                }
+              })()
+            }}
+            className="rounded-xl border border-emerald-600/70 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
+          >
+            {seedBusy ? 'Đang nạp mẫu…' : 'Nạp mẫu kho tri thức từ JSON'}
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -173,15 +209,17 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
           <div className="mt-2 space-y-2 text-sm text-slate-600">
             <p>Chưa có tài liệu — thêm ít nhất một mục để RAG hoạt động.</p>
             <p className="rounded-lg border border-sky-200/80 bg-sky-50/90 px-3 py-2 text-xs leading-relaxed text-slate-700">
-              <strong>Nạp sẵn 50 mục từ code:</strong> trên máy có service account, chạy{' '}
+              <strong>Nạp từ app:</strong> bấm «Nạp mẫu kho tri thức từ JSON» phía trên (cần build có{' '}
+              <code className="font-mono text-[11px]">public/seed/knowledge-documents.json</code>).{' '}
+              <strong>Hoặc từ Terminal</strong> (service account):{' '}
               <code className="rounded bg-white/90 px-1 font-mono text-[11px] text-slate-900">
                 GOOGLE_APPLICATION_CREDENTIALS=./đường-dẫn.json npm run seed:knowledge-base
-              </code>{' '}
-              (ghi vào Firestore <code className="font-mono text-[11px]">knowledgeDocuments</code>). Dry-run:{' '}
+              </code>
+              . Dry-run:{' '}
               <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
                 node scripts/seed-knowledge-base.mjs --dry-run
               </code>
-              . Hoặc dùng form «Thêm tài liệu mới» phía trên rồi bấm Lưu.
+              . Hoặc dùng form «Thêm tài liệu mới» rồi bấm Lưu.
             </p>
           </div>
         ) : null}

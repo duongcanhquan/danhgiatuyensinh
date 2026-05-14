@@ -4,7 +4,9 @@
  * Mỗi document có thêm `seedTag: "vietmy_playbooks_v1"` để xóa gọn bằng:
  *   DELETE_PLAYBOOK_SEED=1 GOOGLE_APPLICATION_CREDENTIALS=./secrets/serviceAccount.json npm run seed:consulting-playbooks
  *
- * Chỉ thêm (không xóa playbook tay soạn trước đó):
+ * ID cố định `vietmy_seed_playbook_01` … `50` — chạy lại lệnh seed ghi đè (merge) cùng ID.
+ *
+ * Chạy seed:
  *   GOOGLE_APPLICATION_CREDENTIALS=./secrets/serviceAccount.json npm run seed:consulting-playbooks
  *
  * Dry-run (đếm mục, không ghi DB):
@@ -73,20 +75,26 @@ async function main() {
   let batch = db.batch()
   let ops = 0
   let written = 0
-  for (const e of entries) {
-    const ref = db.collection(COLLECTION).doc()
-    batch.set(ref, {
-      title: e.title,
-      isActive: e.isActive !== false,
-      priority: Number(e.priority ?? 0),
-      triggerConditions: Array.isArray(e.triggerConditions) ? e.triggerConditions : [],
-      strategy: String(e.strategy ?? ''),
-      keySellingPoints: Array.isArray(e.keySellingPoints) ? e.keySellingPoints.map(String) : [],
-      objectionHandling: Array.isArray(e.objectionHandling) ? e.objectionHandling.map(String) : [],
-      seedTag: SEED_TAG,
-      createdAt: now,
-      updatedAt: now,
-    })
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]
+    const id = `vietmy_seed_playbook_${String(i + 1).padStart(2, '0')}`
+    const ref = db.collection(COLLECTION).doc(id)
+    batch.set(
+      ref,
+      {
+        title: e.title,
+        isActive: e.isActive !== false,
+        priority: Number(e.priority ?? 0),
+        triggerConditions: Array.isArray(e.triggerConditions) ? e.triggerConditions : [],
+        strategy: String(e.strategy ?? ''),
+        keySellingPoints: Array.isArray(e.keySellingPoints) ? e.keySellingPoints.map(String) : [],
+        objectionHandling: Array.isArray(e.objectionHandling) ? e.objectionHandling.map(String) : [],
+        seedTag: SEED_TAG,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    )
     ops++
     written++
     if (ops >= 400) {

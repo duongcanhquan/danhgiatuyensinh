@@ -9,6 +9,7 @@ import type {
   ScoringRuleConditionRow,
   RuleCategory,
 } from '../types'
+import { inferSignalRuleCategory, scoringSignalsToEvaluationFlat } from './leadScoringSignals'
 
 /** Ngưỡng mặc định khi profile không cấu hình hoặc giá trị không hợp lệ. */
 export const FIXED_TAG_THRESHOLDS = {
@@ -74,9 +75,34 @@ function getFieldValue(leadData: Record<string, unknown>, targetField: string): 
   return String(v)
 }
 
+/**
+ * Chuẩn hoá một chuỗi SĐT VN cho chấm điểm: chỉ giữ số; bắt đầu bằng 84 và đủ dài → `0` + phần còn lại
+ * (cùng hướng tiếp cận `normalizePhoneKey` trong `leadIdentity.ts`, nhưng chỉ một trường lead).
+ */
+export function scoringPhoneNationalDigits(raw: string): string {
+  const digits = String(raw ?? '').trim().replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.startsWith('84') && digits.length >= 10) return `0${digits.slice(2)}`
+  return digits
+}
+
+function phoneDigitsMatch(leadData: Record<string, unknown>, rule: ScoringRule, wantTen: boolean): boolean {
+  const raw = getFieldValue(leadData, rule.targetField)
+  const national = scoringPhoneNationalDigits(raw)
+  const ok = national.length === 10
+  return wantTen ? ok : !ok
+}
+
 function ruleMatches(leadData: Record<string, unknown>, rule: ScoringRule): boolean {
-  const fieldVal = norm(getFieldValue(leadData, rule.targetField))
   const condition = rule.condition
+  if (condition === 'PHONE_VN_10_DIGITS') {
+    return phoneDigitsMatch(leadData, rule, true)
+  }
+  if (condition === 'PHONE_VN_NOT_10_DIGITS') {
+    return phoneDigitsMatch(leadData, rule, false)
+  }
+
+  const fieldVal = norm(getFieldValue(leadData, rule.targetField))
 
   if (condition === 'IS_NOT_EMPTY') {
     return fieldVal.length > 0
@@ -163,6 +189,8 @@ export function isProfileOverBudget(blocks?: ScoringRuleBlock[]): boolean {
 
 export function inferRuleCategory(targetField: string): RuleCategory {
   const f = targetField.trim()
+  const sigCat = inferSignalRuleCategory(f)
+  if (sigCat) return sigCat
   if (['aspirations', 'hobbies', 'fieldTripNotes', 'description'].includes(f)) return 'psychographics'
   if (f === 'aiSentimentScore') return 'ai_insights'
   if (['leadSource', 'source', 'parentPhone'].includes(f)) return 'source_engagement'
@@ -242,6 +270,7 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     leadSource: lead.source,
     assignedCounselorId: lead.assignedTo ?? lead.assignedCounselorId,
     aiSentimentScore: lead.aiSentimentScore,
+    ...scoringSignalsToEvaluationFlat(lead.scoringSignals),
   }
 }
 

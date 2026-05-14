@@ -15,7 +15,13 @@ const CONDITION_OPTIONS: { value: ProfileScoringCondition; label: string }[] = [
   { value: 'CONTAINS', label: 'CONTAINS' },
   { value: 'IS_NOT_EMPTY', label: 'IS_NOT_EMPTY' },
   { value: 'IN_LIST', label: 'IN_LIST' },
+  { value: 'PHONE_VN_10_DIGITS', label: 'SĐT VN: đúng 10 số' },
+  { value: 'PHONE_VN_NOT_10_DIGITS', label: 'SĐT VN: ≠10 số hoặc trống' },
 ]
+
+function conditionUsesNoValueRow(c: ProfileScoringCondition): boolean {
+  return c === 'IS_NOT_EMPTY' || c === 'PHONE_VN_10_DIGITS' || c === 'PHONE_VN_NOT_10_DIGITS'
+}
 
 const ALLOCATION_OPTIONS: { value: ScoringRuleAllocationKind; label: string }[] = [
   { value: 'absolute', label: 'Điểm tuyệt đối' },
@@ -198,7 +204,7 @@ function RuleConfigurationCard({
                   Giá trị
                   <input
                     value={Array.isArray(r.value) ? r.value.join(', ') : String(r.value)}
-                    disabled={!canEdit || r.condition === 'IS_NOT_EMPTY'}
+                    disabled={!canEdit || conditionUsesNoValueRow(r.condition)}
                     onChange={(e) => {
                       const v = e.target.value
                       onPatchRow(ri, {
@@ -219,6 +225,14 @@ function RuleConfigurationCard({
                     Nhiều từ khóa <strong>cách nhau bởi dấu phẩy</strong> — khớp nếu trường lead chứa{' '}
                     <strong>bất kỳ</strong> từ nào. So khớp <strong>không phân biệt hoa thường và dấu</strong> (ví dụ{' '}
                     <span className="font-mono text-slate-700">ha noi</span> khớp «Hà Nội»).
+                  </p>
+                ) : null}
+                {r.condition === 'PHONE_VN_10_DIGITS' || r.condition === 'PHONE_VN_NOT_10_DIGITS' ? (
+                  <p className="text-[9px] leading-snug text-slate-600">
+                    Lấy <strong>chỉ chữ số</strong> từ trường lead; nếu bắt đầu bằng <span className="font-mono">84</span>{' '}
+                    và đủ dài thì quy về dạng <span className="font-mono">0xxxxxxxxx</span>. Khớp{' '}
+                    <strong>đúng 10 số</strong> hoặc <strong>không đúng / trống</strong> — dùng cho{' '}
+                    <code className="text-[9px]">phone</code> / <code className="text-[9px]">parentPhone</code>.
                   </p>
                 ) : null}
               </div>
