@@ -700,11 +700,6 @@ export function SettingsView() {
                       {canMaster ? (
                         <CatalogMatchMetaPanel db={db} catalogs={catalogs} active={activeMasterCatalog} />
                       ) : null}
-                      <p
-                        className={`mb-2 shrink-0 text-[11px] font-bold uppercase tracking-wider text-slate-500 ${settingsCopy}`}
-                      >
-                        Mục trong danh mục
-                      </p>
                       <div className="flex min-h-0 flex-1 flex-col">
                         <MasterEntriesEditor
                           catalogId={activeMasterCatalog.id}
@@ -1120,8 +1115,9 @@ function PlaybookEditorModal({
 }
 
 const MATCH_MODE_LABELS: Record<MasterEntryMatchMode, string> = {
-  exact_norm: 'Chính xác (chuẩn hoá, bỏ dấu)',
-  fuzzy_contains: 'Tương đối (chuỗi chứa nhau)',
+  exact_raw: 'Khớp chính xác',
+  exact_norm: 'Khớp không dấu',
+  fuzzy_contains: 'Khớp tương đối',
   gte: 'Số: lớn hơn hoặc bằng ngưỡng',
   lte: 'Số: bé hơn hoặc bằng ngưỡng',
   between: 'Số: từ … đến … (khoảng)',
@@ -1129,8 +1125,8 @@ const MATCH_MODE_LABELS: Record<MasterEntryMatchMode, string> = {
 
 function matchModesForCatalogValueKind(vk: MasterCatalogValueKind): MasterEntryMatchMode[] {
   return vk === 'number'
-    ? ['exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
-    : ['exact_norm', 'fuzzy_contains']
+    ? ['exact_raw', 'exact_norm', 'gte', 'lte', 'between', 'fuzzy_contains']
+    : ['exact_raw', 'exact_norm', 'fuzzy_contains']
 }
 
 function AddMasterCatalogForm({
@@ -1448,29 +1444,16 @@ function CatalogMatchMetaPanel({
       <p className={`mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 ${settingsCopy}`}>
         Chỉnh sửa loại danh mục
       </p>
-      <p className={`mb-3 text-xs leading-snug text-slate-600 ${settingsCopyMuted}`}>
-        Đổi <strong className="font-semibold text-slate-700">tên hiển thị</strong> và nhóm / kiểu dữ liệu. Mục con (vùng, ngành, …) — thêm / sửa / xóa ở khối{' '}
-        <strong className="font-semibold text-slate-700">danh sách bên dưới</strong>. Xóa cả loại danh mục — nút đỏ ở tiêu đề trang.
-      </p>
-      <div className="mb-3 flex flex-col gap-2 border-b border-slate-200/80 pb-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <label className={`min-w-[12rem] flex-[1.2] font-medium text-slate-700 ${settingsCopy}`}>
-          Tên hiển thị
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            disabled={busy}
-            placeholder="Tên trên giao diện và báo cáo"
-            className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
-          />
-        </label>
-        <div className={`min-w-0 flex-1 rounded-lg border border-slate-200/60 bg-white/80 px-2.5 py-2 text-xs text-slate-600 ${settingsCopy}`}>
-          <span className="font-semibold text-slate-700">Mã kỹ thuật (Firestore):</span>{' '}
-          <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-900">{active.id}</code>
-          <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
-            Không đổi — dùng cho document <code className="font-mono">masterData/{'{id}'}</code> và quy tắc chấm điểm.
-          </span>
-        </div>
-      </div>
+      <label className={`mb-3 block font-medium text-slate-700 ${settingsCopy}`}>
+        Tên hiển thị
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          disabled={busy}
+          placeholder="Tên trên giao diện và báo cáo"
+          className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+        />
+      </label>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className={`min-w-[12rem] flex-[1.15] font-medium text-slate-700 ${settingsCopy}`}>
           Nhóm (như Chấm điểm)

@@ -61,6 +61,7 @@ export function parseEntriesFromDoc(data: Record<string, unknown>): MasterDataEn
           const o = x as Record<string, unknown>
           const matchModeRaw = o.matchMode
           const matchMode =
+            matchModeRaw === 'exact_raw' ||
             matchModeRaw === 'exact_norm' ||
             matchModeRaw === 'fuzzy_contains' ||
             matchModeRaw === 'gte' ||
@@ -221,6 +222,7 @@ export function parseCatalogsFromRegistryData(
       vk === 'number' || vk === 'text' ? vk : undefined
     const dm = o.defaultMatchMode
     const defaultMatchMode: MasterEntryMatchMode | undefined =
+      dm === 'exact_raw' ||
       dm === 'exact_norm' ||
       dm === 'fuzzy_contains' ||
       dm === 'gte' ||

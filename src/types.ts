@@ -477,11 +477,18 @@ export type MasterCatalogValueKind = 'text' | 'number'
 
 /**
  * Chế độ khớp mặc định cho catalog (mỗi mục có thể ghi đè `matchMode`).
- * - exact_norm: chuỗi sau bỏ dấu / gom khoảng trắng — khớp đúng nhãn hoặc synonym.
- * - fuzzy_contains: chuỗi lead và nhãn (hoặc synonym) chứa lẫn nhau — kiểm tra tương đối.
+ * - exact_raw: khớp chính xác theo chữ gốc (trim), có dấu, phân biệt hoa thường.
+ * - exact_norm: khớp không dấu — chuẩn hoá giống scoring, so khớp đúng nhãn hoặc synonym.
+ * - fuzzy_contains: khớp tương đối — chuỗi chứa lẫn nhau sau chuẩn hoá.
  * - gte / lte / between: so sánh số (parse từ giá trị lead); dùng `numericMin` / `numericMax` trên mục.
  */
-export type MasterEntryMatchMode = 'exact_norm' | 'fuzzy_contains' | 'gte' | 'lte' | 'between'
+export type MasterEntryMatchMode =
+  | 'exact_raw'
+  | 'exact_norm'
+  | 'fuzzy_contains'
+  | 'gte'
+  | 'lte'
+  | 'between'
 
 export interface MasterCatalogDefinition {
   id: string

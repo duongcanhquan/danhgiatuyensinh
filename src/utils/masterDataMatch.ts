@@ -51,6 +51,12 @@ export function entryMatchesMasterValue(
   const kind = effectiveValueKind(catalog)
 
   if (kind === 'number') {
+    if (mode === 'exact_raw') {
+      const raw = String(rawField ?? '').trim()
+      if (!raw) return false
+      if (raw === String(entry.label).trim()) return true
+      return Boolean(entry.synonyms?.some((s) => raw === String(s).trim()))
+    }
     const n = parseLeadNumericString(rawField)
     if (n === null) return false
     const min = entry.numericMin
@@ -85,6 +91,13 @@ export function entryMatchesMasterValue(
     if (entryNum !== null && n === entryNum) return true
     if (fieldValNorm === scoringNormMaster(entry.label)) return true
     return Boolean(entry.synonyms?.some((s) => fieldValNorm === scoringNormMaster(String(s))))
+  }
+
+  if (mode === 'exact_raw') {
+    const raw = String(rawField ?? '').trim()
+    if (!raw) return false
+    if (raw === String(entry.label).trim()) return true
+    return Boolean(entry.synonyms?.some((s) => raw === String(s).trim()))
   }
 
   if (mode === 'fuzzy_contains') {
