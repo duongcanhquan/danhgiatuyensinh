@@ -1,9 +1,9 @@
 import type { MouseEvent, ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, ChevronDown, Download, Info as InfoIcon, Sparkles, Wand2, X, Zap } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Sparkles, Wand2, X, Zap } from 'lucide-react'
 import { addDoc, collection, deleteField, doc, setDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore'
 import type {
   Lead,
@@ -2410,12 +2410,14 @@ function LeadDetailPanel({
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
+  const signalsHelpRef = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
     setNote('')
     setEvalTag(EVALUATION_TAGS[0])
     setStatusDirty(null)
     setMsg(null)
+    signalsHelpRef.current?.close()
   }, [lead.id])
 
   useEffect(() => {
@@ -2841,25 +2843,63 @@ function LeadDetailPanel({
 
                   {db ? (
                     <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
-                      <h3 className="app-section-heading text-emerald-900">Tín hiệu, hành vi &amp; ghi chú đánh giá</h3>
-                      <p className="mt-1 text-sm font-medium leading-snug text-slate-800">
-                        Mọi cập nhật ở đây được hệ thống dùng để <strong>đánh giá tiềm năng</strong>, giữ nhất quán nhãn{' '}
-                        <strong>HOT / WARM / COLD</strong> (theo điểm profile đang chọn), hỗ trợ <strong>lọc trên bảng hồ
-                        sơ</strong> và làm giàu dữ liệu cho <strong>AI</strong> sau này (tiền lọc AI Gatekeeper trên lịch
-                        sử ghi chú; các tác vụ <strong>phân tích LLM</strong> có thể đọc tổng hợp ghi chú tương tác).
-                      </p>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-700">
-                        <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — các tình huống{' '}
-                        <em>hay gặp</em>, bật/tắt nhanh. <strong>Admin / Siêu quản trị</strong> quản lý danh mục tín hiệu
-                        tùy chỉnh trong <strong>Cài đặt → Chấm điểm</strong> (thêm, sửa, xóa theo từng profile); điểm
-                        cộng/trừ chạy ngay theo profile chấm điểm hiện tại.
-                      </p>
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
-                        <span className="font-semibold text-slate-900">Ghi chú tương tác</span> — phần{' '}
-                        <em>đặc thù</em> có <strong>nhãn đánh giá</strong> và <strong>nội dung giải thích</strong>; mỗi
-                        lần lưu ghi vào <strong>lịch sử bên phải</strong>, đồng thời tham chiếu khi tổng hợp cho AI và
-                        theo dõi diễn biến hồ sơ.
-                      </p>
+                      <div className="flex items-start gap-1.5">
+                        <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
+                          Tín hiệu, hành vi &amp; ghi chú đánh giá
+                        </h3>
+                        <button
+                          type="button"
+                          className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
+                          aria-label="Giải thích khối tín hiệu và ghi chú"
+                          title="Giải thích"
+                          onClick={() => signalsHelpRef.current?.showModal()}
+                        >
+                          <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      </div>
+
+                      <dialog
+                        ref={signalsHelpRef}
+                        className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
+                        onClick={(e) => {
+                          if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
+                        }}
+                      >
+                        <div className="flex max-h-[min(85vh,32rem)] flex-col">
+                          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
+                            <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
+                            <button
+                              type="button"
+                              className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
+                              aria-label="Đóng"
+                              onClick={() => signalsHelpRef.current?.close()}
+                            >
+                              <X className="h-4 w-4" aria-hidden />
+                            </button>
+                          </div>
+                          <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
+                            <p>
+                              Mọi cập nhật ở đây được hệ thống dùng để <strong>đánh giá tiềm năng</strong>, giữ nhất quán
+                              nhãn <strong>HOT / WARM / COLD</strong> (theo điểm profile đang chọn), hỗ trợ{' '}
+                              <strong>lọc trên bảng hồ sơ</strong> và làm giàu dữ liệu cho <strong>AI</strong> sau này (tiền
+                              lọc AI Gatekeeper trên lịch sử ghi chú; các tác vụ <strong>phân tích LLM</strong> có thể đọc
+                              tổng hợp ghi chú tương tác).
+                            </p>
+                            <p className="mt-2">
+                              <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — các tình huống{' '}
+                              <em>hay gặp</em>, bật/tắt nhanh. <strong>Admin / Siêu quản trị</strong> quản lý danh mục tín
+                              hiệu tùy chỉnh trong <strong>Cài đặt → Chấm điểm</strong> (thêm, sửa, xóa theo từng profile);
+                              điểm cộng/trừ chạy ngay theo profile chấm điểm hiện tại.
+                            </p>
+                            <p className="mt-2">
+                              <span className="font-semibold text-slate-900">Ghi chú tương tác</span> — phần{' '}
+                              <em>đặc thù</em> có <strong>nhãn đánh giá</strong> và <strong>nội dung giải thích</strong>; mỗi
+                              lần lưu ghi vào <strong>lịch sử bên phải</strong>, đồng thời tham chiếu khi tổng hợp cho AI
+                              và theo dõi diễn biến hồ sơ.
+                            </p>
+                          </div>
+                        </div>
+                      </dialog>
 
                       <div className="mt-2 grid gap-2 lg:grid-cols-2 lg:items-start">
                         <div className="min-h-0">
