@@ -5,11 +5,10 @@ import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { DataIntake } from './components/DataIntake'
 import { DashboardView } from './views/DashboardView'
-import { LeadManagement } from './views/LeadManagement'
+import { LeadsWorkspace } from './views/LeadsWorkspace'
 import { LoginView } from './views/LoginView'
 import { SettingsView } from './views/SettingsView'
 import { AnalyticsAdvancedView } from './views/AnalyticsAdvancedView'
-import { CounselorDashboard } from './views/CounselorDashboard'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -25,8 +24,8 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
                 <Route index element={<DashboardView />} />
-                <Route path="leads" element={<LeadManagement />} />
-                <Route path="counselor" element={<CounselorDashboard />} />
+                <Route path="leads" element={<LeadsWorkspace />} />
+                <Route path="counselor" element={<Navigate to="/leads?view=counselor" replace />} />
                 <Route path="import" element={<DataIntake />} />
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=ai_lab" replace />} />

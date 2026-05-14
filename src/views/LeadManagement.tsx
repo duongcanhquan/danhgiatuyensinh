@@ -72,6 +72,15 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
 import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/leadIdentity'
+import {
+  LWF,
+  leadFilterSignatureForHydrate,
+  mergeLeadFiltersIntoSearchParams,
+  parseCrmFromUrl,
+  parsePipelineFromUrl,
+  parseTagFromUrl,
+  stripListFiltersKeepOpenView,
+} from '../utils/leadWorkspaceUrlFilters'
 import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
@@ -139,6 +148,11 @@ function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): stri
   return names.get(uid) ?? `${uid.slice(0, 8)}…`
 }
 
+function effectiveLeadAssigneeUid(l: Lead): string {
+  const u = l.assignedTo ?? l.assignedCounselorId
+  return u ? String(u).trim() : ''
+}
+
 /** Bỏ dòng nhật ký nhập `[Import]…` khỏi mô tả — chỉ dùng khi hiển thị, không sửa dữ liệu gốc. */
 function leadDescriptionForDisplay(raw: string | undefined): string {
   if (!raw?.trim()) return ''
@@ -177,7 +191,7 @@ export function LeadManagement() {
   )
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const urlQuery = (searchParams.get('q') ?? '').trim().toLowerCase()
+  const urlQuery = (searchParams.get(LWF.Q) ?? '').trim().toLowerCase()
 
   const [sortKey, setSortKey] = useState<
     | 'none'
@@ -209,6 +223,9 @@ export function LeadManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
+  const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
+  /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('')
   const [scoreMinInput, setScoreMinInput] = useState('')
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
@@ -246,6 +263,11 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
+    if (showAdminGlobalFilters && adminSchools.length) {
+      o.highSchoolIn = adminSchools.slice(0, 10)
+    } else if (schoolFilter !== 'ALL') {
+      o.highSchoolIn = [schoolFilter]
+    }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
     if (showAdminGlobalFilters) {
       if (adminUploaderIds.length) o.uploadedByIn = adminUploaderIds.slice(0, 10)
@@ -257,7 +279,6 @@ export function LeadManagement() {
           o.priorityTagsIn = adminTags.slice(0, 10) as PriorityTag[]
         }
       }
-      if (adminSchools.length) o.highSchoolIn = adminSchools.slice(0, 10)
       if (adminAssignedCounselorIds.length) o.assignedCounselorIn = adminAssignedCounselorIds.slice(0, 10)
       const fromMs = adminDateFrom ? parseIsoDayStartMs(adminDateFrom) : null
       const toMs = adminDateTo ? parseIsoDayEndMs(adminDateTo) : null
@@ -275,6 +296,7 @@ export function LeadManagement() {
     regionFilter,
     majorFilter,
     sourceFilter,
+    schoolFilter,
     showAdminGlobalFilters,
     adminUploaderIds,
     adminRegions,
@@ -543,6 +565,11 @@ export function LeadManagement() {
     if (tagClientEval && tagFilter !== 'ALL') {
       rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
     }
+    if (assigneeFilter === '__UNASSIGNED__') {
+      rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
+    } else if (assigneeFilter) {
+      rows = rows.filter((l) => effectiveLeadAssigneeUid(l) === assigneeFilter)
+    }
     return rows
   }, [
     leads,
@@ -553,6 +580,7 @@ export function LeadManagement() {
     tagClientEval,
     tagFilter,
     effectiveLeadTag,
+    assigneeFilter,
   ])
 
   const sortedFiltered = useMemo(() => {
@@ -612,11 +640,32 @@ export function LeadManagement() {
   const setUrlQuery = (raw: string) => {
     const next = new URLSearchParams(searchParams)
     const t = raw.trim()
-    if (t) next.set('q', t)
-    else next.delete('q')
+    if (t) next.set(LWF.Q, t)
+    else next.delete(LWF.Q)
     setSearchParams(next, { replace: true })
     setPage(1)
   }
+
+  const mergeListFilterUrl = useCallback(
+    (patch: Partial<Record<(typeof LWF)[keyof typeof LWF], string | null | undefined>>) => {
+      setSearchParams((prev) => mergeLeadFiltersIntoSearchParams(prev, patch), { replace: true })
+    },
+    [setSearchParams],
+  )
+
+  const filterHydrateSig = useMemo(() => leadFilterSignatureForHydrate(searchParams), [searchParams])
+
+  useEffect(() => {
+    const sp = searchParams
+    if (sp.has(LWF.TAG)) setTagFilter(parseTagFromUrl(sp.get(LWF.TAG)))
+    if (sp.has(LWF.REGION)) setRegionFilter(sp.get(LWF.REGION)!.trim() || 'ALL')
+    if (sp.has(LWF.SCHOOL)) setSchoolFilter(sp.get(LWF.SCHOOL)!.trim() || 'ALL')
+    if (sp.has(LWF.MAJOR)) setMajorFilter(sp.get(LWF.MAJOR)!.trim() || 'ALL')
+    if (sp.has(LWF.PIPE)) setStatusFilter(parsePipelineFromUrl(sp.get(LWF.PIPE)))
+    if (sp.has(LWF.CRM)) setCrmStatusFilter(parseCrmFromUrl(sp.get(LWF.CRM)))
+    if (sp.has(LWF.SOURCE)) setSourceFilter(sp.get(LWF.SOURCE)!.trim() || 'ALL')
+    if (sp.has(LWF.ASSIGN)) setAssigneeFilter(sp.get(LWF.ASSIGN)!.trim())
+  }, [filterHydrateSig, searchParams])
 
   const clearQuickFilters = useCallback(() => {
     setTagFilter('ALL')
@@ -625,6 +674,8 @@ export function LeadManagement() {
     setStatusFilter('ALL')
     setCrmStatusFilter('ALL')
     setSourceFilter('ALL')
+    setSchoolFilter('ALL')
+    setAssigneeFilter('')
     setScoreMinInput('')
     setScoreMaxInput('')
     setAiShortlistOnly(false)
@@ -635,21 +686,14 @@ export function LeadManagement() {
     setAdminAssignedCounselorIds([])
     setAdminDateFrom('')
     setAdminDateTo('')
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete('q')
-        return next
-      },
-      { replace: true },
-    )
+    setSearchParams((prev) => stripListFiltersKeepOpenView(prev), { replace: true })
     setPage(1)
   }, [setSearchParams, setPage])
 
   const activeFilterChips = useMemo(() => {
     type Chip = { id: string; label: string; onClear: () => void }
     const out: Chip[] = []
-    const qRaw = (searchParams.get('q') ?? '').trim()
+    const qRaw = (searchParams.get(LWF.Q) ?? '').trim()
     if (qRaw) {
       const short = qRaw.length > 26 ? `${qRaw.slice(0, 26)}…` : qRaw
       out.push({
@@ -659,7 +703,7 @@ export function LeadManagement() {
           setSearchParams(
             (prev) => {
               const n = new URLSearchParams(prev)
-              n.delete('q')
+              n.delete(LWF.Q)
               return n
             },
             { replace: true },
@@ -675,6 +719,7 @@ export function LeadManagement() {
         onClear: () => {
           setTagFilter('ALL')
           setPage(1)
+          mergeListFilterUrl({ [LWF.TAG]: null })
         },
       })
     }
@@ -685,6 +730,7 @@ export function LeadManagement() {
         onClear: () => {
           setRegionFilter('ALL')
           setPage(1)
+          mergeListFilterUrl({ [LWF.REGION]: null })
         },
       })
     }
@@ -695,6 +741,7 @@ export function LeadManagement() {
         onClear: () => {
           setMajorFilter('ALL')
           setPage(1)
+          mergeListFilterUrl({ [LWF.MAJOR]: null })
         },
       })
     }
@@ -705,6 +752,7 @@ export function LeadManagement() {
         onClear: () => {
           setStatusFilter('ALL')
           setPage(1)
+          mergeListFilterUrl({ [LWF.PIPE]: null })
         },
       })
     }
@@ -715,6 +763,7 @@ export function LeadManagement() {
         onClear: () => {
           setCrmStatusFilter('ALL')
           setPage(1)
+          mergeListFilterUrl({ [LWF.CRM]: null })
         },
       })
     }
@@ -725,6 +774,35 @@ export function LeadManagement() {
         onClear: () => {
           setSourceFilter('ALL')
           setPage(1)
+          mergeListFilterUrl({ [LWF.SOURCE]: null })
+        },
+      })
+    }
+    if (schoolFilter !== 'ALL') {
+      out.push({
+        id: 'school',
+        label: `Trường: ${schoolFilter.length > 18 ? `${schoolFilter.slice(0, 18)}…` : schoolFilter}`,
+        onClear: () => {
+          setSchoolFilter('ALL')
+          setPage(1)
+          mergeListFilterUrl({ [LWF.SCHOOL]: null })
+        },
+      })
+    }
+    if (assigneeFilter) {
+      const al =
+        assigneeFilter === '__UNASSIGNED__'
+          ? 'Chưa gán TVV'
+          : counselorDisplayNameById.get(assigneeFilter) ??
+            reassignPickList.find((c) => c.id === assigneeFilter)?.displayName ??
+            assigneeFilter.slice(0, 8)
+      out.push({
+        id: 'assign',
+        label: `TVV: ${al}`,
+        onClear: () => {
+          setAssigneeFilter('')
+          setPage(1)
+          mergeListFilterUrl({ [LWF.ASSIGN]: null })
         },
       })
     }
@@ -792,6 +870,8 @@ export function LeadManagement() {
     statusFilter,
     crmStatusFilter,
     sourceFilter,
+    schoolFilter,
+    assigneeFilter,
     scoreMinInput,
     scoreMaxInput,
     aiShortlistOnly,
@@ -803,6 +883,9 @@ export function LeadManagement() {
     adminAssignedCounselorIds,
     adminDateFrom,
     adminDateTo,
+    mergeListFilterUrl,
+    counselorDisplayNameById,
+    reassignPickList,
     setSearchParams,
     setPage,
   ])
@@ -1454,6 +1537,7 @@ export function LeadManagement() {
                   onClick={() => {
                     setTagFilter('ALL')
                     setPage(1)
+                    mergeListFilterUrl({ [LWF.TAG]: null })
                   }}
                   className={[
                     'rounded-full border px-2.5 py-1 text-xs font-semibold transition',
@@ -1475,6 +1559,7 @@ export function LeadManagement() {
                       onClick={() => {
                         setTagFilter(tg)
                         setPage(1)
+                        mergeListFilterUrl({ [LWF.TAG]: tg })
                       }}
                       className={[
                         'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition',
@@ -1506,7 +1591,7 @@ export function LeadManagement() {
           <label className="min-w-0 w-full text-xs font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
             Tìm kiếm
             <input
-              value={searchParams.get('q') ?? ''}
+              value={searchParams.get(LWF.Q) ?? ''}
               onChange={(e) => setUrlQuery(e.target.value)}
               placeholder="Tên, SĐT, mã KH, TVV…"
               title="Lọc theo chuỗi trên nhiều trường (tên, SĐT, mã KH, mô tả, TVV…). Kết hợp với các lọc bên dưới."
@@ -1521,7 +1606,11 @@ export function LeadManagement() {
             label="Nhãn"
             title="HOT/WARM/COLD theo profile chấm điểm đang chọn (hoặc nhãn đã lưu khi đang tìm kiếm)."
             value={tagFilter}
-            onChange={setTagFilter}
+            onChange={(v) => {
+              setTagFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
+            }}
             options={[
               { v: 'ALL', t: 'Tất cả' },
               ...TAG_OPTIONS.map((t) => ({ v: t, t })),
@@ -1532,7 +1621,11 @@ export function LeadManagement() {
             label="Vùng"
             title="Tỉnh / thành trên hồ sơ."
             value={regionFilter}
-            onChange={setRegionFilter}
+            onChange={(v) => {
+              setRegionFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
+            }}
             options={[
               { v: 'ALL', t: 'Tất cả' },
               ...regions.map((p) => ({ v: p, t: p })),
@@ -1543,7 +1636,11 @@ export function LeadManagement() {
             label="Hệ ĐT"
             title="Hệ đào tạo / ngành (educationLevel)."
             value={majorFilter}
-            onChange={setMajorFilter}
+            onChange={(v) => {
+              setMajorFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
+            }}
             options={[
               { v: 'ALL', t: 'Tất cả' },
               ...majors.map((p) => ({ v: p, t: p })),
@@ -1554,7 +1651,11 @@ export function LeadManagement() {
             label="Funnel"
             title="Giai đoạn tuyển sinh (pipeline) — khác với tình trạng tư vấn TVV."
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(v) => {
+              setStatusFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
+            }}
             options={[
               { v: 'ALL', t: 'Tất cả' },
               ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
@@ -1568,7 +1669,11 @@ export function LeadManagement() {
             label="Tư vấn"
             title="Tình trạng làm việc của TVV (trường status)."
             value={crmStatusFilter}
-            onChange={setCrmStatusFilter}
+            onChange={(v) => {
+              setCrmStatusFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
+            }}
             options={[
               { v: 'ALL', t: 'Tất cả' },
               ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
@@ -1579,8 +1684,49 @@ export function LeadManagement() {
             label="Nguồn"
             title="Nguồn lead (source)."
             value={sourceFilter}
-            onChange={setSourceFilter}
+            onChange={(v) => {
+              setSourceFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
+            }}
             options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
+          />
+          <FilterSelect
+            compact
+            label="Trường THPT"
+            title="Trường trung học phổ thông (highSchool) — đồng bộ với tab Tư vấn."
+            value={schoolFilter}
+            onChange={(v) => {
+              setSchoolFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
+            }}
+            options={[
+              { v: 'ALL', t: 'Tất cả' },
+              ...schoolOptions.slice(0, 80).map((sc) => ({
+                v: sc,
+                t: sc.length > 40 ? `${sc.slice(0, 40)}…` : sc,
+              })),
+            ]}
+          />
+          <FilterSelect
+            compact
+            label="TVV"
+            title="Lọc theo tư vấn viên phụ trách (client, trên trang đã tải)."
+            value={assigneeFilter}
+            onChange={(v) => {
+              setAssigneeFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.ASSIGN]: v ? v : null })
+            }}
+            options={[
+              { v: '', t: 'Tất cả TVV' },
+              { v: '__UNASSIGNED__', t: 'Chưa gán TVV' },
+              ...reassignPickList.map((c) => ({
+                v: c.id,
+                t: formatStaffDirectoryLabel(c),
+              })),
+            ]}
           />
           <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
             Điểm từ

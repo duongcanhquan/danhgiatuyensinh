@@ -18,7 +18,7 @@ import {
   LEAD_COUNSELOR_STATUS_LABELS,
   LEAD_COUNSELOR_STATUS_ORDER,
 } from '../types'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
 import { isAdminLikeRole } from '../auth/roleUtils'
@@ -37,6 +37,16 @@ import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/lea
 import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { exportSelectedEvaluatedLeadsToXlsx } from '../utils/exportEvaluatedLeads'
 import { evaluateLead, leadToEvaluationRecord, persistedLeadScoringFields } from '../utils/scoring'
+import {
+  counselorListFilterSignature,
+  LWF,
+  mergeLeadFiltersIntoSearchParams,
+  parseCrmFromUrl,
+  parseDateAxisFromUrl,
+  parseMyDayFromUrl,
+  parsePipelineFromUrl,
+  parsePriorityTagStrict,
+} from '../utils/leadWorkspaceUrlFilters'
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
@@ -131,6 +141,7 @@ function CounselorLeadListRow({
   onToggleSelect,
   rowCrmBusy,
   onCrmChange,
+  onLeadLocallyPatched,
 }: {
   lead: Lead
   priorityTag: PriorityTag
@@ -141,6 +152,8 @@ function CounselorLeadListRow({
   onToggleSelect: (id: string, e?: MouseEvent) => void
   rowCrmBusy: boolean
   onCrmChange: (lead: Lead, next: LeadCounselorStatus) => void
+  /** Đồng bộ bảng sau gọi/ghi chú/follow-up (cùng cách LeadManagement). */
+  onLeadLocallyPatched?: (leadId: string, patch: Partial<Lead>) => void
 }) {
   const db = getFirestoreDb()
   const { profile } = useAuth()
@@ -162,6 +175,7 @@ function CounselorLeadListRow({
       })
       const touch = leadTouchPatch()
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), touch)
+      onLeadLocallyPatched?.(lead.id, touch)
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'NOTE_ADDED',
@@ -192,6 +206,7 @@ function CounselorLeadListRow({
       })
       const touch = leadTouchPatch()
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), touch)
+      onLeadLocallyPatched?.(lead.id, touch)
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'NOTE_ADDED',
@@ -218,10 +233,10 @@ function CounselorLeadListRow({
     }
     try {
       const touch = leadTouchPatch()
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
-        nextFollowUpDate: Timestamp.fromMillis(ms),
-        ...touch,
-      })
+      const nextFu = Timestamp.fromMillis(ms)
+      const patch: Partial<Lead> = { nextFollowUpDate: nextFu, ...touch }
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
+      onLeadLocallyPatched?.(lead.id, patch)
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'SYSTEM_UPDATE',
@@ -326,7 +341,7 @@ function CounselorLeadListRow({
             <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
           <Link
-            to={`/leads?open=${encodeURIComponent(lead.id)}`}
+            to={`/leads?view=full&open=${encodeURIComponent(lead.id)}`}
             className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
             title="Mở chi tiết hồ sơ trên trang Hồ sơ (đồng bộ pipeline, mô tả, tín hiệu)"
           >
@@ -355,6 +370,7 @@ function CounselorLeadWorklist({
   pushToast,
   onRowCrmChange,
   rowCrmBusyId,
+  onLeadLocallyPatched,
 }: {
   rows: Lead[]
   total: number
@@ -371,6 +387,7 @@ function CounselorLeadWorklist({
   pushToast: (text: string) => void
   onRowCrmChange: (lead: Lead, next: LeadCounselorStatus) => void
   rowCrmBusyId: string | null
+  onLeadLocallyPatched?: (leadId: string, patch: Partial<Lead>) => void
 }) {
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
   return (
@@ -418,6 +435,7 @@ function CounselorLeadWorklist({
                   onToggleSelect={toggleSelectId}
                   rowCrmBusy={rowCrmBusyId === lead.id}
                   onCrmChange={onRowCrmChange}
+                  onLeadLocallyPatched={onLeadLocallyPatched}
                 />
               ))
             )}
@@ -470,7 +488,7 @@ export function CounselorDashboard() {
     return m
   }, [directoryUsers])
 
-  const { leads, loading, error, scopeFetchTruncated } = useLeads({
+  const { leads, loading, error, scopeFetchTruncated, applyLocalLeadPatch, refetchLeads } = useLeads({
     dataMode: 'fullScope',
     maxFullScopeLeads: LEADS_UI_FULL_SCOPE_MAX,
     directoryLabels: counselorDirectoryLabelById,
@@ -490,26 +508,39 @@ export function CounselorDashboard() {
   )
   const { scoreByLeadId, activeScoringProfile, schoolTvvSignalDefs } = useLeadScoring(leads)
 
-  const [needle, setNeedle] = useState('')
-  const [dueOnly, setDueOnly] = useState(false)
-  const [tagFilter, setTagFilter] = useState<'ALL' | PriorityTag>('ALL')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const patchListUrl = useCallback(
+    (patch: Partial<Record<(typeof LWF)[keyof typeof LWF], string | null | undefined>>) => {
+      setSearchParams((prev) => mergeLeadFiltersIntoSearchParams(prev, patch), { replace: true })
+    },
+    [setSearchParams],
+  )
+
+  const urlQRaw = searchParams.get(LWF.Q) ?? ''
+  const qLower = urlQRaw.trim().toLowerCase()
+  const dueOnly = searchParams.get(LWF.DUE) === '1'
+  const tagFilter = parsePriorityTagStrict(searchParams.get(LWF.TAG))
+  const myDayFilter = parseMyDayFromUrl(searchParams.get(LWF.MYDAY))
+  const regionFilter = (searchParams.get(LWF.REGION) ?? 'ALL') as 'ALL' | string
+  const schoolFilter = (searchParams.get(LWF.SCHOOL) ?? 'ALL') as 'ALL' | string
+  const majorFilter = (searchParams.get(LWF.MAJOR) ?? 'ALL') as 'ALL' | string
+  const dateAxis = parseDateAxisFromUrl(searchParams.get(LWF.DATE_AXIS))
+  const dateFrom = searchParams.get(LWF.DATE_FROM) ?? ''
+  const dateTo = searchParams.get(LWF.DATE_TO) ?? ''
+  const counselorFilterUid = searchParams.get(LWF.ASSIGN) ?? ''
+  const crmStageFilter = parseCrmFromUrl(searchParams.get(LWF.CRM))
+  const pipelineUrlFilter = parsePipelineFromUrl(searchParams.get(LWF.PIPE))
+  const sourceUrlRaw = (searchParams.get(LWF.SOURCE) ?? '').trim()
+  const sourceUrlFilter: 'ALL' | string =
+    !sourceUrlRaw || sourceUrlRaw.toUpperCase() === 'ALL' ? 'ALL' : sourceUrlRaw
+
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [myDayFilter, setMyDayFilter] = useState<null | 'followup' | 'hot_sla'>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
   const [bulkReassignUid, setBulkReassignUid] = useState('')
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(false)
-  const [regionFilter, setRegionFilter] = useState<'ALL' | string>('ALL')
-  const [schoolFilter, setSchoolFilter] = useState<'ALL' | string>('ALL')
-  const [majorFilter, setMajorFilter] = useState<'ALL' | string>('ALL')
-  const [dateAxis, setDateAxis] = useState<DateAxisFilter>('updated')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  /** '' = mọi TVV; '__UNASSIGNED__' = chưa gán */
-  const [counselorFilterUid, setCounselorFilterUid] = useState('')
-  const [crmStageFilter, setCrmStageFilter] = useState<'ALL' | LeadCounselorStatus>('ALL')
   const [listPage, setListPage] = useState(1)
   const [rowCrmBusyId, setRowCrmBusyId] = useState<string | null>(null)
 
@@ -579,44 +610,23 @@ export function CounselorDashboard() {
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [leads, majorLabels])
 
-  const pipelineFilterSig = useMemo(
-    () =>
-      [
-        needle,
-        regionFilter,
-        schoolFilter,
-        majorFilter,
-        String(dueOnly),
-        tagFilter,
-        myDayFilter ?? '',
-        counselorFilterUid,
-        dateAxis,
-        dateFrom,
-        dateTo,
-        crmStageFilter,
-      ].join('|'),
-    [
-      needle,
-      regionFilter,
-      schoolFilter,
-      majorFilter,
-      dueOnly,
-      tagFilter,
-      myDayFilter,
-      counselorFilterUid,
-      dateAxis,
-      dateFrom,
-      dateTo,
-      crmStageFilter,
-    ],
-  )
+  const sourceOptions = useMemo(() => {
+    const s = new Set<string>()
+    for (const l of leads) {
+      const src = (l.source ?? '').trim()
+      if (src) s.add(src)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leads])
+
+  const listFilterSig = useMemo(() => counselorListFilterSignature(searchParams), [searchParams])
 
   useEffect(() => {
     setListPage(1)
-  }, [pipelineFilterSig])
+  }, [listFilterSig])
 
   const filtered = useMemo(() => {
-    const q = needle.trim().toLowerCase()
+    const q = qLower
     return leads.filter((l) => {
       if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
       if (schoolFilter !== 'ALL' && (l.highSchool ?? '').trim() !== schoolFilter) return false
@@ -635,12 +645,14 @@ export function CounselorDashboard() {
       if (dueOnly && !isDueTodayOrOverdue(l.nextFollowUpDate)) return false
       const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
       if (tagFilter !== 'ALL' && tag !== tagFilter) return false
+      if (pipelineUrlFilter !== 'ALL' && l.pipelineStatus !== pipelineUrlFilter) return false
+      if (sourceUrlFilter !== 'ALL' && (l.source ?? '').trim() !== sourceUrlFilter) return false
       if (!q) return true
       return leadMatchesClientSearch(l, q, counselorDirectoryLabelById)
     })
   }, [
     leads,
-    needle,
+    qLower,
     dueOnly,
     tagFilter,
     scoreByLeadId,
@@ -653,6 +665,8 @@ export function CounselorDashboard() {
     dateAxis,
     dateFrom,
     dateTo,
+    pipelineUrlFilter,
+    sourceUrlFilter,
   ])
 
   const listRows = useMemo(() => {
@@ -730,6 +744,7 @@ export function CounselorDashboard() {
         reassignPickList.find((c) => c.id === bulkReassignUid)?.email ||
         bulkReassignUid
       for (const id of selectedIds) {
+        const ref = doc(db, FS_COLLECTIONS.leads, id)
         const prev = leads.find((x) => x.id === id)
         const assignPatch = assigneeFirestoreMirror(bulkReassignUid) as Partial<Lead>
         const scoreFields = prev
@@ -741,11 +756,10 @@ export function CounselorDashboard() {
               schoolTvvSignalDefs,
             )
           : {}
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
-          ...assignPatch,
-          ...scoreFields,
-          ...leadTouchPatch(),
-        })
+        const touch = leadTouchPatch()
+        const localPatch = { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>
+        await updateDoc(ref, localPatch)
+        applyLocalLeadPatch(id, localPatch)
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
@@ -756,6 +770,7 @@ export function CounselorDashboard() {
       }
       setBulkModal(null)
       setSelectedIds(new Set())
+      refetchLeads()
       pushToast('Đã phân công hàng loạt.')
     } catch (e) {
       console.error(e)
@@ -776,6 +791,8 @@ export function CounselorDashboard() {
     activeScoringProfile,
     scoringMasterBuckets,
     schoolTvvSignalDefs,
+    applyLocalLeadPatch,
+    refetchLeads,
   ])
 
   const applyBulkCrmStatus = useCallback(async () => {
@@ -798,11 +815,10 @@ export function CounselorDashboard() {
               schoolTvvSignalDefs,
             )
           : {}
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, id), {
-          ...dataPatch,
-          ...scoreFields,
-          ...leadTouchPatch(),
-        })
+        const touch = leadTouchPatch()
+        const localPatch = { ...dataPatch, ...scoreFields, ...touch } as Partial<Lead>
+        await updateDoc(doc(db, FS_COLLECTIONS.leads, id), localPatch)
+        applyLocalLeadPatch(id, localPatch)
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'STATUS_CHANGE',
@@ -813,6 +829,7 @@ export function CounselorDashboard() {
       }
       setBulkModal(null)
       setSelectedIds(new Set())
+      refetchLeads()
       pushToast('Đã cập nhật trạng thái CRM.')
     } catch (e) {
       console.error(e)
@@ -820,7 +837,7 @@ export function CounselorDashboard() {
     } finally {
       setBulkBusy(false)
     }
-  }, [db, profile, selectedIds, leads, bulkCrmStatus, pushToast, activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs])
+  }, [db, profile, selectedIds, leads, bulkCrmStatus, pushToast, activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs, applyLocalLeadPatch, refetchLeads])
 
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
@@ -852,6 +869,8 @@ export function CounselorDashboard() {
           ...scoreFields,
           ...touch,
         })
+        const localPatch = { ...dataPatch, ...scoreFields, ...touch } as Partial<Lead>
+        applyLocalLeadPatch(lead.id, localPatch)
         const performer = profile.displayName?.trim() || profile.email || profile.id
         await commitAuditLog(db, {
           leadId: lead.id,
@@ -876,6 +895,7 @@ export function CounselorDashboard() {
       scoringMasterBuckets,
       schoolTvvSignalDefs,
       pushToast,
+      applyLocalLeadPatch,
     ],
   )
 
@@ -899,7 +919,10 @@ export function CounselorDashboard() {
           </VietMyAccentHeading>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             Làm việc trên <strong>danh sách hồ sơ</strong> có bộ lọc — đổi <strong>tình trạng CRM</strong>, ghi chú / gọi /
-            follow-up nhanh, rồi mở <Link to="/leads" className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950">Hồ sơ</Link> để cập nhật pipeline, mô tả và tín hiệu đầy đủ. Kanban kéo-thả tạm ẩn để thao tác thống nhất, dễ kiểm soát hơn.
+            follow-up nhanh, rồi mở{' '}
+            <Link to="/leads?view=full" className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950">
+              Hồ sơ đầy đủ
+            </Link>{' '}
           </p>
         </div>
       </header>
@@ -914,10 +937,15 @@ export function CounselorDashboard() {
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
                     type="search"
-                    value={needle}
-                    onChange={(e) => setNeedle(e.target.value)}
+                    value={urlQRaw}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const t = raw.trim()
+                      patchListUrl({ [LWF.Q]: t ? raw : null })
+                      setListPage(1)
+                    }}
                     onFocus={() => setFiltersExpanded(true)}
-                    placeholder="Tên, SĐT, tỉnh, trường, ngành…"
+                    placeholder="Tên, SĐT, tỉnh, trường, ngành… (đồng bộ với Hồ sơ đầy đủ — tham số q)"
                     className="w-full rounded-xl border border-slate-200/95 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
                   />
                 </div>
@@ -940,14 +968,15 @@ export function CounselorDashboard() {
               </button>
             </div>
             {filtersExpanded ? (
-              <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
                 <label className="block text-xs font-medium text-slate-600">
                   Giai đoạn tư vấn (CRM)
                   <select
                     value={crmStageFilter}
                     onChange={(e) => {
                       setListPage(1)
-                      setCrmStageFilter(e.target.value as 'ALL' | LeadCounselorStatus)
+                      const v = e.target.value as 'ALL' | LeadCounselorStatus
+                      patchListUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
                     }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
@@ -963,7 +992,11 @@ export function CounselorDashboard() {
                   Khu vực
                   <select
                     value={regionFilter}
-                    onChange={(e) => setRegionFilter(e.target.value === 'ALL' ? 'ALL' : e.target.value)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
+                      patchListUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
+                    }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả khu vực</option>
@@ -978,7 +1011,11 @@ export function CounselorDashboard() {
                   Trường THPT
                   <select
                     value={schoolFilter}
-                    onChange={(e) => setSchoolFilter(e.target.value === 'ALL' ? 'ALL' : e.target.value)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
+                      patchListUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
+                    }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả trường</option>
@@ -993,7 +1030,11 @@ export function CounselorDashboard() {
                   Ngành / cấp (educationLevel)
                   <select
                     value={majorFilter}
-                    onChange={(e) => setMajorFilter(e.target.value === 'ALL' ? 'ALL' : e.target.value)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
+                      patchListUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
+                    }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả ngành</option>
@@ -1005,10 +1046,57 @@ export function CounselorDashboard() {
                   </select>
                 </label>
                 <label className="block text-xs font-medium text-slate-600">
+                  Funnel tuyển sinh
+                  <select
+                    value={pipelineUrlFilter}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value
+                      patchListUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    title="Đồng bộ tham số pipe với tab Hồ sơ đầy đủ."
+                  >
+                    <option value="ALL">Tất cả giai đoạn funnel</option>
+                    {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                      <option key={k} value={k}>
+                        {PIPELINE_LABEL[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-medium text-slate-600">
+                  Nguồn
+                  <select
+                    value={sourceUrlFilter}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
+                      patchListUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    title="Đồng bộ tham số source với tab Hồ sơ đầy đủ."
+                  >
+                    <option value="ALL">Mọi nguồn</option>
+                    {sourceUrlFilter !== 'ALL' && !sourceOptions.includes(sourceUrlFilter) ? (
+                      <option value={sourceUrlFilter}>{sourceUrlFilter}</option>
+                    ) : null}
+                    {sourceOptions.slice(0, 80).map((src) => (
+                      <option key={src} value={src}>
+                        {src.length > 48 ? `${src.slice(0, 48)}…` : src}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs font-medium text-slate-600">
                   Thời điểm theo
                   <select
                     value={dateAxis}
-                    onChange={(e) => setDateAxis(e.target.value as DateAxisFilter)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value as DateAxisFilter
+                      patchListUrl({ [LWF.DATE_AXIS]: v === 'updated' ? null : v })
+                    }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="updated">Ngày cập nhật hồ sơ</option>
@@ -1021,7 +1109,11 @@ export function CounselorDashboard() {
                   <input
                     type="date"
                     value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value
+                      patchListUrl({ [LWF.DATE_FROM]: v ? v : null })
+                    }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   />
                 </label>
@@ -1030,7 +1122,11 @@ export function CounselorDashboard() {
                   <input
                     type="date"
                     value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value
+                      patchListUrl({ [LWF.DATE_TO]: v ? v : null })
+                    }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   />
                 </label>
@@ -1038,7 +1134,11 @@ export function CounselorDashboard() {
                   Tư vấn viên phụ trách
                   <select
                     value={counselorFilterUid}
-                    onChange={(e) => setCounselorFilterUid(e.target.value)}
+                    onChange={(e) => {
+                      setListPage(1)
+                      const v = e.target.value
+                      patchListUrl({ [LWF.ASSIGN]: v ? v : null })
+                    }}
                     disabled={counselorsLoading && counselorUsers.length === 0}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
                   >
@@ -1055,15 +1155,19 @@ export function CounselorDashboard() {
                   <button
                     type="button"
                     onClick={() => {
-                      setRegionFilter('ALL')
-                      setSchoolFilter('ALL')
-                      setMajorFilter('ALL')
-                      setDateAxis('updated')
-                      setDateFrom('')
-                      setDateTo('')
-                      setCounselorFilterUid('')
-                      setCrmStageFilter('ALL')
                       setListPage(1)
+                      patchListUrl({
+                        [LWF.REGION]: null,
+                        [LWF.SCHOOL]: null,
+                        [LWF.MAJOR]: null,
+                        [LWF.PIPE]: null,
+                        [LWF.SOURCE]: null,
+                        [LWF.DATE_AXIS]: null,
+                        [LWF.DATE_FROM]: null,
+                        [LWF.DATE_TO]: null,
+                        [LWF.ASSIGN]: null,
+                        [LWF.CRM]: null,
+                      })
                     }}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                   >
@@ -1078,7 +1182,10 @@ export function CounselorDashboard() {
               <input
                 type="checkbox"
                 checked={dueOnly}
-                onChange={(e) => setDueOnly(e.target.checked)}
+                onChange={(e) => {
+                  setListPage(1)
+                  patchListUrl({ [LWF.DUE]: e.target.checked ? '1' : null })
+                }}
                 className="accent-amber-400"
               />
               Hạn hôm nay / quá hạn
@@ -1087,7 +1194,11 @@ export function CounselorDashboard() {
               <ThermometerSun className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
               <select
                 value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value as typeof tagFilter)}
+                onChange={(e) => {
+                  setListPage(1)
+                  const v = e.target.value as typeof tagFilter
+                  patchListUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
+                }}
                 className="min-w-0 flex-1 rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
               >
                 <option value="ALL">Mọi mức độ</option>
@@ -1108,7 +1219,10 @@ export function CounselorDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setMyDayFilter((f) => (f === 'followup' ? null : 'followup'))}
+              onClick={() => {
+                setListPage(1)
+                patchListUrl({ [LWF.MYDAY]: myDayFilter === 'followup' ? null : 'followup' })
+              }}
               className={[
                 'min-w-0 flex-1 rounded-xl border px-3 py-2 text-left text-xs font-medium transition sm:min-w-[12rem] sm:flex-none',
                 myDayFilter === 'followup'
@@ -1121,7 +1235,10 @@ export function CounselorDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setMyDayFilter((f) => (f === 'hot_sla' ? null : 'hot_sla'))}
+              onClick={() => {
+                setListPage(1)
+                patchListUrl({ [LWF.MYDAY]: myDayFilter === 'hot_sla' ? null : 'hotsla' })
+              }}
               className={[
                 'min-w-0 flex-1 rounded-xl border px-3 py-2 text-left text-xs font-medium transition sm:min-w-[12rem] sm:flex-none',
                 myDayFilter === 'hot_sla'
@@ -1146,8 +1263,8 @@ export function CounselorDashboard() {
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm">
           Danh sách này chỉ tải tối đa <strong>{LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
           quyền — có thể còn trên server. Dùng{' '}
-          <Link to="/leads" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
-            Hồ sơ
+          <Link to="/leads?view=full" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
+            Hồ sơ đầy đủ
           </Link>{' '}
           để xem toàn bộ nếu được phép.
         </div>
@@ -1168,7 +1285,7 @@ export function CounselorDashboard() {
         </div>
       ) : (
         <CounselorLeadWorklist
-          key={pipelineFilterSig}
+          key={listFilterSig}
           rows={pageSlice}
           total={listRows.length}
           page={effectiveListPage}
@@ -1184,6 +1301,7 @@ export function CounselorDashboard() {
           pushToast={pushToast}
           onRowCrmChange={applyRowCrmChange}
           rowCrmBusyId={rowCrmBusyId}
+          onLeadLocallyPatched={applyLocalLeadPatch}
         />
       )}
 

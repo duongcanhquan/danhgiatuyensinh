@@ -44,27 +44,18 @@ Hệ thống có các vai trò chính (tên hiển thị trên góc màn hình s
 
 - Tổng quan số liệu hồ sơ đã tải về máy trình duyệt (có thể có nút **Tải thêm** nếu danh sách lớn).
 - Biểu đồ giúp nắm nhanh tình hình pipeline, mức độ ưu tiên (HOT / WARM / COLD), v.v.
-- **Gợi ý:** Dùng để họp nhanh hoặc xem xu hướng; chi tiết từng hồ sơ vào **Quản lý hồ sơ** hoặc **Pipeline tư vấn**.
+- **Gợi ý:** Dùng để họp nhanh hoặc xem xu hướng; chi tiết từng hồ sơ vào **Hồ sơ** (tab «Hồ sơ đầy đủ» hoặc trực tiếp nếu không có tab tư vấn).
 
-### 3.2. Quản lý hồ sơ (`/leads`)
+### 3.2. Hồ sơ & làm việc tư vấn (`/leads`)
 
-- Danh sách dạng bảng: tìm kiếm, lọc (khu vực, thời gian, TVV, v.v. tùy quyền).
-- Mở một hồ sơ để xem / chỉnh sửa thông tin (phần được phép).
-- **Gợi ý:** Đây là nơi tra cứu “một hồ sơ cụ thể” và cập nhật dữ liệu chi tiết.
+Một cổng dữ liệu lead cho mọi vai trò được phép:
 
-### 3.3. Pipeline tư vấn (`/counselor`)
+- **Hồ sơ đầy đủ:** bảng CRM với tìm kiếm URL (`q`), lọc server (khu vực, TVV, nhãn, v.v. tùy quyền), bulk, AI miner, panel chi tiết (funnel, ghi chú, chấm điểm…).
+- **Tư vấn (TVV):** chỉ hiện khi tài khoản có quyền `dashboard:counselor` — bảng làm việc theo ngày (follow-up, gọi/ghi chú nhanh, đổi CRM hàng loạt). Chuyển tab hoặc dùng query `?view=counselor` / `?view=full`. Đường dẫn cũ `/counselor` tự chuyển sang `/leads?view=counselor`.
 
-Dành cho tư vấn (và một số vai trò quản lý có quyền tương ứng).
+**Gợi ý:** Mở chi tiết đầy đủ từ bảng TVV bằng nút hồ sơ hoặc `?view=full&open=<id>`. Có `q` hoặc `open` trên URL thì luôn mở chế độ **Hồ sơ đầy đủ** để panel/tìm kiếm hoạt động đúng.
 
-1. **Lọc trước:** Bấm **Lọc khu vực · ngày · TVV** (hoặc chạm vào ô tìm kiếm để mở bộ lọc). Chọn khu vực, khoảng ngày (theo ngày cập nhật / tạo / follow-up), TVV phụ trách, v.v.
-2. **Tìm thêm theo tên hoặc SĐT** trong ô tìm kiếm nếu cần thu hẹp.
-3. **Các cột CRM** hiển thị hồ sơ đã lọc theo giai đoạn (Mới, Quan tâm, Đã cọc, …).
-4. **Kéo thả** thẻ hồ sơ sang cột khác để đổi giai đoạn (dữ liệu lưu trên hệ thống).
-5. Trên thẻ có thể ghi nhanh **cuộc gọi**, **ghi chú**, **đặt ngày follow-up** (nếu được phép).
-
-**Việc ưu tiên trong ngày:** Các nút lọc nhanh follow-up hôm nay / quá hạn hoặc cảnh báo SLA (nếu có).
-
-### 3.4. Nhập liệu Excel (`/import`)
+### 3.3. Nhập liệu Excel (`/import`)
 
 Thường dành cho **quản trị / phòng tuyển sinh** có quyền nhập liệu.
 
@@ -75,20 +66,20 @@ Thường dành cho **quản trị / phòng tuyển sinh** có quyền nhập li
 
 **Lưu ý:** Hệ thống có thể tự phân công TVV theo tải công việc (tùy cấu hình). Nếu thiếu quyền hoặc lỗi, liên hệ quản trị.
 
-### 3.5. Phân tích nâng cao (`/analytics`)
+### 3.4. Phân tích nâng cao (`/analytics`)
 
 - Báo cáo / biểu đồ sâu hơn so với bảng điều khiển (nếu tài khoản được mở quyền **Phân tích nâng cao**).
 
-### 3.6. Phòng thử AI (`/ai`)
+### 3.5. Phòng thử AI (`/ai`)
 
 - Thử các tính năng gợi ý / AI (nếu được bật quyền **ai:use**).
 - Nội dung cụ thể phụ thuộc cấu hình nhà trường.
 
-### 3.7. Quản lý nhân sự (`/staff`)
+### 3.6. Quản lý nhân sự (`/staff`)
 
 - Quản lý tài khoản người dùng, vai trò (chỉ **quản trị** hoặc tài khoản được cấp quyền tương đương).
 
-### 3.8. Cấu hình dữ liệu (`/settings`)
+### 3.7. Cấu hình dữ liệu (`/settings`)
 
 Thường do **quản trị** sử dụng:
 
