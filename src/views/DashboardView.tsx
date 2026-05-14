@@ -203,8 +203,7 @@ export function DashboardView() {
       />
 
       <header className="relative">
-        <p className="app-page-kicker">VietMy Admissions OS</p>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Tổng kết
         </VietMyAccentHeading>
         {!isAdmin ? (
@@ -233,11 +232,6 @@ export function DashboardView() {
       ) : null}
 
       <section className="relative">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-600">
-          {isAdmin
-            ? 'KPI & nhãn — tổng hợp toàn bộ hồ sơ (admin, theo dữ liệu lưu trên Firestore)'
-            : 'KPI & nhãn — tổng hồ sơ theo hệ thống; HOT/WARM/COLD theo hồ sơ đã tải'}
-        </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
           <DashboardKpiTile
             label="Tổng hồ sơ"

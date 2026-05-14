@@ -842,8 +842,7 @@ export function CounselorDashboard() {
 
       <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
-          <p className="app-page-kicker">VietMy Admissions OS</p>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
             Tư vấn
           </VietMyAccentHeading>
         </div>

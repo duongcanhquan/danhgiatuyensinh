@@ -1,21 +1,131 @@
-import type { AIIntegrationConfig, AITask, Lead } from '../types'
+import type { AIIntegrationConfig, AIProviderId, AITask, Lead } from '../types'
 
 const LS_KEY = 'vietmy_ai_integration_v1'
+
+const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderId, string> = {
+  Gemini: 'gemini-2.0-flash',
+  OpenAI: 'gpt-4o-mini',
+}
+
+function normalizeStoredConfig(o: Partial<AIIntegrationConfig>): AIIntegrationConfig | null {
+  if (o.provider !== 'Gemini' && o.provider !== 'OpenAI') return null
+  const apiKey = String(o.apiKey ?? '').trim()
+  if (!apiKey) return null
+  const modelRaw = String(o.model ?? '').trim()
+  const model = modelRaw || DEFAULT_MODEL_BY_PROVIDER[o.provider]
+  return { provider: o.provider, apiKey, model }
+}
 
 export function loadAIConfigFromStorage(): AIIntegrationConfig | null {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return null
     const o = JSON.parse(raw) as Partial<AIIntegrationConfig>
-    if ((o.provider !== 'Gemini' && o.provider !== 'OpenAI') || !o.apiKey || !o.model) return null
-    return { provider: o.provider, apiKey: o.apiKey, model: o.model }
+    return normalizeStoredConfig(o)
   } catch {
     return null
   }
 }
 
+/** Lưu cấu hình LLM cục bộ (localStorage). Ném lỗi nếu trình duyệt chặn ghi. */
 export function saveAIConfigToStorage(config: AIIntegrationConfig): void {
-  localStorage.setItem(LS_KEY, JSON.stringify(config))
+  const normalized = normalizeStoredConfig({
+    ...config,
+    apiKey: config.apiKey.trim(),
+    model: config.model.trim(),
+  })
+  if (!normalized) {
+    throw new Error('Cấu hình không hợp lệ: cần nhà cung cấp Gemini/OpenAI và API key.')
+  }
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(normalized))
+  } catch (e) {
+    console.error(e)
+    throw new Error(
+      'Không ghi được localStorage (đầy bộ nhớ, chế độ ẩn danh, hoặc trình duyệt chặn). Thử tắt Private / dùng cửa sổ thường.',
+    )
+  }
+}
+
+export type IntegrationChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+/**
+ * Chat tự do (không bắt JSON) — dùng Phòng thử AI khi đã lưu API trong Cài đặt → LLM.
+ */
+export async function callIntegrationChat(
+  config: AIIntegrationConfig,
+  messages: ReadonlyArray<IntegrationChatMessage>,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!messages.length) throw new Error('Thiếu nội dung chat.')
+
+  if (config.provider === 'OpenAI') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: 0.4,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      }),
+    })
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 400)}`)
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[]
+    }
+    const text = data.choices?.[0]?.message?.content ?? ''
+    if (!text) throw new Error('OpenAI: empty response')
+    return text
+  }
+
+  const systemChunks: string[] = []
+  const gemContents: { role: 'user' | 'model'; parts: { text: string }[] }[] = []
+  for (const m of messages) {
+    if (m.role === 'system') {
+      systemChunks.push(m.content)
+      continue
+    }
+    const role = m.role === 'assistant' ? 'model' : 'user'
+    gemContents.push({ role, parts: [{ text: m.content }] })
+  }
+  if (gemContents.length && gemContents[0].role === 'model') {
+    gemContents.unshift({ role: 'user', parts: [{ text: '(Tiếp nối hội thoại)' }] })
+  }
+  if (!gemContents.length) {
+    gemContents.push({ role: 'user', parts: [{ text: '(Không có tin nhắn người dùng)' }] })
+  }
+
+  const sys = systemChunks.join('\n\n').trim()
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.apiKey)}`
+  const body: Record<string, unknown> = {
+    contents: gemContents,
+    generationConfig: { temperature: 0.4 },
+  }
+  if (sys) body.systemInstruction = { parts: [{ text: sys }] }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Gemini ${res.status}: ${errText.slice(0, 400)}`)
+  }
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[]
+  }
+  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+  if (!text) throw new Error('Gemini: empty response')
+  return text
 }
 
 function getLeadFieldValue(lead: Lead, field: string): unknown {

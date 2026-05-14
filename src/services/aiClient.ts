@@ -1,17 +1,25 @@
 /**
- * Gọi endpoint LLM kiểu OpenAI (POST JSON: model, messages) — dùng cho Phòng thử AI / proxy ChatGPT.
- * Phân tích hồ sơ trên CRM dùng `loadAIConfigFromStorage` + Gemini hoặc OpenAI trong Cấu hình → Tích hợp LLM.
- * Biến: `VITE_AI_API_URL`, tuỳ chọn `VITE_AI_API_KEY`, `VITE_AI_MODEL`.
+ * Chat thử (OpenAI-compatible POST) — **ưu tiên** cấu hình đã lưu trong Cài đặt → LLM (localStorage),
+ * giống luồng Phân tích LLM trên hồ sơ. Nếu chưa lưu API, fallback: `VITE_AI_API_URL`, `VITE_AI_API_KEY`, `VITE_AI_MODEL`.
  */
+import { callIntegrationChat, loadAIConfigFromStorage } from '../utils/aiEngine'
+
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
 export async function callOpenAiCompatibleChat(
   messages: ChatMessage[],
   signal?: AbortSignal,
 ): Promise<string> {
+  const integ = loadAIConfigFromStorage()
+  if (integ?.apiKey?.trim()) {
+    return callIntegrationChat(integ, messages, signal)
+  }
+
   const url = (import.meta.env.VITE_AI_API_URL as string | undefined)?.trim()
   if (!url) {
-    throw new Error('Thiếu VITE_AI_API_URL trong .env (endpoint OpenAI-compatible).')
+    throw new Error(
+      'Chưa có API: Siêu quản trị cần lưu Gemini/OpenAI trong Cài đặt → tab LLM → «Lưu API vào trình duyệt», hoặc cấu hình VITE_AI_API_URL trong .env cho proxy.',
+    )
   }
   const apiKey = (import.meta.env.VITE_AI_API_KEY as string | undefined)?.trim()
   const model = (import.meta.env.VITE_AI_MODEL as string | undefined)?.trim() || 'gpt-4o-mini'

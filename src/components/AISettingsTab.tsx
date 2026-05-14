@@ -75,6 +75,8 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  const localApiReady = useMemo(() => Boolean(loadAIConfigFromStorage()?.apiKey), [cfg.apiKey, cfg.model, cfg.provider])
+
   const initialGk = useMemo(() => mergeGatekeeperConfig(loadAiGatekeeperFromStorage()), [])
   const [gkMinLen, setGkMinLen] = useState(() => String(initialGk.minCombinedNoteLength))
   const [gkKeywordsCsv, setGkKeywordsCsv] = useState(() => initialGk.intentKeywords.join(', '))
@@ -111,8 +113,31 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   }, [])
 
   const persistConfig = useCallback(() => {
-    saveAIConfigToStorage(cfg)
-    setMsg('Đã lưu cấu hình API vào trình duyệt (localStorage).')
+    setMsg(null)
+    const apiKey = cfg.apiKey.trim()
+    const modelRaw = cfg.model.trim()
+    if (!apiKey) {
+      setMsg('Nhập API key trước khi lưu.')
+      return
+    }
+    const model = modelRaw || DEFAULT_MODELS[cfg.provider]
+    const next: AIIntegrationConfig = { ...cfg, apiKey, model }
+    try {
+      saveAIConfigToStorage(next)
+      setCfg(next)
+      const verify = loadAIConfigFromStorage()
+      if (!verify?.apiKey) {
+        setMsg(
+          'Đọc lại localStorage không thấy key — thử tắt chế độ ẩn danh, kiểm tra dung lượng site data, hoặc cho phép lưu trữ cho domain này.',
+        )
+        return
+      }
+      setMsg(
+        'Đã lưu cấu hình API vào trình duyệt (localStorage). Phòng thử AI và Phân tích LLM / AI Miner trên cùng trình duyệt sẽ dùng bản này.',
+      )
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Không lưu được vào localStorage.')
+    }
   }, [cfg])
 
   const toggleField = useCallback((id: string) => {
@@ -317,6 +342,20 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               <VietMyAccentHeading as="h3" tone="onDark" size="sm" className="mb-0">
                 Cấu hình API
               </VietMyAccentHeading>
+              <p className="text-xs leading-relaxed text-slate-400">
+                {localApiReady ? (
+                  <>
+                    <span className="text-emerald-300/95">●</span> Trình duyệt này đang có bản lưu API hợp lệ — Phòng
+                    thử AI và phân tích trên hồ sơ sẽ ưu tiên dùng đây (không cần .env trừ khi chưa lưu).
+                  </>
+                ) : (
+                  <>
+                    <span className="text-amber-300/90">○</span> Chưa có bản lưu hợp lệ trên máy này — nhập API key (và
+                    model nếu cần) rồi bấm Lưu. Chỉ tài khoản <strong className="text-slate-200">Siêu quản trị</strong>{' '}
+                    mới lưu được tại đây.
+                  </>
+                )}
+              </p>
               <label className="block text-xs font-medium text-slate-400">
                 Nhà cung cấp
                 <select

@@ -149,16 +149,9 @@ export function AnalyticsAdvancedView() {
   return (
     <div className="space-y-8">
       <header>
-        <p className="app-page-kicker">VietMy Admissions OS</p>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Phân tích nâng cao
         </VietMyAccentHeading>
-        <p className="mt-1 text-base text-slate-600">
-          Funnel tuyển sinh, phân bổ HOT/WARM/COLD (theo bộ chấm điểm đang chọn trên Tổng kết), và xu hướng
-          chỉ số cảm xúc AI 30 ngày. Dữ liệu biểu đồ lấy từ <strong>toàn bộ hồ sơ đã tải trong phạm vi quyền</strong>{' '}
-          (tối đa {MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')} bản ghi). Bậc đầu phễu dùng tổng Firestore (phạm vi
-          quyền); các bậc sau và biểu đồ khác theo tập đã tải.
-        </p>
       </header>
 
       {scopeFetchTruncated ? (

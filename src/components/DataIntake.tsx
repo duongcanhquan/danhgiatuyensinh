@@ -454,8 +454,7 @@ export function DataIntake() {
     <div className="mx-auto w-full max-w-lg px-4 py-8 md:py-12">
       <div className="mx-auto w-full space-y-5 text-center">
         <header>
-          <p className="app-page-kicker text-center">VietMy Admissions OS</p>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block text-center">
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block text-center">
             Nhập liệu
           </VietMyAccentHeading>
         </header>

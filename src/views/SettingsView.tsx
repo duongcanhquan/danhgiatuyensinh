@@ -229,6 +229,7 @@ export function SettingsView() {
   const [masterNavOpenGroups, setMasterNavOpenGroups] = useState<Partial<Record<string, boolean>>>({})
   const [addCatalogPresetSeq, setAddCatalogPresetSeq] = useState(0)
   const [addCatalogPresetGroup, setAddCatalogPresetGroup] = useState<RuleCategory | 'other' | null>(null)
+  const addMasterCatalogFormAnchorRef = useRef<HTMLDivElement>(null)
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
   const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
@@ -330,6 +331,9 @@ export function SettingsView() {
   const queueAddMasterCatalogPreset = (g: RuleCategory | 'other') => {
     setAddCatalogPresetGroup(g)
     setAddCatalogPresetSeq((s) => s + 1)
+    queueMicrotask(() => {
+      addMasterCatalogFormAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
   }
 
   const removeMasterCatalog = async (c: MasterCatalogDefinition) => {
@@ -450,8 +454,7 @@ export function SettingsView() {
   return (
     <div className={`space-y-4 md:space-y-5 ${settingsCopy}`}>
       <header className="space-y-1">
-        <p className="app-page-kicker">VietMy Admissions OS</p>
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="mt-1 block">
+        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Cài đặt
         </VietMyAccentHeading>
       </header>
@@ -597,7 +600,7 @@ export function SettingsView() {
               ].join(' ')}
             >
               <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:overflow-hidden">
-                <aside className="flex max-h-[min(42vh,22rem)] shrink-0 flex-col gap-3 rounded-xl border border-slate-200/90 bg-white/85 p-3 shadow-sm md:p-4 lg:max-h-none lg:w-[min(100%,19rem)] xl:w-80">
+                <aside className="flex min-h-0 max-h-[min(42vh,22rem)] shrink-0 flex-col gap-3 overflow-y-auto overscroll-contain rounded-xl border border-slate-200/90 bg-white/85 p-3 shadow-sm md:p-4 lg:h-full lg:max-h-full lg:w-[min(100%,19rem)] xl:w-80">
                   <p className={`shrink-0 font-semibold uppercase tracking-wide text-slate-600 ${settingsCopy}`}>
                     Chọn danh mục
                   </p>
@@ -662,7 +665,7 @@ export function SettingsView() {
                     })}
                   </nav>
                   {db && canMaster ? (
-                    <div className="shrink-0 border-t border-slate-200/80 pt-3">
+                    <div ref={addMasterCatalogFormAnchorRef} className="shrink-0 scroll-mt-3 border-t border-slate-200/80 pt-3">
                       <AddMasterCatalogForm
                         db={db}
                         catalogs={catalogs}
@@ -697,6 +700,11 @@ export function SettingsView() {
                       {canMaster ? (
                         <CatalogMatchMetaPanel db={db} catalogs={catalogs} active={activeMasterCatalog} />
                       ) : null}
+                      <p
+                        className={`mb-2 shrink-0 text-[11px] font-bold uppercase tracking-wider text-slate-500 ${settingsCopy}`}
+                      >
+                        Mục trong danh mục
+                      </p>
                       <div className="flex min-h-0 flex-1 flex-col">
                         <MasterEntriesEditor
                           catalogId={activeMasterCatalog.id}
@@ -1141,6 +1149,7 @@ function AddMasterCatalogForm({
   addCatalogPresetGroup?: RuleCategory | 'other' | null
 }) {
   const [label, setLabel] = useState('')
+  const labelInputRef = useRef<HTMLInputElement>(null)
   const [valueKind, setValueKind] = useState<MasterCatalogValueKind>('text')
   const [defaultMatchMode, setDefaultMatchMode] = useState<MasterEntryMatchMode>('exact_norm')
   const [ruleCategory, setRuleCategory] = useState<'' | RuleCategory>('')
@@ -1151,6 +1160,12 @@ function AddMasterCatalogForm({
     if (addCatalogPresetSeq < 1 || addCatalogPresetGroup == null) return
     if (addCatalogPresetGroup === 'other') setRuleCategory('')
     else setRuleCategory(addCatalogPresetGroup)
+    const hint =
+      addCatalogPresetGroup === 'other'
+        ? 'Đã chọn nhóm «Khác». Nhập tên danh mục rồi bấm Thêm.'
+        : `Đã chọn nhóm «${RULE_CATEGORY_LABELS[addCatalogPresetGroup]}». Nhập tên danh mục rồi bấm Thêm.`
+    setMsg(hint)
+    queueMicrotask(() => labelInputRef.current?.focus())
   }, [addCatalogPresetSeq, addCatalogPresetGroup])
 
   const allowedModes = matchModesForCatalogValueKind(valueKind)
@@ -1264,6 +1279,7 @@ function AddMasterCatalogForm({
         >
           Tên danh mục
           <input
+            ref={labelInputRef}
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             disabled={busy}
@@ -1365,6 +1381,7 @@ function CatalogMatchMetaPanel({
   catalogs: MasterCatalogDefinition[]
   active: MasterCatalogDefinition
 }) {
+  const [label, setLabel] = useState(active.label)
   const [valueKind, setValueKind] = useState<MasterCatalogValueKind>(active.valueKind ?? 'text')
   const [defaultMatchMode, setDefaultMatchMode] = useState<MasterEntryMatchMode>(
     active.defaultMatchMode ?? 'exact_norm',
@@ -1378,6 +1395,7 @@ function CatalogMatchMetaPanel({
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
+    setLabel(active.label)
     setValueKind(active.valueKind ?? 'text')
     setDefaultMatchMode(active.defaultMatchMode ?? 'exact_norm')
     setRuleCategory(
@@ -1386,7 +1404,7 @@ function CatalogMatchMetaPanel({
         : '',
     )
     setMsg(null)
-  }, [active.id, active.valueKind, active.defaultMatchMode, active.ruleCategory])
+  }, [active.id, active.label, active.valueKind, active.defaultMatchMode, active.ruleCategory])
 
   const allowedModes = matchModesForCatalogValueKind(valueKind)
 
@@ -1394,10 +1412,16 @@ function CatalogMatchMetaPanel({
     setBusy(true)
     setMsg(null)
     try {
+      const trimmedLabel = label.trim()
+      if (trimmedLabel.length < 2) {
+        setMsg('Tên hiển thị cần ít nhất 2 ký tự.')
+        return
+      }
       const nextCatalogs = catalogs.map((c) => {
         if (c.id !== active.id) return c
         const next: MasterCatalogDefinition = {
           ...c,
+          label: trimmedLabel,
           valueKind,
           defaultMatchMode,
         }
@@ -1411,7 +1435,7 @@ function CatalogMatchMetaPanel({
         { catalogs: payload, updatedAt: Timestamp.now() },
         { merge: true },
       )
-      setMsg('Đã lưu cấu hình kiểu danh mục và cách khớp mặc định.')
+      setMsg('Đã lưu tên và cấu hình loại danh mục.')
     } catch (e) {
       setMsg(firestoreWriteErrorMessage(e))
     } finally {
@@ -1421,6 +1445,32 @@ function CatalogMatchMetaPanel({
 
   return (
     <div className={`mb-4 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3 text-slate-800 shadow-inner md:p-4 ${settingsCopy}`}>
+      <p className={`mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 ${settingsCopy}`}>
+        Chỉnh sửa loại danh mục
+      </p>
+      <p className={`mb-3 text-xs leading-snug text-slate-600 ${settingsCopyMuted}`}>
+        Đổi <strong className="font-semibold text-slate-700">tên hiển thị</strong> và nhóm / kiểu dữ liệu. Mục con (vùng, ngành, …) — thêm / sửa / xóa ở khối{' '}
+        <strong className="font-semibold text-slate-700">danh sách bên dưới</strong>. Xóa cả loại danh mục — nút đỏ ở tiêu đề trang.
+      </p>
+      <div className="mb-3 flex flex-col gap-2 border-b border-slate-200/80 pb-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className={`min-w-[12rem] flex-[1.2] font-medium text-slate-700 ${settingsCopy}`}>
+          Tên hiển thị
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            disabled={busy}
+            placeholder="Tên trên giao diện và báo cáo"
+            className={`mt-1 w-full rounded-lg border border-slate-200/90 bg-white px-2 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40 ${settingsCopy}`}
+          />
+        </label>
+        <div className={`min-w-0 flex-1 rounded-lg border border-slate-200/60 bg-white/80 px-2.5 py-2 text-xs text-slate-600 ${settingsCopy}`}>
+          <span className="font-semibold text-slate-700">Mã kỹ thuật (Firestore):</span>{' '}
+          <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-900">{active.id}</code>
+          <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+            Không đổi — dùng cho document <code className="font-mono">masterData/{'{id}'}</code> và quy tắc chấm điểm.
+          </span>
+        </div>
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className={`min-w-[12rem] flex-[1.15] font-medium text-slate-700 ${settingsCopy}`}>
           Nhóm (như Chấm điểm)
