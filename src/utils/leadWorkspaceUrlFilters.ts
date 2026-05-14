@@ -1,7 +1,7 @@
 import type { LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from '../types'
 import { LEAD_COUNSELOR_STATUS_ORDER } from '../types'
 
-/** Tham số URL dùng chung giữa tab «Tư vấn» và «Hồ sơ đầy đủ» (`/leads`). */
+/** Tham số URL lọc/tìm hồ sơ trên `/leads` (đồng bộ bookmark và chia sẻ link). */
 export const LWF = {
   Q: 'q',
   CRM: 'crm',

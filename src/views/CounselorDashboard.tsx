@@ -341,7 +341,7 @@ function CounselorLeadListRow({
             <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
           <Link
-            to={`/leads?view=full&open=${encodeURIComponent(lead.id)}`}
+            to={`/leads?open=${encodeURIComponent(lead.id)}`}
             className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
             title="Mở chi tiết hồ sơ trên trang Hồ sơ (đồng bộ pipeline, mô tả, tín hiệu)"
           >
@@ -920,7 +920,7 @@ export function CounselorDashboard() {
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             Làm việc trên <strong>danh sách hồ sơ</strong> có bộ lọc — đổi <strong>tình trạng CRM</strong>, ghi chú / gọi /
             follow-up nhanh, rồi mở{' '}
-            <Link to="/leads?view=full" className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950">
+            <Link to="/leads" className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950">
               Hồ sơ đầy đủ
             </Link>{' '}
           </p>
@@ -1263,7 +1263,7 @@ export function CounselorDashboard() {
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm">
           Danh sách này chỉ tải tối đa <strong>{LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
           quyền — có thể còn trên server. Dùng{' '}
-          <Link to="/leads?view=full" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
+          <Link to="/leads" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
             Hồ sơ đầy đủ
           </Link>{' '}
           để xem toàn bộ nếu được phép.

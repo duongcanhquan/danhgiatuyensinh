@@ -44,16 +44,16 @@ Hệ thống có các vai trò chính (tên hiển thị trên góc màn hình s
 
 - Tổng quan số liệu hồ sơ đã tải về máy trình duyệt (có thể có nút **Tải thêm** nếu danh sách lớn).
 - Biểu đồ giúp nắm nhanh tình hình pipeline, mức độ ưu tiên (HOT / WARM / COLD), v.v.
-- **Gợi ý:** Dùng để họp nhanh hoặc xem xu hướng; chi tiết từng hồ sơ vào **Hồ sơ** (tab «Hồ sơ đầy đủ» hoặc trực tiếp nếu không có tab tư vấn).
+- **Gợi ý:** Dùng để họp nhanh hoặc xem xu hướng; chi tiết từng hồ sơ vào menu **Hồ sơ** (`/leads`).
 
-### 3.2. Hồ sơ & làm việc tư vấn (`/leads`)
+### 3.2. Hồ sơ (`/leads`)
 
-Một cổng dữ liệu lead cho mọi vai trò được phép:
+Một màn CRM duy nhất cho mọi vai trò được phép:
 
-- **Hồ sơ đầy đủ:** bảng CRM với tìm kiếm URL (`q`), lọc server (khu vực, TVV, nhãn, v.v. tùy quyền), bulk, AI miner, panel chi tiết (funnel, ghi chú, chấm điểm…).
-- **Tư vấn (TVV):** chỉ hiện khi tài khoản có quyền `dashboard:counselor` — bảng làm việc theo ngày (follow-up, gọi/ghi chú nhanh, đổi CRM hàng loạt). Chuyển tab hoặc dùng query `?view=counselor` / `?view=full`. Đường dẫn cũ `/counselor` tự chuyển sang `/leads?view=counselor`.
+- Tìm kiếm URL (`q`), lọc (khu vực, TVV, nhãn, funnel, nguồn, … tùy quyền), phân trang / tải theo server khi cần, bulk, AI miner, panel chi tiết (funnel, ghi chú, chấm điểm…).
+- Đường dẫn cũ `/counselor` tự chuyển về `/leads`.
 
-**Gợi ý:** Mở chi tiết đầy đủ từ bảng TVV bằng nút hồ sơ hoặc `?view=full&open=<id>`. Có `q` hoặc `open` trên URL thì luôn mở chế độ **Hồ sơ đầy đủ** để panel/tìm kiếm hoạt động đúng.
+**Gợi ý:** Mở sẵn panel chi tiết một hồ sơ bằng `?open=<id>` trên URL.
 
 ### 3.3. Nhập liệu Excel (`/import`)
 
