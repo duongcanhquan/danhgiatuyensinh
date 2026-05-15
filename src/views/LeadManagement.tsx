@@ -829,7 +829,7 @@ export function LeadManagement() {
     if (aiShortlistOnly) {
       out.push({
         id: 'ai',
-        label: 'AI Shortlist',
+        label: 'Chỉ hồ sơ AI Shortlist',
         onClear: () => {
           setAiShortlistOnly(false)
           setPage(1)
@@ -1781,26 +1781,60 @@ export function LeadManagement() {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setAiShortlistOnly((v) => !v)
-              setPage(1)
-            }}
-            className={[
-              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition',
-              aiShortlistOnly
-                ? 'border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 shadow-[0_0_22px_rgba(251,191,36,0.5)]'
-                : 'border-slate-200/90 bg-white/90 text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
-            ].join(' ')}
-          >
-            <Zap className="h-3.5 w-3.5 shrink-0 text-current" strokeWidth={2.5} aria-hidden />
-            ⚡ AI Shortlist
-          </button>
+        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200/60 pt-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              title="Bật/tắt lọc: chỉ các hồ sơ đã được AI đánh dấu shortlist trên server (trường isAiShortlisted)."
+              onClick={() => {
+                setAiShortlistOnly((v) => !v)
+                setPage(1)
+              }}
+              className={[
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide transition sm:px-3 sm:py-1.5 sm:text-xs',
+                aiShortlistOnly
+                  ? 'border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 shadow-[0_0_22px_rgba(251,191,36,0.5)]'
+                  : 'border-slate-200/90 bg-white/90 text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
+              ].join(' ')}
+            >
+              <Zap className="h-3.5 w-3.5 shrink-0 text-current" strokeWidth={2.5} aria-hidden />
+              ⚡ AI Shortlist
+            </button>
+            <details className="group relative">
+              <summary
+                className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-full border border-slate-200/90 bg-white/90 text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 hover:text-amber-900 [&::-webkit-details-marker]:hidden"
+                aria-label="Hướng dẫn AI Shortlist"
+                title="Mở hướng dẫn"
+              >
+                <CircleHelp className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
+              </summary>
+              <div className="absolute left-0 z-30 mt-1.5 w-[min(22rem,calc(100vw-2rem))] space-y-2 rounded-xl border border-slate-200/90 bg-white/98 p-3 text-left text-xs leading-snug text-slate-700 shadow-lg backdrop-blur-md sm:left-auto sm:right-0">
+                <p className="font-semibold text-slate-900">AI Shortlist hoạt động thế nào?</p>
+                <ol className="list-decimal space-y-1.5 pl-4 marker:text-amber-700">
+                  <li>
+                    Nút <strong>⚡ AI Shortlist</strong> chỉ là <strong>bộ lọc danh sách</strong>: hiện các hồ sơ đã có cờ{' '}
+                    <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-800">isAiShortlisted = true</code>{' '}
+                    trên Firestore (kèm lý do trong <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">aiShortlistReason</code>).
+                  </li>
+                  <li>
+                    Để <strong>tạo / cập nhật</strong> cờ đó: chọn một hoặc nhiều hồ sơ có nhãn <strong>WARM</strong> (theo profile chấm điểm đang bật) → thanh thao tác hàng loạt →{' '}
+                    <strong>✨ Chạy AI Phân tích (Shortlist)</strong> → vượt <strong>AI Gatekeeper</strong> → LLM phân tích theo lô và ghi kết quả vào từng hồ sơ.
+                  </li>
+                  <li>
+                    Cần <strong>quyền LLM</strong> và đã <strong>cấu hình API key</strong> (Cài đặt → LLM). Nếu chưa từng chạy AI, bật lọc này thường cho danh sách trống — đó là bình thường.
+                  </li>
+                </ol>
+                <p className="border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+                  TVV chỉ thấy hồ sơ được gán cho mình; quản trị thấy theo phạm vi quyền. Lọc kết hợp với các điều kiện khác vẫn do Firestore xử lý (cần deploy chỉ mục nếu console báo thiếu index).
+                </p>
+              </div>
+            </details>
+          </div>
           {aiShortlistOnly ? (
-            <span className="text-xs leading-snug text-slate-600">
-              Chỉ hồ sơ có <span className="font-semibold text-amber-900">isAiShortlisted</span> trên Firestore.
+            <span className="max-w-xl text-xs leading-snug text-slate-600">
+              Đang lọc: chỉ hồ sơ đã được AI đánh dấu shortlist (
+              <code className="rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-950">isAiShortlisted</code>
+              ).
             </span>
           ) : null}
         </div>
