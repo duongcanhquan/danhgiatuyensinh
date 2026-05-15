@@ -94,7 +94,7 @@ Thường dành cho **quản trị / phòng tuyển sinh** có quyền nhập li
 Thường do **quản trị** sử dụng:
 
 - **Danh mục dữ liệu** (vùng, ngành, nguồn, …) dùng chung cho form và nhập liệu.
-- **Chấm điểm** — trong tab này có hai phần: **Điểm thông tin** (cấu hình % đầy hồ sơ) và **Profile chấm điểm** (HOT/WARM, thử JSON); ngoài ra còn **kịch bản tư vấn**, **kho tri thức**, **cấu hình AI / LLM** — tùy tab hiển thị.
+- **Chấm điểm** — trong tab này có hai phần: **Điểm thông tin** (cấu hình % đầy dữ liệu tĩnh trên hồ sơ: điểm nền + các dòng tiêu chí bật và khớp, rồi kẹp min–max %) và **Profile chấm điểm** (HOT/WARM, thử JSON); hai thước đo độc lập. Mặc định bật bộ tiêu chí «lõi» (danh tính, liên hệ, địa lý, trường/hệ…); các tiêu chí như nguồn lead, ngành quan tâm, học lực, lớp, mô tả dài… **mặc định tắt** — có thể bật và chỉnh điểm trong bảng quy tắc; cột «Cách đánh giá» trong app mô tả điều kiện khớp cố định cho từng `id`. Ngoài ra còn **kịch bản tư vấn**, **kho tri thức**, **cấu hình AI / LLM** — tùy tab hiển thị.
 
 Người dùng thông thường **không cần** vào đây trừ khi được giao nhiệm vụ cấu hình.
 

@@ -175,9 +175,11 @@ function sectionsData(): Section[] {
             </li>
           </ol>
           <p className={p}>
-            Cột <strong>% (điểm thông tin)</strong> trên bảng cho biết mức đầy các trường cơ bản — đặt chuột lên vòng %
-            để xem chi tiết. Cách tính và chỉnh trọng số: <strong>Cài đặt → Chấm điểm → tab Điểm thông tin</strong>; khác với
-            nhãn HOT/WARM ở tab <strong>Profile chấm điểm</strong>.
+            Cột <strong>% (điểm thông tin)</strong> trên bảng phản ánh <strong>độ đầy dữ liệu tĩnh</strong> (điểm nền + các
+            tiêu chí bật và khớp, rồi kẹp min–max %) — không phải HOT/WARM. Đặt chuột lên vòng % để xem chi tiết. Cách tính
+            và chỉnh: <strong>Cài đặt → Chấm điểm → tab Điểm thông tin</strong> (bảng có cột «Cách đánh giá» cho từng{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-xs">id</code>); nhãn HOT/WARM ở tab{' '}
+            <strong>Profile chấm điểm</strong>.
           </p>
           <p className={p}>
             <strong>Chia sẻ đúng bộ lọc:</strong> sau khi chỉnh lọc, copy địa chỉ trên thanh trình duyệt và gửi cho đồng
@@ -317,8 +319,10 @@ function sectionsData(): Section[] {
           </ul>
           <p className={p}>
             <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> <strong>Cài đặt → Chấm điểm → Điểm thông tin</strong> — chỉnh
-            điểm nền, kẹp % và trọng số từng trường (lưu toàn trường). <strong>Profile chấm điểm (HOT/WARM)</strong> nằm tab
-            kế bên trong cùng màn Chấm điểm. Từng hồ sơ vẫn có thể ghi đè % khi đã lưu sẵn trên lead (mlWinProbability + mlExplanation).
+            điểm nền, kẹp %, bật/tắt từng dòng tiêu chí và điểm khi khớp (mặc định bật bộ «lõi»; một số tiêu chí bổ sung như
+            nguồn, ngành quan tâm, học lực, mô tả dài… mặc định tắt — bật nếu trường muốn đưa vào %). Lưu toàn trường.{' '}
+            <strong>Profile chấm điểm (HOT/WARM)</strong> nằm tab kế bên trong cùng màn Chấm điểm. Từng hồ sơ vẫn có thể ghi
+            đè % khi đã lưu sẵn trên lead (mlWinProbability + mlExplanation).
           </p>
         </div>
       ),

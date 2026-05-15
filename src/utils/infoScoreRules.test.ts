@@ -73,4 +73,30 @@ describe('infoScoreRules', () => {
     const phoneRow = m.mvpBreakdown?.items.find((i) => i.id === 'phone')
     expect(phoneRow).toBeUndefined()
   })
+
+  it('description criterion is off by default and does not appear in breakdown', () => {
+    const d = getDefaultInfoScoreRules()
+    const rt = buildInfoScoreRuntime(d, true)
+    const m = computeMockMlWinProbability(
+      stubLead({ fullName: 'Nguyễn Văn A', description: 'Mô tả đủ dài để vượt ngưỡng tối thiểu.' }),
+      rt,
+    )
+    const descRow = m.mvpBreakdown?.items.find((i) => i.id === 'description')
+    expect(descRow).toBeUndefined()
+  })
+
+  it('description criterion counts when enabled and text is long enough', () => {
+    const d = getDefaultInfoScoreRules()
+    const next = mergeInfoScoreRules({
+      ...d,
+      fields: d.fields.map((f) => (f.id === 'description' ? { ...f, enabled: true } : f)),
+    })
+    const rt = buildInfoScoreRuntime(next, true)
+    const m = computeMockMlWinProbability(
+      stubLead({ fullName: 'Nguyễn Văn A', description: 'Mô tả đủ dài để vượt ngưỡng tối thiểu.' }),
+      rt,
+    )
+    const descRow = m.mvpBreakdown?.items.find((i) => i.id === 'description')
+    expect(descRow?.matched).toBe(true)
+  })
 })

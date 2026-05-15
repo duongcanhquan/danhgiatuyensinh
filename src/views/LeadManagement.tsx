@@ -123,7 +123,7 @@ const EVALUATION_TAGS = [
 
 /** Tooltip cột — ngắn; chi tiết công thức nằm trên từng ô (đặt chuột lên gauge). */
 const ML_WIN_COLUMN_HINT =
-  'Điểm thông tin = tỷ lệ thông tin có trên hồ sơ một người. MVP: app cộng theo các trường điền (kẹp 5–96%); Đã lưu: Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng điểm.'
+  'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max). Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
 
 function isElevatedForAdminFilters(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'

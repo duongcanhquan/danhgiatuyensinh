@@ -2,12 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, PieChart, RotateCcw, Save, Trash2 } from 'lucide-react'
 import type { InfoScoreFieldRowPersisted, InfoScoreRulesPersisted } from '../types'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
-import { getDefaultInfoScoreRules, infoScoreMaxRaw, mergeInfoScoreRules } from '../utils/infoScoreRules'
+import { getDefaultInfoScoreRules, INFO_SCORE_CRITERION_HELP, infoScoreMaxRaw, mergeInfoScoreRules } from '../utils/infoScoreRules'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
 
 function clampPct(n: number): number {
   if (!Number.isFinite(n)) return 0
   return Math.max(0, Math.min(100, Math.round(n)))
+}
+
+function criterionRuleText(id: string): string {
+  return INFO_SCORE_CRITERION_HELP.find((h) => h.id === id)?.rule ?? '—'
 }
 
 export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
@@ -82,10 +86,12 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
             Điểm thông tin (độ đầy hồ sơ)
           </VietMyAccentHeading>
           <p className="mt-2 text-sm leading-relaxed text-slate-700 md:text-base">
-            Con số <strong>%</strong> trên cột hồ sơ phản ánh <strong>mức đã có bao nhiêu thông tin cơ bản</strong> —{' '}
-            <strong>không phải</strong> điểm HOT/WARM/COLD của bộ chấm điểm phía dưới, và <strong>không phải</strong> kết
-            quả AI. Cột mã <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">id</code> là khóa kỹ thuật
-            (logic khớp trong app); chỉnh được nhãn hiển thị, điểm và bật/tắt từng dòng.
+            Con số <strong>%</strong> đo <strong>độ đầy thông tin tĩnh</strong> trên hồ sơ (đã nhập trên form / import),
+            không đo chất lượng tư vấn, không thay cho nhãn HOT/WARM và không phải kết quả AI. Điểm nền + các tiêu chí{' '}
+            <strong>đang bật</strong> và <strong>khớp điều kiện</strong> được cộng, rồi kẹp trong khoảng min–max %. Cột{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">id</code> gắn với logic cố định trong app
+            — muốn thêm loại trường hoàn toàn mới cần cập nhật phần mềm; trong phạm vi hiện tại bạn có thể <strong>bật/tắt</strong>,{' '}
+            <strong>đổi điểm</strong> và <strong>đổi nhãn</strong> cho từng tiêu chí có sẵn.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
             {loading ? (
@@ -110,6 +116,24 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
           {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
           {msg ? <p className="mt-2 text-sm text-emerald-800">{msg}</p> : null}
         </div>
+      </div>
+
+      <div className="mt-5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-800">
+        <p className="font-semibold text-slate-900">Nguyên tắc &amp; tiêu chí bổ sung</p>
+        <ul className="mt-2 list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>Bộ lõi (mặc định bật):</strong> danh tính, liên hệ, địa lý, hệ đào tạo và trường — phù hợp hồ sơ mới
+            nhập từ Excel / form nhanh.
+          </li>
+          <li>
+            <strong>Tiêu chí thêm (mặc định tắt):</strong> nguồn lead, ngành riêng (<code className="font-mono text-xs">majorInterest</code>),
+            học lực, lớp, ghi chú đủ dài — bật khi trường bạn đã thu thập đủ dữ liệu và muốn % phản ánh thêm.
+          </li>
+          <li>
+            Mỗi dòng trong bảng dưới có cột <em>Cách đánh giá</em> mô tả đúng điều kiện trong mã; chỉnh điểm / nhãn không
+            làm thay đổi điều kiện khớp.
+          </li>
+        </ul>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -209,7 +233,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200/90 bg-white/95 shadow-sm">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <caption className="border-b border-slate-200 bg-slate-50/95 px-4 py-3 text-left text-sm font-semibold text-slate-900">
             Bảng quy tắc — tổng điểm thô tối đa ≈ {maxRaw} (trước kẹp {draft.capMin}–{draft.capMax}%)
           </caption>
@@ -219,7 +243,8 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
               <th className="px-3 py-2.5">id</th>
               <th className="px-3 py-2.5">Nhãn hiển thị</th>
               <th className="px-3 py-2.5 text-right">Điểm</th>
-              <th className="px-3 py-2.5">Ghi chú (tooltip)</th>
+              <th className="min-w-[12rem] px-3 py-2.5">Cách đánh giá (cố định)</th>
+              <th className="min-w-[10rem] px-3 py-2.5">Ghi chú (tooltip)</th>
             </tr>
           </thead>
           <tbody>
@@ -228,6 +253,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
               <td className="px-3 py-3 font-mono text-xs text-slate-500">base</td>
               <td className="px-3 py-3 font-medium text-slate-900">Điểm nền (luôn tính)</td>
               <td className="px-3 py-3 text-right font-semibold tabular-nums">+{draft.basePoints}</td>
+              <td className="px-3 py-3 text-slate-600">Luôn cộng — mức khởi điểm trước các tiêu chí dòng.</td>
               <td className="px-3 py-3 text-slate-600">Không tắt được — chỉnh ở ô «Điểm nền» phía trên.</td>
             </tr>
             {draft.fields.map((f) => (
@@ -264,6 +290,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
                     className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-right text-sm font-semibold tabular-nums disabled:opacity-50"
                   />
                 </td>
+                <td className="px-3 py-3 text-xs leading-snug text-slate-600">{criterionRuleText(f.id)}</td>
                 <td className="px-3 py-3">
                   <input
                     type="text"

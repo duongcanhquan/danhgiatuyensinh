@@ -933,16 +933,21 @@ export const SCORING_AUX_TVV_SIGNALS_DOC_ID = 'tvvSignalDefinitions' as const
 /** Doc cố định: `scoringAux/infoScoreConfig` — quy tắc điểm thông tin (% đầy hồ sơ) toàn trường. */
 export const SCORING_AUX_INFO_SCORE_DOC_ID = 'infoScoreConfig' as const
 
-/** Các trường hồ sơ được hỗ trợ trong công thức điểm thông tin (logic khớp cố định trong app). */
+/** Các trường hồ sơ được hỗ trợ trong công thức điểm thông tin (logic khớp cố định trong app — thêm id mới cần cập nhật mã). */
 export const INFO_SCORE_FIELD_IDS = [
   'fullName',
   'phone',
-  'customerId',
   'parentPhone',
+  'customerId',
   'province',
-  'educationLevel',
-  'highSchool',
   'address',
+  'source',
+  'educationLevel',
+  'majorInterest',
+  'academicPerformance',
+  'highSchool',
+  'gradeClass',
+  'description',
 ] as const
 
 export type InfoScoreFieldId = (typeof INFO_SCORE_FIELD_IDS)[number]
