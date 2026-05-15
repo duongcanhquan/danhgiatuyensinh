@@ -15,6 +15,7 @@ import { SCRIPT_CATEGORY_LABELS } from '../types'
 import { assembleConsultingFlow } from '../utils/scriptEngine'
 import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useAuth } from '../hooks/useAuth'
+import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { MlWinGauge } from './MlWinGauge'
 
 export type ConsultingAssistantVariant = 'rail' | 'embedded'
@@ -131,10 +132,11 @@ export function ConsultingAssistantPanel({
   showHeader?: boolean
 }) {
   const { can } = useAuth()
+  const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const canConfigureScripts = can('config:playbooks')
   const flow = useMemo(() => assembleConsultingFlow(lead, snippets), [lead, snippets])
   const totalSteps = flow.length
-  const ml = useMemo(() => resolveMlWinDisplay(lead), [lead])
+  const ml = useMemo(() => resolveMlWinDisplay(lead, infoScoreRuntime), [lead, infoScoreRuntime])
 
   const isRail = variant === 'rail'
   /** Nội dung nhúng trong popup chi tiết — phóng to chữ & khoảng cách cho dễ đọc. */

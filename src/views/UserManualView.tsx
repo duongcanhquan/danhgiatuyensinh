@@ -316,10 +316,9 @@ function sectionsData(): Section[] {
             <li>Nên chuẩn hóa cột dữ liệu (ngành quan tâm, học lực, loại trường…) để chấm điểm ổn định.</li>
           </ul>
           <p className={p}>
-            <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> trong <strong>Cài đặt → Chấm điểm</strong> có khối giải
-            thích riêng — đây là mức “đầy” các trường cơ bản (công thức MVP), <strong>khác</strong> nhãn HOT/WARM của
-            profile chấm điểm. Trọng số MVP hiện cố định trong phần mềm; có thể ghi đè từng hồ sơ nếu tích hợp lưu sẵn trên
-            server.
+            <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> trong <strong>Cài đặt → Chấm điểm</strong> có khối chỉnh
+            điểm nền, kẹp % và trọng số từng trường (lưu toàn trường trên server). Khác nhãn HOT/WARM của profile chấm
+            điểm. Từng hồ sơ vẫn có thể ghi đè bằng dữ liệu đã lưu sẵn nếu tích hợp cần.
           </p>
         </div>
       ),

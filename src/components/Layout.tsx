@@ -18,6 +18,7 @@ import { useAuth } from '../hooks/useAuth'
 import type { Permission } from '../types'
 import { USER_ROLE_LABELS } from '../types'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
+import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
 
 type NavDef = { to: string; label: string; icon: LucideIcon; perm?: Permission }
 
@@ -243,7 +244,9 @@ export function Layout() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[#e8ecf2]">
           <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col px-0 py-0">
             <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-sm font-normal leading-relaxed text-slate-800 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
-              <Outlet />
+              <InfoScoreRulesProvider>
+                <Outlet />
+              </InfoScoreRulesProvider>
             </div>
           </main>
         </div>

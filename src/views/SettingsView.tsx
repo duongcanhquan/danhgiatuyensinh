@@ -115,9 +115,8 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Điểm thông tin (% trên hồ sơ)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Khối <strong>Điểm thông tin (độ đầy hồ sơ)</strong> ở đầu tab này mô tả cách tính % đầy thông tin —{' '}
-            <strong>khác</strong> bộ HOT/WARM bên dưới. Trọng số MVP hiện cố định trong mã; có thể ghi đè từng hồ sơ bằng
-            trường lưu trên server khi tích hợp cần.
+            Khối <strong>Điểm thông tin (độ đầy hồ sơ)</strong> ở đầu tab này cho phép chỉnh điểm nền, kẹp %, bật/tắt
+            và trọng số từng trường — lưu vào <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>. Khác bộ HOT/WARM bên dưới. Hồ sơ có cặp mlWinProbability + mlExplanation vẫn ưu tiên hiển thị theo dữ liệu đã lưu trên từng lead.
           </p>
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Bộ chấm điểm (Profiles)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
@@ -782,7 +781,7 @@ export function SettingsView() {
           <h2 id="tab-scoring" className="sr-only uppercase">
             Chấm điểm
           </h2>
-          <InfoCompletenessRulesPanel />
+          <InfoCompletenessRulesPanel canEdit={canScoringRules} />
           <ProfileManagerTab db={db} />
           <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
             <h3 className={settingsHeading}>

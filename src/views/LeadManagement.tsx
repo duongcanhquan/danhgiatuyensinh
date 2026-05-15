@@ -37,6 +37,7 @@ import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/us
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
@@ -183,6 +184,7 @@ export function LeadManagement() {
     catalogs,
   } = useMasterData()
   const { profile, can, canRunLlmAnalysis } = useAuth()
+  const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const institutionalRagBlock = useMemo(
@@ -593,7 +595,7 @@ export function LeadManagement() {
         ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
         : l.calculatedScore
     const tagOf = (l: Lead) => effectiveLeadTag(l)
-    const mlOf = (l: Lead) => resolveMlWinDisplay(l).mlWinProbability
+    const mlOf = (l: Lead) => resolveMlWinDisplay(l, infoScoreRuntime).mlWinProbability
     rows.sort((a, b) => {
       switch (sortKey) {
         case 'fullName':
@@ -617,7 +619,7 @@ export function LeadManagement() {
       }
     })
     return rows
-  }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId])
+  }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId, infoScoreRuntime])
 
   /** Phân trang theo Firestore / bucket tìm kiếm — hook đã trả đúng một trang (≤30 dòng). */
   const displayTotalPages = Math.max(1, firestoreTotalPages)
@@ -2031,7 +2033,7 @@ export function LeadManagement() {
                 const ev = activeScoringProfile ? scoreByLeadId.get(l.id) : undefined
                 const displayScore = ev?.calculatedScore ?? l.calculatedScore
                 const displayTag = ev?.priorityTag ?? l.priorityTag
-                const ml = resolveMlWinDisplay(l)
+                const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
                 return (
                 <motion.tr
@@ -3034,6 +3036,7 @@ function LeadDetailPanel({
   dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can, canRunLlmAnalysis } = useAuth()
+  const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const canEditScoringSignals =
     isAdminLikeRole(profile?.role) ||
     (Boolean(can('leads:write:self_assigned')) &&
@@ -3166,7 +3169,7 @@ function LeadDetailPanel({
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [hasUnsavedProgress, saving])
 
-  const leadMl = useMemo(() => resolveMlWinDisplay(lead), [lead])
+  const leadMl = useMemo(() => resolveMlWinDisplay(lead, infoScoreRuntime), [lead, infoScoreRuntime])
 
   const [aiSelTaskId, setAiSelTaskId] = useState('')
   const [aiRunning, setAiRunning] = useState(false)

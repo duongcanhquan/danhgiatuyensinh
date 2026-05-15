@@ -929,3 +929,37 @@ export type FsCollectionKey = keyof typeof FS_COLLECTIONS
 
 /** Doc cố định: `scoringAux/tvvSignalDefinitions` — checklist tùy chỉnh (Hành vi / Rủi ro) cho chi tiết hồ sơ. */
 export const SCORING_AUX_TVV_SIGNALS_DOC_ID = 'tvvSignalDefinitions' as const
+
+/** Doc cố định: `scoringAux/infoScoreConfig` — quy tắc điểm thông tin (% đầy hồ sơ) toàn trường. */
+export const SCORING_AUX_INFO_SCORE_DOC_ID = 'infoScoreConfig' as const
+
+/** Các trường hồ sơ được hỗ trợ trong công thức điểm thông tin (logic khớp cố định trong app). */
+export const INFO_SCORE_FIELD_IDS = [
+  'fullName',
+  'phone',
+  'customerId',
+  'parentPhone',
+  'province',
+  'educationLevel',
+  'highSchool',
+  'address',
+] as const
+
+export type InfoScoreFieldId = (typeof INFO_SCORE_FIELD_IDS)[number]
+
+export type InfoScoreFieldRowPersisted = {
+  id: InfoScoreFieldId
+  label: string
+  pointsIfMatch: number
+  hint?: string
+  enabled: boolean
+}
+
+/** Lưu Firestore — `scoringAux/infoScoreConfig` */
+export type InfoScoreRulesPersisted = {
+  schemaVersion: 1
+  basePoints: number
+  capMin: number
+  capMax: number
+  fields: InfoScoreFieldRowPersisted[]
+}

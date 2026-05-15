@@ -1,5 +1,10 @@
 import type { Lead } from '../types'
-import { scoringPhoneNationalDigits } from './scoringEngine'
+import type { InfoScoreRuntime } from './infoScoreRules'
+import {
+  buildInfoScoreRuntime,
+  getDefaultInfoScoreRules,
+  infoScoreMaxRaw,
+} from './infoScoreRules'
 
 export type MlWinDisplaySource = 'firestore' | 'mvp_mock'
 
@@ -22,6 +27,8 @@ export type MvpBreakdown = {
   rawScore: number
   /** Giá trị sau kẹp (trùng `mlWinProbability`) */
   clampedPercent: number
+  /** Nguồn quy tắc % đầy hồ sơ */
+  ruleSource?: 'builtin' | 'remote'
 }
 
 export type MlWinDisplay = {
@@ -31,7 +38,7 @@ export type MlWinDisplay = {
   mvpBreakdown?: MvpBreakdown
 }
 
-/** Điểm nền + kẹp % — dùng chung cho tính toán và màn Cài đặt (mô tả). */
+/** @deprecated Dùng `getDefaultInfoScoreRules()` — giữ để tương thích import cũ. */
 export const MVP_INFO_SCORE_GLOBAL = {
   basePoints: 38,
   capMin: 5,
@@ -43,86 +50,38 @@ export type MvpInfoScoreFieldRulePublic = {
   label: string
   pointsIfMatch: number
   hint?: string
+  enabled?: boolean
 }
 
-function studentPhoneTenDigits(lead: Lead): boolean {
-  return scoringPhoneNationalDigits(lead.phone ?? '').length === 10
+function builtinRuntime(): InfoScoreRuntime {
+  return buildInfoScoreRuntime(getDefaultInfoScoreRules(), false)
 }
 
-/**
- * Quy tắc từng trường trên hồ sơ (điểm thông tin MVP) — một nguồn duy nhất cho UI Cài đặt và `computeMockMlWinProbability`.
- */
-const MVP_FIELD_RULES: ReadonlyArray<
-  MvpInfoScoreFieldRulePublic & { matched: (lead: Lead) => boolean }
-> = [
-  {
-    id: 'fullName',
-    label: 'Họ tên sinh viên',
-    pointsIfMatch: 6,
-    matched: (l) => Boolean(l.fullName?.trim()),
-  },
-  {
-    id: 'phone',
-    label: 'SĐT sinh viên (chuẩn VN, đúng 10 số)',
-    pointsIfMatch: 10,
-    matched: studentPhoneTenDigits,
-    hint: 'Giống chấm điểm: chỉ số, +84→0…, đủ 10 số mới cộng.',
-  },
-  {
-    id: 'customerId',
-    label: 'Mã khách hàng',
-    pointsIfMatch: 5,
-    matched: (l) => Boolean(l.customerId?.trim()),
-  },
-  {
-    id: 'parentPhone',
-    label: 'SĐT người liên hệ (có nhập)',
-    pointsIfMatch: 4,
-    matched: (l) => Boolean(l.parentPhone?.trim()),
-    hint: 'Chỉ cần có nội dung — không bắt 10 số như SĐT SV.',
-  },
-  {
-    id: 'province',
-    label: 'Tỉnh / thành phố',
-    pointsIfMatch: 6,
-    matched: (l) => Boolean(l.province?.trim()),
-  },
-  {
-    id: 'educationLevel',
-    label: 'Hệ đào tạo / ngành quan tâm',
-    pointsIfMatch: 8,
-    matched: (l) => Boolean(l.educationLevel?.trim()),
-  },
-  {
-    id: 'highSchool',
-    label: 'Trường học',
-    pointsIfMatch: 7,
-    matched: (l) => Boolean(l.highSchool?.trim()),
-  },
-  {
-    id: 'address',
-    label: 'Địa chỉ',
-    pointsIfMatch: 4,
-    matched: (l) => Boolean(l.address?.trim()),
-  },
-]
-
-/** Danh sách quy tắc (không hàm) — hiển thị trong Cài đặt. */
+/** Bảng trường (không matcher) — tiện cho tài liệu / test. */
 export function getMvpInfoScoreFieldRulesPublic(): ReadonlyArray<MvpInfoScoreFieldRulePublic> {
-  return MVP_FIELD_RULES.map(({ id, label, pointsIfMatch, hint }) => ({ id, label, pointsIfMatch, hint }))
+  return getDefaultInfoScoreRules().fields.map(({ id, label, pointsIfMatch, hint, enabled }) => ({
+    id,
+    label,
+    pointsIfMatch,
+    hint,
+    enabled,
+  }))
 }
 
-/** Tổng điểm tối đa nếu mọi trường đều khớp (trước kẹp). */
 export function getMvpInfoScoreMaxRaw(): number {
-  return MVP_INFO_SCORE_GLOBAL.basePoints + MVP_FIELD_RULES.reduce((s, r) => s + r.pointsIfMatch, 0)
+  return infoScoreMaxRaw(getDefaultInfoScoreRules())
 }
 
 /**
- * **Điểm thông tin** (MVP trong app): tỷ lệ mức có thông tin / hồ sơ trên một người —
- * **không phải** xác suất thắng ML. Điểm nền + từng trường điền; **kẹp** `capMin…capMax` rồi hiển thị như %.
+ * **Điểm thông tin**: điểm nền + các trường bật; kẹp capMin–capMax.
+ * `runtime` lấy từ context — khi không truyền, dùng bản mặc định mã.
  */
-export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlWinProbability' | 'mlExplanation' | 'mvpBreakdown'> {
-  const { basePoints, capMin, capMax } = MVP_INFO_SCORE_GLOBAL
+export function computeMockMlWinProbability(
+  lead: Lead,
+  runtime?: InfoScoreRuntime | null,
+): Pick<MlWinDisplay, 'mlWinProbability' | 'mlExplanation' | 'mvpBreakdown'> {
+  const r = runtime ?? builtinRuntime()
+  const { basePoints, capMin, capMax } = r
 
   const items: MvpBreakdownItem[] = [
     {
@@ -132,13 +91,15 @@ export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlW
       matched: true,
       hint: 'Luôn áp dụng — mức khởi điểm trước khi cộng các trường thông tin trên hồ sơ.',
     },
-    ...MVP_FIELD_RULES.map((r) => ({
-      id: r.id,
-      label: r.label,
-      pointsIfMatch: r.pointsIfMatch,
-      matched: r.matched(lead),
-      hint: r.hint,
-    })),
+    ...r.fields
+      .filter((f) => f.enabled)
+      .map((f) => ({
+        id: f.id,
+        label: f.label,
+        pointsIfMatch: f.pointsIfMatch,
+        matched: f.match(lead),
+        hint: f.hint,
+      })),
   ]
 
   let raw = 0
@@ -166,6 +127,7 @@ export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlW
       items,
       rawScore: raw,
       clampedPercent: clamped,
+      ruleSource: r.ruleSource,
     },
   }
 }
@@ -194,8 +156,13 @@ export function buildMlWinHoverText(ml: MlWinDisplay): string {
     })
     .join('\n')
 
+  const sourceLine =
+    b.ruleSource === 'remote'
+      ? 'NGUỒN: Điểm thông tin theo cấu hình trường (Firestore: scoringAux/infoScoreConfig).'
+      : 'NGUỒN: Điểm thông tin mặc định trong app (chưa có cấu hình trường — có thể lưu trong Cài đặt → Chấm điểm).'
+
   return [
-    'NGUỒN: Điểm thông tin do app tính (MVP) — tỷ lệ mức có thông tin / hồ sơ trên một người; không phải xác suất thắng ML.',
+    sourceLine,
     '',
     'Cách tính:',
     `  1) Cộng điểm các dòng có [✓] trong bảng dưới (điểm nền luôn tính).`,
@@ -210,7 +177,7 @@ export function buildMlWinHoverText(ml: MlWinDisplay): string {
   ].join('\n')
 }
 
-export function resolveMlWinDisplay(lead: Lead): MlWinDisplay {
+export function resolveMlWinDisplay(lead: Lead, runtime?: InfoScoreRuntime | null): MlWinDisplay {
   if (
     typeof lead.mlWinProbability === 'number' &&
     !Number.isNaN(lead.mlWinProbability) &&
@@ -222,7 +189,7 @@ export function resolveMlWinDisplay(lead: Lead): MlWinDisplay {
       source: 'firestore',
     }
   }
-  const m = computeMockMlWinProbability(lead)
+  const m = computeMockMlWinProbability(lead, runtime ?? null)
   return {
     mlWinProbability: m.mlWinProbability,
     mlExplanation: m.mlExplanation,
@@ -230,3 +197,5 @@ export function resolveMlWinDisplay(lead: Lead): MlWinDisplay {
     mvpBreakdown: m.mvpBreakdown,
   }
 }
+
+export { mergeInfoScoreRules, parseInfoScoreDoc, getDefaultInfoScoreRules } from './infoScoreRules'
