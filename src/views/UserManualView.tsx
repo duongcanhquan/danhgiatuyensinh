@@ -176,8 +176,8 @@ function sectionsData(): Section[] {
           </ol>
           <p className={p}>
             Cột <strong>% (điểm thông tin)</strong> trên bảng cho biết mức đầy các trường cơ bản — đặt chuột lên vòng %
-            để xem chi tiết. Cách tính mặc định và bảng trọng số xem trong <strong>Cài đặt → Chấm điểm</strong> (khối «Điểm
-            thông tin»); khác với nhãn HOT/WARM từ bộ chấm điểm.
+            để xem chi tiết. Cách tính và chỉnh trọng số: <strong>Cài đặt → Chấm điểm → tab Điểm thông tin</strong>; khác với
+            nhãn HOT/WARM ở tab <strong>Profile chấm điểm</strong>.
           </p>
           <p className={p}>
             <strong>Chia sẻ đúng bộ lọc:</strong> sau khi chỉnh lọc, copy địa chỉ trên thanh trình duyệt và gửi cho đồng
@@ -316,9 +316,9 @@ function sectionsData(): Section[] {
             <li>Nên chuẩn hóa cột dữ liệu (ngành quan tâm, học lực, loại trường…) để chấm điểm ổn định.</li>
           </ul>
           <p className={p}>
-            <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> trong <strong>Cài đặt → Chấm điểm</strong> có khối chỉnh
-            điểm nền, kẹp % và trọng số từng trường (lưu toàn trường trên server). Khác nhãn HOT/WARM của profile chấm
-            điểm. Từng hồ sơ vẫn có thể ghi đè bằng dữ liệu đã lưu sẵn nếu tích hợp cần.
+            <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> <strong>Cài đặt → Chấm điểm → Điểm thông tin</strong> — chỉnh
+            điểm nền, kẹp % và trọng số từng trường (lưu toàn trường). <strong>Profile chấm điểm (HOT/WARM)</strong> nằm tab
+            kế bên trong cùng màn Chấm điểm. Từng hồ sơ vẫn có thể ghi đè % khi đã lưu sẵn trên lead (mlWinProbability + mlExplanation).
           </p>
         </div>
       ),

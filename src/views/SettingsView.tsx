@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { FirebaseError } from 'firebase/app'
 import {
   doc,
@@ -52,6 +52,12 @@ import { StaffManagementView } from '../views/StaffManagementView'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 type SettingsTabId = 'master' | 'rule_templates' | 'scoring' | 'consulting' | 'knowledge' | 'llm' | 'ai_lab' | 'staff'
+
+type ScoringSubTabId = 'info' | 'profile'
+
+function scoringSubFromSearch(raw: string | null): ScoringSubTabId {
+  return raw === 'profile' ? 'profile' : 'info'
+}
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -113,10 +119,16 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
             <strong>Ứng dụng:</strong> bảng hồ sơ, lọc, ưu tiên làm việc theo nhãn. Khác tab <strong>Tư vấn</strong> (playbook
             / kịch bản thoại cho TVV đọc) và khác <strong>LLM</strong> (phân tích bằng API).
           </p>
+          <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Hai phần trong tab Chấm điểm</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Dùng hai tab con: <strong>Điểm thông tin</strong> (% đầy hồ sơ, lưu <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>) và{' '}
+            <strong>Profile chấm điểm</strong> (HOT/WARM/COLD + thử JSON). URL có thể gồm{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringSub=info</code> hoặc{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringSub=profile</code>.
+          </p>
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Điểm thông tin (% trên hồ sơ)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Khối <strong>Điểm thông tin (độ đầy hồ sơ)</strong> ở đầu tab này cho phép chỉnh điểm nền, kẹp %, bật/tắt
-            và trọng số từng trường — lưu vào <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>. Khác bộ HOT/WARM bên dưới. Hồ sơ có cặp mlWinProbability + mlExplanation vẫn ưu tiên hiển thị theo dữ liệu đã lưu trên từng lead.
+            Tab con <strong>Điểm thông tin</strong>: chỉnh điểm nền, kẹp %, bật/tắt và trọng số từng trường — khác nhãn HOT/WARM của profile. Hồ sơ có cặp mlWinProbability + mlExplanation vẫn ưu tiên hiển thị theo dữ liệu đã lưu trên từng lead.
           </p>
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Bộ chấm điểm (Profiles)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
@@ -296,7 +308,7 @@ export function SettingsView() {
       const data = JSON.parse(demoJson) as Record<string, unknown>
       const profile = profiles[0]
       if (!profile) {
-        setDemoResult('Chưa có bộ chấm điểm — tạo trong tab «Chấm điểm».')
+        setDemoResult('Chưa có bộ chấm điểm — tạo trong tab Chấm điểm → Profile chấm điểm.')
         return
       }
       const { calculatedScore, priorityTag } = evaluateLead(data, profile, masterBuckets)
@@ -411,6 +423,8 @@ export function SettingsView() {
   }, [db, canAiEngine, canAiLab, canStaff])
 
   const tabParam = searchParams.get('tab')
+  const scoringSubParam = searchParams.get('scoringSub')
+  const scoringSub = useMemo(() => scoringSubFromSearch(scoringSubParam), [scoringSubParam])
   const editSnippetParam = searchParams.get('editSnippet')
   const urlTab = parseSettingsTab(tabParam)
 
@@ -449,18 +463,32 @@ export function SettingsView() {
       )
       return
     }
-    const valid = Boolean(urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled))
-    if (valid) return
+    if (activeTab !== 'scoring' && scoringSubParam) {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.delete('scoringSub')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
+    const validTab = Boolean(urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled))
+    const validScoringSub = scoringSubParam === 'info' || scoringSubParam === 'profile'
+    const fixTab = !validTab
+    const fixSub = activeTab === 'scoring' && !validScoringSub
+    if (!fixTab && !fixSub) return
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        if (n.get('tab') === activeTab) return n
-        n.set('tab', activeTab)
+        if (fixTab) n.set('tab', activeTab)
+        if (activeTab === 'scoring' && !validScoringSub) n.set('scoringSub', 'info')
         return n
       },
       { replace: true },
     )
-  }, [db, tabParam, editSnippetParam, urlTab, tabDefs, activeTab, setSearchParams])
+  }, [db, tabParam, editSnippetParam, urlTab, tabDefs, activeTab, setSearchParams, scoringSubParam])
 
   const setTab = (id: SettingsTabId) => {
     if (!tabDefs.some((t) => t.id === id && t.enabled)) return
@@ -468,11 +496,30 @@ export function SettingsView() {
       (prev) => {
         const n = new URLSearchParams(prev)
         n.set('tab', id)
+        if (id === 'scoring') {
+          const s = n.get('scoringSub')
+          if (s !== 'info' && s !== 'profile') n.set('scoringSub', 'info')
+        }
         return n
       },
       { replace: true },
     )
   }
+
+  const setScoringSub = useCallback(
+    (sub: ScoringSubTabId) => {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'scoring')
+          n.set('scoringSub', sub)
+          return n
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
 
   return (
     <div className={`space-y-4 md:space-y-5 ${settingsCopy}`}>
@@ -781,35 +828,82 @@ export function SettingsView() {
           <h2 id="tab-scoring" className="sr-only uppercase">
             Chấm điểm
           </h2>
-          <InfoCompletenessRulesPanel canEdit={canScoringRules} />
-          <ProfileManagerTab db={db} />
-          <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
-            <h3 className={settingsHeading}>
-              Thử nghiệm chấm điểm (JSON)
-            </h3>
-            <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
-              Dán JSON mẫu — dùng <strong>profile đầu tiên</strong> trong danh sách. Các khóa nên khớp{' '}
-              <code className={`rounded bg-slate-200/80 px-1 font-mono ${settingsCopy}`}>targetField</code> trong quy tắc của profile đó.
-            </p>
-            <textarea
-              value={demoJson}
-              onChange={(e) => setDemoJson(e.target.value)}
-              rows={5}
-              className={`mt-4 w-full rounded-xl border border-slate-200/80 bg-slate-50/95 px-4 py-3 font-mono leading-relaxed text-slate-900 outline-none ring-emerald-400/30 focus:ring-2 ${settingsCopy}`}
-            />
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <button
-                type="button"
-                onClick={runDemo}
-                className={`min-h-11 rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-emerald-700 ${settingsCopy}`}
-              >
-                Chạy thử chấm điểm
-              </button>
-              {demoResult ? (
-                <p className={`font-medium text-slate-800 ${settingsCopy}`}>{demoResult}</p>
-              ) : null}
+
+          <nav
+            className="flex flex-wrap gap-2 rounded-2xl border border-slate-200/80 bg-white/90 p-2 shadow-md backdrop-blur-xl"
+            role="tablist"
+            aria-label="Chấm điểm — chọn phần"
+          >
+            <button
+              type="button"
+              role="tab"
+              id="tab-scoring-info"
+              aria-selected={scoringSub === 'info'}
+              aria-controls="panel-scoring-info"
+              onClick={() => setScoringSub('info')}
+              className={[
+                'min-h-10 rounded-xl border px-4 py-2.5 text-sm font-semibold tracking-tight transition md:px-5',
+                scoringSub === 'info'
+                  ? 'border-violet-400/60 bg-gradient-to-r from-violet-600 to-violet-700 text-white shadow-md'
+                  : 'border-transparent bg-slate-50/90 text-slate-800 hover:border-slate-200 hover:bg-white',
+              ].join(' ')}
+            >
+              Điểm thông tin
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-scoring-profile"
+              aria-selected={scoringSub === 'profile'}
+              aria-controls="panel-scoring-profile"
+              onClick={() => setScoringSub('profile')}
+              className={[
+                'min-h-10 rounded-xl border px-4 py-2.5 text-sm font-semibold tracking-tight transition md:px-5',
+                scoringSub === 'profile'
+                  ? 'border-emerald-500/55 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                  : 'border-transparent bg-slate-50/90 text-slate-800 hover:border-slate-200 hover:bg-white',
+              ].join(' ')}
+            >
+              Profile chấm điểm
+            </button>
+          </nav>
+
+          {scoringSub === 'info' ? (
+            <div id="panel-scoring-info" role="tabpanel" aria-labelledby="tab-scoring-info" className="space-y-6">
+              <InfoCompletenessRulesPanel canEdit={canScoringRules} />
             </div>
-          </section>
+          ) : (
+            <div id="panel-scoring-profile" role="tabpanel" aria-labelledby="tab-scoring-profile" className="space-y-6">
+              <ProfileManagerTab db={db} />
+              <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
+                <h3 className={settingsHeading}>
+                  Thử nghiệm chấm điểm (JSON)
+                </h3>
+                <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
+                  Dán JSON mẫu — dùng <strong>profile đầu tiên</strong> trong danh sách. Các khóa nên khớp{' '}
+                  <code className={`rounded bg-slate-200/80 px-1 font-mono ${settingsCopy}`}>targetField</code> trong quy tắc của profile đó.
+                </p>
+                <textarea
+                  value={demoJson}
+                  onChange={(e) => setDemoJson(e.target.value)}
+                  rows={5}
+                  className={`mt-4 w-full rounded-xl border border-slate-200/80 bg-slate-50/95 px-4 py-3 font-mono leading-relaxed text-slate-900 outline-none ring-emerald-400/30 focus:ring-2 ${settingsCopy}`}
+                />
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <button
+                    type="button"
+                    onClick={runDemo}
+                    className={`min-h-11 rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-emerald-700 ${settingsCopy}`}
+                  >
+                    Chạy thử chấm điểm
+                  </button>
+                  {demoResult ? (
+                    <p className={`font-medium text-slate-800 ${settingsCopy}`}>{demoResult}</p>
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          )}
         </div>
       ) : null}
 

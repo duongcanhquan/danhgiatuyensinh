@@ -159,7 +159,7 @@ export function buildMlWinHoverText(ml: MlWinDisplay): string {
   const sourceLine =
     b.ruleSource === 'remote'
       ? 'NGUỒN: Điểm thông tin theo cấu hình trường (Firestore: scoringAux/infoScoreConfig).'
-      : 'NGUỒN: Điểm thông tin mặc định trong app (chưa có cấu hình trường — có thể lưu trong Cài đặt → Chấm điểm).'
+      : 'NGUỒN: Điểm thông tin mặc định trong app (chưa có cấu hình trường — có thể lưu trong Cài đặt → Chấm điểm → tab Điểm thông tin).'
 
   return [
     sourceLine,
