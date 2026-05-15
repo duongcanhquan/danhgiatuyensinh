@@ -169,7 +169,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className="font-semibold text-slate-900">LLM &amp; tác vụ AI</p>
           <p className={`mt-1.5 ${settingsCopy}`}>
             Khối bên dưới có các tab: <strong>Hướng dẫn</strong> (cách setup &amp; dùng), <strong>API</strong>,{' '}
-            <strong>Gatekeeper</strong>, <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Bắt đầu từ tab Hướng dẫn
+            <strong>Lọc trước khi gọi AI</strong>, <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Bắt đầu từ tab Hướng dẫn
             nếu lần đầu cấu hình.
           </p>
         </>

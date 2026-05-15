@@ -29,7 +29,7 @@ type AiSettingsSubTab = 'guide' | 'api' | 'gatekeeper' | 'library' | 'tasks'
 const SUB_TABS: { id: AiSettingsSubTab; label: string; short: string; Icon: typeof BookOpen }[] = [
   { id: 'guide', label: 'Hướng dẫn', short: 'HD', Icon: BookOpen },
   { id: 'api', label: 'API', short: 'API', Icon: Key },
-  { id: 'gatekeeper', label: 'Gatekeeper', short: 'GK', Icon: Shield },
+  { id: 'gatekeeper', label: 'Lọc trước khi gọi AI', short: 'Lọc', Icon: Shield },
   { id: 'library', label: 'Tác vụ đã lưu', short: 'DS', Icon: ListChecks },
   { id: 'tasks', label: 'Tạo tác vụ', short: 'Mới', Icon: Wand2 },
 ]
@@ -99,7 +99,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
     saveAiGatekeeperToStorage(payload)
     setGkMinLen(String(minN))
     setGkDays(String(days))
-    setMsg('Đã lưu quy tắc AI Gatekeeper vào trình duyệt (localStorage).')
+    setMsg('Đã lưu quy tắc «lọc trước khi gọi AI» vào trình duyệt (localStorage).')
   }, [gkMinLen, gkKeywordsCsv, gkDays])
 
   const resetGatekeeperDefaults = useCallback(() => {
@@ -112,7 +112,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
       intentKeywordsCsv: d.intentKeywords.join(', '),
       maxInteractionAgeDays: d.maxInteractionAgeDays,
     })
-    setMsg('Đã khôi phục quy tắc AI Gatekeeper mặc định và lưu vào trình duyệt.')
+    setMsg('Đã khôi phục quy tắc «lọc trước khi gọi AI» mặc định và lưu vào trình duyệt.')
   }, [])
 
   const persistConfig = useCallback(() => {
@@ -304,8 +304,8 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   trình duyệt đó (localStorage), không gửi lên Firestore.
                 </li>
                 <li>
-                  Cùng người (hoặc Siêu QT) mở tab <strong>Gatekeeper</strong> nếu dùng AI Miner hàng loạt: giới hạn
-                  lead WARM nào được đưa vào LLM (ít tốn token) → <strong>Lưu quy tắc</strong>.
+                  Cùng người (hoặc Siêu QT) mở tab <strong>Lọc trước khi gọi AI</strong> nếu dùng phân tích hàng loạt trên
+                  bảng hồ sơ: giới hạn hồ sơ WARM nào được gửi cho AI (ít tốn chi phí) → <strong>Lưu quy tắc</strong>.
                 </li>
                 <li>
                   <strong>Admin / Siêu quản trị</strong> mở tab <strong>Tạo tác vụ</strong>: đặt tên, system prompt,
@@ -417,10 +417,11 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                 <Shield className="h-6 w-6 shrink-0 text-cyan-300" aria-hidden />
                 <div>
                   <VietMyAccentHeading as="h3" tone="onDark" size="sm" className="mb-0">
-                    AI Gatekeeper
+                    Lọc trước khi gọi AI
                   </VietMyAccentHeading>
                   <p className="mt-1 text-xs text-slate-400">
-                    Lọc lead trước khi gọi LLM (AI Miner / lô). Lưu cùng localStorage với API.
+                    Giới hạn hồ sơ nào được gửi cho bước phân tích AI hàng loạt trên màn Hồ sơ. Quy tắc lưu cùng trình
+                    duyệt với khóa API (Siêu quản trị).
                   </p>
                 </div>
               </div>
@@ -468,7 +469,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                     onClick={persistGatekeeper}
                     className="rounded-xl border border-cyan-400/45 bg-gradient-to-r from-cyan-600/35 to-teal-800/40 px-4 py-2 text-sm font-semibold text-cyan-50 transition hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
                   >
-                    Lưu Gatekeeper
+                    Lưu quy tắc lọc
                   </button>
                   <button
                     type="button"

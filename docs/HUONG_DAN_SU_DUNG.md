@@ -53,9 +53,9 @@ Một màn CRM duy nhất cho mọi vai trò được phép:
 - Tìm kiếm URL (`q`), lọc (khu vực, TVV, nhãn, funnel, nguồn, … tùy quyền), phân trang / tải theo server khi cần, bulk, AI miner, panel chi tiết (funnel, ghi chú, chấm điểm…).
 - Đường dẫn cũ `/counselor` tự chuyển về `/leads`.
 
-**AI Shortlist (nút ⚡ trên bộ lọc):** chỉ là **lọc danh sách** theo cờ `isAiShortlisted === true` trên Firestore. Để có cờ đó, chọn các hồ sơ **WARM** (theo profile chấm điểm đang dùng) → thanh bulk → **Chạy AI Phân tích (Shortlist)** → qua **AI Gatekeeper** → LLM ghi `isAiShortlisted`, `aiShortlistReason`, `recommendedAction`. Cần quyền LLM và API key trong Cài đặt.
+**AI Shortlist (nút ⚡ trên màn Hồ sơ):** chỉ **lọc bảng** để xem các hồ sơ đã được AI phân tích và có **tia sét vàng** cạnh tên. Nút này **không** chạy AI. Để có tia sét: lọc nhãn **WARM** → chọn dòng → thanh dưới cùng → **Chạy AI Phân tích (Shortlist)** → xác nhận trong cửa sổ kiểm tra → chờ xong. Cần đã **lưu khóa API** (Cài đặt → LLM → API) trên trình duyệt và tài khoản được **phép dùng AI** (Quản lý nhân sự). Nếu bật lọc mà không có dòng: thường là chưa chạy bước phân tích — không phải lỗi hiển thị.
 
-**Gợi ý:** Mở sẵn panel chi tiết một hồ sơ bằng `?open=<id>` trên URL.
+**Gợi ý:** Mở sẵn chi tiết một hồ sơ bằng tham số `?open=<id>` trên URL (nếu được hỗ trợ).
 
 ### 3.3. Nhập liệu Excel (`/import`)
 

@@ -830,7 +830,7 @@ export function LeadManagement() {
     if (aiShortlistOnly) {
       out.push({
         id: 'ai',
-        label: 'Chỉ hồ sơ AI Shortlist',
+        label: 'Chỉ hồ sơ AI đã đánh dấu',
         onClear: () => {
           setAiShortlistOnly(false)
           setPage(1)
@@ -1200,7 +1200,7 @@ export function LeadManagement() {
     } catch (e) {
       console.error(e)
       setAiMinerError(
-        e instanceof Error ? e.message : 'Không tải được tương tác cho bộ lọc AI Gatekeeper.',
+        e instanceof Error ? e.message : 'Không tải được lịch sử tương tác để kiểm tra trước khi chạy AI.',
       )
     } finally {
       setGatekeeperBusy(false)
@@ -1786,7 +1786,7 @@ export function LeadManagement() {
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              title="Bật/tắt lọc: chỉ các hồ sơ đã được AI đánh dấu shortlist trên server (trường isAiShortlisted)."
+              title="Chỉ hiện các hồ sơ đã được AI phân tích và đánh dấu ưu tiên (có tia sét vàng cạnh tên). Bấm lại để tắt."
               onClick={() => {
                 setAiShortlistOnly((v) => !v)
                 setPage(1)
@@ -1805,7 +1805,7 @@ export function LeadManagement() {
               type="button"
               onClick={() => setAiShortlistGuideOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-amber-400 hover:bg-amber-50/90 hover:text-amber-950"
-              title="Mở hướng dẫn AI Shortlist (cửa sổ giữa màn hình)"
+              title="Mở hướng dẫn từng bước (cửa sổ giữa màn hình)"
             >
               <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
               Hướng dẫn
@@ -1813,9 +1813,9 @@ export function LeadManagement() {
           </div>
           {aiShortlistOnly ? (
             <span className="max-w-xl text-xs leading-snug text-slate-600">
-              Đang lọc: chỉ hồ sơ đã được AI đánh dấu shortlist (
-              <code className="rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-950">isAiShortlisted</code>
-              ).
+              Đang lọc: chỉ các hồ sơ đã được AI đánh dấu ưu tiên (có <strong className="text-amber-900">tia sét vàng</strong>{' '}
+              cạnh tên). Nếu chưa từng chạy bước phân tích AI cho nhóm WARM, danh sách có thể không có dòng nào — hãy
+              mở <strong>Hướng dẫn</strong> bên cạnh.
             </span>
           ) : null}
         </div>
@@ -2060,7 +2060,7 @@ export function LeadManagement() {
                           className="h-4 w-4 shrink-0 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.95)]"
                           strokeWidth={2.5}
                           fill="currentColor"
-                          aria-label="AI Shortlist"
+                          aria-label="Đã được AI đánh dấu ưu tiên"
                         />
                       ) : null}
                       <span className="min-w-0 truncate">{l.fullName || '—'}</span>
@@ -2257,11 +2257,11 @@ export function LeadManagement() {
                       id="ai-shortlist-guide-title"
                       className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
                     >
-                      Hướng dẫn: AI Shortlist
+                      AI Shortlist — làm thế nào?
                     </p>
                     <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                      Hai bước tách biệt — <strong className="text-slate-800">lọc danh sách</strong> và{' '}
-                      <strong className="text-slate-800">chạy AI để đánh dấu</strong> trên Firestore.
+                      Có <strong className="text-slate-800">hai việc khác nhau</strong>: trước hết để AI phân tích và
+                      lưu gợi ý lên hồ sơ, sau đó (tuỳ chọn) dùng nút lọc để chỉ xem nhóm đó.
                     </p>
                   </div>
                   <button
@@ -2274,40 +2274,66 @@ export function LeadManagement() {
                   </button>
                 </div>
 
-                <ol className="mt-5 list-decimal space-y-4 pl-5 text-sm leading-relaxed text-slate-800 marker:font-bold marker:text-amber-700 sm:text-[15px] sm:leading-relaxed">
-                  <li>
-                    <span className="font-semibold text-slate-900">Nút «⚡ AI Shortlist»</span> chỉ bật{' '}
-                    <strong>bộ lọc</strong>: truy vấn Firestore với{' '}
-                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-900">
-                      isAiShortlisted == true
-                    </code>
-                    . Không gọi API, không tốn token. Nếu chưa ai chạy Miner trước đó, danh sách có thể{' '}
-                    <strong>trống</strong> — đúng với thiết kế.
-                  </li>
-                  <li>
-                    <span className="font-semibold text-slate-900">Để có dữ liệu shortlist</span>: trên bảng Hồ sơ,
-                    tick chọn các lead có nhãn <strong>WARM</strong> (theo profile chấm điểm đang bật) → thanh thao tác
-                    hàng loạt phía dưới → <strong>✨ Chạy AI Phân tích (Shortlist)</strong> → cửa sổ{' '}
-                    <strong>AI Gatekeeper</strong> → xác nhận chạy. LLM ghi{' '}
-                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono">isAiShortlisted</code>,{' '}
-                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono">aiShortlistReason</code>,{' '}
-                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono">recommendedAction</code> lên
-                    từng hồ sơ.
-                  </li>
-                  <li>
-                    Cần <strong>quyền LLM</strong> (và được quản lý bật «Cho phép dùng LLM…» nếu không phải Siêu quản
-                    trị) và đã <strong>lưu API</strong> tại <strong>Cài đặt → tab LLM</strong> trên trình duyệt này.
-                  </li>
-                </ol>
-
-                <div className="mt-6 rounded-xl border border-slate-200/90 bg-slate-50/90 p-4 text-sm text-slate-700">
-                  <p className="font-semibold text-slate-900">Gợi ý nhanh</p>
-                  <ul className="mt-2 list-disc space-y-1.5 pl-5 text-slate-700">
-                    <li>Chip «Đang lọc» có mục «Chỉ hồ sơ AI Shortlist» — bấm × để tắt lọc.</li>
+                <section className="mt-5 space-y-3 rounded-xl border border-emerald-200/70 bg-emerald-50/50 p-4 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
+                  <p className="font-bold text-emerald-950">A. Chuẩn bị (làm một lần hoặc khi đổi máy)</p>
+                  <ol className="list-decimal space-y-2 pl-5 marker:font-semibold marker:text-emerald-800">
                     <li>
-                      Chi tiết một hồ sơ: mở panel — khối «AI Shortlist · Chiến lược chốt» hiển thị lý do đã lưu.
+                      Vào <strong>Cài đặt</strong> → tab <strong>LLM</strong> → mục <strong>API</strong>: chọn nhà cung
+                      bấm <strong>Lưu API vào trình duyệt</strong>. Phải lưu trên{' '}
+                      <strong>đúng máy và trình duyệt</strong> bạn đang dùng.
                     </li>
-                  </ul>
+                    <li>
+                      Nếu bạn <strong>không phải Siêu quản trị</strong>: nhờ quản lý vào <strong>Quản lý nhân sự</strong>,
+                      mở hồ sơ của bạn và bật <strong>«Cho phép dùng LLM và tác vụ AI»</strong>. Không bật thì các nút
+                      chạy AI sẽ không hoạt động.
+                    </li>
+                  </ol>
+                </section>
+
+                <section className="mt-4 space-y-3 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
+                  <p className="font-bold text-slate-900">B. Để AI phân tích và “đánh dấu” hồ sơ (có tia sét vàng)</p>
+                  <ol className="list-decimal space-y-2.5 pl-5 marker:font-semibold marker:text-amber-700">
+                    <li>
+                      Ở trang <strong>Hồ sơ</strong>, ở bộ lọc nhãn, chọn <strong>WARM</strong> (nhãn theo bộ chấm điểm
+                      đang bật ở đầu trang).
+                    </li>
+                    <li>
+                      Tick ô vuông bên trái các dòng bạn muốn gửi cho AI (ít nhất một dòng WARM).
+                    </li>
+                    <li>
+                      Kéo xuống <strong>thanh thao tác hàng loạt</strong> dưới cùng → bấm{' '}
+                      <strong>✨ Chạy AI Phân tích (Shortlist)</strong>.
+                    </li>
+                    <li>
+                      Đọc cửa sổ kiểm tra hiện ra (tiêu đề kiểu “tiết kiệm token”) → bấm xác nhận <strong>Chạy AI</strong>{' '}
+                      nếu đồng ý. Chờ đến khi xong; mỗi hồ sơ được xử lý sẽ có <strong>tia sét vàng</strong> cạnh tên trên
+                      bảng.
+                    </li>
+                    <li>
+                      Mở chi tiết một hồ sơ: phần <strong>«Gợi ý từ AI»</strong> ở đầu panel hiển thị lý do và hành động
+                      gợi ý.
+                    </li>
+                  </ol>
+                </section>
+
+                <section className="mt-4 space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
+                  <p className="font-bold text-amber-950">C. Nút «⚡ AI Shortlist» trên bộ lọc</p>
+                  <p>
+                    Nút này chỉ <strong>lọc bảng</strong> để còn các hồ sơ <strong>đã có tia sét vàng</strong> (tức đã
+                    qua bước B). <strong>Không</strong> gọi AI, <strong>không</strong> tốn phí API.
+                  </p>
+                  <p className="font-semibold text-amber-950">
+                    Nếu bật lọc mà không thấy dòng nào: thường là vì chưa ai chạy bước B cho các hồ sơ trong phạm vi bạn
+                    được xem — không phải lỗi màn hình.
+                  </p>
+                </section>
+
+                <div className="mt-5 rounded-xl border border-slate-200/90 bg-slate-50/90 p-4 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">Tắt lọc nhanh</p>
+                  <p className="mt-1">
+                    Dải chip <strong>«Đang lọc»</strong> phía trên có dòng <strong>«Chỉ hồ sơ AI đã đánh dấu»</strong> —
+                    bấm dấu × trên chip đó, hoặc bấm lại nút <strong>⚡ AI Shortlist</strong>.
+                  </p>
                 </div>
 
                 <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
@@ -2327,7 +2353,7 @@ export function LeadManagement() {
                     }}
                     className="rounded-xl border border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 px-4 py-2.5 text-sm font-bold text-amber-950 shadow-sm transition hover:brightness-105"
                   >
-                    Bật lọc AI Shortlist
+                    Chỉ xem hồ sơ đã có tia sét
                   </button>
                 </div>
               </div>
@@ -2361,22 +2387,25 @@ export function LeadManagement() {
                     id="gatekeeper-title"
                     className="text-center text-xs font-bold uppercase tracking-[0.2em] text-slate-600"
                   >
-                    AI Gatekeeper · Tiết kiệm token
+                    Kiểm tra trước khi chạy AI
+                  </p>
+                  <p className="mt-1 text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Giúp giảm chi phí — chỉ gửi hồ sơ đủ điều kiện
                   </p>
                   <p className="mt-4 text-center text-base font-semibold text-slate-900">
                     Bạn đã chọn {gatekeeperModal.totalSelected} hồ sơ
                     {gatekeeperModal.totalSelected !== gatekeeperModal.warmCount ? (
                       <span className="mt-1 block text-sm font-normal text-slate-600">
-                        Trong đó {gatekeeperModal.warmCount} hồ sơ WARM được đưa vào bộ lọc tiền xử lý (chỉ nhóm này gọi
-                        LLM).
+                        Trong đó {gatekeeperModal.warmCount} hồ sơ có nhãn WARM được đưa vào bước kiểm tra (chỉ nhóm này
+                        mới được gửi cho AI phân tích).
                       </span>
                     ) : null}
                   </p>
                   {gatekeeperModal.warmCount > 0 ? (
                     <p className="mt-4 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm leading-relaxed text-emerald-950">
-                      🛡️ Bộ lọc Tiền xử lý đã loại bỏ{' '}
+                      🛡️ Bước kiểm tra tự động đã loại bỏ{' '}
                       <span className="font-bold tabular-nums">{gatekeeperModal.skipped}</span> hồ sơ (ghi chú quá ngắn,
-                      không có tín hiệu ý định theo cấu hình, hoặc không có tương tác trong cửa sổ thời gian).
+                      chưa đủ tín hiệu theo cài đặt, hoặc chưa có tương tác trong khoảng thời gian cho phép).
                     </p>
                   ) : null}
                   {gatekeeperModal.passed.length > 0 ? (
@@ -2390,7 +2419,7 @@ export function LeadManagement() {
                         {gatekeeperModal.warmCount > 0 ? (
                           <span className="mt-2 block text-sm font-normal text-slate-600">
                             (Ước tính tiết kiệm ~{Math.round((gatekeeperModal.skipped / gatekeeperModal.warmCount) * 100)}
-                            % chi phí API so với gửi toàn bộ WARM đã chọn.)
+                            % chi phí so với việc gửi toàn bộ WARM đã chọn.)
                           </span>
                         ) : null}
                       </p>
@@ -2413,8 +2442,9 @@ export function LeadManagement() {
                     </>
                   ) : (
                     <p className="mt-4 text-center text-sm text-slate-700">
-                      Không có hồ sơ WARM nào vượt qua bộ lọc. Điều chỉnh quy tắc trong Cài đặt (tab LLM → AI Gatekeeper)
-                      hoặc cập nhật ghi chú tương tác rồi thử lại.
+                      Không có hồ sơ WARM nào đủ điều kiện. Bạn có thể nới quy tắc trong{' '}
+                      <strong>Cài đặt → tab LLM → «Lọc trước khi gọi AI»</strong>, hoặc bổ sung ghi chú / tương tác rồi
+                      thử lại.
                     </p>
                   )}
                   {gatekeeperModal.passed.length === 0 ? (
@@ -2449,7 +2479,7 @@ export function LeadManagement() {
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(167,139,250,0.35),transparent_50%),radial-gradient(ellipse_at_70%_80%,rgba(45,212,191,0.25),transparent_45%),radial-gradient(ellipse_at_50%_50%,rgba(251,191,36,0.2),transparent_55%)]" />
               <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/40 bg-gradient-to-br from-white/30 via-violet-100/25 to-teal-100/20 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-2xl">
                 <p className="text-center text-xs font-bold uppercase tracking-wider text-slate-600">
-                  AI Shortlist · theo lô
+                  Đang phân tích AI theo lô
                 </p>
                 <p className="mt-2 text-center text-base font-semibold text-slate-900">
                   {aiMinerProgress.done}/{aiMinerProgress.total} hồ sơ
@@ -3538,7 +3568,7 @@ function LeadDetailPanel({
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-900">
-                  AI Shortlist · Chiến lược chốt
+                  Gợi ý từ AI (ưu tiên chốt sale)
                 </p>
                 {lead.aiProcessedAt?.toDate ? (
                   <p className="mt-0.5 text-xs text-amber-800/80">
@@ -3754,7 +3784,8 @@ function LeadDetailPanel({
                               <p>
                                 Khối <strong>Tín hiệu &amp; đánh giá tiềm năng</strong> phục vụ chấm điểm profile, nhãn{' '}
                                 <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
-                                <strong>AI</strong> (Gatekeeper, phân tích LLM đọc tổng hợp ghi chú tương tác).
+                                <strong>AI</strong> (bước kiểm tra trước khi gọi AI, rồi phân tích và tóm tắt ghi chú tương
+                                tác).
                               </p>
                               <p className="mt-2">
                                 <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
