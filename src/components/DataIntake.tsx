@@ -376,6 +376,9 @@ export function DataIntake() {
           gradeClass: pr.row.gradeClass,
           address: pr.row.address,
           description: pr.row.description,
+          ...(pr.row.aspirations?.trim() ? { aspirations: pr.row.aspirations.trim() } : {}),
+          ...(pr.row.hobbies?.trim() ? { hobbies: pr.row.hobbies.trim() } : {}),
+          ...(pr.row.fieldTripNotes?.trim() ? { fieldTripNotes: pr.row.fieldTripNotes.trim() } : {}),
         } as Record<string, unknown>
         const { calculatedScore, priorityTag } = evaluateLead(record, importProfile, masterBuckets, schoolTvvSignalDefs)
 

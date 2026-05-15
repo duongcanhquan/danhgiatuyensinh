@@ -255,8 +255,17 @@ export interface Lead {
   assignedTo: UserId | null
   /** Tình trạng — Kanban tư vấn (Firestore `status`) */
   status: LeadCounselorStatus
-  /** Ghi chú thêm / mô tả tiến độ (có thể nối thêm theo thời gian) */
+  /** Ghi chú / mô tả chung (import, tổng hợp) — quy tắc dùng targetField `description` / CONTAINS */
   description: string
+  /**
+   * Nguyện vọng / mong muốn học tập (ưu tiên tách khỏi mô tả chung).
+   * Import Excel: cột «Nguyện vọng» / tương đương; chấm điểm / AI: `aspirations`.
+   */
+  aspirations?: string
+  /** Sở thích — `hobbies` trong tác vụ AI / quy tắc nếu cần */
+  hobbies?: string
+  /** Ghi chú khảo sát / đi thực tế — `fieldTripNotes` */
+  fieldTripNotes?: string
   /** Trường học */
   highSchool: string
   /** Lớp */

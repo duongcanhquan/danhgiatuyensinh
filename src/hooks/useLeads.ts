@@ -130,10 +130,13 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
     const phone = String(data.phone ?? '')
     const parentPhone = String(data.parentPhone ?? '')
     const source = String(data.source ?? data.leadSource ?? '')
-    let description = String(data.description ?? '')
-    if (!description.trim()) {
-      const bits = [data.aspirations, data.hobbies, data.fieldTripNotes].filter(Boolean).map(String)
-      description = bits.join('\n---\n')
+    let description = String(data.description ?? '').trim()
+    const aspirationsRaw = String(data.aspirations ?? '').trim()
+    const hobbiesRaw = String(data.hobbies ?? '').trim()
+    const fieldTripNotesRaw = String(data.fieldTripNotes ?? '').trim()
+    if (!description) {
+      const bits = [aspirationsRaw, hobbiesRaw, fieldTripNotesRaw].filter(Boolean)
+      description = bits.join('\n---\n').trim()
     }
     const gradeClass = String(data.gradeClass ?? '')
     const address = String(data.address ?? '')
@@ -193,6 +196,9 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       assignedCounselorId: legacyAssigned ?? undefined,
       status,
       description,
+      ...(aspirationsRaw ? { aspirations: aspirationsRaw } : {}),
+      ...(hobbiesRaw ? { hobbies: hobbiesRaw } : {}),
+      ...(fieldTripNotesRaw ? { fieldTripNotes: fieldTripNotesRaw } : {}),
       highSchool,
       gradeClass,
       province,

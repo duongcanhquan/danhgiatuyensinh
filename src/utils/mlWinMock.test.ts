@@ -94,6 +94,6 @@ describe('computeMockMlWinProbability', () => {
     const ml = resolveMlWinDisplay(stubLead({ fullName: 'A', phone: '0901234567' }))
     const tip = buildMlWinHoverText(ml)
     expect(tip).toContain('Điểm thô')
-    expect(tip).toContain('SĐT sinh viên')
+    expect(tip).toContain('SĐT thí sinh')
   })
 })

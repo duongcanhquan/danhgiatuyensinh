@@ -24,6 +24,12 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'mo ta': 'description',
   'ghi chu them': 'description',
   'ghi chu': 'description',
+  'nguyen vong': 'aspirations',
+  'mong muon hoc tap': 'aspirations',
+  'nhu cau': 'aspirations',
+  'nguyen vong / mong muon': 'aspirations',
+  'so thich': 'hobbies',
+  'ghi chu di truong': 'fieldTripNotes',
   'truong hoc': 'highSchool',
   lop: 'gradeClass',
   'tinh thanh pho': 'province',
@@ -48,6 +54,9 @@ export type ExcelLeadRow = {
   assignedToRaw: string
   statusRaw: string
   description: string
+  aspirations?: string
+  hobbies?: string
+  fieldTripNotes?: string
   highSchool: string
   gradeClass: string
   province: string
@@ -185,6 +194,9 @@ export function buildLeadFirestorePayload(
     status,
     pipelineStatus,
     description: row.description ?? '',
+    ...(row.aspirations?.trim() ? { aspirations: row.aspirations.trim() } : {}),
+    ...(row.hobbies?.trim() ? { hobbies: row.hobbies.trim() } : {}),
+    ...(row.fieldTripNotes?.trim() ? { fieldTripNotes: row.fieldTripNotes.trim() } : {}),
     highSchool: row.highSchool ?? '',
     gradeClass: row.gradeClass ?? '',
     province: row.province ?? '',
@@ -221,6 +233,7 @@ export function downloadStandardIntakeTemplate(): void {
     'Học lực',
     'Loại trường',
     'Dự định',
+    'Nguyện vọng / mong muốn',
     'Người phụ trách',
     'Tình trạng',
     'Ghi Chú thêm',
@@ -246,6 +259,9 @@ export function downloadStandardIntakeTemplate(): void {
       '2. «Người phụ trách» = tư vấn viên: ghi tên hiển thị hoặc email đăng nhập (khớp TVV hoặc Admin trong hệ thống). Khớp → lead gán thẳng cho người đó; không khớp → hệ thống gán tạm Admin để sau này điều chuyển.',
     ],
     ['   Khuyến nghị: ưu tiên email nếu hai TVV trùng tên sau khi bỏ dấu.'],
+    [
+      '2b. «Nguyện vọng / mong muốn» lưu riêng trên lead (aspirations), tách khỏi «Ghi Chú thêm» (description) — phù hợp AI / chấm điểm.',
+    ],
     ['3. «Tình trạng»: Mới, Quan tâm / đang tư vấn, Đã cọc, Nhập học, … (hệ thống chuẩn hoá về Kanban).'],
     ['4. Điểm chấm & nhãn HOT/WARM/COLD/LOSS do engine tính sau upload.'],
     [

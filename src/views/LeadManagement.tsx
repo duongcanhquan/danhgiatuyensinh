@@ -68,6 +68,8 @@ import { MlWinGauge } from '../components/MlWinGauge'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
+import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
+import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft } from '../utils/leadProfileEdit'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
@@ -3046,6 +3048,13 @@ function LeadDetailPanel({
   const { playbooks } = useConsultingPlaybooks()
   const matched = useMemo(() => playbooksMatchingLead(lead, playbooks).slice(0, 3), [lead, playbooks])
 
+  const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
+  const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
+
+  useEffect(() => {
+    setCoreDraft(leadToCoreDraft(lead))
+  }, [lead.id])
+
   const [note, setNote] = useState('')
   const [evalTag, setEvalTag] = useState<string>(EVALUATION_TAGS[0])
   const [crmDirty, setCrmDirty] = useState<LeadCounselorStatus | null>(null)
@@ -3142,10 +3151,11 @@ function LeadDetailPanel({
 
   const hasUnsavedProgress = useMemo(
     () =>
+      coreDirty ||
       (crmEditOnLeft && crmForForm !== lead.status) ||
       statusForForm !== lead.pipelineStatus ||
       note.trim().length > 0,
-    [crmEditOnLeft, crmForForm, lead.status, statusForForm, lead.pipelineStatus, note],
+    [coreDirty, crmEditOnLeft, crmForForm, lead.status, statusForForm, lead.pipelineStatus, note],
   )
 
   useEffect(() => {
@@ -3235,9 +3245,15 @@ function LeadDetailPanel({
     const noteTrim = note.trim()
     const crmChanged = crmEditOnLeft && crmForForm !== lead.status
     const pipeChanged = statusForForm !== lead.pipelineStatus
+    const corePatch = buildLeadCoreFirestorePatch(lead, coreDraft)
+    const coreChanged = Object.keys(corePatch).length > 0
 
-    if (!crmChanged && !pipeChanged && !noteTrim) {
+    if (!crmChanged && !pipeChanged && !noteTrim && !coreChanged) {
       setMsg('Không có thay đổi.')
+      return
+    }
+    if (coreChanged && !canMutateLead) {
+      setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này (cần Admin hoặc TVV được gán + quyền ghi hồ sơ).')
       return
     }
     if (crmChanged && !canMutateLead) {
@@ -3268,9 +3284,11 @@ function LeadDetailPanel({
       if (pipeChanged) dataPatch.pipelineStatus = statusForForm
       else if (crmChanged) dataPatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
 
+      const coreAsPartial = corePatch as unknown as Partial<Lead>
+      const mergedForScore: Partial<Lead> = { ...dataPatch, ...coreAsPartial }
       const scoreFields = persistedLeadScoringFields(
         lead,
-        dataPatch,
+        mergedForScore,
         activeScoringProfile,
         scoringMasterBuckets,
         schoolTvvSignalDefs,
@@ -3279,7 +3297,7 @@ function LeadDetailPanel({
       const touch = leadTouchPatch()
       const performer = profile.displayName?.trim() || profile.email || profile.id
 
-      const leadFirestorePatch: Record<string, unknown> = { ...touch, ...scoreFields }
+      const leadFirestorePatch: Record<string, unknown> = { ...touch, ...scoreFields, ...corePatch }
       if (crmChanged || pipeChanged) {
         if (crmChanged) leadFirestorePatch.status = nextCrm
         if (pipeChanged) leadFirestorePatch.pipelineStatus = statusForForm
@@ -3287,6 +3305,18 @@ function LeadDetailPanel({
       }
 
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadFirestorePatch)
+
+      if (coreChanged) {
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'SYSTEM_UPDATE',
+          description: `Cập nhật thông tin hồ sơ (${Object.keys(corePatch).length} trường): ${Object.keys(corePatch)
+            .slice(0, 12)
+            .join(', ')}${Object.keys(corePatch).length > 12 ? '…' : ''}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
 
       if (crmChanged) {
         await commitAuditLog(db, {
@@ -3334,9 +3364,19 @@ function LeadDetailPanel({
         })
       }
 
+      const nextLead: Lead = {
+        ...lead,
+        ...dataPatch,
+        ...coreAsPartial,
+        ...scoreFields,
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      }
+      setCoreDraft(leadToCoreDraft(nextLead))
+
       onUpdated({
-        ...(crmChanged ? { status: nextCrm } : {}),
-        ...(nextPipeFinal !== lead.pipelineStatus ? { pipelineStatus: nextPipeFinal } : {}),
+        ...dataPatch,
+        ...coreAsPartial,
         ...scoreFields,
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
@@ -3604,33 +3644,30 @@ function LeadDetailPanel({
               {/* Trái: thông tin hồ sơ → (sticky) tiến độ & ghi chú + thẻ tín hiệu đánh giá tách biệt */}
               <div className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
                 <aside className="space-y-2 text-sm leading-snug text-slate-800">
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 sm:grid-cols-3 sm:gap-x-2.5">
-                    <Info label="Mã KH" value={lead.customerId} />
-                    <Info label="Nguồn" value={lead.source} />
-                    <Info label="Hệ đào tạo" value={lead.educationLevel} />
-                    <Info label="Tỉnh / TP" value={lead.province} />
-                    <Info label="Địa chỉ" value={lead.address} />
-                    <Info label="Trường học" value={lead.highSchool} />
-                    <Info label="Lớp" value={lead.gradeClass} />
-                    <Info label="Điện thoại SV" value={lead.phone} />
-                    <Info label="ĐT người liên hệ" value={lead.parentPhone} />
-                    <div className="col-span-2 sm:col-span-3">
-                      <p className="text-xs font-medium text-slate-500">Ghi chú / mô tả (hồ sơ)</p>
-                      <p className="mt-0.5 max-h-20 overflow-y-auto whitespace-pre-wrap break-words text-xs text-slate-800">
-                        {leadDescriptionForDisplay(lead.description).trim() || '—'}
-                      </p>
-                    </div>
-                    <Info
-                      label="Điểm (profile)"
-                      value={String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
-                    />
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">Nhãn</p>
-                      <div className="mt-0.5">
+                  <section className="rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
+                    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-2">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
+                        <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                          Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới (điểm chấm tự tính lại nếu có profile).
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                        <span className="tabular-nums">Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}</span>
                         <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
                       </div>
                     </div>
-                  </div>
+                    <div className="mt-2 max-h-[min(52vh,28rem)] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin]">
+                      <LeadProfileCoreForm
+                        draft={coreDraft}
+                        onChange={setCoreDraft}
+                        disabled={!showCounselorProgressForm}
+                      />
+                    </div>
+                    {!showCounselorProgressForm ? (
+                      <p className="mt-2 text-[10px] text-amber-800">Chỉ xem — không có quyền sửa thông tin hồ sơ (Admin hoặc TVV được gán).</p>
+                    ) : null}
+                  </section>
 
                   {db ? (
                     <div className="space-y-2">
@@ -3641,7 +3678,7 @@ function LeadDetailPanel({
                               role="status"
                               className="rounded-lg border border-amber-300/90 bg-amber-50/95 px-2.5 py-2 text-xs font-semibold leading-snug text-amber-950 shadow-sm"
                             >
-                              Có thay đổi chưa lưu — bấm «Lưu cập nhật». Đóng panel sẽ hỏi xác nhận; đóng tab trình
+                              Có thay đổi chưa lưu — bấm «Lưu cập nhật» (thông tin hồ sơ, tình trạng TVV, funnel và/hoặc ghi chú tương tác). Đóng panel sẽ hỏi xác nhận; đóng tab trình
                               duyệt cũng có thể được hỏi trước khi rời trang.
                             </div>
                           ) : null}
@@ -4123,15 +4160,6 @@ function LeadDetailPanel({
           </div>
         </>
       ) : null}
-    </div>
-  )
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-0.5 break-words text-sm leading-snug text-slate-800">{value || '—'}</p>
     </div>
   )
 }
