@@ -13,12 +13,26 @@ function defaultOpenAiProxyPath(): string {
   return `${prefix}/openai-proxy/v1/chat/completions`
 }
 
+/** Trình duyệt không được POST thẳng tới api.openai.com (CORS). Nhiều .env/gh-actions nhầm đặt proxy = URL OpenAI gốc. */
+function isDirectOpenAiApiUrl(url: string): boolean {
+  const t = url.trim()
+  if (!t) return false
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+    const u = new URL(t, base)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+    return u.hostname === 'api.openai.com'
+  } catch {
+    return false
+  }
+}
+
 /** POST body tương thích OpenAI Chat Completions — ưu tiên proxy (cùng domain) để tránh CORS. */
 export function getOpenAiChatCompletionsUrl(): string {
   const proxy = String(import.meta.env.VITE_OPENAI_PROXY_URL ?? '').trim()
-  if (proxy) return proxy
+  if (proxy && !isDirectOpenAiApiUrl(proxy)) return proxy
   const legacy = String(import.meta.env.VITE_AI_API_URL ?? '').trim()
-  if (legacy) return legacy
+  if (legacy && !isDirectOpenAiApiUrl(legacy)) return legacy
   return defaultOpenAiProxyPath()
 }
 
@@ -33,7 +47,7 @@ export function explainOpenAiBrowserFetchError(err: unknown, endpoint: string): 
   const hittingOpenAiDirect = endpoint.includes('api.openai.com')
   if (looksLikeCorsOrNetwork && hittingOpenAiDirect) {
     return new Error(
-      'Không gọi được OpenAI từ trình duyệt (thường là CORS: api.openai.com không cho trang web gọi trực tiếp). Cách xử lý: đặt trong file .env khi build biến VITE_OPENAI_PROXY_URL (hoặc VITE_AI_API_URL) trỏ tới endpoint proxy tương thích OpenAI trên cùng domain với app; hoặc chạy «npm run dev» — dev server đã kèm proxy /openai-proxy. Hoặc chuyển sang Gemini.',
+      'Không gọi được OpenAI từ trình duyệt (thường là CORS: api.openai.com không cho trang web gọi trực tiếp). Kiểm tra: VITE_OPENAI_PROXY_URL / VITE_AI_API_URL không được trỏ tới https://api.openai.com — hãy xóa hoặc đổi sang máy chủ proxy thật (Cloud Function, v.v.). Nếu không cần URL riêng, xóa biến để app dùng đường /openai-proxy cùng domain; «npm run dev» / «npm run preview» có sẵn proxy. Hoặc chuyển sang Gemini trong Cài đặt → LLM.',
       { cause: err },
     )
   }
