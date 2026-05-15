@@ -130,12 +130,11 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className="mt-1.5">
             <strong>Playbook</strong>: kịch bản chiến lược theo <em>điều kiện lead</em> (vùng, ngành, nhãn…) — TVV mở hồ
             sơ sẽ thấy gợi ý USP / xử lý từ chối. <strong>Script Hub</strong>: các đoạn thoại theo từng bước (chào → USP → …)
-            trong panel «Trợ lý tư vấn động». Toàn bộ là <strong>nội dung soạn sẵn</strong>, <strong>không tốn token</strong>{' '}
-            LLM.
+            trong panel «Trợ lý tư vấn động».             Toàn bộ là <strong>nội dung soạn sẵn</strong> trong hệ thống — không tính phí gọi AI.
           </p>
           <p className="mt-2 text-slate-700">
-            <strong>Ứng dụng:</strong> hỗ trợ TVV gọi điện / chat đúng tình huống. <strong>Không thay</strong> kho tri thức RAG
-            (dành cho LLM đọc học phí — quy chế) và <strong>không thay</strong> tab LLM hay Phòng thử AI.
+            <strong>Ứng dụng:</strong> hỗ trợ TVV gọi điện / chat đúng tình huống. <strong>Không thay</strong> Kho tri thức
+            (tài liệu cho AI đọc khi phân tích hồ sơ) và <strong>không thay</strong> tab LLM hay Phòng thử AI.
           </p>
           <p className={`mt-2 border-t border-slate-200 pt-2 ${settingsCopyMuted}`}>
             <strong>Nạp từ app:</strong> trong khối Playbook — tab <strong>Thiết lập</strong> (tải file mẫu, tải JSON lên, nạp
@@ -146,16 +145,16 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'knowledge':
       return (
         <>
-          <p className="font-semibold text-slate-900">Kho tri thức (RAG) là gì?</p>
+          <p className="font-semibold text-slate-900">Kho tri thức là gì?</p>
           <p className="mt-1.5">
-            Nơi lưu <strong>văn bản đã duyệt</strong> (học phí, lệ phí, quy chế, thông tin ngành…). Khi ai đó chạy{' '}
-            <strong>tác vụ AI trên một lead</strong> (màn chi tiết hồ sơ → nút phân tích LLM), hệ thống{' '}
-            <strong>ghép nội dung kho này vào prompt</strong> để model bám số liệu / quy định, hạn chế bịa.
+            Nơi lưu <strong>văn bản đã duyệt</strong> (học phí, quy chế, thông tin ngành…). Khi chạy{' '}
+            <strong>Phân tích AI</strong> trong chi tiết hồ sơ, hệ thống có thể <strong>đính kèm đoạn văn từ kho này</strong>{' '}
+            để câu trả lời bám đúng quy định, hạn chế bịa.
           </p>
           <p className="mt-2 text-slate-700">
-            <strong>Ứng dụng:</strong> chỉ đi cùng luồng <strong>LLM trên lead</strong>. <strong>Không</strong> tự hiện trong
-            Playbook / Script Hub; <strong>không</strong> nạp vào ô «Phòng thử AI». Khác <strong>Chấm điểm</strong> (công thức
-            điểm, không phải văn bản cho LLM).
+            <strong>Ứng dụng:</strong> chỉ đi kèm luồng <strong>phân tích AI trên hồ sơ</strong>. Không tự hiện trong Playbook
+            hay Script Hub; không dùng trong ô chat «Phòng thử AI». Khác mục <strong>Chấm điểm</strong> (chỉ tính điểm theo
+            công thức).
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
             Trong khối dưới: tab <strong>Thiết lập</strong> (nạp mẫu, thêm/sửa) và tab <strong>Dữ liệu</strong> (danh sách, tìm
@@ -179,13 +178,13 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
         <>
           <p className="font-semibold text-slate-900">Phòng thử AI là gì?</p>
           <p className="mt-1.5">
-            Ô chat <strong>thử API</strong>: nhập câu hỏi, nhận câu trả lời để kiểm tra khóa / mạng. <strong>Không ghi</strong> lên
-            lead, <strong>không</strong> dùng Playbook / Script Hub, <strong>không</strong> nạp kho tri thức RAG (khác với khi chạy
-            tác vụ LLM trên hồ sơ).
+            Ô chat để <strong>thử khóa AI</strong>: gõ câu hỏi, xem câu trả lời. <strong>Không ghi</strong> lên hồ sơ,{' '}
+            <strong>không</strong> dùng Playbook / Script Hub, <strong>không</strong> lấy tài liệu từ Kho tri thức (khác với
+            khi phân tích trong chi tiết hồ sơ).
           </p>
           <p className="mt-2 text-slate-700">
-            <strong>Ứng dụng:</strong> thử nghiệm nhanh trước khi cấu hình tác vụ ở tab <strong>LLM</strong>. Đừng nhầm với phân
-            tích AI trong chi tiết lead.
+            <strong>Ứng dụng:</strong> kiểm tra nhanh sau khi lưu API ở tab <strong>LLM</strong>. Đừng nhầm với nút phân
+            tích AI trong từng hồ sơ.
           </p>
         </>
       )
@@ -200,8 +199,8 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
             Console → Authentication hoặc Cloud Function.
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
-            <strong>LLM:</strong> chỉ <strong>Siêu quản trị</strong> lưu khóa API (Cài đặt → LLM). Bật «Cho phép dùng LLM và tác
-            vụ AI» trong form sửa user để TVV / Admin được chạy phân tích trên CRM.
+            <strong>LLM:</strong> chỉ <strong>Siêu quản trị</strong> lưu khóa API (Cài đặt → LLM). Bật «Cho phép dùng AI
+            trên hồ sơ» trong form sửa nhân viên để TVV / quản trị được chạy phân tích trên CRM.
           </p>
         </>
       )

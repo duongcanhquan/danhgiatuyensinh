@@ -362,7 +362,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
               </label>
               {isSuperAdminRole(editing.role) ? (
                 <p className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-950">
-                  <strong>Siêu quản trị</strong> luôn được chạy LLM và tác vụ AI trên CRM (không cần bật cờ dưới đây).
+                  <strong>Siêu quản trị</strong> luôn được dùng AI trên CRM (không cần bật ô dưới đây).
                 </p>
               ) : (
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-violet-200/80 bg-violet-50/50 px-3 py-2.5 text-sm text-slate-800">
@@ -373,10 +373,11 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                     onChange={(e) => setEditAllowLlm(e.target.checked)}
                   />
                   <span>
-                    <span className="font-semibold text-violet-950">Cho phép dùng LLM và tác vụ AI</span>
+                    <span className="font-semibold text-violet-950">Cho phép dùng AI trên hồ sơ</span>
                     <span className="mt-0.5 block text-xs font-normal leading-snug text-slate-600">
-                      Khi bật, người này được chạy phân tích LLM trên hồ sơ, AI Lead Miner và Phòng thử AI (vẫn cần khóa
-                      API đã lưu trên trình duyệt do Siêu quản trị cấu hình).
+                      Khi bật, người này được mở <strong>Phân tích AI</strong> trong chi tiết hồ sơ, chạy{' '}
+                      <strong>phân tích hàng loạt</strong> trên màn Hồ sơ và vào <strong>Phòng thử AI</strong> trong
+                      Cài đặt. Vẫn cần trình duyệt đã <strong>lưu khóa API</strong> (thường do Siêu quản trị lưu trước).
                     </span>
                   </span>
                 </label>

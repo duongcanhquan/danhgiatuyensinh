@@ -343,7 +343,7 @@ function CounselorLeadListRow({
           <Link
             to={`/leads?open=${encodeURIComponent(lead.id)}`}
             className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
-            title="Mở chi tiết hồ sơ trên trang Hồ sơ (đồng bộ pipeline, mô tả, tín hiệu)"
+            title="Mở đầy đủ thông tin trên màn Hồ sơ"
           >
             <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             <span className="hidden xl:inline">Hồ sơ</span>
@@ -1055,7 +1055,7 @@ export function CounselorDashboard() {
                       patchListUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
                     }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                    title="Đồng bộ tham số pipe với tab Hồ sơ đầy đủ."
+                    title="Cùng bộ lọc với màn Hồ sơ khi chia sẻ link."
                   >
                     <option value="ALL">Tất cả giai đoạn funnel</option>
                     {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
@@ -1075,7 +1075,7 @@ export function CounselorDashboard() {
                       patchListUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
                     }}
                     className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                    title="Đồng bộ tham số source với tab Hồ sơ đầy đủ."
+                    title="Cùng bộ lọc với màn Hồ sơ khi chia sẻ link."
                   >
                     <option value="ALL">Mọi nguồn</option>
                     {sourceUrlFilter !== 'ALL' && !sourceOptions.includes(sourceUrlFilter) ? (

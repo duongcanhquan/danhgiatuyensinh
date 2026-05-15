@@ -15,9 +15,8 @@ export function AiLabView({ embedded = false }: { embedded?: boolean }) {
   if (!can('ai:use') || !canRunLlmAnalysis) {
     return (
       <div className="rounded-2xl border border-amber-300/60 bg-amber-50/90 p-6 text-sm text-amber-900">
-        Bạn không có quyền dùng Phòng thử AI. Cần quyền <code className="rounded bg-white/80 px-1">ai:use</code> và
-        được Quản lý bật «Cho phép dùng LLM và tác vụ AI» trong Cài đặt → Quản lý nhân sự (Siêu quản trị không cần
-        cờ này).
+        Bạn chưa được mở Phòng thử AI. Nhờ quản lý vào <strong>Cài đặt → Quản lý nhân sự</strong>, mở hồ sơ của bạn và
+        bật <strong>«Cho phép dùng AI trên hồ sơ»</strong>. Siêu quản trị không cần bật dòng này.
       </div>
     )
   }
@@ -46,9 +45,8 @@ export function AiLabView({ embedded = false }: { embedded?: boolean }) {
     <div className="w-full max-w-none space-y-6">
       {embedded ? (
         <p className="rounded-xl border border-violet-200/60 bg-violet-50/90 px-3 py-2 text-xs leading-relaxed text-violet-950">
-          Phòng thử này <strong>ưu tiên</strong> API đã lưu ở tab <strong>LLM</strong> (localStorage). Nếu chưa lưu, app
-          mới thử <code className="rounded bg-white/80 px-1 font-mono text-xs">VITE_AI_API_URL</code> trong file{' '}
-          <code className="font-mono text-xs">.env</code>.
+          Phòng thử này dùng <strong>khóa API đã lưu</strong> ở tab <strong>LLM → API</strong> trên cùng trình duyệt. Nếu
+          chưa lưu, nhờ Siêu quản trị cấu hình hoặc hỏi bộ phận kỹ thuật về cấu hình máy chủ riêng (nếu có).
         </p>
       ) : null}
       {embedded ? null : (
@@ -58,12 +56,13 @@ export function AiLabView({ embedded = false }: { embedded?: boolean }) {
           </VietMyAccentHeading>
           <div className="mt-1 max-w-2xl space-y-1 text-sm leading-relaxed text-slate-700 md:text-base">
             <p>
-              <strong className="text-slate-900">Cách dùng:</strong> nhập nội dung dưới đây rồi bấm{' '}
-              <strong className="text-slate-900">Gửi tới AI</strong> để nhận câu trả lời (API do kỹ thuật cấu hình cho app).
+              <strong className="text-slate-900">Cách dùng:</strong> nhập nội dung, bấm <strong>Gửi tới AI</strong>, đọc
+              câu trả lời. Dùng để thử câu hỏi mẫu, không lưu vào hồ sơ.
             </p>
             <p>
-              <strong className="text-slate-900">Trong CRM:</strong> để bật AI khi mở hồ sơ, vào{' '}
-              <strong className="text-slate-900">Cài đặt → tab LLM</strong>, chọn Gemini hoặc ChatGPT rồi lưu trên trình duyệt.
+              <strong className="text-slate-900">Để dùng AI trong CRM:</strong> Siêu quản trị vào{' '}
+              <strong>Cài đặt → LLM → API</strong>, chọn ChatGPT hoặc Gemini, lưu khóa trên trình duyệt; quản lý bật quyền
+              AI cho nhân viên cần dùng.
             </p>
           </div>
         </header>

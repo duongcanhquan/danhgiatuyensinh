@@ -264,8 +264,8 @@ export function AISettingsTab({ db }: { db: Firestore }) {
         <div className="shrink-0 space-y-2 border-b border-white/5 px-4 py-2 md:px-5">
           {!anyAccess ? (
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              Bạn không có quyền chỉnh. Cần <code className="text-amber-50">config:ai_engine</code> hoặc{' '}
-              <code className="text-amber-50">config:llm_api</code> (Siêu quản trị).
+              Bạn không có quyền chỉnh khu vực này. Cần tài khoản được giao quyền <strong>cấu hình AI</strong> hoặc{' '}
+              <strong>Siêu quản trị</strong>.
             </p>
           ) : null}
           {error ? (
@@ -278,12 +278,13 @@ export function AISettingsTab({ db }: { db: Firestore }) {
           ) : null}
           {!canLlmApi && (subTab === 'api' || subTab === 'gatekeeper') ? (
             <p className="rounded-lg border border-cyan-500/25 bg-cyan-950/40 px-3 py-2 text-xs text-cyan-100">
-              Tab này chỉnh được khi đăng nhập <strong>Siêu quản trị</strong> (<code className="text-cyan-50">config:llm_api</code>).
+              Tab <strong>API</strong> và <strong>Lọc trước khi gọi AI</strong> chỉ chỉnh được khi đăng nhập{' '}
+              <strong>Siêu quản trị</strong>.
             </p>
           ) : null}
           {!canTasks && (subTab === 'library' || subTab === 'tasks') ? (
             <p className="rounded-lg border border-violet-500/25 bg-violet-950/40 px-3 py-2 text-xs text-violet-100">
-              Cần quyền <code className="text-violet-50">config:ai_engine</code> để xem / tạo tác vụ.
+              Tab <strong>Tác vụ</strong> chỉ dành cho tài khoản được giao quyền <strong>cấu hình AI / tác vụ</strong>.
             </p>
           ) : null}
         </div>
@@ -296,45 +297,49 @@ export function AISettingsTab({ db }: { db: Firestore }) {
         >
           {subTab === 'guide' ? (
             <div className="space-y-4 text-sm leading-relaxed text-slate-300">
-              <p className="text-xs font-semibold uppercase tracking-wide text-rose-200/90">Luồng đề xuất (làm lần lượt)</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-200/90">Các bước nên làm (theo thứ tự)</p>
               <ol className="list-decimal space-y-3 pl-4 marker:text-amber-400/90">
                 <li>
-                  <strong className="text-slate-100">Siêu quản trị</strong> mở tab <strong>API</strong>: chọn Gemini hoặc
-                  OpenAI, dán khóa API, chọn model → bấm <strong>Lưu API vào trình duyệt</strong>. Khóa chỉ nằm trên máy
-                  trình duyệt đó (localStorage), không gửi lên Firestore.
+                  <strong className="text-slate-100">Siêu quản trị</strong> mở tab <strong>API</strong>: chọn ChatGPT hoặc
+                  Gemini, dán khóa, chọn model → bấm <strong>Lưu API vào trình duyệt</strong>. Khóa chỉ lưu trên{' '}
+                  <strong>máy và trình duyệt hiện tại</strong>, không tự sang máy khác.
                 </li>
                 <li>
-                  Cùng người (hoặc Siêu QT) mở tab <strong>Lọc trước khi gọi AI</strong> nếu dùng phân tích hàng loạt trên
-                  bảng hồ sơ: giới hạn hồ sơ WARM nào được gửi cho AI (ít tốn chi phí) → <strong>Lưu quy tắc</strong>.
+                  Nếu dùng <strong>phân tích AI hàng loạt</strong> trên màn Hồ sơ: mở tab{' '}
+                  <strong>Lọc trước khi gọi AI</strong>, chỉnh ngưỡng (độ dài ghi chú, từ khóa, số ngày…) →{' '}
+                  <strong>Lưu quy tắc lọc</strong> — giúp bỏ hồ sơ chưa đủ tín hiệu, đỡ tốn chi phí gọi AI.
                 </li>
                 <li>
-                  <strong>Admin / Siêu quản trị</strong> mở tab <strong>Tạo tác vụ</strong>: đặt tên, system prompt,
-                  chọn trường lead gửi kèm, định nghĩa schema JSON đầu ra → <strong>Lưu tác vụ lên Firestore</strong>.
-                  Kiểm tra danh sách ở tab <strong>Tác vụ đã lưu</strong>.
+                  <strong>Admin / Siêu quản trị</strong> mở tab <strong>Tạo tác vụ</strong>: đặt tên, viết hướng dẫn
+                  cho AI, chọn thông tin hồ sơ gửi kèm, mô tả dạng kết quả mong muốn → <strong>Lưu tác vụ</strong>. Danh
+                  sách đã lưu xem ở tab <strong>Tác vụ đã lưu</strong>.
                 </li>
                 <li>
                   Trong <strong>Cài đặt → Quản lý nhân sự</strong>, quản lý bật{' '}
-                  <strong>«Cho phép dùng LLM và tác vụ AI»</strong> cho từng TVV cần chạy phân tích (Siêu QT không cần
-                  cờ này).
+                  <strong>«Cho phép dùng AI trên hồ sơ»</strong> cho từng nhân viên cần chạy phân tích trên CRM (Siêu
+                  quản trị không cần bật dòng này).
                 </li>
                 <li>
-                  TVV được phép: mở <strong>chi tiết hồ sơ</strong> → nút <strong>Phân tích LLM</strong> → chọn tác vụ →
-                  chạy. Cần đã có API trên <strong>cùng trình duyệt</strong> (thường là máy Siêu QT đã lưu key) hoặc lưu
-                  lại key trên máy TVV (ít khuyến nghị hơn về bảo mật).
+                  Nhân viên được phép: mở <strong>chi tiết một hồ sơ</strong> → bấm <strong>Phân tích LLM</strong> → chọn
+                  tác vụ → chạy. Trình duyệt đó cần đã có <strong>khóa API đã lưu</strong> (thường do Siêu quản trị lưu
+                  trước trên máy dùng chung; hoặc lưu riêng trên máy nhân viên — kém an toàn hơn).
                 </li>
                 <li>
-                  Tab <strong>Phòng thử AI</strong> (khác tab này): chat thử API, không ghi lead. Dùng sau khi API đã
-                  lưu để kiểm tra mạng / model.
+                  Tab <strong>Phòng thử AI</strong> (trong Cài đặt, khác tab này): gõ câu hỏi thử, <strong>không</strong>{' '}
+                  ghi vào hồ sơ. Dùng sau khi đã lưu API để kiểm tra kết nối và model.
                 </li>
               </ol>
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs text-slate-400">
-                <p className="font-medium text-slate-200">Ghi nhớ</p>
+                <p className="font-medium text-slate-200">Nhớ giúp người dùng</p>
                 <ul className="mt-2 list-disc space-y-1 pl-4">
                   <li>
-                    Kho tri thức (tab <strong>Kho tri thức</strong>) được ghép vào prompt khi chạy tác vụ trên lead (nếu
-                    có tài liệu).
+                    <strong>Kho tri thức</strong> (tab riêng trong Cài đặt): tài liệu có thể được đưa vào câu hỏi gửi
+                    AI khi chạy tác vụ trên hồ sơ.
                   </li>
-                  <li>Tác vụ AI ≠ Chấm điểm profile: chấm điểm là công thức điểm; LLM là văn bản phân tích có cấu trúc.</li>
+                  <li>
+                    <strong>Chấm điểm profile</strong> là công thức trên máy chủ; <strong>Tác vụ AI</strong> là đoạn văn
+                    phân tích do AI tạo — hai thứ khác nhau.
+                  </li>
                 </ul>
               </div>
             </div>
@@ -348,8 +353,8 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               <p className="text-xs leading-relaxed text-slate-400">
                 {localApiReady ? (
                   <>
-                    <span className="text-emerald-300/95">●</span> Trình duyệt này đang có bản lưu API hợp lệ — Phòng
-                    thử AI và phân tích trên hồ sơ sẽ ưu tiên dùng đây (không cần .env trừ khi chưa lưu).
+                    <span className="text-emerald-300/95">●</span> Trình duyệt này đã có khóa API hợp lệ — Phòng thử AI
+                    và phân tích trên hồ sơ sẽ dùng khóa đã lưu (trừ khi kỹ thuật cấu hình thêm máy chủ riêng).
                   </>
                 ) : (
                   <>

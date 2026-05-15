@@ -1066,13 +1066,13 @@ export function LeadManagement() {
       if (!db || !profile) return
       if (!canRunLlmAnalysis) {
         setAiMinerError(
-          'Tác vụ LLM cần được Quản lý bật «Cho phép dùng LLM & tác vụ AI» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+          'Phân tích AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
         )
         return
       }
       const cfg = loadAIConfigFromStorage()
       if (!cfg) {
-        setAiMinerError('Chưa cấu hình LLM — mở Cài đặt và lưu API key (tab LLM).')
+        setAiMinerError('Chưa có khóa AI — vào Cài đặt → LLM → API, chọn ChatGPT hoặc Gemini rồi bấm Lưu.')
         return
       }
       if (!warmPassed.length) return
@@ -1168,13 +1168,13 @@ export function LeadManagement() {
     if (!db || !profile) return
     if (!canRunLlmAnalysis) {
       setAiMinerError(
-        'Tác vụ LLM cần được Quản lý bật «Cho phép dùng LLM & tác vụ AI» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+        'Phân tích AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
       )
       return
     }
     const cfg = loadAIConfigFromStorage()
     if (!cfg) {
-      setAiMinerError('Chưa cấu hình LLM — mở Cài đặt và lưu API key (tab LLM).')
+      setAiMinerError('Chưa có khóa AI — vào Cài đặt → LLM → API, chọn ChatGPT hoặc Gemini rồi bấm Lưu.')
       return
     }
     const warmRows = leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM')
@@ -1595,7 +1595,7 @@ export function LeadManagement() {
               value={searchParams.get(LWF.Q) ?? ''}
               onChange={(e) => setUrlQuery(e.target.value)}
               placeholder="Tên, SĐT, mã KH, TVV…"
-              title="Lọc theo chuỗi trên nhiều trường (tên, SĐT, mã KH, mô tả, TVV…). Kết hợp với các lọc bên dưới."
+              title="Tìm trong các thông tin hiển thị trên hồ sơ (tên, SĐT, mã KH, mô tả, TVV…). Có thể dùng chung với các lọc bên dưới."
               className="mt-0.5 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
@@ -1605,7 +1605,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Nhãn"
-            title="HOT/WARM/COLD theo profile chấm điểm đang chọn (hoặc nhãn đã lưu khi đang tìm kiếm)."
+            title="Nhãn HOT / WARM / COLD theo bộ chấm điểm đang chọn ở đầu trang (khi đang tìm kiếm có thể dùng nhãn đã lưu trên hồ sơ)."
             value={tagFilter}
             onChange={(v) => {
               setTagFilter(v)
@@ -1635,7 +1635,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Hệ ĐT"
-            title="Hệ đào tạo / ngành (educationLevel)."
+            title="Ngành / hệ đào tạo ghi trên hồ sơ."
             value={majorFilter}
             onChange={(v) => {
               setMajorFilter(v)
@@ -1650,7 +1650,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Funnel"
-            title="Giai đoạn tuyển sinh (pipeline) — khác với tình trạng tư vấn TVV."
+            title="Giai đoạn tuyển sinh trên hồ sơ (khác với cột «Tư vấn» — tiến độ làm việc với TVV)."
             value={statusFilter}
             onChange={(v) => {
               setStatusFilter(v)
@@ -1668,7 +1668,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Tư vấn"
-            title="Tình trạng làm việc của TVV (trường status)."
+            title="Tiến độ làm việc với tư vấn viên (CRM)."
             value={crmStatusFilter}
             onChange={(v) => {
               setCrmStatusFilter(v)
@@ -1683,7 +1683,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Nguồn"
-            title="Nguồn lead (source)."
+            title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
             value={sourceFilter}
             onChange={(v) => {
               setSourceFilter(v)
@@ -1695,7 +1695,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Trường THPT"
-            title="Trường trung học phổ thông (highSchool) — đồng bộ với tab Tư vấn."
+            title="Trường THPT của thí sinh. Địa chỉ trang có thể lưu lại để người khác mở cùng bộ lọc (nếu có quyền xem)."
             value={schoolFilter}
             onChange={(v) => {
               setSchoolFilter(v)
@@ -1713,7 +1713,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="TVV"
-            title="Lọc theo tư vấn viên phụ trách (client, trên trang đã tải)."
+            title="TVV được phân công (áp dụng trên danh sách đang hiển thị)."
             value={assigneeFilter}
             onChange={(v) => {
               setAssigneeFilter(v)
@@ -1940,7 +1940,7 @@ export function LeadManagement() {
                     {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chú / mô tả hồ sơ (ẩn dòng nhật ký nhập [Import])">
+                <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chú hoặc mô tả ngắn trên hồ sơ">
                   Ghi chú
                 </th>
                 <th className="px-4 py-3 font-medium">
@@ -1989,7 +1989,7 @@ export function LeadManagement() {
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
-                    title="Giai đoạn tuyển sinh (pipeline) — khác tình trạng TVV."
+                    title="Giai đoạn tuyển sinh — khác với cột tình trạng tư vấn."
                     onClick={() => toggleSort('pipelineStatus')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
@@ -2284,7 +2284,7 @@ export function LeadManagement() {
                     </li>
                     <li>
                       Nếu bạn <strong>không phải Siêu quản trị</strong>: nhờ quản lý vào <strong>Quản lý nhân sự</strong>,
-                      mở hồ sơ của bạn và bật <strong>«Cho phép dùng LLM và tác vụ AI»</strong>. Không bật thì các nút
+                      mở hồ sơ của bạn và bật <strong>«Cho phép dùng AI trên hồ sơ»</strong>. Không bật thì các nút
                       chạy AI sẽ không hoạt động.
                     </li>
                   </ol>
@@ -2485,7 +2485,7 @@ export function LeadManagement() {
                   {aiMinerProgress.done}/{aiMinerProgress.total} hồ sơ
                 </p>
                 <p className="mt-1 text-center text-xs text-slate-600">
-                  Xử lý theo lô — tối đa 12 hồ sơ / lần gọi LLM (tiết kiệm token).
+                  Xử lý theo lô — tối đa 12 hồ sơ mỗi lần gọi AI (giúp giảm chi phí).
                 </p>
                 <div className="relative mt-5 h-2.5 overflow-hidden rounded-full border border-white/50 bg-white/20 shadow-inner">
                   <div
@@ -3354,13 +3354,13 @@ function LeadDetailPanel({
   const runAiLlmAnalysis = async () => {
     if (!canRunLlmAnalysis) {
       setAiErr(
-        'Tác vụ LLM cần được Quản lý bật «Cho phép dùng LLM & tác vụ AI» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+        'Phân tích AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
       )
       return
     }
     const config = loadAIConfigFromStorage()
     if (!config?.apiKey?.trim()) {
-      setAiErr('Chưa cấu hình Gemini hoặc ChatGPT: Cài đặt → tab LLM.')
+      setAiErr('Chưa có khóa ChatGPT / Gemini — vào Cài đặt → LLM → API và lưu trên trình duyệt này.')
       return
     }
     if (!selectedAITask) {
@@ -3417,7 +3417,7 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'AI_RUN',
-          description: `Chạy phân tích LLM: «${selectedAITask.name}»`,
+          description: `Chạy phân tích AI: «${selectedAITask.name}»`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -3958,7 +3958,7 @@ function LeadDetailPanel({
           <button
             type="button"
             className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="Đóng cửa sổ phân tích LLM"
+            aria-label="Đóng cửa sổ phân tích AI"
             onClick={() => setLlmPopupOpen(false)}
           />
           <div
@@ -3977,11 +3977,11 @@ function LeadDetailPanel({
                 </span>
                 <div className="min-w-0">
                   <h2 id="lead-llm-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
-                    Phân tích LLM
+                    Phân tích AI
                   </h2>
                   <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
-                    Gemini / ChatGPT (key do Siêu quản trị cấu hình trên trình duyệt) — kết quả lưu Firestore. Cần quản
-                    lý bật quyền dùng LLM cho tài khoản của bạn.
+                    ChatGPT / Gemini (khóa do Siêu quản trị lưu trong Cài đặt → LLM) — kết quả lưu trên hệ thống. Cần
+                    quản lý bật «Cho phép dùng AI trên hồ sơ» cho tài khoản của bạn.
                   </p>
                 </div>
               </div>
@@ -4057,8 +4057,8 @@ function LeadDetailPanel({
                 </div>
               ) : (
                 <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                  Chọn tác vụ và bấm chạy. API key chỉ Siêu quản trị lưu được (Cài đặt → tab LLM). Nếu bị chặn, nhờ
-                  quản lý bật «Cho phép dùng LLM và tác vụ AI» trong Quản lý nhân sự.
+                  Chọn tác vụ và bấm chạy. Khóa API chỉ Siêu quản trị lưu được (Cài đặt → LLM). Nếu bị chặn, nhờ quản
+                  lý bật «Cho phép dùng AI trên hồ sơ» trong Quản lý nhân sự.
                 </p>
               )}
             </div>

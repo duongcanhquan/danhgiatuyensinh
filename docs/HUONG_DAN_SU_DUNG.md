@@ -40,6 +40,8 @@ Hệ thống có các vai trò chính (tên hiển thị trên góc màn hình s
 
 ## 3. Các màn hình chính (theo menu)
 
+Mỗi dòng dưới đây là **một mục trên menu** sau khi đăng nhập (tên có thể khác tùy nhà trường; nếu không thấy mục cần dùng, báo quản trị).
+
 ### 3.1. Bảng điều khiển (`/`)
 
 - Tổng quan số liệu hồ sơ đã tải về máy trình duyệt (có thể có nút **Tải thêm** nếu danh sách lớn).
@@ -48,14 +50,20 @@ Hệ thống có các vai trò chính (tên hiển thị trên góc màn hình s
 
 ### 3.2. Hồ sơ (`/leads`)
 
-Một màn CRM duy nhất cho mọi vai trò được phép:
+Màn làm việc chính với danh sách thí sinh / CRM. Bạn sẽ thấy lần lượt:
 
-- Tìm kiếm URL (`q`), lọc (khu vực, TVV, nhãn, funnel, nguồn, … tùy quyền), phân trang / tải theo server khi cần, bulk, AI miner, panel chi tiết (funnel, ghi chú, chấm điểm…).
-- Đường dẫn cũ `/counselor` tự chuyển về `/leads`.
+1. **Ô tìm kiếm** — gõ tên, số điện thoại, mã KH, tỉnh… (có thể dùng chung với các lọc bên dưới).
+2. **Hàng lọc** — nhãn ưu tiên, vùng, hệ đào tạo, funnel tuyển sinh, tình trạng tư vấn, nguồn, trường, TVV… (tùy quyền, có thể không đủ tất cả).
+3. **Bảng hồ sơ** — bấm một dòng để mở **chi tiết** (ghi chú, lịch sử, chấm điểm, gợi ý AI…).
+4. **Thanh thao tác hàng loạt** (khi tick chọn dòng) — đổi tình trạng, phân công, chạy AI trên nhiều hồ sơ, v.v.
 
-**AI Shortlist (nút ⚡ trên màn Hồ sơ):** chỉ **lọc bảng** để xem các hồ sơ đã được AI phân tích và có **tia sét vàng** cạnh tên. Nút này **không** chạy AI. Để có tia sét: lọc nhãn **WARM** → chọn dòng → thanh dưới cùng → **Chạy AI Phân tích (Shortlist)** → xác nhận trong cửa sổ kiểm tra → chờ xong. Cần đã **lưu khóa API** (Cài đặt → LLM → API) trên trình duyệt và tài khoản được **phép dùng AI** (Quản lý nhân sự). Nếu bật lọc mà không có dòng: thường là chưa chạy bước phân tích — không phải lỗi hiển thị.
+**Chia sẻ hoặc lưu lại đúng bộ lọc:** copy **địa chỉ trên thanh trình duyệt** sau khi chỉnh lọc — người nhận mở link sẽ thấy cùng trạng thái (nếu có quyền xem dữ liệu đó).
 
-**Gợi ý:** Mở sẵn chi tiết một hồ sơ bằng tham số `?open=<id>` trên URL (nếu được hỗ trợ).
+**Nút ⚡ «AI Shortlist»** chỉ **thu hẹp danh sách** tới những hồ sơ đã được AI phân tích (có **tia sét vàng** cạnh tên). Nút này **không** gọi AI. Muốn có tia sét: chọn nhãn **WARM** → tick hồ sơ → thanh dưới → **Chạy AI Phân tích (Shortlist)** → đọc cửa sổ kiểm tra → **Chạy AI** → chờ xong. Trước đó cần **lưu khóa API** trong **Cài đặt → LLM → API** trên **chính trình duyệt này**, và tài khoản được **phép dùng AI** (Quản lý nhân sự bật trong hồ sơ nhân viên). Nếu bật ⚡ mà bảng trống: thường là chưa ai chạy bước phân tích — **không phải lỗi giao diện**.
+
+**Mở nhanh một hồ sơ:** nếu được hỗ trợ, địa chỉ trang có thể có thêm phần mở sẵn chi tiết (hỏi quản trị hoặc xem link mẫu nhà trường gửi).
+
+Đường dẫn cũ `/counselor` tự chuyển về `/leads`.
 
 ### 3.3. Nhập liệu Excel (`/import`)
 
@@ -72,10 +80,10 @@ Thường dành cho **quản trị / phòng tuyển sinh** có quyền nhập li
 
 - Báo cáo / biểu đồ sâu hơn so với bảng điều khiển (nếu tài khoản được mở quyền **Phân tích nâng cao**).
 
-### 3.5. Phòng thử AI (`/ai`)
+### 3.5. Phòng thử AI
 
-- Thử các tính năng gợi ý / AI (nếu được bật quyền **ai:use**).
-- Nội dung cụ thể phụ thuộc cấu hình nhà trường.
+- Nằm trong **Cài đặt** (tab **Phòng thử AI**), dùng để **chat thử** với AI sau khi đã lưu khóa API — không ghi lên hồ sơ.
+- Chỉ tài khoản được **phép dùng AI** mới vào được (quản lý bật trong Quản lý nhân sự; Siêu quản trị luôn được).
 
 ### 3.6. Quản lý nhân sự (`/staff`)
 
@@ -107,7 +115,7 @@ Người dùng thông thường **không cần** vào đây trừ khi được g
 | Quên mật khẩu / không đăng nhập được | Quản trị hệ thống / phòng CNTT |
 | Thiếu menu hoặc không sửa được hồ sơ | Quản trị (điều chỉnh quyền vai trò) |
 | Sai dữ liệu sau khi import Excel | Phòng tuyển sinh + quản trị (kiểm tra file mẫu và quy tắc trùng) |
-| Lỗi “không có quyền” / permission denied | Quản trị (Firestore Rules và quyền user) |
+| Lỗi “không có quyền” / không truy cập được | Quản trị (kiểm tra vai trò và quyền tài khoản) |
 
 ---
 
