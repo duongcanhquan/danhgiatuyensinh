@@ -10,6 +10,7 @@ import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTe
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { scoringTargetFieldForIntakeColumn, STANDARD_LEAD_INTAKE_COLUMNS } from '../utils/excelLeadMapper'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
+import { ScoringAllocationValueInput } from './ScoringAllocationValueInput'
 
 type EditSession = {
   id: string
@@ -343,7 +344,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
             ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs text-slate-600">
-                Tên hiển thị khi kéo (ở tab Chấm điểm)
+                Tên hiển thị khi kéo (ở tab Profile đánh giá)
                 <input
                   value={session.title}
                   disabled={!canEdit || busy}
@@ -500,13 +501,13 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                       </label>
                       <label className="w-24 text-xs text-slate-600">
                         Điểm / %
-                        <input
-                          type="number"
-                          step={1}
-                          value={r.allocationValue}
+                        <ScoringAllocationValueInput
+                          rowId={r.id}
+                          value={Number(r.allocationValue)}
                           disabled={!canEdit || busy}
-                          onChange={(e) => patchRow(ri, { allocationValue: Number(e.target.value) })}
-                          className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1.5 text-xs"
+                          onCommit={(n) => patchRow(ri, { allocationValue: n })}
+                          className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1.5 text-xs tabular-nums"
+                          aria-label="Điểm hoặc phần trăm"
                         />
                       </label>
                       {canEdit ? (

@@ -3103,6 +3103,8 @@ function LeadDetailPanel({
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
+  const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
+  const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -3111,6 +3113,8 @@ function LeadDetailPanel({
     setCrmDirty(null)
     setStatusDirty(null)
     setMsg(null)
+    setDetailLeftTab('counselor')
+    setDetailRightTab('history')
     signalsHelpRef.current?.close()
   }, [lead.id])
 
@@ -3509,6 +3513,74 @@ function LeadDetailPanel({
     }
   }
 
+  const interactionsHistorySection = (
+    <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm">
+      <h3 className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-600">
+        Lịch sử ghi chú &amp; đánh giá
+      </h3>
+      {intLoading ? <p className="mt-0.5 shrink-0 text-xs text-slate-500">Đang tải…</p> : null}
+      <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
+        {interactions.map((it) => (
+          <li
+            key={it.id}
+            className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-200/60 pb-1">
+              <p className="font-semibold text-slate-900">
+                {interactionChannelVi(it.channel)}
+                {it.evaluationTag ? (
+                  <span className="font-normal text-slate-600"> · {it.evaluationTag}</span>
+                ) : null}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {labelUid(it.authorUid)} · {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
+              </p>
+            </div>
+            {(it.snapshotCrmStatus || it.snapshotPipelineStatus || it.snapshotPriorityTag) && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {it.snapshotCrmStatus ? (
+                  <span
+                    className="inline-flex max-w-full items-center rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-950"
+                    title="Tình trạng CRM tại lúc lưu"
+                  >
+                    TVV: {LEAD_COUNSELOR_STATUS_LABELS[it.snapshotCrmStatus]}
+                  </span>
+                ) : null}
+                {it.snapshotPipelineStatus ? (
+                  <span
+                    className="inline-flex max-w-full items-center rounded border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-950"
+                    title="Funnel tại lúc lưu"
+                  >
+                    Funnel: {PIPELINE_LABEL[it.snapshotPipelineStatus]}
+                  </span>
+                ) : null}
+                {it.snapshotPriorityTag ? (
+                  <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-800">
+                    Nhãn: <TagBadge tag={it.snapshotPriorityTag} />
+                  </span>
+                ) : null}
+              </div>
+            )}
+            {it.counselorNote ? (
+              <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
+            ) : null}
+            {it.callOutcome ? (
+              <p className="mt-1 text-[11px] font-medium text-slate-600">Kết quả: {it.callOutcome}</p>
+            ) : null}
+            {it.aiSentiment ? (
+              <p className="mt-1 text-[11px] leading-snug text-violet-800">
+                AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
+              </p>
+            ) : null}
+          </li>
+        ))}
+        {!intLoading && !interactions.length ? (
+          <li className="text-xs text-slate-500">Chưa có tương tác.</li>
+        ) : null}
+      </ul>
+    </section>
+  )
+
   const playbooksBody = (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {matched.length ? (
@@ -3641,320 +3713,353 @@ function LeadDetailPanel({
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              {/* Trái: thông tin hồ sơ → (sticky) tiến độ & ghi chú + thẻ tín hiệu đánh giá tách biệt */}
-              <div className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-y-auto">
-                <aside className="space-y-2 text-sm leading-snug text-slate-800">
-                  <section className="rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
-                    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-2">
-                      <div className="min-w-0">
-                        <div className="flex items-start gap-1">
-                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
-                          <button
-                            type="button"
-                            className="mt-0.5 shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-slate-600 shadow-sm hover:bg-slate-50"
-                            title={LEAD_DETAIL_PROFILE_HELP}
-                            aria-label="Giải thích khối thông tin hồ sơ"
-                          >
-                            <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
-                          </button>
-                        </div>
-                        <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                          Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                        <span className="tabular-nums">Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}</span>
-                        <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
-                      </div>
-                    </div>
-                    <div className="mt-2 max-h-[min(72dvh,44rem)] min-h-[12rem] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin] lg:max-h-[min(78dvh,48rem)]">
-                      <LeadProfileCoreForm
-                        draft={coreDraft}
-                        onChange={setCoreDraft}
-                        disabled={!showCounselorProgressForm}
-                      />
-                    </div>
-                    {!showCounselorProgressForm ? (
-                      <p className="mt-2 text-[10px] text-amber-800">Chỉ xem — không có quyền sửa thông tin hồ sơ (Admin hoặc TVV được gán).</p>
-                    ) : null}
-                  </section>
-
-                  {db ? (
-                    <div className="space-y-2">
-                      {showCounselorProgressForm || canSaveInteraction ? (
-                        <div className="sticky top-0 z-20 space-y-1.5 border-b border-slate-200/70 bg-white/95 pb-1.5 pt-0.5 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-white/90">
-                          {hasUnsavedProgress ? (
-                            <div
-                              role="status"
-                              className="rounded-lg border border-amber-300/90 bg-amber-50/95 px-2.5 py-2 text-xs font-semibold leading-snug text-amber-950 shadow-sm"
-                            >
-                              Có thay đổi chưa lưu — bấm «Lưu cập nhật» (thông tin hồ sơ, tình trạng TVV, funnel và/hoặc ghi chú tương tác). Đóng panel sẽ hỏi xác nhận; đóng tab trình
-                              duyệt cũng có thể được hỏi trước khi rời trang.
-                            </div>
-                          ) : null}
-                          <div className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 p-2 shadow-md ring-1 ring-amber-200/70 sm:p-2.5">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
-                              Tiến độ tư vấn &amp; ghi chú
-                            </p>
-                            <p className="mt-1 text-xs leading-snug text-slate-600">
-                              {crmEditOnRight ? (
-                                <>
-                                  <strong>Tình trạng TVV</strong> chỉnh ở khối «Phân công &amp; tình trạng» bên phải (nút
-                                  «Lưu phân công»). Tại đây: funnel tuyển sinh, nhãn đánh giá, ghi chú tương tác — bấm{' '}
-                                  <strong>Lưu cập nhật</strong>
-                                  {canSaveInteraction ? '; có ghi chú thì ghi thêm vào lịch sử kèm snapshot.' : '.'}
-                                </>
-                              ) : (
-                                <>
-                                  Một lần lưu: đồng bộ <strong>tình trạng TVV</strong>, funnel (theo quyền) và — nếu có
-                                  ghi chú — thêm dòng lịch sử kèm tình trạng &amp; nhãn tại thời điểm đó.
-                                </>
-                              )}
-                            </p>
-                            <div
-                              className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
-                            >
-                              {crmEditOnLeft ? (
-                                <label className="block text-xs font-medium text-slate-800">
-                                  Tình trạng tư vấn
-                                  <select
-                                    value={crmForForm}
-                                    onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
-                                    className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                  >
-                                    {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
-                                      <option key={s} value={s} className="bg-white">
-                                        {LEAD_COUNSELOR_STATUS_LABELS[s]}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              ) : null}
-                              <label className="block text-xs font-medium text-slate-800">
-                                Funnel tuyển sinh
-                                <select
-                                  value={statusForForm}
-                                  onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                >
-                                  {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                                    <option key={k} value={k} className="bg-white">
-                                      {PIPELINE_LABEL[k]}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="block text-xs font-medium text-slate-800">
-                                Nhãn đánh giá
-                                <select
-                                  value={evalTag}
-                                  onChange={(e) => setEvalTag(e.target.value)}
-                                  className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                >
-                                  {EVALUATION_TAGS.map((t) => (
-                                    <option key={t} value={t} className="bg-white">
-                                      {t}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            </div>
-                            <label className="mt-2 block text-xs font-medium text-slate-800">
-                              Ghi chú tương tác
-                              <textarea
-                                value={note}
-                                onChange={(e) => setNote(e.target.value)}
-                                rows={3}
-                                placeholder={
-                                  crmEditOnRight
-                                    ? 'Ghi nhận buổi làm việc — lưu kèm funnel / nhãn phía trên…'
-                                    : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / funnel phía trên…'
-                                }
-                                className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
-                              />
-                            </label>
-                            {msg ? <p className="mt-1 text-xs font-medium text-amber-900">{msg}</p> : null}
-                            <button
-                              type="button"
-                              disabled={
-                                saving ||
-                                !db ||
-                                (!showCounselorProgressForm && !canSaveInteraction) ||
-                                !hasUnsavedProgress
-                              }
-                              onClick={() => void saveUnified()}
-                              className="mt-2 w-full rounded-md border border-amber-600 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
-                            >
-                              {saving ? 'Đang lưu…' : 'Lưu cập nhật'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
-                        <div className="flex items-start gap-1.5">
-                          <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
-                            Tín hiệu &amp; đánh giá tiềm năng
-                          </h3>
-                          <button
-                            type="button"
-                            className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
-                            aria-label="Giải thích khối tín hiệu đánh giá"
-                            title="Giải thích"
-                            onClick={() => signalsHelpRef.current?.showModal()}
-                          >
-                            <CircleHelp className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                        </div>
-                        <p className="mt-1 text-xs leading-snug text-slate-600">
-                          Cờ hành vi / rủi ro — mỗi thay đổi <strong>lưu ngay</strong> vào hồ sơ; điểm &amp; nhãn HOT/WARM/COLD
-                          theo profile chấm điểm đang chọn.
-                        </p>
-
-                        <dialog
-                          ref={signalsHelpRef}
-                          className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
-                          onClick={(e) => {
-                            if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
-                          }}
-                        >
-                          <div className="flex max-h-[min(85vh,32rem)] flex-col">
-                            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
-                              <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
+              <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
+                <nav
+                  className="flex shrink-0 flex-wrap gap-2 rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm"
+                  role="tablist"
+                  aria-label="Nội dung chính chi tiết hồ sơ"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailLeftTab === 'counselor'}
+                    onClick={() => setDetailLeftTab('counselor')}
+                    className={[
+                      'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                      detailLeftTab === 'counselor'
+                        ? 'border-violet-500/55 bg-gradient-to-r from-violet-600 to-violet-700 text-white shadow-md'
+                        : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
+                    ].join(' ')}
+                  >
+                    Thao tác TVV
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailLeftTab === 'profile'}
+                    onClick={() => setDetailLeftTab('profile')}
+                    className={[
+                      'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                      detailLeftTab === 'profile'
+                        ? 'border-slate-600/50 bg-slate-800 text-white shadow-md'
+                        : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
+                    ].join(' ')}
+                  >
+                    Thông tin hồ sơ
+                  </button>
+                </nav>
+                <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                  {detailLeftTab === 'profile' ? (
+                    <aside className="space-y-2 text-sm leading-snug text-slate-800">
+                      <section className="rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
+                        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-2">
+                          <div className="min-w-0">
+                            <div className="flex items-start gap-1">
+                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
                               <button
                                 type="button"
-                                className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
-                                aria-label="Đóng"
-                                onClick={() => signalsHelpRef.current?.close()}
+                                className="mt-0.5 shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-slate-600 shadow-sm hover:bg-slate-50"
+                                title={LEAD_DETAIL_PROFILE_HELP}
+                                aria-label="Giải thích khối thông tin hồ sơ"
                               >
-                                <X className="h-4 w-4" aria-hidden />
+                                <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
                               </button>
                             </div>
-                            <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
-                              <p>
-                                Khối <strong>Tín hiệu &amp; đánh giá tiềm năng</strong> phục vụ chấm điểm profile, nhãn{' '}
-                                <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
-                                <strong>AI</strong> (bước kiểm tra trước khi gọi AI, rồi phân tích và tóm tắt ghi chú tương
-                                tác).
-                              </p>
-                              <p className="mt-2">
-                                <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
-                                <strong>lưu ngay</strong> từng mục (không dùng chung nút «Lưu cập nhật» của khối tiến độ).
-                              </p>
-                              <p className="mt-2">
-                                <span className="font-semibold text-slate-900">Tiến độ &amp; ghi chú</span> — thẻ màu
-                                cam phía trên: funnel, nhãn đánh giá, ghi chú tương tác và nút <strong>Lưu cập nhật</strong>
-                                . Khi có khối phân công bên phải, <strong>tình trạng TVV</strong> chỉnh ở đó để tránh trùng.
-                              </p>
-                            </div>
+                            <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                              Sau khi chỉnh, chuyển sang tab <strong>Thao tác TVV</strong> để lưu funnel / ghi chú (nút «Lưu cập
+                              nhật») nếu cần đồng bộ cùng lúc với thông tin hồ sơ.
+                            </p>
                           </div>
-                        </dialog>
-
-                        <div className="mt-2 min-h-0">
-                          <LeadScoringSignalsPanel
-                            key={`sig-${lead.id}`}
-                            lead={lead}
-                            db={db}
-                            activeScoringProfile={activeScoringProfile}
-                            canEdit={canEditScoringSignals}
-                            onUpdated={onUpdated}
-                            compact
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                            <span className="tabular-nums">
+                              Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                            </span>
+                            <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                          </div>
+                        </div>
+                        <div className="mt-2 max-h-[min(72dvh,44rem)] min-h-[12rem] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin] lg:max-h-[min(78dvh,48rem)]">
+                          <LeadProfileCoreForm
+                            draft={coreDraft}
+                            onChange={setCoreDraft}
+                            disabled={!showCounselorProgressForm}
                           />
                         </div>
+                        {!showCounselorProgressForm ? (
+                          <p className="mt-2 text-[10px] text-amber-800">
+                            Chỉ xem — không có quyền sửa thông tin hồ sơ (Admin hoặc TVV được gán).
+                          </p>
+                        ) : null}
                       </section>
-                    </div>
-                  ) : null}
-                </aside>
+                    </aside>
+                  ) : (
+                    <aside className="space-y-2 text-sm leading-snug text-slate-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/90 bg-white px-2 py-1.5 text-[11px] text-slate-700 shadow-sm">
+                        <span className="font-semibold text-slate-800">Tóm tắt nhanh</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="tabular-nums">
+                            Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                          </span>
+                          <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                        </div>
+                      </div>
+                      {db ? (
+                        <div className="space-y-2">
+                          {showCounselorProgressForm || canSaveInteraction ? (
+                            <div className="space-y-1.5 border-b border-slate-200/70 pb-2">
+                              {hasUnsavedProgress ? (
+                                <div
+                                  role="status"
+                                  className="rounded-lg border border-amber-300/90 bg-amber-50/95 px-2.5 py-2 text-xs font-semibold leading-snug text-amber-950 shadow-sm"
+                                >
+                                  Có thay đổi chưa lưu — bấm «Lưu cập nhật» (thông tin hồ sơ, tình trạng TVV, funnel và/hoặc
+                                  ghi chú tương tác). Đóng panel sẽ hỏi xác nhận; đóng tab trình duyệt cũng có thể được hỏi
+                                  trước khi rời trang.
+                                </div>
+                              ) : null}
+                              <div className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 p-2 shadow-md ring-1 ring-amber-200/70 sm:p-2.5">
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
+                                  Tiến độ tư vấn &amp; ghi chú
+                                </p>
+                                <p className="mt-1 text-xs leading-snug text-slate-600">
+                                  {crmEditOnRight ? (
+                                    <>
+                                      <strong>Tình trạng TVV</strong> chỉnh ở tab «Phân công &amp; tình trạng» (nút «Lưu phân
+                                      công»). Tại đây: funnel tuyển sinh, nhãn đánh giá, ghi chú tương tác — bấm{' '}
+                                      <strong>Lưu cập nhật</strong>
+                                      {canSaveInteraction ? '; có ghi chú thì ghi thêm vào lịch sử kèm snapshot.' : '.'}
+                                    </>
+                                  ) : (
+                                    <>
+                                      Một lần lưu: đồng bộ <strong>tình trạng TVV</strong>, funnel (theo quyền) và — nếu có
+                                      ghi chú — thêm dòng lịch sử kèm tình trạng &amp; nhãn tại thời điểm đó.
+                                    </>
+                                  )}
+                                </p>
+                                <div
+                                  className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+                                >
+                                  {crmEditOnLeft ? (
+                                    <label className="block text-xs font-medium text-slate-800">
+                                      Tình trạng tư vấn
+                                      <select
+                                        value={crmForForm}
+                                        onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
+                                        className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                      >
+                                        {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
+                                          <option key={s} value={s} className="bg-white">
+                                            {LEAD_COUNSELOR_STATUS_LABELS[s]}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  ) : null}
+                                  <label className="block text-xs font-medium text-slate-800">
+                                    Funnel tuyển sinh
+                                    <select
+                                      value={statusForForm}
+                                      onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                                      className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                    >
+                                      {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                                        <option key={k} value={k} className="bg-white">
+                                          {PIPELINE_LABEL[k]}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="block text-xs font-medium text-slate-800">
+                                    Nhãn đánh giá
+                                    <select
+                                      value={evalTag}
+                                      onChange={(e) => setEvalTag(e.target.value)}
+                                      className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                    >
+                                      {EVALUATION_TAGS.map((t) => (
+                                        <option key={t} value={t} className="bg-white">
+                                          {t}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                </div>
+                                <label className="mt-2 block text-xs font-medium text-slate-800">
+                                  Ghi chú tương tác
+                                  <textarea
+                                    value={note}
+                                    onChange={(e) => setNote(e.target.value)}
+                                    rows={3}
+                                    placeholder={
+                                      crmEditOnRight
+                                        ? 'Ghi nhận buổi làm việc — lưu kèm funnel / nhãn phía trên…'
+                                        : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / funnel phía trên…'
+                                    }
+                                    className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                  />
+                                </label>
+                                {msg ? <p className="mt-1 text-xs font-medium text-amber-900">{msg}</p> : null}
+                                <button
+                                  type="button"
+                                  disabled={
+                                    saving ||
+                                    !db ||
+                                    (!showCounselorProgressForm && !canSaveInteraction) ||
+                                    !hasUnsavedProgress
+                                  }
+                                  onClick={() => void saveUnified()}
+                                  className="mt-2 w-full rounded-md border border-amber-600 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
+                                >
+                                  {saving ? 'Đang lưu…' : 'Lưu cập nhật'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
+                            <div className="flex items-start gap-1.5">
+                              <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
+                                Tín hiệu &amp; đánh giá tiềm năng
+                              </h3>
+                              <button
+                                type="button"
+                                className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
+                                aria-label="Giải thích khối tín hiệu đánh giá"
+                                title="Giải thích"
+                                onClick={() => signalsHelpRef.current?.showModal()}
+                              >
+                                <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs leading-snug text-slate-600">
+                              Cờ hành vi / rủi ro — mỗi thay đổi <strong>lưu ngay</strong> vào hồ sơ; điểm &amp; nhãn HOT/WARM/COLD
+                              theo profile chấm điểm đang chọn.
+                            </p>
+
+                            <dialog
+                              ref={signalsHelpRef}
+                              className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
+                              onClick={(e) => {
+                                if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
+                              }}
+                            >
+                              <div className="flex max-h-[min(85vh,32rem)] flex-col">
+                                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
+                                  <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
+                                    aria-label="Đóng"
+                                    onClick={() => signalsHelpRef.current?.close()}
+                                  >
+                                    <X className="h-4 w-4" aria-hidden />
+                                  </button>
+                                </div>
+                                <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
+                                  <p>
+                                    Khối <strong>Tín hiệu &amp; đánh giá tiềm năng</strong> phục vụ chấm điểm profile, nhãn{' '}
+                                    <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
+                                    <strong>AI</strong> (bước kiểm tra trước khi gọi AI, rồi phân tích và tóm tắt ghi chú tương
+                                    tác).
+                                  </p>
+                                  <p className="mt-2">
+                                    <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
+                                    <strong>lưu ngay</strong> từng mục (không dùng chung nút «Lưu cập nhật» của khối tiến độ).
+                                  </p>
+                                  <p className="mt-2">
+                                    <span className="font-semibold text-slate-900">Tiến độ &amp; ghi chú</span> — thẻ màu
+                                    cam: funnel, nhãn đánh giá, ghi chú tương tác và nút <strong>Lưu cập nhật</strong>. Khi có
+                                    tab «Phân công &amp; tình trạng», <strong>tình trạng TVV</strong> chỉnh ở đó để tránh trùng.
+                                  </p>
+                                </div>
+                              </div>
+                            </dialog>
+
+                            <div className="mt-2 min-h-0">
+                              <LeadScoringSignalsPanel
+                                key={`sig-${lead.id}`}
+                                lead={lead}
+                                db={db}
+                                activeScoringProfile={activeScoringProfile}
+                                canEdit={canEditScoringSignals}
+                                onUpdated={onUpdated}
+                                compact
+                              />
+                            </div>
+                          </section>
+                        </div>
+                      ) : null}
+                    </aside>
+                  )}
+                </div>
               </div>
 
-              {/* Phải: phân công & tình trạng → lịch sử ghi chú (tiến độ & ghi chú đã gộp bên trái) */}
-              <aside className="scroll-touch flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-5 lg:min-h-0 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
+              <aside className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-5 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
                 {crmQuickBlockVisible && db ? (
-                  <LeadCrmQuickBlock
-                    key={`${lead.id}-${lead.updatedAt.toMillis()}`}
-                    lead={lead}
-                    db={db}
-                    counselorUsers={counselorUsers}
-                    pickListUsers={pickListUsers}
-                    counselorsLoading={counselorsLoading}
-                    reassignElevated={reassignElevated}
-                    onUpdated={onUpdated}
-                    compact
-                    leadScoringContext={{
-                      profile: activeScoringProfile,
-                      buckets: scoringMasterBuckets,
-                      schoolDefs: schoolTvvSignalDefs ?? null,
-                    }}
-                  />
-                ) : null}
-                <section className="flex min-h-[10rem] flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm lg:min-h-0">
-                  <h3 className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-600">
-                    Lịch sử ghi chú &amp; đánh giá
-                  </h3>
-                  {intLoading ? (
-                    <p className="mt-0.5 shrink-0 text-xs text-slate-500">Đang tải…</p>
-                  ) : null}
-                  <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
-                    {interactions.map((it) => (
-                      <li
-                        key={it.id}
-                        className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
+                  <>
+                    <nav
+                      className="flex shrink-0 flex-wrap gap-2 rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm"
+                      role="tablist"
+                      aria-label="Phân công và lịch sử"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={detailRightTab === 'assign'}
+                        onClick={() => setDetailRightTab('assign')}
+                        className={[
+                          'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                          detailRightTab === 'assign'
+                            ? 'border-teal-500/55 bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md'
+                            : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
+                        ].join(' ')}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-200/60 pb-1">
-                          <p className="font-semibold text-slate-900">
-                            {interactionChannelVi(it.channel)}
-                            {it.evaluationTag ? (
-                              <span className="font-normal text-slate-600"> · {it.evaluationTag}</span>
-                            ) : null}
-                          </p>
-                          <p className="text-[11px] text-slate-500">
-                            {labelUid(it.authorUid)} · {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
-                          </p>
+                        Phân công &amp; tình trạng
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={detailRightTab === 'history'}
+                        onClick={() => setDetailRightTab('history')}
+                        className={[
+                          'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                          detailRightTab === 'history'
+                            ? 'border-sky-500/55 bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md'
+                            : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
+                        ].join(' ')}
+                      >
+                        Lịch sử &amp; ghi chú
+                      </button>
+                    </nav>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      {detailRightTab === 'assign' ? (
+                        <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                          <LeadCrmQuickBlock
+                            key={`${lead.id}-${lead.updatedAt.toMillis()}`}
+                            lead={lead}
+                            db={db}
+                            counselorUsers={counselorUsers}
+                            pickListUsers={pickListUsers}
+                            counselorsLoading={counselorsLoading}
+                            reassignElevated={reassignElevated}
+                            onUpdated={onUpdated}
+                            compact
+                            leadScoringContext={{
+                              profile: activeScoringProfile,
+                              buckets: scoringMasterBuckets,
+                              schoolDefs: schoolTvvSignalDefs ?? null,
+                            }}
+                          />
                         </div>
-                        {(it.snapshotCrmStatus || it.snapshotPipelineStatus || it.snapshotPriorityTag) && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {it.snapshotCrmStatus ? (
-                              <span
-                                className="inline-flex max-w-full items-center rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-950"
-                                title="Tình trạng CRM tại lúc lưu"
-                              >
-                                TVV: {LEAD_COUNSELOR_STATUS_LABELS[it.snapshotCrmStatus]}
-                              </span>
-                            ) : null}
-                            {it.snapshotPipelineStatus ? (
-                              <span
-                                className="inline-flex max-w-full items-center rounded border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-950"
-                                title="Funnel tại lúc lưu"
-                              >
-                                Funnel: {PIPELINE_LABEL[it.snapshotPipelineStatus]}
-                              </span>
-                            ) : null}
-                            {it.snapshotPriorityTag ? (
-                              <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-800">
-                                Nhãn: <TagBadge tag={it.snapshotPriorityTag} />
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                        {it.counselorNote ? (
-                          <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
-                        ) : null}
-                        {it.callOutcome ? (
-                          <p className="mt-1 text-[11px] font-medium text-slate-600">Kết quả: {it.callOutcome}</p>
-                        ) : null}
-                        {it.aiSentiment ? (
-                          <p className="mt-1 text-[11px] leading-snug text-violet-800">
-                            AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                    {!intLoading && !interactions.length ? (
-                      <li className="text-xs text-slate-500">Chưa có tương tác.</li>
-                    ) : null}
-                  </ul>
-                </section>
+                      ) : (
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{interactionsHistorySection}</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  interactionsHistorySection
+                )}
               </aside>
+
             </div>
         </div>
       </div>

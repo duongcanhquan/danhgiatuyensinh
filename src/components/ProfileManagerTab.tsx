@@ -191,7 +191,7 @@ function ProfileEditorPanel({
   return (
     <div
       className={[
-        'space-y-1.5',
+        'min-w-0 space-y-1.5',
         workspaceLayout ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : '',
       ]
         .filter(Boolean)
@@ -433,7 +433,7 @@ function ProfileEditorPanel({
       >
         <div
           className={[
-            'grid min-h-0 flex-1 gap-2',
+            'grid min-h-0 min-w-0 flex-1 gap-2',
             canEditProfile && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEditProfile ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
             workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[220px]',
           ].join(' ')}
@@ -585,7 +585,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
       className={[
         workspaceFullscreen
           ? 'fixed inset-0 z-[200] flex flex-col overflow-hidden bg-slate-100 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] sm:p-4 md:p-5'
-          : 'overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-white via-amber-50/40 to-sky-50/50 p-1 shadow-[0_20px_60px_rgba(15,23,42,0.08)]',
+          : 'min-w-0 overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-white via-amber-50/40 to-sky-50/50 p-1 shadow-[0_20px_60px_rgba(15,23,42,0.08)]',
       ].join(' ')}
     >
       <div

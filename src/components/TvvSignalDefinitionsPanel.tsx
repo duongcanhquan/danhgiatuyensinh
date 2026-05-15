@@ -4,6 +4,7 @@ import type { Firestore } from 'firebase/firestore'
 import type { ProfileCustomScoringSignal } from '../types'
 import { FS_COLLECTIONS, SCORING_AUX_TVV_SIGNALS_DOC_ID } from '../types'
 import { useSchoolTvvSignalDefinitions } from '../hooks/useSchoolTvvSignalDefinitions'
+import { ScoringAllocationValueInput } from './ScoringAllocationValueInput'
 
 /**
  * Cấu hình checklist «Hành vi / Rủi ro» tùy chỉnh — hiển thị trên chi tiết hồ sơ; điểm gộp vào profile chấm điểm.
@@ -104,19 +105,19 @@ export function TvvSignalDefinitionsPanel({ db, canEdit }: { db: Firestore; canE
             </label>
             <label className="w-16 shrink-0 text-xs font-medium text-slate-700">
               Điểm
-              <input
-                type="number"
+              <ScoringAllocationValueInput
+                rowId={s.id}
                 value={s.points}
                 disabled={!canEdit || busy}
-                onChange={(e) => {
-                  const n = Number(e.target.value)
+                onCommit={(n) => {
                   setDraft((list) => {
                     const next = [...list]
-                    next[idx] = { ...next[idx]!, points: Number.isFinite(n) ? n : 0 }
+                    next[idx] = { ...next[idx]!, points: n }
                     return next
                   })
                 }}
                 className="mt-0.5 h-7 w-full rounded border border-slate-200 bg-white px-1 text-xs tabular-nums text-slate-900 disabled:opacity-50"
+                aria-label="Điểm tín hiệu"
               />
             </label>
             {canEdit ? (

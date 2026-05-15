@@ -5,13 +5,11 @@ export type VietMyAccentHeadingSize = 'sm' | 'md' | 'lg' | 'xl'
 
 export type VietMyAccentHeadingTag = 'h1' | 'h2' | 'h3' | 'p' | 'span'
 
-const toneGradients: Record<VietMyAccentHeadingTone, string> = {
-  /** Nền tối: đỏ sáng → đỏ đậm → gần đen (vẫn đọc được trên slate). */
-  onDark:
-    'bg-gradient-to-r from-rose-200 via-red-500 to-zinc-950 bg-clip-text font-bold uppercase text-transparent',
-  /** Nền sáng: đỏ đậm sang đen. */
-  onLight:
-    'bg-gradient-to-r from-rose-600 via-red-600 to-zinc-950 bg-clip-text font-bold uppercase text-transparent',
+const toneClass: Record<VietMyAccentHeadingTone, string> = {
+  /** Nền tối — fallback chữ sáng; gradient chỉ khi clip text ổn định (xem `index.css`). */
+  onDark: 'vm-accent-heading-dark',
+  /** Nền sáng — fallback đỏ đậm đọc được. */
+  onLight: 'vm-accent-heading-light',
 }
 
 /** Một thang cỡ cho mọi trang (sans, gần text-sm / text-lg trang). */
@@ -23,7 +21,7 @@ const sizes: Record<VietMyAccentHeadingSize, string> = {
 }
 
 /**
- * Tiêu đề VietMy: chữ HOA + gradient nửa đỏ nửa đen (trang trí thương hiệu).
+ * Tiêu đề VietMy: chữ HOA + gradient thương hiệu, có màu đặc dự phòng khi `background-clip: text` lỗi.
  */
 export function VietMyAccentHeading({
   as = 'h2',
@@ -42,11 +40,7 @@ export function VietMyAccentHeading({
   const raw = typeof children === 'string' ? children : String(children)
   const text = raw.toLocaleUpperCase('vi-VN')
   return (
-    <Comp
-      className={[toneGradients[tone], sizes[size], 'font-sans leading-tight antialiased', className]
-        .filter(Boolean)
-        .join(' ')}
-    >
+    <Comp className={[toneClass[tone], sizes[size], 'font-sans leading-tight antialiased', className].filter(Boolean).join(' ')}>
       {text}
     </Comp>
   )

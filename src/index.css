@@ -60,6 +60,8 @@
 html {
   /* 100% = 1rem theo mặc định trình duyệt — đồng bộ Tailwind text-* trên toàn site */
   font-size: 100%;
+  /* Tránh form/scrollbar theo dark mode OS làm lệch tông trang sáng */
+  color-scheme: only light;
 }
 
 html,
@@ -108,6 +110,45 @@ main h2 {
   font-family: var(--font-display);
 }
 
+/**
+ * Tiêu đề thương hiệu (VietMyAccentHeading): gradient trên chữ chỉ khi `background-clip: text`
+ * hoạt động ổn định; nếu không — giữ màu đặc đọc được (tránh chữ “biến mất” trên một số GPU / IE mode).
+ */
+.vm-accent-heading-light {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: rgb(159 18 57);
+  background-image: linear-gradient(92deg, rgb(190 24 93) 0%, rgb(185 28 28) 45%, rgb(15 23 42) 100%);
+  background-size: 100% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .vm-accent-heading-light {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+.vm-accent-heading-dark {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: rgb(254 243 199);
+  background-image: linear-gradient(92deg, rgb(254 205 211) 0%, rgb(239 68 68) 42%, rgb(24 24 27) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .vm-accent-heading-dark {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
 /* Tiêu đề khối / biểu đồ — sans, HOA, một cỡ mọi breakpoint */
 .app-section-heading {
   font-family: var(--font-sans);
@@ -143,6 +184,26 @@ main h2 {
     0 1px 0 rgba(255, 255, 255, 0.98) inset,
     0 0 0 1px rgba(201, 162, 39, 0.12),
     0 20px 56px rgba(10, 15, 26, 0.1);
+}
+
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .app-glass-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(250 250 249);
+    border-color: rgb(226 232 240);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-glass-panel,
+  .app-card-glass,
+  .app-card-glass-strong {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgb(255 255 255 / 0.97);
+    border-color: rgb(203 213 225);
+  }
 }
 
 .app-card-glass {

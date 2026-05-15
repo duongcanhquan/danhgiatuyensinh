@@ -106,7 +106,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
   }
 
   return (
-    <section className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-white via-violet-50/40 to-white p-5 shadow-xl backdrop-blur-xl md:p-8">
+    <section className="min-w-0 max-w-full rounded-2xl border border-violet-200/80 bg-gradient-to-br from-white via-violet-50/40 to-white p-5 shadow-xl backdrop-blur-xl md:p-8">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-violet-200 bg-white shadow-sm">
           <PieChart className="h-5 w-5 text-violet-700" strokeWidth={1.75} aria-hidden />
@@ -227,7 +227,11 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
         </div>
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200/90 bg-white/95 shadow-sm">
+      <div
+        className="mt-6 w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200/90 bg-white/95 shadow-sm [-webkit-overflow-scrolling:touch]"
+        role="region"
+        aria-label="Bảng quy tắc điểm thông tin — cuộn ngang trên màn hẹp"
+      >
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <caption className="border-b border-slate-200 bg-slate-50/95 px-4 py-3 text-left text-sm font-semibold text-slate-900">
             Bảng quy tắc — tổng điểm thô tối đa ≈ {maxRaw} (trước kẹp {draft.capMin}–{draft.capMax}%)

@@ -10,6 +10,7 @@ import type {
 import { RULE_CATEGORY_LABELS } from '../types'
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { createBlockFromTemplateKey, RULE_TEMPLATE_DRAG_MIME, type RuleLibraryTemplate } from '../utils/ruleLibrary'
+import { ScoringAllocationValueInput } from './ScoringAllocationValueInput'
 
 function conditionUsesNoValueRow(c: ProfileScoringCondition): boolean {
   return (
@@ -62,7 +63,7 @@ function allocationPreviewPoints(block: ScoringRuleBlock, r: ScoringRuleConditio
 /** Header canvas — một dòng để nhường chiều cao cho khối kéo thả. */
 function CumulativeScoringCanvasHeader() {
   return (
-    <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200/90 bg-white/95 px-2.5 py-2 shadow-sm backdrop-blur-sm">
+    <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
       <p className="text-xs font-semibold leading-snug text-slate-700">
         Canvas bên phải ·{' '}
         <span className="text-slate-600">
@@ -349,13 +350,13 @@ function RuleConfigurationCard({
                 </label>
                 <label className="text-xs text-slate-600">
                   {r.allocationKind === 'percent_of_max' ? '% hoặc ±' : 'Điểm ±'}
-                  <input
-                    type="number"
-                    step={1}
-                    value={r.allocationValue}
+                  <ScoringAllocationValueInput
+                    rowId={r.id}
+                    value={Number(r.allocationValue)}
                     disabled={!canEdit}
-                    onChange={(e) => onPatchRow(ri, { allocationValue: Number(e.target.value) })}
+                    onCommit={(n) => onPatchRow(ri, { allocationValue: n })}
                     className={allocInputClass}
+                    aria-label={r.allocationKind === 'percent_of_max' ? 'Phần trăm hoặc điểm' : 'Điểm cộng trừ'}
                   />
                 </label>
                 <div className="mt-auto flex flex-col gap-1 text-xs text-slate-600">
@@ -496,7 +497,7 @@ export function ProfileDropCanvas({
   return (
     <div
       className={[
-        'flex flex-col',
+        'flex min-w-0 flex-col',
         workspaceLayout ? 'min-h-0 flex-1' : 'min-h-[320px]',
       ].join(' ')}
     >
@@ -506,7 +507,7 @@ export function ProfileDropCanvas({
         onDragOver={onDragOverAllow}
         onDrop={onDropCanvas}
         className={[
-          'relative space-y-2 overflow-y-auto rounded-xl border-2 border-dashed border-sky-400/80 bg-gradient-to-b from-sky-50/60 to-white p-3 pb-6 shadow-inner ring-1 ring-sky-200/50',
+          'relative min-w-0 space-y-2 overflow-x-auto overflow-y-auto rounded-xl border-2 border-dashed border-sky-400/80 bg-gradient-to-b from-sky-50/60 to-white p-3 pb-6 shadow-inner ring-1 ring-sky-200/50',
           workspaceLayout ? 'min-h-0 flex-1' : 'flex-1',
         ].join(' ')}
       >
