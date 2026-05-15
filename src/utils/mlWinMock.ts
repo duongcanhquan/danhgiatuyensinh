@@ -31,84 +31,121 @@ export type MlWinDisplay = {
   mvpBreakdown?: MvpBreakdown
 }
 
-const MVP_BASE = 38
-const MVP_CAP_MIN = 5
-const MVP_CAP_MAX = 96
+/** Điểm nền + kẹp % — dùng chung cho tính toán và màn Cài đặt (mô tả). */
+export const MVP_INFO_SCORE_GLOBAL = {
+  basePoints: 38,
+  capMin: 5,
+  capMax: 96,
+} as const
+
+export type MvpInfoScoreFieldRulePublic = {
+  id: string
+  label: string
+  pointsIfMatch: number
+  hint?: string
+}
 
 function studentPhoneTenDigits(lead: Lead): boolean {
   return scoringPhoneNationalDigits(lead.phone ?? '').length === 10
 }
 
 /**
+ * Quy tắc từng trường trên hồ sơ (điểm thông tin MVP) — một nguồn duy nhất cho UI Cài đặt và `computeMockMlWinProbability`.
+ */
+const MVP_FIELD_RULES: ReadonlyArray<
+  MvpInfoScoreFieldRulePublic & { matched: (lead: Lead) => boolean }
+> = [
+  {
+    id: 'fullName',
+    label: 'Họ tên sinh viên',
+    pointsIfMatch: 6,
+    matched: (l) => Boolean(l.fullName?.trim()),
+  },
+  {
+    id: 'phone',
+    label: 'SĐT sinh viên (chuẩn VN, đúng 10 số)',
+    pointsIfMatch: 10,
+    matched: studentPhoneTenDigits,
+    hint: 'Giống chấm điểm: chỉ số, +84→0…, đủ 10 số mới cộng.',
+  },
+  {
+    id: 'customerId',
+    label: 'Mã khách hàng',
+    pointsIfMatch: 5,
+    matched: (l) => Boolean(l.customerId?.trim()),
+  },
+  {
+    id: 'parentPhone',
+    label: 'SĐT người liên hệ (có nhập)',
+    pointsIfMatch: 4,
+    matched: (l) => Boolean(l.parentPhone?.trim()),
+    hint: 'Chỉ cần có nội dung — không bắt 10 số như SĐT SV.',
+  },
+  {
+    id: 'province',
+    label: 'Tỉnh / thành phố',
+    pointsIfMatch: 6,
+    matched: (l) => Boolean(l.province?.trim()),
+  },
+  {
+    id: 'educationLevel',
+    label: 'Hệ đào tạo / ngành quan tâm',
+    pointsIfMatch: 8,
+    matched: (l) => Boolean(l.educationLevel?.trim()),
+  },
+  {
+    id: 'highSchool',
+    label: 'Trường học',
+    pointsIfMatch: 7,
+    matched: (l) => Boolean(l.highSchool?.trim()),
+  },
+  {
+    id: 'address',
+    label: 'Địa chỉ',
+    pointsIfMatch: 4,
+    matched: (l) => Boolean(l.address?.trim()),
+  },
+]
+
+/** Danh sách quy tắc (không hàm) — hiển thị trong Cài đặt. */
+export function getMvpInfoScoreFieldRulesPublic(): ReadonlyArray<MvpInfoScoreFieldRulePublic> {
+  return MVP_FIELD_RULES.map(({ id, label, pointsIfMatch, hint }) => ({ id, label, pointsIfMatch, hint }))
+}
+
+/** Tổng điểm tối đa nếu mọi trường đều khớp (trước kẹp). */
+export function getMvpInfoScoreMaxRaw(): number {
+  return MVP_INFO_SCORE_GLOBAL.basePoints + MVP_FIELD_RULES.reduce((s, r) => s + r.pointsIfMatch, 0)
+}
+
+/**
  * **Điểm thông tin** (MVP trong app): tỷ lệ mức có thông tin / hồ sơ trên một người —
- * **không phải** xác suất thắng ML. Điểm nền + từng trường điền; **kẹp MVP_CAP_MIN…MVP_CAP_MAX** rồi hiển thị như %.
+ * **không phải** xác suất thắng ML. Điểm nền + từng trường điền; **kẹp** `capMin…capMax` rồi hiển thị như %.
  */
 export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlWinProbability' | 'mlExplanation' | 'mvpBreakdown'> {
+  const { basePoints, capMin, capMax } = MVP_INFO_SCORE_GLOBAL
+
   const items: MvpBreakdownItem[] = [
     {
       id: 'base',
       label: 'Điểm nền (cố định)',
-      pointsIfMatch: MVP_BASE,
+      pointsIfMatch: basePoints,
       matched: true,
       hint: 'Luôn áp dụng — mức khởi điểm trước khi cộng các trường thông tin trên hồ sơ.',
     },
-    {
-      id: 'fullName',
-      label: 'Họ tên sinh viên',
-      pointsIfMatch: 6,
-      matched: Boolean(lead.fullName?.trim()),
-    },
-    {
-      id: 'phone',
-      label: 'SĐT sinh viên (chuẩn VN, đúng 10 số)',
-      pointsIfMatch: 10,
-      matched: studentPhoneTenDigits(lead),
-      hint: 'Giống chấm điểm: chỉ số, +84→0…, đủ 10 số mới cộng.',
-    },
-    {
-      id: 'customerId',
-      label: 'Mã khách hàng',
-      pointsIfMatch: 5,
-      matched: Boolean(lead.customerId?.trim()),
-    },
-    {
-      id: 'parentPhone',
-      label: 'SĐT người liên hệ (có nhập)',
-      pointsIfMatch: 4,
-      matched: Boolean(lead.parentPhone?.trim()),
-      hint: 'Chỉ cần có nội dung — không bắt 10 số như SĐT SV.',
-    },
-    {
-      id: 'province',
-      label: 'Tỉnh / thành phố',
-      pointsIfMatch: 6,
-      matched: Boolean(lead.province?.trim()),
-    },
-    {
-      id: 'educationLevel',
-      label: 'Hệ đào tạo / ngành quan tâm',
-      pointsIfMatch: 8,
-      matched: Boolean(lead.educationLevel?.trim()),
-    },
-    {
-      id: 'highSchool',
-      label: 'Trường học',
-      pointsIfMatch: 7,
-      matched: Boolean(lead.highSchool?.trim()),
-    },
-    {
-      id: 'address',
-      label: 'Địa chỉ',
-      pointsIfMatch: 4,
-      matched: Boolean(lead.address?.trim()),
-    },
+    ...MVP_FIELD_RULES.map((r) => ({
+      id: r.id,
+      label: r.label,
+      pointsIfMatch: r.pointsIfMatch,
+      matched: r.matched(lead),
+      hint: r.hint,
+    })),
   ]
 
   let raw = 0
   for (const it of items) {
     if (it.matched) raw += it.pointsIfMatch
   }
-  const clamped = Math.max(MVP_CAP_MIN, Math.min(MVP_CAP_MAX, Math.round(raw)))
+  const clamped = Math.max(capMin, Math.min(capMax, Math.round(raw)))
 
   const reasons = items
     .filter((i) => i.id !== 'base' && i.matched)
@@ -123,9 +160,9 @@ export function computeMockMlWinProbability(lead: Lead): Pick<MlWinDisplay, 'mlW
     mlWinProbability: clamped,
     mlExplanation,
     mvpBreakdown: {
-      basePoints: MVP_BASE,
-      capMin: MVP_CAP_MIN,
-      capMax: MVP_CAP_MAX,
+      basePoints,
+      capMin,
+      capMax,
       items,
       rawScore: raw,
       clampedPercent: clamped,

@@ -175,6 +175,11 @@ function sectionsData(): Section[] {
             </li>
           </ol>
           <p className={p}>
+            Cột <strong>% (điểm thông tin)</strong> trên bảng cho biết mức đầy các trường cơ bản — đặt chuột lên vòng %
+            để xem chi tiết. Cách tính mặc định và bảng trọng số xem trong <strong>Cài đặt → Chấm điểm</strong> (khối «Điểm
+            thông tin»); khác với nhãn HOT/WARM từ bộ chấm điểm.
+          </p>
+          <p className={p}>
             <strong>Chia sẻ đúng bộ lọc:</strong> sau khi chỉnh lọc, copy địa chỉ trên thanh trình duyệt và gửi cho đồng
             nghiệp có quyền xem — họ mở link sẽ thấy cùng trạng thái lọc (nếu được phép xem dữ liệu đó).
           </p>
@@ -310,6 +315,12 @@ function sectionsData(): Section[] {
             <li>Tab quy tắc mẫu: giúp thêm nhanh khối điều kiện khi soạn profile.</li>
             <li>Nên chuẩn hóa cột dữ liệu (ngành quan tâm, học lực, loại trường…) để chấm điểm ổn định.</li>
           </ul>
+          <p className={p}>
+            <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> trong <strong>Cài đặt → Chấm điểm</strong> có khối giải
+            thích riêng — đây là mức “đầy” các trường cơ bản (công thức MVP), <strong>khác</strong> nhãn HOT/WARM của
+            profile chấm điểm. Trọng số MVP hiện cố định trong phần mềm; có thể ghi đè từng hồ sơ nếu tích hợp lưu sẵn trên
+            server.
+          </p>
         </div>
       ),
     },

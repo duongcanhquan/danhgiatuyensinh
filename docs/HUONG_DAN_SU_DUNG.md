@@ -94,7 +94,7 @@ Thường dành cho **quản trị / phòng tuyển sinh** có quyền nhập li
 Thường do **quản trị** sử dụng:
 
 - **Danh mục dữ liệu** (vùng, ngành, nguồn, …) dùng chung cho form và nhập liệu.
-- **Chấm điểm / hồ sơ tuyển sinh**, **kịch bản tư vấn**, **kho tri thức**, **cấu hình AI / LLM** — tùy tab hiển thị.
+- **Chấm điểm / hồ sơ tuyển sinh** — gồm cả phần **Điểm thông tin (độ đầy hồ sơ)** mô tả cách tính % trên bảng hồ sơ (khác nhãn HOT/WARM), **kịch bản tư vấn**, **kho tri thức**, **cấu hình AI / LLM** — tùy tab hiển thị.
 
 Người dùng thông thường **không cần** vào đây trừ khi được giao nhiệm vụ cấu hình.
 

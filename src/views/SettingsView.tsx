@@ -39,6 +39,7 @@ import {
   uniqueCatalogIdFromLabel,
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
+import { InfoCompletenessRulesPanel } from '../components/InfoCompletenessRulesPanel'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { RuleTemplateLibraryPanel } from '../components/RuleTemplateLibraryPanel'
 import { TvvSignalDefinitionsPanel } from '../components/TvvSignalDefinitionsPanel'
@@ -111,6 +112,12 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className="mt-2 text-slate-700">
             <strong>Ứng dụng:</strong> bảng hồ sơ, lọc, ưu tiên làm việc theo nhãn. Khác tab <strong>Tư vấn</strong> (playbook
             / kịch bản thoại cho TVV đọc) và khác <strong>LLM</strong> (phân tích bằng API).
+          </p>
+          <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Điểm thông tin (% trên hồ sơ)</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Khối <strong>Điểm thông tin (độ đầy hồ sơ)</strong> ở đầu tab này mô tả cách tính % đầy thông tin —{' '}
+            <strong>khác</strong> bộ HOT/WARM bên dưới. Trọng số MVP hiện cố định trong mã; có thể ghi đè từng hồ sơ bằng
+            trường lưu trên server khi tích hợp cần.
           </p>
           <p className={`mt-3 border-t border-slate-200 pt-3 font-semibold text-slate-900`}>Bộ chấm điểm (Profiles)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
@@ -775,6 +782,7 @@ export function SettingsView() {
           <h2 id="tab-scoring" className="sr-only uppercase">
             Chấm điểm
           </h2>
+          <InfoCompletenessRulesPanel />
           <ProfileManagerTab db={db} />
           <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
             <h3 className={settingsHeading}>
