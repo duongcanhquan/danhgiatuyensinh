@@ -1,41 +1,13 @@
 import type { Lead, RuleCondition, ScriptCategory, ScriptSnippet } from '../types'
 import { SCRIPT_CATEGORIES } from '../types'
+import { leadSemanticFieldValue } from './leadSemanticFieldValue'
 
 function norm(s: string): string {
   return s.trim().toLowerCase()
 }
 
 function leadFieldValue(lead: Lead, field: string): string {
-  switch (field) {
-    case 'region':
-      return lead.province
-    case 'province':
-      return lead.province ?? ''
-    case 'major':
-    case 'majorInterest':
-      return lead.educationLevel
-    case 'educationLevel':
-      return lead.educationLevel
-    case 'schoolType':
-      return ''
-    case 'financialStatus':
-      return ''
-    case 'academicLevel':
-      return lead.educationLevel
-    case 'source':
-      return lead.source
-    case 'highSchool':
-    case 'highSchoolName':
-      return lead.highSchool
-    case 'priorityTag':
-      return lead.priorityTag
-    case 'pipelineStatus':
-      return lead.pipelineStatus
-    case 'status':
-      return lead.status
-    default:
-      return ''
-  }
+  return leadSemanticFieldValue(lead, field)
 }
 
 export function matchRuleCondition(lead: Lead, c: RuleCondition): boolean {

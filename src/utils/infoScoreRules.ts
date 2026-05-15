@@ -11,115 +11,128 @@ function studentPhoneTenDigits(lead: Lead): boolean {
   return scoringPhoneNationalDigits(lead.phone ?? '').length === 10
 }
 
+function nonEmptyField(s: string | undefined): boolean {
+  return Boolean(String(s ?? '').trim())
+}
+
 function descriptionMeaningful(lead: Lead): boolean {
   return (lead.description?.trim().length ?? 0) >= 15
 }
 
 const MATCHERS: Record<InfoScoreFieldId, (lead: Lead) => boolean> = {
-  fullName: (l) => Boolean(l.fullName?.trim()),
+  customerId: (l) => nonEmptyField(l.customerId),
+  fullName: (l) => nonEmptyField(l.fullName),
+  dateOfBirth: (l) => nonEmptyField(l.dateOfBirth),
   phone: studentPhoneTenDigits,
-  parentPhone: (l) => Boolean(l.parentPhone?.trim()),
-  customerId: (l) => Boolean(l.customerId?.trim()),
-  province: (l) => Boolean(l.province?.trim()),
-  address: (l) => Boolean(l.address?.trim()),
-  source: (l) => Boolean(l.source?.trim()),
-  educationLevel: (l) => Boolean(l.educationLevel?.trim()),
-  majorInterest: (l) => Boolean(l.majorInterest?.trim()),
-  academicPerformance: (l) => Boolean(l.academicPerformance?.trim()),
-  highSchool: (l) => Boolean(l.highSchool?.trim()),
-  gradeClass: (l) => Boolean(l.gradeClass?.trim()),
+  parentPhone: (l) => nonEmptyField(l.parentPhone),
+  source: (l) => nonEmptyField(l.source),
+  majorInterest: (l) => nonEmptyField(l.majorInterest),
+  academicPerformance: (l) => nonEmptyField(l.academicPerformance),
+  highSchool: (l) => nonEmptyField(l.highSchool),
+  aspirations: (l) => nonEmptyField(l.aspirations),
+  financialStatus: (l) => nonEmptyField(l.financialStatus),
+  hanoiArea: (l) => nonEmptyField(l.hanoiArea),
+  hobbies: (l) => nonEmptyField(l.hobbies),
+  profileNote1: (l) => nonEmptyField(l.profileNote1),
+  profileNote2: (l) => nonEmptyField(l.profileNote2),
+  gradeClass: (l) => nonEmptyField(l.gradeClass),
+  province: (l) => nonEmptyField(l.province),
+  address: (l) => nonEmptyField(l.address),
+  assignedTo: (l) => Boolean(l.assignedTo && String(l.assignedTo).trim()),
+  otherAttentionNotes: (l) => nonEmptyField(l.otherAttentionNotes),
+  educationLevel: (l) => nonEmptyField(l.educationLevel),
   description: descriptionMeaningful,
 }
 
 /**
- * Bản mặc định: bộ «lõi» thường có trên form / Excel (bật); các tiêu chí bổ sung (nguồn, ngành riêng, học lực, …)
- * mặc định tắt — trường bật thêm trong Cài đặt khi quy trình cần.
+ * Mặc định: bật 20 tiêu chí trùng bộ cột Excel quy chuẩn (có thể tắt / đổi điểm trong Cài đặt).
+ * `educationLevel` và `description` (legacy) mặc định tắt — bật nếu vẫn thu thập qua form mở rộng / dữ liệu cũ.
  */
 const DEFAULT_FIELD_ROWS: readonly InfoScoreFieldRowPersisted[] = [
-  { id: 'fullName', label: 'Họ tên thí sinh', pointsIfMatch: 6, enabled: true },
+  { id: 'customerId', label: 'Mã khách hàng', pointsIfMatch: 3, enabled: true },
+  { id: 'fullName', label: 'Tên Sinh viên', pointsIfMatch: 4, enabled: true },
+  { id: 'dateOfBirth', label: 'Ngày sinh', pointsIfMatch: 2, enabled: true, hint: 'Chuỗi không rỗng sau trim.' },
   {
     id: 'phone',
-    label: 'SĐT thí sinh (chuẩn VN, đủ 10 số)',
-    pointsIfMatch: 10,
+    label: 'Điện thoại (đủ 10 số VN)',
+    pointsIfMatch: 8,
     enabled: true,
     hint: 'Chuẩn hóa +84 → 0…; chỉ tính khi đủ 10 chữ số quốc gia.',
   },
   {
     id: 'parentPhone',
-    label: 'SĐT người liên hệ / phụ huynh',
+    label: 'ĐT người liên hệ',
+    pointsIfMatch: 3,
+    enabled: true,
+    hint: 'Chỉ cần có nội dung — không bắt đủ 10 số.',
+  },
+  { id: 'source', label: 'Nguồn', pointsIfMatch: 2, enabled: true },
+  { id: 'majorInterest', label: 'Ngành Quan tâm', pointsIfMatch: 3, enabled: true },
+  { id: 'academicPerformance', label: 'Học lực/ xếp loại', pointsIfMatch: 3, enabled: true },
+  { id: 'highSchool', label: 'Trường học', pointsIfMatch: 4, enabled: true },
+  { id: 'aspirations', label: 'Mong muốn', pointsIfMatch: 2, enabled: true },
+  { id: 'financialStatus', label: 'Nhóm tài chính', pointsIfMatch: 2, enabled: true },
+  { id: 'hanoiArea', label: 'Quận/ huyện', pointsIfMatch: 2, enabled: true },
+  { id: 'hobbies', label: 'Sở thích', pointsIfMatch: 1, enabled: true },
+  { id: 'profileNote1', label: 'Ghi chú 1', pointsIfMatch: 2, enabled: true },
+  { id: 'profileNote2', label: 'Ghi chú 2', pointsIfMatch: 1, enabled: true },
+  { id: 'gradeClass', label: 'Lớp hiện đang học', pointsIfMatch: 2, enabled: true },
+  { id: 'province', label: 'Tỉnh / Thành phố', pointsIfMatch: 3, enabled: true },
+  { id: 'address', label: 'Địa chỉ', pointsIfMatch: 3, enabled: true },
+  {
+    id: 'assignedTo',
+    label: 'Đã phân công TVV',
     pointsIfMatch: 4,
     enabled: true,
-    hint: 'Chỉ cần có nội dung — không bắt đủ 10 số như SĐT thí sinh.',
+    hint: 'Có `assignedTo` (UID) — cột «Tư vấn viên» sau import / phân công.',
   },
-  { id: 'customerId', label: 'Mã khách hàng', pointsIfMatch: 5, enabled: true },
-  { id: 'province', label: 'Tỉnh / thành phố', pointsIfMatch: 6, enabled: true },
-  { id: 'address', label: 'Địa chỉ (số nhà, phường…)', pointsIfMatch: 4, enabled: true },
-  {
-    id: 'source',
-    label: 'Nguồn lead (web, Zalo, giới thiệu…)',
-    pointsIfMatch: 3,
-    enabled: false,
-    hint: 'Theo cột nguồn trên hồ sơ — hữu ích cho báo cáo kênh.',
-  },
+  { id: 'otherAttentionNotes', label: 'Nội dung lưu ý khác', pointsIfMatch: 2, enabled: true },
   {
     id: 'educationLevel',
-    label: 'Hệ / cấp đào tạo quan tâm',
-    pointsIfMatch: 8,
-    enabled: true,
-    hint: 'Ví dụ Cao đẳng, Đại học — khác cột «Ngành quan tâm» nếu tách cột Excel.',
-  },
-  {
-    id: 'majorInterest',
-    label: 'Ngành / nội dung quan tâm (majorInterest)',
-    pointsIfMatch: 6,
+    label: 'Hệ đào tạo (mở rộng, không trong 20 cột)',
+    pointsIfMatch: 4,
     enabled: false,
-    hint: 'Chỉ khi có cột riêng trên dữ liệu; không trùng với hệ đào tạo.',
-  },
-  {
-    id: 'academicPerformance',
-    label: 'Học lực / xếp loại',
-    pointsIfMatch: 5,
-    enabled: false,
-    hint: 'Theo trường học lực trên CRM / import.',
-  },
-  { id: 'highSchool', label: 'Trường THPT / nơi học gần nhất', pointsIfMatch: 7, enabled: true },
-  {
-    id: 'gradeClass',
-    label: 'Lớp',
-    pointsIfMatch: 2,
-    enabled: false,
-    hint: 'Tùy biểu mẫu nhập liệu có cột lớp hay không.',
+    hint: 'Bật nếu vẫn thu thập cột này ngoài Excel chuẩn.',
   },
   {
     id: 'description',
-    label: 'Ghi chú / mô tả (≥ 15 ký tự có nghĩa)',
-    pointsIfMatch: 5,
+    label: 'Mô tả legacy (≥ 15 ký tự)',
+    pointsIfMatch: 4,
     enabled: false,
-    hint: 'Khuyến nghị TVV ghi vài dòng tóm tắt tương tác — không tính chuỗi rỗng hoặc quá ngắn.',
+    hint: 'Dữ liệu cũ / «Ghi chú thêm» — tách với Ghi chú 1–2.',
   },
 ]
 
 /** Giải thích điều kiện khớp cố định trong app (đồng bộ với MATCHERS). */
 export const INFO_SCORE_CRITERION_HELP: ReadonlyArray<{ id: InfoScoreFieldId; rule: string }> = [
-  { id: 'fullName', rule: 'Có ít nhất một ký tự (sau trim).' },
+  { id: 'customerId', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'fullName', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'dateOfBirth', rule: 'Chuỗi không rỗng sau trim (định dạng ngày tự do).' },
   { id: 'phone', rule: 'Số quốc gia VN đúng 10 chữ số (sau chuẩn hóa +84 / khoảng trắng).' },
   { id: 'parentPhone', rule: 'Chuỗi không rỗng sau trim.' },
-  { id: 'customerId', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'source', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'majorInterest', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'academicPerformance', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'highSchool', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'aspirations', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'financialStatus', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'hanoiArea', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'hobbies', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'profileNote1', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'profileNote2', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'gradeClass', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'province', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'address', rule: 'Chuỗi không rỗng sau trim.' },
-  { id: 'source', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'assignedTo', rule: 'Trường assignedTo có UID (đã gán tư vấn viên).' },
+  { id: 'otherAttentionNotes', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'educationLevel', rule: 'Chuỗi không rỗng sau trim.' },
-  { id: 'majorInterest', rule: 'Có giá trị trên trường tùy chọn `majorInterest`.' },
-  { id: 'academicPerformance', rule: 'Có giá trị trên trường tùy chọn `academicPerformance`.' },
-  { id: 'highSchool', rule: 'Chuỗi không rỗng sau trim.' },
-  { id: 'gradeClass', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'description', rule: 'Độ dài trim ≥ 15 ký tự (tránh cộng điểm cho ghi chú rỗng / vài ký tự).' },
 ]
 
 export function getDefaultInfoScoreRules(): InfoScoreRulesPersisted {
   return {
     schemaVersion: 1,
-    basePoints: 38,
+    basePoints: 10,
     capMin: 5,
     capMax: 96,
     fields: DEFAULT_FIELD_ROWS.map((r) => ({ ...r })),

@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore'
 import { describe, expect, it } from 'vitest'
 import type { Lead } from '../types'
+import { getDefaultInfoScoreRules, infoScoreMaxRaw } from './infoScoreRules'
 import { buildMlWinHoverText, computeMockMlWinProbability, resolveMlWinDisplay } from './mlWinMock'
 
 function stubLead(over: Partial<Lead> = {}): Lead {
@@ -63,7 +64,8 @@ describe('computeMockMlWinProbability', () => {
     )
     const phoneRow = m.mvpBreakdown?.items.find((i) => i.id === 'phone')
     expect(phoneRow?.matched).toBe(true)
-    expect(m.mlWinProbability).toBeGreaterThanOrEqual(38)
+    // base 10 + tên 4 + SĐT đủ 10 số 8
+    expect(m.mlWinProbability).toBe(22)
   })
 
   it('does not match student phone when national digits are not length 10', () => {
@@ -72,28 +74,42 @@ describe('computeMockMlWinProbability', () => {
     expect(phoneRow?.matched).toBe(false)
   })
 
-  it('sums all MVP rows when profile is complete (max 88 with current weights)', () => {
+  it('sums all MVP rows when 20 tiêu chí chuẩn đều khớp (max theo cấu hình mặc định)', () => {
+    const rules = getDefaultInfoScoreRules()
+    const maxRaw = infoScoreMaxRaw(rules)
     const m = computeMockMlWinProbability(
       stubLead({
         fullName: 'X',
         phone: '0901234567',
         customerId: 'KH1',
-        parentPhone: '091',
-        province: 'HN',
-        educationLevel: 'Cao đẳng',
+        parentPhone: '0912345678',
+        source: 'Web',
+        dateOfBirth: '2006-01-01',
+        majorInterest: 'CNTT',
+        academicPerformance: 'Khá',
         highSchool: 'THPT 1',
+        aspirations: 'Đại học',
+        financialStatus: 'FULL_PAY',
+        hanoiArea: 'Ba Đình',
+        hobbies: 'Đọc sách',
+        profileNote1: 'G1',
+        profileNote2: 'G2',
+        gradeClass: '12A1',
+        province: 'HN',
         address: 'P1',
+        assignedTo: 'uid-tvv-1',
+        otherAttentionNotes: 'OK',
       }),
     )
-    expect(m.mvpBreakdown?.rawScore).toBe(88)
-    expect(m.mlWinProbability).toBe(88)
-    expect(m.mvpBreakdown?.clampedPercent).toBe(88)
+    expect(m.mvpBreakdown?.rawScore).toBe(maxRaw)
+    expect(m.mlWinProbability).toBe(maxRaw)
+    expect(m.mvpBreakdown?.clampedPercent).toBe(maxRaw)
   })
 
   it('buildMlWinHoverText lists steps and raw score for MVP', () => {
     const ml = resolveMlWinDisplay(stubLead({ fullName: 'A', phone: '0901234567' }))
     const tip = buildMlWinHoverText(ml)
     expect(tip).toContain('Điểm thô')
-    expect(tip).toContain('SĐT thí sinh')
+    expect(tip).toMatch(/Điện thoại|điện thoại/i)
   })
 })

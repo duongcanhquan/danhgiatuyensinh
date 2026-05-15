@@ -8,6 +8,7 @@ import { inferRuleCategory } from '../utils/scoringEngine'
 import { buildScoringBlockFromTemplateDoc, getRuleLibraryTemplates, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTemplatesFirestore'
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
+import { scoringTargetFieldForIntakeColumn, STANDARD_LEAD_INTAKE_COLUMNS } from '../utils/excelLeadMapper'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
 
 type EditSession = {
@@ -214,7 +215,11 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
     })
   }, [])
 
-  const fieldIds = useMemo(() => AI_LEAD_FIELD_OPTIONS.map((o) => o.id), [])
+  const fieldIds = useMemo(() => {
+    const fromIntake = STANDARD_LEAD_INTAKE_COLUMNS.map((c) => scoringTargetFieldForIntakeColumn(c.key))
+    const fromAi = AI_LEAD_FIELD_OPTIONS.map((o) => o.id)
+    return [...new Set([...fromIntake, ...fromAi])].sort((a, b) => a.localeCompare(b))
+  }, [])
   const isPersisted = Boolean(session && docs.some((d) => d.id === session.id))
 
   return (
@@ -411,6 +416,33 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                   <option key={id} value={id} />
                 ))}
               </datalist>
+              <details className="mt-2 rounded-lg border border-slate-200/90 bg-slate-50/80 p-2 text-[11px] text-slate-700">
+                <summary className="cursor-pointer font-semibold text-slate-800">Bảng tra: 20 cột Excel ↔ targetField</summary>
+                <p className="mt-1 leading-snug text-slate-600">
+                  Trong profile chấm điểm, nhập đúng cột «targetField» (mono). Cột «Tư vấn viên» trên file tương ứng{' '}
+                  <code className="rounded bg-white px-0.5 font-mono text-[10px]">assignedTo</code> (UID).
+                </p>
+                <div className="mt-2 max-h-48 overflow-auto rounded border border-slate-200 bg-white">
+                  <table className="w-full border-collapse text-left text-[10px]">
+                    <thead className="sticky top-0 bg-slate-100">
+                      <tr>
+                        <th className="border border-slate-200 px-1.5 py-1">Cột Excel</th>
+                        <th className="border border-slate-200 px-1.5 py-1">targetField</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {STANDARD_LEAD_INTAKE_COLUMNS.map(({ key, header }) => (
+                        <tr key={key}>
+                          <td className="border border-slate-200 px-1.5 py-0.5">{header}</td>
+                          <td className="border border-slate-200 px-1.5 py-0.5 font-mono text-slate-800">
+                            {scoringTargetFieldForIntakeColumn(key)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
             </label>
 
             <div className="border-t border-slate-100 pt-3">

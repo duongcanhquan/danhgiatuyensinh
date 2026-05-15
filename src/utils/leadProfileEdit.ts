@@ -4,6 +4,7 @@ import type { Lead } from '../types'
 export type LeadCoreDraft = {
   fullName: string
   customerId: string
+  dateOfBirth: string
   phone: string
   parentPhone: string
   source: string
@@ -22,12 +23,16 @@ export type LeadCoreDraft = {
   aspirations: string
   hobbies: string
   fieldTripNotes: string
+  profileNote1: string
+  profileNote2: string
+  otherAttentionNotes: string
 }
 
 export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
   return {
     fullName: lead.fullName ?? '',
     customerId: lead.customerId ?? '',
+    dateOfBirth: lead.dateOfBirth ?? '',
     phone: lead.phone ?? '',
     parentPhone: lead.parentPhone ?? '',
     source: lead.source ?? '',
@@ -46,6 +51,9 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     aspirations: lead.aspirations ?? '',
     hobbies: lead.hobbies ?? '',
     fieldTripNotes: lead.fieldTripNotes ?? '',
+    profileNote1: lead.profileNote1 ?? '',
+    profileNote2: lead.profileNote2 ?? '',
+    otherAttentionNotes: lead.otherAttentionNotes ?? '',
   }
 }
 
@@ -62,6 +70,7 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
   const fields: (keyof LeadCoreDraft)[] = [
     'fullName',
     'customerId',
+    'dateOfBirth',
     'phone',
     'parentPhone',
     'source',
@@ -80,6 +89,9 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
     'aspirations',
     'hobbies',
     'fieldTripNotes',
+    'profileNote1',
+    'profileNote2',
+    'otherAttentionNotes',
   ]
   for (const k of fields) {
     if (norm(draft[k]) !== norm(String(before[k as keyof Lead] ?? ''))) {

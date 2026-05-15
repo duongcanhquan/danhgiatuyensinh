@@ -58,8 +58,11 @@ export function LeadProfileCoreForm({
           <Field label="Họ tên" target="fullName">
             <input className={inputCls} value={draft.fullName} disabled={disabled} onChange={(e) => patch('fullName', e.target.value)} />
           </Field>
-          <Field label="Mã KH" target="customerId">
+          <Field label="Mã khách hàng" target="customerId">
             <input className={inputCls} value={draft.customerId} disabled={disabled} onChange={(e) => patch('customerId', e.target.value)} />
+          </Field>
+          <Field label="Ngày sinh" target="dateOfBirth" hint="Chuỗi tự do (vd. 15/03/2008 hoặc 2008-03-15) — có thể chấm IS_NOT_EMPTY / CONTAINS năm.">
+            <input className={inputCls} value={draft.dateOfBirth} disabled={disabled} onChange={(e) => patch('dateOfBirth', e.target.value)} />
           </Field>
           <Field label="Điện thoại SV" target="phone">
             <input className={inputCls} inputMode="tel" value={draft.phone} disabled={disabled} onChange={(e) => patch('phone', e.target.value)} />
@@ -84,7 +87,7 @@ export function LeadProfileCoreForm({
           <Field label="Tỉnh / TP" target="province / region">
             <input className={inputCls} value={draft.province} disabled={disabled} onChange={(e) => patch('province', e.target.value)} />
           </Field>
-          <Field label="Quận / huyện (HN)" target="hanoiArea">
+          <Field label="Quận/ huyện" target="hanoiArea" hint="Cột Excel quy chuẩn; IN_LIST nếu map danh mục hanoi_areas.">
             <input className={inputCls} value={draft.hanoiArea} disabled={disabled} onChange={(e) => patch('hanoiArea', e.target.value)} />
           </Field>
           <Field label="Địa chỉ" target="address">
@@ -93,7 +96,7 @@ export function LeadProfileCoreForm({
           <Field label="Trường THPT" target="highSchool / highSchoolName">
             <input className={inputCls} value={draft.highSchool} disabled={disabled} onChange={(e) => patch('highSchool', e.target.value)} />
           </Field>
-          <Field label="Lớp" target="gradeClass">
+          <Field label="Lớp hiện đang học" target="gradeClass">
             <input className={inputCls} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
           </Field>
         </div>
@@ -136,19 +139,24 @@ export function LeadProfileCoreForm({
           </span>
         </summary>
         <div className="mt-2 space-y-2">
-          <Field
-            label="Mô tả & ghi chú chung"
-            target="description"
-            hint="Văn bản tổng quan / import «Ghi chú thêm» — CONTAINS / IS_NOT_EMPTY trên profile."
-          >
-            <textarea rows={3} className={`${inputCls} resize-y`} value={draft.description} disabled={disabled} onChange={(e) => patch('description', e.target.value)} />
+          <Field label="Mong muốn" target="aspirations" hint="Trùng cột «Mong muốn» trên Excel mẫu 20 cột.">
+            <textarea rows={3} className={`${inputCls} resize-y`} value={draft.aspirations} disabled={disabled} onChange={(e) => patch('aspirations', e.target.value)} />
+          </Field>
+          <Field label="Ghi chú 1" target="profileNote1" hint="Tách khỏi Ghi chú 2 và «Nội dung lưu ý khác» — dễ map quy tắc CONTAINS.">
+            <textarea rows={2} className={`${inputCls} resize-y`} value={draft.profileNote1} disabled={disabled} onChange={(e) => patch('profileNote1', e.target.value)} />
+          </Field>
+          <Field label="Ghi chú 2" target="profileNote2">
+            <textarea rows={2} className={`${inputCls} resize-y`} value={draft.profileNote2} disabled={disabled} onChange={(e) => patch('profileNote2', e.target.value)} />
+          </Field>
+          <Field label="Nội dung lưu ý khác" target="otherAttentionNotes">
+            <textarea rows={2} className={`${inputCls} resize-y`} value={draft.otherAttentionNotes} disabled={disabled} onChange={(e) => patch('otherAttentionNotes', e.target.value)} />
           </Field>
           <Field
-            label="Nguyện vọng / mong muốn học tập"
-            target="aspirations"
-            hint="Nhu cầu đào tạo của SV — tách khỏi ghi chú TVV; tác vụ AI thường gửi field này."
+            label="Mô tả tổng hợp (legacy / import cũ)"
+            target="description"
+            hint="File cũ «Ghi chú thêm» / mô tả chung — vẫn dùng được làm targetField description."
           >
-            <textarea rows={3} className={`${inputCls} resize-y`} value={draft.aspirations} disabled={disabled} onChange={(e) => patch('aspirations', e.target.value)} />
+            <textarea rows={3} className={`${inputCls} resize-y`} value={draft.description} disabled={disabled} onChange={(e) => patch('description', e.target.value)} />
           </Field>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Field label="Sở thích" target="hobbies">
@@ -169,16 +177,27 @@ export function LeadProfileCoreForm({
         <summary className="cursor-pointer text-xs font-semibold text-slate-700">Bản đồ nhanh: import Excel → Lead</summary>
         <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[10px] leading-snug text-slate-600">
           <li>
-            Cột <strong>Ghi Chú thêm</strong> / «Mô tả» / «Ghi chú» → <code className="font-mono">description</code>
+            Mẫu tải về / xuất đánh giá: <strong>20 cột</strong> quy chuẩn (tên cột giống file mẫu). Cột thêm (vd. «Tình
+            trạng») vẫn map nếu có trong file.
           </li>
           <li>
-            Cột <strong>Nguyện vọng</strong> (nếu có trong file) → <code className="font-mono">aspirations</code>
+            <strong>Mong muốn</strong> → <code className="font-mono">aspirations</code>; <strong>Ghi chú 1 / 2</strong> →{' '}
+            <code className="font-mono">profileNote1</code>, <code className="font-mono">profileNote2</code>;{' '}
+            <strong>Nội dung lưu ý khác</strong> → <code className="font-mono">otherAttentionNotes</code>
           </li>
           <li>
-            <strong>Học lực</strong> → <code className="font-mono">academicPerformance</code> (chấm điểm đọc như <code className="font-mono">academicLevel</code>)
+            <strong>Ngày sinh</strong> → <code className="font-mono">dateOfBirth</code> (chuỗi)
           </li>
           <li>
-            <strong>Ngành quan tâm</strong> → <code className="font-mono">majorInterest</code>
+            <strong>Tư vấn viên</strong> (Excel) → gán <code className="font-mono">assignedTo</code> (UID); chấm điểm
+            dùng targetField <code className="font-mono">assignedTo</code>
+          </li>
+          <li>
+            <strong>Ghi chú thêm</strong> / mô tả cũ → <code className="font-mono">description</code>
+          </li>
+          <li>
+            <strong>Học lực</strong> → <code className="font-mono">academicPerformance</code> (engine:{' '}
+            <code className="font-mono">academicLevel</code>)
           </li>
         </ul>
       </details>

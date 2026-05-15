@@ -1,8 +1,9 @@
 /**
- * Chat thử (OpenAI-compatible POST) — **ưu tiên** cấu hình đã lưu trong Cài đặt → LLM (localStorage),
- * giống luồng Phân tích LLM trên hồ sơ. Nếu chưa lưu API, fallback: `VITE_AI_API_URL`, `VITE_AI_API_KEY`, `VITE_AI_MODEL`.
+ * Chat thử (OpenAI-compatible POST) — **ưu tiên** Cài đặt → LLM (localStorage), sau đó `.env`
+ * (`VITE_AI_API_KEY`, tuỳ chọn `VITE_AI_PROVIDER`, `VITE_AI_MODEL`). URL OpenAI lấy trong `callIntegrationChat`
+ * (dev: proxy `/openai-proxy`; production: `VITE_OPENAI_PROXY_URL` hoặc `VITE_AI_API_URL`).
  */
-import { callIntegrationChat, loadAIConfigFromStorage } from '../utils/aiEngine'
+import { callIntegrationChat, resolveAIIntegrationConfig } from '../utils/aiEngine'
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
@@ -10,40 +11,11 @@ export async function callOpenAiCompatibleChat(
   messages: ChatMessage[],
   signal?: AbortSignal,
 ): Promise<string> {
-  const integ = loadAIConfigFromStorage()
-  if (integ?.apiKey?.trim()) {
-    return callIntegrationChat(integ, messages, signal)
-  }
-
-  const url = (import.meta.env.VITE_AI_API_URL as string | undefined)?.trim()
-  if (!url) {
+  const integ = resolveAIIntegrationConfig()
+  if (!integ?.apiKey?.trim()) {
     throw new Error(
-      'Chưa có API: Siêu quản trị cần lưu Gemini/OpenAI trong Cài đặt → tab LLM → «Lưu API vào trình duyệt», hoặc cấu hình VITE_AI_API_URL trong .env cho proxy.',
+      'Chưa có API: lưu Gemini/OpenAI trong Cài đặt → tab LLM → «Lưu API vào trình duyệt», hoặc cấu hình VITE_AI_API_KEY (tuỳ chọn VITE_AI_PROVIDER, VITE_AI_MODEL) trong .env. Với OpenAI trên web tĩnh cần thêm VITE_OPENAI_PROXY_URL.',
     )
   }
-  const apiKey = (import.meta.env.VITE_AI_API_KEY as string | undefined)?.trim()
-  const model = (import.meta.env.VITE_AI_MODEL as string | undefined)?.trim() || 'gpt-4o-mini'
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    },
-    body: JSON.stringify({ model, messages }),
-    signal,
-  })
-
-  const raw = await res.text()
-  if (!res.ok) {
-    throw new Error(raw || `HTTP ${res.status}`)
-  }
-  let data: { choices?: { message?: { content?: string } }[] }
-  try {
-    data = JSON.parse(raw) as typeof data
-  } catch {
-    return raw
-  }
-  const text = data.choices?.[0]?.message?.content
-  return text ?? raw
+  return callIntegrationChat(integ, messages, signal)
 }

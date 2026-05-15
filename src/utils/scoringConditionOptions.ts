@@ -1,18 +1,55 @@
 import type { ProfileScoringCondition } from '../types'
 
-/** Nhãn UI cho điều kiện chấm điểm — ưu tiên tiếng Việt, giữ mã kỹ thuật khi cần. */
+/**
+ * Nhãn UI cho điều kiện chấm điểm — mô tả rõ hành vi so khớp để chỉnh profile / mẫu quy tắc.
+ * Giá trị ô «Giá trị» (value): tùy điều kiện — một chuỗi, nhiều từ cách phẩy, hoặc danh sách cho IN_LIST.
+ */
 export const SCORING_CONDITION_UI_OPTIONS: { value: ProfileScoringCondition; label: string }[] = [
-  { value: 'EQUALS', label: 'Bằng (chuẩn hoá: không dấu, gom khoảng trắng)' },
-  { value: 'CONTAINS', label: 'Chứa — bất kỳ từ nào (phẩy, không dấu)' },
-  { value: 'CONTAINS_ABBR_NORM', label: 'Chứa / viết tắt (không dấu, gộp khoảng)' },
-  { value: 'CONTAINS_ALL_NORM', label: 'Phải chứa đủ các từ (cách nhau bởi dấu phẩy, không dấu)' },
-  { value: 'NOT_CONTAINS_NORM', label: 'Không chứa từ nào (phẩy, không dấu)' },
-  { value: 'HAS_DIGIT', label: 'Có chữ số trong chuỗi' },
-  { value: 'IS_NOT_EMPTY', label: 'Không rỗng (sau chuẩn hoá)' },
+  {
+    value: 'EQUALS',
+    label:
+      'EQUALS — Bằng (sau chuẩn hoá: bỏ dấu, gom khoảng trắng). Giá trị: một chuỗi duy nhất cần trùng toàn bộ.',
+  },
+  {
+    value: 'CONTAINS',
+    label:
+      'CONTAINS — Chứa bất kỳ từ khóa nào. Giá trị: nhiều từ cách nhau bởi dấu phẩy; mỗi từ so không dấu / không phân biệt hoa thường.',
+  },
+  {
+    value: 'CONTAINS_ABBR_NORM',
+    label:
+      'CONTAINS_ABBR_NORM — Như CONTAINS + khớp viết tắt chữ đầu hoặc chuỗi dính (vd. cntt, tphcm).',
+  },
+  {
+    value: 'CONTAINS_ALL_NORM',
+    label:
+      'CONTAINS_ALL_NORM — Lead phải chứa đủ mọi đoạn (phẩy); AND sau bỏ dấu. Ví dụ: dai hoc, ha noi.',
+  },
+  {
+    value: 'NOT_CONTAINS_NORM',
+    label:
+      'NOT_CONTAINS_NORM — Loại trừ: nếu chứa bất kỳ từ nào (phẩy, không dấu) thì không khớp. Trống = luôn khớp.',
+  },
+  {
+    value: 'HAS_DIGIT',
+    label: 'HAS_DIGIT — Chuỗi có ít nhất một chữ số (mã, năm…). Không cần nhập giá trị.',
+  },
+  {
+    value: 'IS_NOT_EMPTY',
+    label: 'IS_NOT_EMPTY — Sau chuẩn hoá không rỗng. Dùng kiểm tra đã có dữ liệu cột (ngày sinh, ghi chú…).',
+  },
   {
     value: 'IN_LIST',
-    label: 'Thuộc một trong các nhóm đã liệt kê (có thể khớp với Danh mục nếu trùng tên)',
+    label:
+      'IN_LIST — Giá trị lead thuộc một trong các mục (phẩy). Nếu có Danh mục master trùng targetField hoặc map cố định (tỉnh, học lực…), có thể khớp theo alias danh mục.',
   },
-  { value: 'PHONE_VN_10_DIGITS', label: 'SĐT VN: đúng 10 số' },
-  { value: 'PHONE_VN_NOT_10_DIGITS', label: 'SĐT Việt Nam: khác 10 số hoặc để trống' },
+  {
+    value: 'PHONE_VN_10_DIGITS',
+    label: 'PHONE_VN_10_DIGITS — Số điện thoại VN đúng 10 chữ số (sau chuẩn +84 → 0…). Áp cho targetField phone/parentPhone.',
+  },
+  {
+    value: 'PHONE_VN_NOT_10_DIGITS',
+    label:
+      'PHONE_VN_NOT_10_DIGITS — SĐT khác 10 số VN hoặc trống. Dùng cảnh báo / điểm âm khi SĐT chưa chuẩn.',
+  },
 ]

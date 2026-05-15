@@ -134,12 +134,18 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
     const aspirationsRaw = String(data.aspirations ?? '').trim()
     const hobbiesRaw = String(data.hobbies ?? '').trim()
     const fieldTripNotesRaw = String(data.fieldTripNotes ?? '').trim()
+    const profileNote1Raw = String(data.profileNote1 ?? '').trim()
+    const profileNote2Raw = String(data.profileNote2 ?? '').trim()
+    const otherAttentionRaw = String(data.otherAttentionNotes ?? '').trim()
     if (!description) {
-      const bits = [aspirationsRaw, hobbiesRaw, fieldTripNotesRaw].filter(Boolean)
+      const bits = [aspirationsRaw, hobbiesRaw, fieldTripNotesRaw, profileNote1Raw, profileNote2Raw, otherAttentionRaw].filter(
+        Boolean,
+      )
       description = bits.join('\n---\n').trim()
     }
     const gradeClass = String(data.gradeClass ?? '')
     const address = String(data.address ?? '')
+    const dateOfBirth = String(data.dateOfBirth ?? '').trim() || undefined
 
     const statusRaw = String(data.status ?? '').trim()
     const coercedCounselor = statusRaw ? coerceLeadCounselorStatus(statusRaw) : null
@@ -199,6 +205,10 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       ...(aspirationsRaw ? { aspirations: aspirationsRaw } : {}),
       ...(hobbiesRaw ? { hobbies: hobbiesRaw } : {}),
       ...(fieldTripNotesRaw ? { fieldTripNotes: fieldTripNotesRaw } : {}),
+      ...(profileNote1Raw ? { profileNote1: profileNote1Raw } : {}),
+      ...(profileNote2Raw ? { profileNote2: profileNote2Raw } : {}),
+      ...(otherAttentionRaw ? { otherAttentionNotes: otherAttentionRaw } : {}),
+      ...(dateOfBirth ? { dateOfBirth } : {}),
       highSchool,
       gradeClass,
       province,
@@ -273,6 +283,23 @@ export type LeadListServerFilters = {
   aiShortlistedOnly?: boolean
 }
 
+/**
+ * Bản sao bộ lọc server **không** gồm `priorityTag` / `priorityTagsIn`.
+ * Dùng khi đếm phân bổ HOT/WARM/COLD/LOSS (mỗi nhãn một truy vấn) trong cùng phạm vi các lọc khác.
+ */
+export function serverFiltersForTagDistribution(
+  f: LeadListServerFilters | undefined,
+): LeadListServerFilters | undefined {
+  if (!f) return undefined
+  const slim = Object.fromEntries(
+    Object.entries(f).filter(([key, val]) => {
+      if (key === 'priorityTag' || key === 'priorityTagsIn') return false
+      return val !== undefined
+    }),
+  ) as LeadListServerFilters
+  return Object.keys(slim).length ? slim : undefined
+}
+
 export type UseLeadsOptions = {
   serverFilters?: LeadListServerFilters
   searchText?: string
@@ -317,6 +344,12 @@ function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryF
 function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMyUserProfile): QueryFilterConstraint[] {
   if (!f) return []
   const c: QueryFilterConstraint[] = []
+  if (f.pipelineStatus) {
+    c.push(where('pipelineStatus', '==', f.pipelineStatus))
+  }
+  if (f.crmStatus) {
+    c.push(where('status', '==', f.crmStatus))
+  }
   if (f.priorityTagsIn?.length) {
     const t = f.priorityTagsIn.slice(0, 10)
     if (t.length === 1) c.push(where('priorityTag', '==', t[0]))
@@ -440,18 +473,27 @@ export function leadMatchesClientSearch(
   const phone = (l.phone ?? '').toLowerCase()
   const email = (l.customerId ?? '').toLowerCase()
   const parent = (l.parentPhone ?? '').toLowerCase()
-  const major = (l.educationLevel ?? '').toLowerCase()
+  const edu = (l.educationLevel ?? '').toLowerCase()
+  const majorI = (l.majorInterest ?? '').toLowerCase()
+  const academic = (l.academicPerformance ?? '').toLowerCase()
   const reg = (l.province ?? '').toLowerCase()
   const school = (l.highSchool ?? '').toLowerCase()
+  const grade = (l.gradeClass ?? '').toLowerCase()
+  const dob = (l.dateOfBirth ?? '').toLowerCase()
   const addr = (l.address ?? '').toLowerCase()
   const src = (l.source ?? '').toLowerCase()
   const desc = (l.description ?? '').toLowerCase()
+  const asp = (l.aspirations ?? '').toLowerCase()
+  const hob = (l.hobbies ?? '').toLowerCase()
+  const n1 = (l.profileNote1 ?? '').toLowerCase()
+  const n2 = (l.profileNote2 ?? '').toLowerCase()
+  const nO = (l.otherAttentionNotes ?? '').toLowerCase()
   const uid = l.assignedTo ?? l.assignedCounselorId
   const tv = uid ? (directoryLabels?.get(uid) ?? '').toLowerCase() : ''
   const uploadLbl = l.uploadedBy
     ? (directoryLabels?.get(l.uploadedBy) ?? (l.uploaderName ?? '')).toLowerCase()
     : (l.uploaderName ?? '').toLowerCase()
-  const hay = `${name} ${phone} ${email} ${parent} ${major} ${reg} ${school} ${addr} ${src} ${desc} ${tv} ${uploadLbl}`
+  const hay = `${name} ${phone} ${email} ${parent} ${edu} ${majorI} ${academic} ${reg} ${school} ${grade} ${dob} ${addr} ${src} ${desc} ${asp} ${hob} ${n1} ${n2} ${nO} ${tv} ${uploadLbl}`
   return hay.includes(q)
 }
 
@@ -594,6 +636,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       searchBucketRef.current = null
       totalRef.current = null
       setCurrentPageState(1)
+      setScopeTagCounts(null)
     }
 
     const pageToLoad = fkChanged ? 1 : currentPageRef.current
@@ -620,24 +663,21 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const fetchTagCountsOnly = async () => {
       try {
+        const distFilters = serverFiltersForTagDistribution(serverFilters)
         const tagEntries = await Promise.all(
           TAG_KEYS.map(async (t) => {
-            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, serverFilters, t)
+            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t)
             const n = (await getCountFromServer(qTag)).data().count
             return [t, n] as const
           }),
         )
         if (cancelled) return
-        if (serverFilters?.priorityTagsIn && serverFilters.priorityTagsIn.length > 1) {
-          setScopeTagCounts(null)
-        } else {
-          setScopeTagCounts({
-            HOT: tagEntries.find(([k]) => k === 'HOT')?.[1] ?? 0,
-            WARM: tagEntries.find(([k]) => k === 'WARM')?.[1] ?? 0,
-            COLD: tagEntries.find(([k]) => k === 'COLD')?.[1] ?? 0,
-            LOSS: tagEntries.find(([k]) => k === 'LOSS')?.[1] ?? 0,
-          })
-        }
+        setScopeTagCounts({
+          HOT: tagEntries.find(([k]) => k === 'HOT')?.[1] ?? 0,
+          WARM: tagEntries.find(([k]) => k === 'WARM')?.[1] ?? 0,
+          COLD: tagEntries.find(([k]) => k === 'COLD')?.[1] ?? 0,
+          LOSS: tagEntries.find(([k]) => k === 'LOSS')?.[1] ?? 0,
+        })
       } catch (e) {
         console.error(e)
         if (!cancelled) setScopeTagCounts(null)

@@ -6,7 +6,7 @@ import type { AIIntegrationConfig, AIProviderId, AITask } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { useAITasks } from '../hooks/useAITasks'
 import { useAuth } from '../hooks/useAuth'
-import { loadAIConfigFromStorage, saveAIConfigToStorage } from '../utils/aiEngine'
+import { loadAIConfigFromStorage, resolveAIIntegrationConfig, saveAIConfigToStorage } from '../utils/aiEngine'
 import {
   DEFAULT_AI_GATEKEEPER_RULES,
   loadAiGatekeeperFromStorage,
@@ -76,7 +76,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   const [msg, setMsg] = useState<string | null>(null)
 
   const localApiReady = useMemo(
-    () => Boolean((cfg.apiKey || loadAIConfigFromStorage()?.apiKey || '').trim()),
+    () => Boolean((cfg.apiKey || resolveAIIntegrationConfig()?.apiKey || '').trim()),
     [cfg.apiKey],
   )
 
@@ -383,6 +383,17 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   <option value="OpenAI">{providerLabel.OpenAI}</option>
                 </select>
               </label>
+              {cfg.provider === 'OpenAI' ? (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-950/35 px-3 py-2 text-xs leading-relaxed text-amber-100/95">
+                  <strong>Trình duyệt ↔ OpenAI:</strong> trang web thường không gọi trực tiếp{' '}
+                  <code className="font-mono text-[0.85em]">api.openai.com</code> được (CORS) — sẽ thấy lỗi «Failed to
+                  fetch». Khi chạy <code className="font-mono text-[0.85em]">npm run dev</code> app đã dùng proxy nội bộ;
+                  khi <strong>build đặt lên hosting</strong> cần biến <code className="font-mono text-[0.85em]">VITE_OPENAI_PROXY_URL</code>{' '}
+                  (hoặc <code className="font-mono text-[0.85em]">VITE_AI_API_URL</code>) trỏ tới máy chủ proxy tương thích
+                  OpenAI rồi build lại — xem <code className="font-mono text-[0.85em]">.env.example</code>. Hoặc chọn{' '}
+                  <strong>Gemini</strong> nếu phù hợp.
+                </p>
+              ) : null}
               <label className="block text-xs font-medium text-slate-400">
                 Model
                 <input

@@ -14,6 +14,20 @@ function criterionRuleText(id: string): string {
   return INFO_SCORE_CRITERION_HELP.find((h) => h.id === id)?.rule ?? '—'
 }
 
+/** Nút ? — toàn bộ nội dung trong `title` (hover) / `aria-label` cho trình đọc màn hình. */
+function HelpDot({ text, ariaLabel }: { text: string; ariaLabel: string }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-400/70 bg-white text-[11px] font-bold leading-none text-slate-700 shadow-sm hover:bg-slate-50"
+      title={text}
+      aria-label={ariaLabel}
+    >
+      ?
+    </button>
+  )
+}
+
 export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
   const { merged, docExists, rulesFromRemote, loading, error, saveRules, resetToBuiltin } = useInfoScoreRules()
   const [draft, setDraft] = useState<InfoScoreRulesPersisted>(() => merged)
@@ -85,14 +99,16 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
           <VietMyAccentHeading as="h3" tone="onLight" size="md" className="text-slate-900">
             Điểm thông tin (độ đầy hồ sơ)
           </VietMyAccentHeading>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700 md:text-base">
-            Con số <strong>%</strong> đo <strong>độ đầy thông tin tĩnh</strong> trên hồ sơ (đã nhập trên form / import),
-            không đo chất lượng tư vấn, không thay cho nhãn HOT/WARM và không phải kết quả AI. Điểm nền + các tiêu chí{' '}
-            <strong>đang bật</strong> và <strong>khớp điều kiện</strong> được cộng, rồi kẹp trong khoảng min–max %. Cột{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">id</code> gắn với logic cố định trong app
-            — muốn thêm loại trường hoàn toàn mới cần cập nhật phần mềm; trong phạm vi hiện tại bạn có thể <strong>bật/tắt</strong>,{' '}
-            <strong>đổi điểm</strong> và <strong>đổi nhãn</strong> cho từng tiêu chí có sẵn.
-          </p>
+          <div className="mt-2 flex flex-wrap items-start gap-2 text-sm leading-relaxed text-slate-700 md:text-base">
+            <p className="min-w-0 flex-1">
+              % đo mức <strong>đã điền</strong> theo <strong>20 cột quy chuẩn</strong> + tiêu chí mở rộng bạn bật bên dưới
+              (điểm nền + dòng khớp, rồi kẹp min–max). Khác nhãn HOT/WARM của profile chấm điểm.
+            </p>
+            <HelpDot
+              ariaLabel="Giải thích chi tiết điểm thông tin"
+              text="Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp điều kiện; kẹp trong khoảng min–max %). Không đo chất lượng tư vấn, không thay cho nhãn HOT/WARM. Trên từng lead, nếu đã lưu cặp mlWinProbability + mlExplanation trên Firestore thì UI ưu tiên hiển thị theo dữ liệu đó (ghi đè công thức). Cột id gắn logic cố định trong app — chỉ bật/tắt, đổi điểm và nhãn hiển thị trong phạm vi bảng."
+            />
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
             {loading ? (
               <span className="inline-flex items-center gap-1.5">
@@ -118,47 +134,25 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
         </div>
       </div>
 
-      <div className="mt-5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-800">
-        <p className="font-semibold text-slate-900">Nguyên tắc &amp; tiêu chí bổ sung</p>
-        <ul className="mt-2 list-disc space-y-1.5 pl-5">
-          <li>
-            <strong>Bộ lõi (mặc định bật):</strong> danh tính, liên hệ, địa lý, hệ đào tạo và trường — phù hợp hồ sơ mới
-            nhập từ Excel / form nhanh.
-          </li>
-          <li>
-            <strong>Tiêu chí thêm (mặc định tắt):</strong> nguồn lead, ngành riêng (<code className="font-mono text-xs">majorInterest</code>),
-            học lực, lớp, ghi chú đủ dài — bật khi trường bạn đã thu thập đủ dữ liệu và muốn % phản ánh thêm.
-          </li>
-          <li>
-            Mỗi dòng trong bảng dưới có cột <em>Cách đánh giá</em> mô tả đúng điều kiện trong mã; chỉnh điểm / nhãn không
-            làm thay đổi điều kiện khớp.
-          </li>
-        </ul>
+      <div className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 py-2 text-sm text-slate-800">
+        <span className="font-semibold text-slate-900">Nguyên tắc &amp; hiển thị</span>
+        <HelpDot
+          ariaLabel="Nguyên tắc điểm thông tin và cách hiển thị trên hệ thống"
+          text="Bộ mặc định bật 20 tiêu chí trùng cột Excel quy chuẩn (có thể tắt hoặc giảm điểm). Hai dòng educationLevel và description là mở rộng / legacy — mặc định tắt. Cộng điểm nền + các dòng đang bật mà hồ sơ khớp điều kiện, rồi kẹp % giữa min và max. Nếu lead có mlWinProbability + mlExplanation đã lưu, giao diện ưu tiên hiển thị cặp đó."
+        />
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200/90 bg-white/90 p-4 shadow-inner">
-          <h4 className="text-sm font-semibold text-slate-900">Cách hiển thị trên hệ thống</h4>
-          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-700">
-            <li>
-              Cộng <strong>điểm nền</strong> + các dòng <strong>đang bật</strong> mà hồ sơ đạt điều kiện, rồi{' '}
-              <strong>kẹp</strong> giữa min và max %.
-            </li>
-            <li>
-              Nếu trên từng lead có <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">mlWinProbability</code>{' '}
-              + <code className="rounded bg-slate-100 px-1 font-mono text-[0.85em]">mlExplanation</code>, UI{' '}
-              <strong>ưu tiên</strong> giá trị đó (ghi đè công thức này cho người đó).
-            </li>
-          </ul>
-        </div>
-
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 shadow-inner">
-          <h4 className="text-sm font-semibold text-amber-950">Quyền chỉnh</h4>
-          <p className="mt-2 text-sm leading-relaxed text-amber-950/95">
-            {canEdit
-              ? 'Bạn có quyền cấu hình chấm điểm — có thể lưu hoặc xóa doc cấu hình điểm thông tin.'
-              : 'Chỉ xem — cần quyền chỉnh quy tắc chấm điểm (config:scoring_rules) để lưu thay đổi.'}
-          </p>
+      <div className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-amber-950">
+          <span className="font-semibold">Quyền chỉnh cấu hình</span>
+          <HelpDot
+            ariaLabel="Quyền chỉnh điểm thông tin"
+            text={
+              canEdit
+                ? 'Bạn có quyền cấu hình chấm điểm — có thể lưu hoặc xóa doc scoringAux/infoScoreConfig.'
+                : 'Chỉ xem — cần quyền chỉnh quy tắc chấm điểm (config:scoring_rules) để lưu thay đổi.'
+            }
+          />
         </div>
       </div>
 
@@ -243,7 +237,15 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
               <th className="px-3 py-2.5">id</th>
               <th className="px-3 py-2.5">Nhãn hiển thị</th>
               <th className="px-3 py-2.5 text-right">Điểm</th>
-              <th className="min-w-[12rem] px-3 py-2.5">Cách đánh giá (cố định)</th>
+              <th className="min-w-[3rem] px-3 py-2.5 text-center">
+                <span className="inline-flex items-center justify-center gap-1">
+                  Điều kiện
+                  <HelpDot
+                    ariaLabel="Giải thích cột điều kiện"
+                    text="Mỗi dòng: điều kiện khớp cố định trong mã (xem chi tiết qua nút ? trong ô). Đổi điểm hoặc nhãn hiển thị không làm thay đổi điều kiện."
+                  />
+                </span>
+              </th>
               <th className="min-w-[10rem] px-3 py-2.5">Ghi chú (tooltip)</th>
             </tr>
           </thead>
@@ -253,8 +255,18 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
               <td className="px-3 py-3 font-mono text-xs text-slate-500">base</td>
               <td className="px-3 py-3 font-medium text-slate-900">Điểm nền (luôn tính)</td>
               <td className="px-3 py-3 text-right font-semibold tabular-nums">+{draft.basePoints}</td>
-              <td className="px-3 py-3 text-slate-600">Luôn cộng — mức khởi điểm trước các tiêu chí dòng.</td>
-              <td className="px-3 py-3 text-slate-600">Không tắt được — chỉnh ở ô «Điểm nền» phía trên.</td>
+              <td className="px-3 py-3 text-center">
+                <HelpDot
+                  text="Luôn cộng — mức khởi điểm trước các tiêu chí dòng (không có điều kiện khớp)."
+                  ariaLabel="Điều kiện điểm nền"
+                />
+              </td>
+              <td className="px-3 py-3 text-center">
+                <HelpDot
+                  text="Không tắt được — chỉnh giá trị ở ô «Điểm nền» phía trên."
+                  ariaLabel="Ghi chú điểm nền"
+                />
+              </td>
             </tr>
             {draft.fields.map((f) => (
               <tr key={f.id} className="border-b border-slate-100 last:border-0">
@@ -290,7 +302,9 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
                     className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-right text-sm font-semibold tabular-nums disabled:opacity-50"
                   />
                 </td>
-                <td className="px-3 py-3 text-xs leading-snug text-slate-600">{criterionRuleText(f.id)}</td>
+                <td className="px-3 py-3 text-center">
+                <HelpDot text={criterionRuleText(f.id)} ariaLabel={`Điều kiện khớp cho ${f.id}`} />
+              </td>
                 <td className="px-3 py-3">
                   <input
                     type="text"

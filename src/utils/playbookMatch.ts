@@ -1,53 +1,12 @@
 import type { ConsultingPlaybook, Lead, PlaybookTriggerCondition } from '../types'
+import { leadSemanticFieldValue } from './leadSemanticFieldValue'
 
 function norm(s: string): string {
   return s.trim().toLowerCase()
 }
 
 function leadFieldValue(lead: Lead, field: string): string {
-  switch (field) {
-    case 'province':
-      return lead.province
-    case 'region':
-      return lead.province
-    case 'educationLevel':
-      return lead.educationLevel
-    case 'source':
-      return lead.source
-    case 'highSchool':
-      return lead.highSchool
-    case 'highSchoolName':
-      return lead.highSchool
-    case 'gradeClass':
-      return lead.gradeClass
-    case 'address':
-      return lead.address
-    case 'customerId':
-      return lead.customerId
-    case 'description':
-      return lead.description
-    case 'hanoiArea':
-      return ''
-    case 'major':
-    case 'majorInterest':
-      return lead.educationLevel
-    case 'schoolType':
-      return ''
-    case 'financialStatus':
-      return ''
-    case 'academicLevel':
-      return lead.educationLevel
-    case 'studyIntention':
-      return lead.educationLevel
-    case 'priorityTag':
-      return lead.priorityTag
-    case 'pipelineStatus':
-      return lead.pipelineStatus
-    case 'status':
-      return lead.status
-    default:
-      return ''
-  }
+  return leadSemanticFieldValue(lead, field)
 }
 
 function matchCondition(lead: Lead, c: PlaybookTriggerCondition): boolean {

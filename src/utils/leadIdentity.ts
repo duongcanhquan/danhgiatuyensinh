@@ -62,7 +62,8 @@ export function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): string {
     const cid = normIdentity(row.customerId ?? '')
     const edu = normIdentity(row.educationLevel ?? '')
     const grade = normIdentity(row.gradeClass ?? '')
-    basis = `identity:${n}|kh:${cid}|edu:${edu}|lop:${grade}`
+    const dob = normIdentity(row.dateOfBirth ?? '')
+    basis = `identity:${n}|kh:${cid}|edu:${edu}|lop:${grade}|dob:${dob}`
   }
   return sha256HexSync(basis)
 }

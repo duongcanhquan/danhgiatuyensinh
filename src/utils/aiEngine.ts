@@ -1,6 +1,43 @@
 import type { AIIntegrationConfig, AIProviderId, AITask, Lead } from '../types'
+import { leadSemanticFieldValue } from './leadSemanticFieldValue'
 
 const LS_KEY = 'vietmy_ai_integration_v1'
+
+/** POST body tương thích OpenAI Chat Completions — ưu tiên proxy (cùng domain / dev) để tránh CORS. */
+export function getOpenAiChatCompletionsUrl(): string {
+  const proxy = String(import.meta.env.VITE_OPENAI_PROXY_URL ?? '').trim()
+  if (proxy) return proxy
+  const legacy = String(import.meta.env.VITE_AI_API_URL ?? '').trim()
+  if (legacy) return legacy
+  if (import.meta.env.DEV) return '/openai-proxy/v1/chat/completions'
+  return 'https://api.openai.com/v1/chat/completions'
+}
+
+export function explainOpenAiBrowserFetchError(err: unknown, endpoint: string): Error {
+  const msg = err instanceof Error ? err.message : String(err)
+  const looksLikeCorsOrNetwork =
+    msg === 'Failed to fetch' ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('NetworkError') ||
+    msg.includes('Load failed') ||
+    err instanceof TypeError
+  const hittingOpenAiDirect = endpoint.includes('api.openai.com')
+  if (looksLikeCorsOrNetwork && hittingOpenAiDirect) {
+    return new Error(
+      'Không gọi được OpenAI từ trình duyệt (thường là CORS: api.openai.com không cho trang web gọi trực tiếp). Cách xử lý: đặt trong file .env khi build biến VITE_OPENAI_PROXY_URL (hoặc VITE_AI_API_URL) trỏ tới endpoint proxy tương thích OpenAI trên cùng domain với app; hoặc chạy «npm run dev» — dev server đã kèm proxy /openai-proxy. Hoặc chuyển sang Gemini.',
+      { cause: err },
+    )
+  }
+  return err instanceof Error ? err : new Error(msg)
+}
+
+async function fetchOpenAiChat(endpoint: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(endpoint, init)
+  } catch (e) {
+    throw explainOpenAiBrowserFetchError(e, endpoint)
+  }
+}
 
 const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderId, string> = {
   Gemini: 'gemini-2.0-flash',
@@ -25,6 +62,25 @@ export function loadAIConfigFromStorage(): AIIntegrationConfig | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Cấu hình gọi LLM cho toàn app: **ưu tiên** Cài đặt → LLM (localStorage), sau đó biến môi trường Vite:
+ * `VITE_AI_API_KEY`, tuỳ chọn `VITE_AI_PROVIDER` (`OpenAI` | `Gemini`), `VITE_AI_MODEL`.
+ * Dùng chung cho Phân tích hồ sơ, AI Lead Miner, Phòng thử AI (qua `callOpenAiCompatibleChat`).
+ */
+export function resolveAIIntegrationConfig(): AIIntegrationConfig | null {
+  const fromLs = loadAIConfigFromStorage()
+  if (fromLs) return fromLs
+
+  const apiKey = String(import.meta.env.VITE_AI_API_KEY ?? '').trim()
+  if (!apiKey) return null
+
+  const providerRaw = String(import.meta.env.VITE_AI_PROVIDER ?? 'OpenAI').trim()
+  const provider: AIProviderId = providerRaw === 'Gemini' ? 'Gemini' : 'OpenAI'
+  const modelRaw = String(import.meta.env.VITE_AI_MODEL ?? '').trim()
+  const model = modelRaw || DEFAULT_MODEL_BY_PROVIDER[provider]
+  return { provider, apiKey, model }
 }
 
 /** Lưu cấu hình LLM cục bộ (localStorage). Ném lỗi nếu trình duyệt chặn ghi. */
@@ -61,7 +117,8 @@ export async function callIntegrationChat(
   if (!messages.length) throw new Error('Thiếu nội dung chat.')
 
   if (config.provider === 'OpenAI') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const endpoint = getOpenAiChatCompletionsUrl()
+    const res = await fetchOpenAiChat(endpoint, {
       method: 'POST',
       signal,
       headers: {
@@ -131,15 +188,17 @@ export async function callIntegrationChat(
 
 function getLeadFieldValue(lead: Lead, field: string): unknown {
   const v = (lead as unknown as Record<string, unknown>)[field]
-  if (v === undefined || v === null) return ''
-  if (typeof v === 'object' && 'toDate' in (v as object)) {
-    try {
-      return (v as { toDate: () => Date }).toDate().toISOString()
-    } catch {
-      return String(v)
+  if (v !== undefined && v !== null) {
+    if (typeof v === 'object' && 'toDate' in (v as object)) {
+      try {
+        return (v as { toDate: () => Date }).toDate().toISOString()
+      } catch {
+        return String(v)
+      }
     }
+    return v
   }
-  return v
+  return leadSemanticFieldValue(lead, field)
 }
 
 /**
@@ -225,7 +284,8 @@ async function callGemini(config: AIIntegrationConfig, system: string, user: str
 }
 
 async function callOpenAI(config: AIIntegrationConfig, system: string, user: string): Promise<string> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const endpoint = getOpenAiChatCompletionsUrl()
+  const res = await fetchOpenAiChat(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

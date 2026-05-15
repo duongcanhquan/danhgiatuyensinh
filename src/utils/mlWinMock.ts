@@ -40,7 +40,7 @@ export type MlWinDisplay = {
 
 /** @deprecated Dùng `getDefaultInfoScoreRules()` — giữ để tương thích import cũ. */
 export const MVP_INFO_SCORE_GLOBAL = {
-  basePoints: 38,
+  basePoints: 10,
   capMin: 5,
   capMax: 96,
 } as const

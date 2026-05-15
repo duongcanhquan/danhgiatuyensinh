@@ -274,6 +274,14 @@ export interface Lead {
   province: string
   /** Địa chỉ */
   address: string
+  /** Ngày sinh (chuỗi theo Excel, vd. dd/MM/yyyy hoặc YYYY-MM-DD) */
+  dateOfBirth?: string
+  /** Ghi chú 1 — cột Excel quy chuẩn; `targetField` chấm điểm: profileNote1 */
+  profileNote1?: string
+  /** Ghi chú 2 — targetField: profileNote2 */
+  profileNote2?: string
+  /** Nội dung lưu ý khác — targetField: otherAttentionNotes */
+  otherAttentionNotes?: string
 
   // --- System / analytics (not Excel columns) ---
   calculatedScore: number
@@ -910,6 +918,7 @@ export interface AuditLog {
 export const FS_COLLECTIONS = {
   users: 'users',
   leads: 'leads',
+  /** Dành cho mở rộng (chưa có hook đọc/ghi trong app hiện tại). */
   scoringRuleSets: 'scoringRuleSets',
   /** Mỗi doc = một `ScoringProfile` (rules + thresholds nhúng trong doc) */
   scoringProfiles: 'scoringProfiles',
@@ -921,6 +930,7 @@ export const FS_COLLECTIONS = {
   consultingPlaybooks: 'consultingPlaybooks',
   /** Smart Script Hub — modular consulting snippets */
   scriptSnippets: 'scriptSnippets',
+  /** Dành cho mở rộng (chưa có hook đọc/ghi trong app hiện tại). */
   routingPolicies: 'routingPolicies',
   /** Sub-collection of a lead */
   interactions: 'interactions',
@@ -942,20 +952,29 @@ export const SCORING_AUX_TVV_SIGNALS_DOC_ID = 'tvvSignalDefinitions' as const
 /** Doc cố định: `scoringAux/infoScoreConfig` — quy tắc điểm thông tin (% đầy hồ sơ) toàn trường. */
 export const SCORING_AUX_INFO_SCORE_DOC_ID = 'infoScoreConfig' as const
 
-/** Các trường hồ sơ được hỗ trợ trong công thức điểm thông tin (logic khớp cố định trong app — thêm id mới cần cập nhật mã). */
+/** Các trường hồ sơ dùng trong công thức điểm thông tin — đồng bộ 20 cột Excel + 2 trường mở rộng (legacy). */
 export const INFO_SCORE_FIELD_IDS = [
+  'customerId',
   'fullName',
+  'dateOfBirth',
   'phone',
   'parentPhone',
-  'customerId',
-  'province',
-  'address',
   'source',
-  'educationLevel',
   'majorInterest',
   'academicPerformance',
   'highSchool',
+  'aspirations',
+  'financialStatus',
+  'hanoiArea',
+  'hobbies',
+  'profileNote1',
+  'profileNote2',
   'gradeClass',
+  'province',
+  'address',
+  'assignedTo',
+  'otherAttentionNotes',
+  'educationLevel',
   'description',
 ] as const
 

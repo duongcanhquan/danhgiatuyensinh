@@ -303,6 +303,26 @@ function RuleConfigurationCard({
                     <code className="text-xs">phone</code> / <code className="text-xs">parentPhone</code>.
                   </p>
                 ) : null}
+                {r.condition === 'IN_LIST' ? (
+                  <p className="text-xs leading-snug text-slate-600">
+                    Nhập <strong>danh sách giá trị mong muốn</strong>, cách nhau bởi dấu phẩy. Với{' '}
+                    <code className="text-xs">province</code>, <code className="text-xs">majorInterest</code>,{' '}
+                    <code className="text-xs">financialStatus</code>, <code className="text-xs">hanoiArea</code>… engine
+                    có thể khớp thêm theo <strong>Danh mục</strong> (alias, nhóm) nếu đã cấu hình master data.
+                  </p>
+                ) : null}
+                {r.condition === 'IS_NOT_EMPTY' ? (
+                  <p className="text-xs leading-snug text-slate-600">
+                    Cộng điểm khi trường <strong>đã có nội dung</strong> (sau bỏ dấu / gom khoảng trắng vẫn còn ký tự).
+                    Phù hợp kiểm tra đã nhập ngày sinh, ghi chú, mong muốn…
+                  </p>
+                ) : null}
+                {r.condition === 'EQUALS' ? (
+                  <p className="text-xs leading-snug text-slate-600">
+                    So khớp <strong>toàn chuỗi</strong> sau chuẩn hoá (không dấu, gom khoảng trắng). Dùng khi cần trùng
+                    chính xác một nhãn (vd. một mã nguồn cố định).
+                  </p>
+                ) : null}
               </div>
               <div className="flex min-h-0 flex-col gap-1.5 rounded-lg border border-amber-200/90 bg-amber-50/40 p-2">
                 <p className="text-xs font-bold uppercase tracking-wide text-amber-950">2 · Điểm &amp; phân bổ</p>

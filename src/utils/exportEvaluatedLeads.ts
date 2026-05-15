@@ -1,8 +1,21 @@
 import * as XLSX from 'xlsx'
 import type { Lead, PriorityTag } from '../types'
 import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
+import { STANDARD_LEAD_INTAKE_COLUMNS, type ExcelLeadRow } from './excelLeadMapper'
 
 export type EvaluatedLeadExportRow = Record<string, string | number>
+
+function intakeCellForExport(lead: Lead, key: keyof ExcelLeadRow): string {
+  if (key === 'assignedToRaw') return (lead.assignedTo ?? lead.assignedCounselorId ?? '').trim()
+  if (key === 'statusRaw') return LEAD_COUNSELOR_STATUS_LABELS[lead.status] ?? String(lead.status)
+  const raw = lead[key as keyof Lead]
+  if (raw === undefined || raw === null) return ''
+  if (typeof raw === 'object' && raw !== null && 'toDate' in raw && typeof (raw as { toDate?: () => Date }).toDate === 'function') {
+    return (raw as { toDate: () => Date }).toDate().toISOString().slice(0, 10)
+  }
+  if (typeof raw === 'object') return ''
+  return String(raw).trim()
+}
 
 /** Xuất chỉ các hồ sơ có id nằm trong `selectedIds` (cùng cấu trúc với xuất đầy đủ). */
 export function exportSelectedEvaluatedLeadsToXlsx(
@@ -27,21 +40,19 @@ export function exportEvaluatedLeadsToXlsx(
   const profileName = options.profileName ?? 'Mặc định'
   const data: EvaluatedLeadExportRow[] = rows.map((l) => {
     const ev = evaluatedByLeadId.get(l.id)
-    return {
+    const row: EvaluatedLeadExportRow = {}
+    for (const { key, header } of STANDARD_LEAD_INTAKE_COLUMNS) {
+      row[header] = intakeCellForExport(l, key)
+    }
+    Object.assign(row, {
       'ID hồ sơ': l.id,
-      'Mã KH': l.customerId,
-      'Họ tên': l.fullName,
-      'SĐT': l.phone,
-      'SĐT phụ huynh': l.parentPhone ?? '',
-      'Nguồn KH': l.source,
-      'Hệ đào tạo': l.educationLevel,
-      'Tỉnh/Thành phố': l.province,
-      'Địa chỉ': l.address,
-      'Trường học': l.highSchool,
-      'Lớp': l.gradeClass,
-      'Mô tả': l.description,
       'Giai đoạn pipeline': l.pipelineStatus,
-      'Cột CRM (Kanban)': LEAD_COUNSELOR_STATUS_LABELS[l.status] ?? l.status,
+      'Tình trạng tư vấn (CRM)': LEAD_COUNSELOR_STATUS_LABELS[l.status] ?? l.status,
+      'Hệ đào tạo (bổ sung)': l.educationLevel ?? '',
+      'Loại trường (bổ sung)': l.schoolType ?? '',
+      'Dự định (bổ sung)': l.studyIntention ?? '',
+      'Mô tả legacy (description)': l.description ?? '',
+      'Ghi chú thực tế (fieldTripNotes)': l.fieldTripNotes ?? '',
       'Mã trùng (hash)': l.uniqueHash ?? '',
       'Ngày hẹn follow-up':
         l.nextFollowUpDate && typeof l.nextFollowUpDate.toDate === 'function'
@@ -50,10 +61,10 @@ export function exportEvaluatedLeadsToXlsx(
       'Người tải lên (UID)': l.uploadedBy ?? '',
       'Tên người tải lên': l.uploaderName ?? '',
       'Mã lô tải lên': l.uploadBatchId ?? '',
-      'TV phụ trách (UID)': l.assignedTo ?? l.assignedCounselorId ?? '',
       [`Điểm tính toán (${profileName})`]: ev?.calculatedScore ?? l.calculatedScore,
       [`Nhãn ưu tiên (${profileName})`]: ev?.priorityTag ?? l.priorityTag,
-    }
+    })
+    return row
   })
   const ws = XLSX.utils.json_to_sheet(data)
   const wb = XLSX.utils.book_new()

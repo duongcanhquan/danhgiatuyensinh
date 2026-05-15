@@ -2,6 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- Bảng kê collection id (đồng bộ `FS_COLLECTIONS` trong src/types.ts) ---
+    // users, leads, scoringProfiles, scoringRuleTemplates, scoringAux, masterData,
+    // consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks,
+    // leads/{id}/interactions, leads/{id}/aiInsightTasks
+    // (scoringRuleSets, routingPolicies: id dự phòng — app chưa ghi đọc.)
+    //
     // Production: add rules for `auditLogs` (read/write scoped by role).
     // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
     // Sau khi sửa index: `firebase deploy --only firestore:indexes` (database `warmlist` trong firebase.json).

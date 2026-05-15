@@ -413,7 +413,19 @@ export function inferRuleCategory(targetField: string): RuleCategory {
   const f = targetField.trim()
   const sigCat = inferSignalRuleCategory(f)
   if (sigCat) return sigCat
-  if (['aspirations', 'hobbies', 'fieldTripNotes', 'description'].includes(f)) return 'psychographics'
+  if (
+    [
+      'aspirations',
+      'hobbies',
+      'fieldTripNotes',
+      'description',
+      'profileNote1',
+      'profileNote2',
+      'otherAttentionNotes',
+    ].includes(f)
+  )
+    return 'psychographics'
+  if (f === 'dateOfBirth') return 'demographics'
   if (f === 'aiSentimentScore') return 'ai_insights'
   if (['leadSource', 'source', 'parentPhone'].includes(f)) return 'source_engagement'
   if (
@@ -422,6 +434,7 @@ export function inferRuleCategory(targetField: string): RuleCategory {
       'schoolType',
       'schoolTypeKey',
       'majorTrainingAlignment',
+      'majorInterest',
       'highSchoolName',
       'highSchoolId',
       'highSchool',
@@ -490,6 +503,10 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     assignedTo: lead.assignedTo,
     status: lead.status,
     description: lead.description,
+    dateOfBirth: lead.dateOfBirth?.trim() ?? '',
+    profileNote1: lead.profileNote1?.trim() ?? '',
+    profileNote2: lead.profileNote2?.trim() ?? '',
+    otherAttentionNotes: lead.otherAttentionNotes?.trim() ?? '',
     aspirations: lead.aspirations?.trim() ?? '',
     hobbies: lead.hobbies?.trim() ?? '',
     fieldTripNotes: lead.fieldTripNotes?.trim() ?? '',
@@ -508,6 +525,8 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     // Legacy field names still referenced by older scoring rules in Firestore
     region: lead.province,
     majorInterest,
+    /** Alias cũ `targetField: major` trên một số profile / mẫu quy tắc. */
+    major: majorInterest,
     academicLevel,
     highSchoolName: lead.highSchool,
     leadSource: lead.source,

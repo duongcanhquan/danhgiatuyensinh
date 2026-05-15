@@ -52,7 +52,7 @@ import {
   exportEvaluatedLeadsToXlsx,
   exportSelectedEvaluatedLeadsToXlsx,
 } from '../utils/exportEvaluatedLeads'
-import { loadAIConfigFromStorage, runAIAnalysis } from '../utils/aiEngine'
+import { resolveAIIntegrationConfig, runAIAnalysis } from '../utils/aiEngine'
 import { fetchLeadInteractionNotesBulk, runBatchAiMiner } from '../utils/aiMiner'
 import {
   fetchInteractionsBulkForGatekeeper,
@@ -123,9 +123,12 @@ const EVALUATION_TAGS = [
   'Chưa rõ ràng',
 ] as const
 
-/** Tooltip cột — ngắn; chi tiết công thức nằm trên từng ô (đặt chuột lên gauge). */
+/** Tooltip cột Điểm thông tin — đặt chuột lên nút ? hoặc gauge để xem chi tiết. */
 const ML_WIN_COLUMN_HINT =
-  'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max). Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
+  'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
+
+const LEAD_DETAIL_PROFILE_HELP =
+  'Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới. Điểm chấm HOT/WARM/COLD (profile) và % điểm thông tin (độ đầy hồ sơ) được tính lại sau lưu khi có cấu hình.'
 
 function isElevatedForAdminFilters(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
@@ -328,6 +331,7 @@ export function LeadManagement() {
     totalPages: firestoreTotalPages,
     setPage,
     scopeFetchTruncated,
+    scopeTagCounts,
     applyLocalLeadPatch,
     refetchLeads,
   } = useLeads({
@@ -336,6 +340,7 @@ export function LeadManagement() {
     directoryLabels: counselorDirectoryLabelById,
     dataMode: tagClientEval ? 'fullScope' : 'paged',
     maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    includeScopeTagCounts: !tagClientEval,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -367,7 +372,8 @@ export function LeadManagement() {
     [activeScoringProfile, scoreByLeadId],
   )
 
-  const tagQuickCounts = useMemo(() => {
+  /** Đếm theo từng nhãn trên tập `leads` đã tải (dùng khi tính lại nhãn theo profile — fullScope). */
+  const tagCountsFromLoadedLeads = useMemo(() => {
     const m: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
     for (const l of leads) {
       const t = effectiveLeadTag(l)
@@ -375,6 +381,18 @@ export function LeadManagement() {
     }
     return m
   }, [leads, effectiveLeadTag])
+
+  /**
+   * Số trong ngoặc trên nút lọc nhanh: Firestore aggregation (đúng phạm vi lọc, không giới hạn 30/trang)
+   * khi dùng nhãn đã lưu; khi tính lại theo profile thì đếm trên tập fullScope đã tải.
+   * Khi đang tìm kiếm chuỗi: không hiển thị (full-text là client-side, không có chỉ số server tương ứng).
+   */
+  const tagChipCounts = useMemo((): Record<PriorityTag, number> | null => {
+    if (urlQuery.trim()) return null
+    if (tagClientEval) return tagCountsFromLoadedLeads
+    if (scopeTagCounts) return scopeTagCounts
+    return null
+  }, [urlQuery, tagClientEval, scopeTagCounts, tagCountsFromLoadedLeads])
 
   const {
     snippets: scriptSnippets,
@@ -1074,9 +1092,11 @@ export function LeadManagement() {
         )
         return
       }
-      const cfg = loadAIConfigFromStorage()
+      const cfg = resolveAIIntegrationConfig()
       if (!cfg) {
-        setAiMinerError('Chưa có khóa AI — vào Cài đặt → LLM → API, chọn ChatGPT hoặc Gemini rồi bấm Lưu.')
+        setAiMinerError(
+          'Chưa có khóa AI — vào Cài đặt → LLM → API rồi bấm Lưu, hoặc đặt VITE_AI_API_KEY (tuỳ chọn VITE_AI_PROVIDER=OpenAI|Gemini, VITE_AI_MODEL) trong .env và chạy lại dev/build.',
+        )
         return
       }
       if (!warmPassed.length) return
@@ -1176,9 +1196,11 @@ export function LeadManagement() {
       )
       return
     }
-    const cfg = loadAIConfigFromStorage()
+    const cfg = resolveAIIntegrationConfig()
     if (!cfg) {
-      setAiMinerError('Chưa có khóa AI — vào Cài đặt → LLM → API, chọn ChatGPT hoặc Gemini rồi bấm Lưu.')
+      setAiMinerError(
+        'Chưa có khóa AI — vào Cài đặt → LLM → API rồi bấm Lưu, hoặc đặt VITE_AI_API_KEY trong .env và chạy lại dev/build.',
+      )
       return
     }
     const warmRows = leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM')
@@ -1525,12 +1547,14 @@ export function LeadManagement() {
                   <>
                     {' '}
                     — khi đang <strong>tìm kiếm</strong>, cột «Nhãn» bên dưới lọc theo <strong>nhãn đã lưu</strong> trên
-                    hồ sơ.
+                    hồ sơ; số lượng trên các nút HOT/WARM… tạm ẩn (tìm kiếm là lọc client trên trang tải).
                   </>
                 ) : (
                   <>
                     {' '}
-                    — HOT / WARM / COLD / LOSS được <strong>tính lại</strong> theo bộ điểm đang chọn (tối đa{' '}
+                    — HOT / WARM / COLD / LOSS: số trong ngoặc là <strong>tổng trong phạm vi lọc</strong> (Firestore),
+                    không chỉ 30 dòng trang hiện tại. Khi <strong>không</strong> đang tìm kiếm và bạn chọn nhãn, các
+                    nhãn được <strong>tính lại</strong> theo bộ điểm đang chọn (tối đa{' '}
                     {LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ cập nhật gần đây).
                   </>
                 )}
@@ -1555,7 +1579,7 @@ export function LeadManagement() {
                 </button>
                 {TAG_OPTIONS.map((tg) => {
                   const on = tagFilter === tg
-                  const cnt = tagQuickCounts[tg]
+                  const cnt = tagChipCounts?.[tg]
                   return (
                     <button
                       key={tg}
@@ -1580,7 +1604,7 @@ export function LeadManagement() {
                       ].join(' ')}
                     >
                       <span className="font-bold tracking-wide">{tg}</span>
-                      <span className="tabular-nums opacity-90">({cnt})</span>
+                      {cnt !== undefined ? <span className="tabular-nums opacity-90">({cnt})</span> : null}
                     </button>
                   )
                 })}
@@ -1965,18 +1989,28 @@ export function LeadManagement() {
                   </button>
                 </th>
                 <th className="w-16 min-w-[3.75rem] px-1 py-3 text-center text-xs font-medium normal-case">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('mlWin')}
-                    className="inline-flex flex-col items-center gap-0.5 text-violet-900 transition hover:text-violet-700"
-                    title={ML_WIN_COLUMN_HINT}
-                  >
-                    <span className="leading-tight">Điểm</span>
-                    <span className="leading-tight">thông tin</span>
-                    {sortKey === 'mlWin' ? (
-                      <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    ) : null}
-                  </button>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('mlWin')}
+                      className="inline-flex flex-col items-center gap-0.5 text-violet-900 transition hover:text-violet-700"
+                    >
+                      <span className="leading-tight">Điểm</span>
+                      <span className="leading-tight">thông tin</span>
+                      {sortKey === 'mlWin' ? (
+                        <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-violet-300/80 bg-violet-50 p-0.5 text-violet-900 shadow-sm hover:bg-violet-100"
+                      title={ML_WIN_COLUMN_HINT}
+                      aria-label="Giải thích cột điểm thông tin"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
+                    </button>
+                  </div>
                 </th>
                 <th className="px-4 py-3 font-medium">
                   <button
@@ -2132,7 +2166,7 @@ export function LeadManagement() {
           aiMinerDisabled={
             aiMinerProgress !== null ||
             gatekeeperBusy ||
-            !loadAIConfigFromStorage() ||
+            !resolveAIIntegrationConfig() ||
             selectedWarmCount === 0
           }
         />
@@ -2283,8 +2317,11 @@ export function LeadManagement() {
                   <ol className="list-decimal space-y-2 pl-5 marker:font-semibold marker:text-emerald-800">
                     <li>
                       Vào <strong>Cài đặt</strong> → tab <strong>LLM</strong> → mục <strong>API</strong>: chọn nhà cung
-                      bấm <strong>Lưu API vào trình duyệt</strong>. Phải lưu trên{' '}
-                      <strong>đúng máy và trình duyệt</strong> bạn đang dùng.
+                      cấp, dán khóa, bấm <strong>Lưu API vào trình duyệt</strong>. Phải lưu trên{' '}
+                      <strong>đúng máy và trình duyệt</strong> bạn đang dùng (hoặc cấu hình{' '}
+                      <code className="rounded bg-white/80 px-1 py-0.5 text-xs">VITE_AI_API_KEY</code> trong{' '}
+                      <code className="rounded bg-white/80 px-1 py-0.5 text-xs">.env</code> khi dev/build — ưu tiên
+                      localStorage nếu đã lưu).
                     </li>
                     <li>
                       Nếu bạn <strong>không phải Siêu quản trị</strong>: nhờ quản lý vào <strong>Quản lý nhân sự</strong>,
@@ -3127,13 +3164,6 @@ function LeadDetailPanel({
     [interactions],
   )
 
-  const assigneeHeaderLabel = useMemo(() => {
-    const uid = lead.assignedTo ?? lead.assignedCounselorId
-    if (!uid) return '—'
-    const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-    return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
-  }, [lead.assignedTo, lead.assignedCounselorId, pickListUsers, counselorUsers])
-
   const showCounselorProgressForm =
     isAdminLikeRole(profile?.role) ||
     (Boolean(can('leads:write:self_assigned')) &&
@@ -3401,9 +3431,11 @@ function LeadDetailPanel({
       )
       return
     }
-    const config = loadAIConfigFromStorage()
+    const config = resolveAIIntegrationConfig()
     if (!config?.apiKey?.trim()) {
-      setAiErr('Chưa có khóa ChatGPT / Gemini — vào Cài đặt → LLM → API và lưu trên trình duyệt này.')
+      setAiErr(
+        'Chưa có khóa ChatGPT / Gemini — lưu trong Cài đặt → LLM, hoặc đặt VITE_AI_API_KEY (tuỳ chọn VITE_AI_PROVIDER, VITE_AI_MODEL) trong .env rồi chạy lại dev/build.',
+      )
       return
     }
     if (!selectedAITask) {
@@ -3528,38 +3560,6 @@ function LeadDetailPanel({
           >
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
-          <div className="mt-2 flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
-            {(
-              [
-                { k: 'SĐT', v: lead.phone || '—', t: false },
-                { k: 'SĐT PH', v: lead.parentPhone || '—', t: false },
-                { k: 'Mã KH', v: lead.customerId || '—', t: false },
-                { k: 'Nguồn', v: lead.source || '—', t: true },
-                {
-                  k: 'Tư vấn',
-                  v: LEAD_COUNSELOR_STATUS_LABELS[lead.status],
-                  t: false,
-                  hint: 'Tình trạng làm việc TVV (tư vấn)',
-                },
-                {
-                  k: 'Funnel',
-                  v: PIPELINE_LABEL[lead.pipelineStatus],
-                  t: false,
-                  hint: 'Giai đoạn tuyển sinh (pipeline)',
-                },
-                { k: 'TVV', v: assigneeHeaderLabel, t: true },
-              ] satisfies Array<{ k: string; v: string; t: boolean; hint?: string }>
-            ).map((row) => (
-              <div
-                key={row.k}
-                title={row.hint ?? (row.t ? row.v : undefined)}
-                className="flex max-w-[10.5rem] shrink-0 items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
-              >
-                <span className="shrink-0 text-slate-500">{row.k}</span>
-                <span className="min-w-0 truncate font-medium text-slate-900">{row.v}</span>
-              </div>
-            ))}
-          </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1.5">
           <button
@@ -3646,10 +3646,20 @@ function LeadDetailPanel({
                 <aside className="space-y-2 text-sm leading-snug text-slate-800">
                   <section className="rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
                     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-2">
-                      <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
+                      <div className="min-w-0">
+                        <div className="flex items-start gap-1">
+                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
+                          <button
+                            type="button"
+                            className="mt-0.5 shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-slate-600 shadow-sm hover:bg-slate-50"
+                            title={LEAD_DETAIL_PROFILE_HELP}
+                            aria-label="Giải thích khối thông tin hồ sơ"
+                          >
+                            <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
+                          </button>
+                        </div>
                         <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                          Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới (điểm chấm tự tính lại nếu có profile).
+                          Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới.
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
@@ -3657,7 +3667,7 @@ function LeadDetailPanel({
                         <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
                       </div>
                     </div>
-                    <div className="mt-2 max-h-[min(52vh,28rem)] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin]">
+                    <div className="mt-2 max-h-[min(72dvh,44rem)] min-h-[12rem] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin] lg:max-h-[min(78dvh,48rem)]">
                       <LeadProfileCoreForm
                         draft={coreDraft}
                         onChange={setCoreDraft}

@@ -14,7 +14,20 @@ function appBase(mode: string): string {
   return mode === 'production' ? '/danhgiatuyensinh/' : '/'
 }
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode, command }) => ({
   base: appBase(mode),
   plugins: [react(), tailwindcss()],
+  /** Dev: tránh CORS khi gọi OpenAI — app dùng URL `/openai-proxy/v1/...` (xem `getOpenAiChatCompletionsUrl`). */
+  server:
+    command === 'serve'
+      ? {
+          proxy: {
+            '/openai-proxy': {
+              target: 'https://api.openai.com',
+              changeOrigin: true,
+              rewrite: (path) => path.replace(/^\/openai-proxy/, '') || '/',
+            },
+          },
+        }
+      : undefined,
 }))
