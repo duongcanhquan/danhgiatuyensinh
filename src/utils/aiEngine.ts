@@ -3,14 +3,23 @@ import { leadSemanticFieldValue } from './leadSemanticFieldValue'
 
 const LS_KEY = 'vietmy_ai_integration_v1'
 
-/** POST body tương thích OpenAI Chat Completions — ưu tiên proxy (cùng domain / dev) để tránh CORS. */
+/**
+ * Proxy cùng origin (Vite dev + `vite preview` có sẵn `/openai-proxy`).
+ * Hosting tĩnh (vd. GitHub Pages) cần reverse proxy cùng path, hoặc build với `VITE_OPENAI_PROXY_URL`.
+ */
+function defaultOpenAiProxyPath(): string {
+  const base = String(import.meta.env.BASE ?? '/')
+  const prefix = base === '/' ? '' : base.replace(/\/$/, '')
+  return `${prefix}/openai-proxy/v1/chat/completions`
+}
+
+/** POST body tương thích OpenAI Chat Completions — ưu tiên proxy (cùng domain) để tránh CORS. */
 export function getOpenAiChatCompletionsUrl(): string {
   const proxy = String(import.meta.env.VITE_OPENAI_PROXY_URL ?? '').trim()
   if (proxy) return proxy
   const legacy = String(import.meta.env.VITE_AI_API_URL ?? '').trim()
   if (legacy) return legacy
-  if (import.meta.env.DEV) return '/openai-proxy/v1/chat/completions'
-  return 'https://api.openai.com/v1/chat/completions'
+  return defaultOpenAiProxyPath()
 }
 
 export function explainOpenAiBrowserFetchError(err: unknown, endpoint: string): Error {
@@ -25,6 +34,13 @@ export function explainOpenAiBrowserFetchError(err: unknown, endpoint: string): 
   if (looksLikeCorsOrNetwork && hittingOpenAiDirect) {
     return new Error(
       'Không gọi được OpenAI từ trình duyệt (thường là CORS: api.openai.com không cho trang web gọi trực tiếp). Cách xử lý: đặt trong file .env khi build biến VITE_OPENAI_PROXY_URL (hoặc VITE_AI_API_URL) trỏ tới endpoint proxy tương thích OpenAI trên cùng domain với app; hoặc chạy «npm run dev» — dev server đã kèm proxy /openai-proxy. Hoặc chuyển sang Gemini.',
+      { cause: err },
+    )
+  }
+  const hittingSameOriginProxy = endpoint.includes('/openai-proxy/')
+  if (looksLikeCorsOrNetwork && hittingSameOriginProxy) {
+    return new Error(
+      'Không gọi được qua /openai-proxy (host chưa cấu hình proxy tới OpenAI, hoặc bạn đang xem bản build trên hosting tĩnh). Thử: «npm run dev» hoặc «npm run preview» (cả hai đều có proxy); build với VITE_OPENAI_PROXY_URL trỏ tới máy chủ proxy; hoặc trong Cài đặt → LLM chuyển sang Gemini.',
       { cause: err },
     )
   }

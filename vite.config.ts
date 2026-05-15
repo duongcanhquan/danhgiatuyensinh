@@ -14,20 +14,34 @@ function appBase(mode: string): string {
   return mode === 'production' ? '/danhgiatuyensinh/' : '/'
 }
 
-export default defineConfig(({ mode, command }) => ({
-  base: appBase(mode),
-  plugins: [react(), tailwindcss()],
-  /** Dev: tránh CORS khi gọi OpenAI — app dùng URL `/openai-proxy/v1/...` (xem `getOpenAiChatCompletionsUrl`). */
-  server:
-    command === 'serve'
-      ? {
-          proxy: {
-            '/openai-proxy': {
-              target: 'https://api.openai.com',
-              changeOrigin: true,
-              rewrite: (path) => path.replace(/^\/openai-proxy/, '') || '/',
-            },
-          },
-        }
-      : undefined,
-}))
+function openAiProxyForAppBase(base: string): Record<string, object> {
+  const prefix = base === '/' ? '' : base.replace(/\/$/, '')
+  const mount = `${prefix}/openai-proxy`.replace(/^\/{2,}/, '/')
+  const escaped = mount.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return {
+    [mount]: {
+      target: 'https://api.openai.com',
+      changeOrigin: true,
+      rewrite: (path: string) => path.replace(new RegExp(`^${escaped}`), '') || '/',
+    },
+  }
+}
+
+export default defineConfig(({ mode, command }) => {
+  const base = appBase(mode)
+  const openAiProxy = openAiProxyForAppBase(base)
+  return {
+    base,
+    plugins: [react(), tailwindcss()],
+    /** Dev + preview: tránh CORS khi gọi OpenAI — URL proxy khớp `import.meta.env.BASE` (xem `getOpenAiChatCompletionsUrl`). */
+    server:
+      command === 'serve'
+        ? {
+            proxy: openAiProxy,
+          }
+        : undefined,
+    preview: {
+      proxy: openAiProxy,
+    },
+  }
+})

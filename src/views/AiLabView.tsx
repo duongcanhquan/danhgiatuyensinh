@@ -46,9 +46,10 @@ export function AiLabView({ embedded = false }: { embedded?: boolean }) {
       {embedded ? (
         <p className="rounded-xl border border-violet-200/60 bg-violet-50/90 px-3 py-2 text-xs leading-relaxed text-violet-950">
           Phòng thử này dùng <strong>khóa API đã lưu</strong> ở tab <strong>LLM → API</strong> trên cùng trình duyệt. Với{' '}
-          <strong>ChatGPT</strong>: bản chạy bằng <code className="font-mono text-[0.85em]">npm run dev</code> tự dùng
-          proxy (tránh CORS); bản build trên hosting cần <code className="font-mono text-[0.85em]">VITE_OPENAI_PROXY_URL</code>{' '}
-          — xem <code className="font-mono text-[0.85em]">.env.example</code>. Nếu chưa lưu khóa, nhờ Siêu quản trị cấu
+          <strong>ChatGPT</strong>: <code className="font-mono text-[0.85em]">npm run dev</code> hoặc{' '}
+          <code className="font-mono text-[0.85em]">npm run preview</code> đều có proxy (tránh CORS); bản tĩnh trên hosting
+          cần proxy cùng domain hoặc <code className="font-mono text-[0.85em]">VITE_OPENAI_PROXY_URL</code> — xem{' '}
+          <code className="font-mono text-[0.85em]">.env.example</code>. Nếu chưa lưu khóa, nhờ Siêu quản trị cấu
           hình.
         </p>
       ) : null}

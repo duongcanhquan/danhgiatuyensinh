@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, PieChart, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Loader2, PieChart, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { InfoScoreFieldRowPersisted, InfoScoreRulesPersisted } from '../types'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { getDefaultInfoScoreRules, INFO_SCORE_CRITERION_HELP, infoScoreMaxRaw, mergeInfoScoreRules } from '../utils/infoScoreRules'
@@ -33,10 +34,25 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
   const [draft, setDraft] = useState<InfoScoreRulesPersisted>(() => merged)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   useEffect(() => {
     setDraft(merged)
   }, [merged])
+
+  useEffect(() => {
+    if (!helpOpen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHelpOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [helpOpen])
 
   const maxRaw = useMemo(() => infoScoreMaxRaw(draft), [draft])
 
@@ -96,19 +112,26 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
           <PieChart className="h-5 w-5 text-violet-700" strokeWidth={1.75} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <VietMyAccentHeading as="h3" tone="onLight" size="md" className="text-slate-900">
-            Điểm thông tin (độ đầy hồ sơ)
-          </VietMyAccentHeading>
-          <div className="mt-2 flex flex-wrap items-start gap-2 text-sm leading-relaxed text-slate-700 md:text-base">
-            <p className="min-w-0 flex-1">
-              % đo mức <strong>đã điền</strong> theo <strong>20 cột quy chuẩn</strong> + tiêu chí mở rộng bạn bật bên dưới
-              (điểm nền + dòng khớp, rồi kẹp min–max). Khác nhãn HOT/WARM của profile chấm điểm.
-            </p>
-            <HelpDot
-              ariaLabel="Giải thích chi tiết điểm thông tin"
-              text="Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp điều kiện; kẹp trong khoảng min–max %). Không đo chất lượng tư vấn, không thay cho nhãn HOT/WARM. Trên từng lead, nếu đã lưu cặp mlWinProbability + mlExplanation trên Firestore thì UI ưu tiên hiển thị theo dữ liệu đó (ghi đè công thức). Cột id gắn logic cố định trong app — chỉ bật/tắt, đổi điểm và nhãn hiển thị trong phạm vi bảng."
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <VietMyAccentHeading as="h3" tone="onLight" size="md" className="text-slate-900">
+              Điểm thông tin (độ đầy hồ sơ)
+            </VietMyAccentHeading>
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet-400/80 bg-white text-sm font-bold text-violet-800 shadow-sm hover:bg-violet-50"
+              aria-haspopup="dialog"
+              aria-expanded={helpOpen}
+              aria-controls="info-score-help-dialog"
+              title="Giải thích điểm thông tin"
+            >
+              ?
+            </button>
           </div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-700 md:text-base">
+            % đo mức <strong>đã điền</strong> theo <strong>20 cột quy chuẩn</strong> + tiêu chí bạn bật bên dưới — bấm{' '}
+            <strong>?</strong> để đọc đầy đủ. Khác nhãn HOT/WARM của profile chấm điểm.
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
             {loading ? (
               <span className="inline-flex items-center gap-1.5">
@@ -131,28 +154,6 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
           </div>
           {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
           {msg ? <p className="mt-2 text-sm text-emerald-800">{msg}</p> : null}
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 py-2 text-sm text-slate-800">
-        <span className="font-semibold text-slate-900">Nguyên tắc &amp; hiển thị</span>
-        <HelpDot
-          ariaLabel="Nguyên tắc điểm thông tin và cách hiển thị trên hệ thống"
-          text="Bộ mặc định bật 20 tiêu chí trùng cột Excel quy chuẩn (có thể tắt hoặc giảm điểm). Hai dòng educationLevel và description là mở rộng / legacy — mặc định tắt. Cộng điểm nền + các dòng đang bật mà hồ sơ khớp điều kiện, rồi kẹp % giữa min và max. Nếu lead có mlWinProbability + mlExplanation đã lưu, giao diện ưu tiên hiển thị cặp đó."
-        />
-      </div>
-
-      <div className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-amber-950">
-          <span className="font-semibold">Quyền chỉnh cấu hình</span>
-          <HelpDot
-            ariaLabel="Quyền chỉnh điểm thông tin"
-            text={
-              canEdit
-                ? 'Bạn có quyền cấu hình chấm điểm — có thể lưu hoặc xóa doc scoringAux/infoScoreConfig.'
-                : 'Chỉ xem — cần quyền chỉnh quy tắc chấm điểm (config:scoring_rules) để lưu thay đổi.'
-            }
-          />
         </div>
       </div>
 
@@ -324,6 +325,103 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
       <p className="mt-4 text-xs leading-relaxed text-slate-500 md:text-sm">
         Gợi ý: dùng % để ưu tiên bổ sung hồ sơ; dùng HOT/WARM từ bộ chấm điểm cho ưu tiên tuyển sinh. Hai thước đo độc lập.
       </p>
+
+      {helpOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-[2px]"
+              role="presentation"
+              onClick={() => setHelpOpen(false)}
+            >
+              <div
+                id="info-score-help-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="info-score-help-title"
+                className="max-h-[min(88dvh,640px)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-violet-200/90 bg-white p-5 shadow-2xl sm:max-w-xl sm:p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                  <h4 id="info-score-help-title" className="text-base font-bold uppercase tracking-wide text-violet-950 sm:text-lg">
+                    Điểm thông tin (độ đầy hồ sơ)
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpen(false)}
+                    className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-900"
+                    aria-label="Đóng"
+                  >
+                    <X className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+                <div className="mt-4 space-y-4 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
+                  <p>
+                    Con số % đo độ đầy <strong>thông tin tĩnh</strong> trên hồ sơ (đã nhập trên form / import),{' '}
+                    <strong>không</strong> đo chất lượng tư vấn, <strong>không</strong> thay cho nhãn HOT/WARM và{' '}
+                    <strong>không phải</strong> kết quả AI. Điểm nền + các tiêu chí đang bật và khớp điều kiện được cộng,
+                    rồi kẹp trong khoảng min–max %. Cột <code className="rounded bg-slate-100 px-1 font-mono text-xs">id</code>{' '}
+                    gắn với logic cố định trong app — muốn thêm loại trường hoàn toàn mới cần cập nhật phần mềm; trong
+                    phạm vi hiện tại bạn có thể bật/tắt, đổi điểm và đổi nhãn cho từng tiêu chí có sẵn.
+                  </p>
+                  <p className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:text-sm">
+                    Dòng trạng thái <strong>«Đang áp dụng…»</strong> ngay trên form cho biết đang dùng cấu hình server hay
+                    mặc định app (trước khi mở popup này).
+                  </p>
+                  <div>
+                    <p className="font-semibold text-slate-900">Nguyên tắc và tiêu chí bổ sung</p>
+                    <ul className="mt-2 list-disc space-y-2 pl-5 text-slate-800">
+                      <li>
+                        <strong>Bộ lõi (mặc định bật):</strong> danh tính, liên hệ, địa lý, hệ đào tạo và trường — phù
+                        hợp hồ sơ mới nhập từ Excel / form nhanh.
+                      </li>
+                      <li>
+                        <strong>Tiêu chí thêm (mặc định tắt):</strong> nguồn lead, ngành riêng (majorInterest), học lực,
+                        lớp, ghi chú đủ dài — bật khi trường bạn đã thu thập đủ dữ liệu và muốn % phản ánh thêm. (Chi
+                        tiết cột nào đang bật/tắt xem đúng cột <strong>Bật</strong> trong bảng — có thể chỉnh theo nhu
+                        cầu trường.)
+                      </li>
+                      <li>
+                        Mỗi dòng trong bảng dưới có cột <strong>Điều kiện</strong> (nút <strong>?</strong> trong ô) mô tả
+                        đúng điều kiện trong mã; chỉnh điểm / nhãn hiển thị không làm thay đổi điều kiện khớp.
+                      </li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Cách hiển thị trên hệ thống</p>
+                    <ul className="mt-2 list-disc space-y-2 pl-5 text-slate-800">
+                      <li>
+                        Cộng điểm nền + các dòng đang bật mà hồ sơ đạt điều kiện, rồi kẹp giữa min và max %.
+                      </li>
+                      <li>
+                        Nếu trên từng lead có <code className="font-mono text-xs">mlWinProbability</code> +{' '}
+                        <code className="font-mono text-xs">mlExplanation</code>, UI ưu tiên giá trị đó (ghi đè công thức
+                        cho người đó).
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-amber-950">
+                    <p className="font-semibold">Quyền chỉnh</p>
+                    <p className="mt-1">
+                      {canEdit
+                        ? 'Bạn có quyền cấu hình chấm điểm — có thể lưu hoặc xóa doc cấu hình điểm thông tin (scoringAux/infoScoreConfig).'
+                        : 'Chỉ xem — cần quyền chỉnh quy tắc chấm điểm (config:scoring_rules) để lưu thay đổi.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end border-t border-slate-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpen(false)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   )
 }
