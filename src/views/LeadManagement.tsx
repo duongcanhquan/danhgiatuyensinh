@@ -229,6 +229,7 @@ export function LeadManagement() {
   const [scoreMinInput, setScoreMinInput] = useState('')
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
+  const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
 
   /** Lọc HOT/WARM/COLD theo điểm profile hiện tại — không dùng `where(priorityTag)`; cần quét gần đây (fullScope). */
   const tagClientEval = tagFilter !== 'ALL' && !urlQuery.trim()
@@ -1800,35 +1801,15 @@ export function LeadManagement() {
               <Zap className="h-3.5 w-3.5 shrink-0 text-current" strokeWidth={2.5} aria-hidden />
               ⚡ AI Shortlist
             </button>
-            <details className="group relative">
-              <summary
-                className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-full border border-slate-200/90 bg-white/90 text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 hover:text-amber-900 [&::-webkit-details-marker]:hidden"
-                aria-label="Hướng dẫn AI Shortlist"
-                title="Mở hướng dẫn"
-              >
-                <CircleHelp className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-              </summary>
-              <div className="absolute left-0 z-30 mt-1.5 w-[min(22rem,calc(100vw-2rem))] space-y-2 rounded-xl border border-slate-200/90 bg-white/98 p-3 text-left text-xs leading-snug text-slate-700 shadow-lg backdrop-blur-md sm:left-auto sm:right-0">
-                <p className="font-semibold text-slate-900">AI Shortlist hoạt động thế nào?</p>
-                <ol className="list-decimal space-y-1.5 pl-4 marker:text-amber-700">
-                  <li>
-                    Nút <strong>⚡ AI Shortlist</strong> chỉ là <strong>bộ lọc danh sách</strong>: hiện các hồ sơ đã có cờ{' '}
-                    <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-800">isAiShortlisted = true</code>{' '}
-                    trên Firestore (kèm lý do trong <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">aiShortlistReason</code>).
-                  </li>
-                  <li>
-                    Để <strong>tạo / cập nhật</strong> cờ đó: chọn một hoặc nhiều hồ sơ có nhãn <strong>WARM</strong> (theo profile chấm điểm đang bật) → thanh thao tác hàng loạt →{' '}
-                    <strong>✨ Chạy AI Phân tích (Shortlist)</strong> → vượt <strong>AI Gatekeeper</strong> → LLM phân tích theo lô và ghi kết quả vào từng hồ sơ.
-                  </li>
-                  <li>
-                    Cần <strong>quyền LLM</strong> và đã <strong>cấu hình API key</strong> (Cài đặt → LLM). Nếu chưa từng chạy AI, bật lọc này thường cho danh sách trống — đó là bình thường.
-                  </li>
-                </ol>
-                <p className="border-t border-slate-100 pt-2 text-[11px] text-slate-500">
-                  TVV chỉ thấy hồ sơ được gán cho mình; quản trị thấy theo phạm vi quyền. Lọc kết hợp với các điều kiện khác vẫn do Firestore xử lý (cần deploy chỉ mục nếu console báo thiếu index).
-                </p>
-              </div>
-            </details>
+            <button
+              type="button"
+              onClick={() => setAiShortlistGuideOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-amber-400 hover:bg-amber-50/90 hover:text-amber-950"
+              title="Mở hướng dẫn AI Shortlist (cửa sổ giữa màn hình)"
+            >
+              <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
+              Hướng dẫn
+            </button>
           </div>
           {aiShortlistOnly ? (
             <span className="max-w-xl text-xs leading-snug text-slate-600">
@@ -2254,6 +2235,106 @@ export function LeadManagement() {
           </div>
         </>
       ) : null}
+
+      {aiShortlistGuideOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div className="fixed inset-0 z-[74] flex items-center justify-center p-4 sm:p-6" role="presentation">
+              <button
+                type="button"
+                className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+                aria-label="Đóng hướng dẫn"
+                onClick={() => setAiShortlistGuideOpen(false)}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="ai-shortlist-guide-title"
+                className="relative z-10 max-h-[min(88dvh,720px)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-amber-200/80 bg-white p-5 shadow-[0_24px_64px_rgba(15,23,42,0.28)] sm:max-w-xl sm:p-7"
+              >
+                <div className="flex items-start justify-between gap-3 border-b border-amber-100 pb-4">
+                  <div className="min-w-0">
+                    <p
+                      id="ai-shortlist-guide-title"
+                      className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+                    >
+                      Hướng dẫn: AI Shortlist
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                      Hai bước tách biệt — <strong className="text-slate-800">lọc danh sách</strong> và{' '}
+                      <strong className="text-slate-800">chạy AI để đánh dấu</strong> trên Firestore.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAiShortlistGuideOpen(false)}
+                    className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-900"
+                    aria-label="Đóng"
+                  >
+                    <X className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+
+                <ol className="mt-5 list-decimal space-y-4 pl-5 text-sm leading-relaxed text-slate-800 marker:font-bold marker:text-amber-700 sm:text-[15px] sm:leading-relaxed">
+                  <li>
+                    <span className="font-semibold text-slate-900">Nút «⚡ AI Shortlist»</span> chỉ bật{' '}
+                    <strong>bộ lọc</strong>: truy vấn Firestore với{' '}
+                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-900">
+                      isAiShortlisted == true
+                    </code>
+                    . Không gọi API, không tốn token. Nếu chưa ai chạy Miner trước đó, danh sách có thể{' '}
+                    <strong>trống</strong> — đúng với thiết kế.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-slate-900">Để có dữ liệu shortlist</span>: trên bảng Hồ sơ,
+                    tick chọn các lead có nhãn <strong>WARM</strong> (theo profile chấm điểm đang bật) → thanh thao tác
+                    hàng loạt phía dưới → <strong>✨ Chạy AI Phân tích (Shortlist)</strong> → cửa sổ{' '}
+                    <strong>AI Gatekeeper</strong> → xác nhận chạy. LLM ghi{' '}
+                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono">isAiShortlisted</code>,{' '}
+                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono">aiShortlistReason</code>,{' '}
+                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-mono">recommendedAction</code> lên
+                    từng hồ sơ.
+                  </li>
+                  <li>
+                    Cần <strong>quyền LLM</strong> (và được quản lý bật «Cho phép dùng LLM…» nếu không phải Siêu quản
+                    trị) và đã <strong>lưu API</strong> tại <strong>Cài đặt → tab LLM</strong> trên trình duyệt này.
+                  </li>
+                </ol>
+
+                <div className="mt-6 rounded-xl border border-slate-200/90 bg-slate-50/90 p-4 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">Gợi ý nhanh</p>
+                  <ul className="mt-2 list-disc space-y-1.5 pl-5 text-slate-700">
+                    <li>Chip «Đang lọc» có mục «Chỉ hồ sơ AI Shortlist» — bấm × để tắt lọc.</li>
+                    <li>
+                      Chi tiết một hồ sơ: mở panel — khối «AI Shortlist · Chiến lược chốt» hiển thị lý do đã lưu.
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setAiShortlistGuideOpen(false)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiShortlistGuideOpen(false)
+                      setAiShortlistOnly(true)
+                      setPage(1)
+                    }}
+                    className="rounded-xl border border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 px-4 py-2.5 text-sm font-bold text-amber-950 shadow-sm transition hover:brightness-105"
+                  >
+                    Bật lọc AI Shortlist
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {gatekeeperModal && typeof document !== 'undefined'
         ? createPortal(
