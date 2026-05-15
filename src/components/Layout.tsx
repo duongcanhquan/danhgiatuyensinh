@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
+  BookOpen,
   Database,
   LayoutDashboard,
   LineChart,
@@ -30,6 +31,7 @@ const mainNav: NavDef[] = [
   { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, perm: 'analytics:advanced' },
   { to: '/import', label: 'Nhập liệu', icon: Database, perm: 'data:intake' },
   { to: '/settings', label: 'Cài đặt', icon: Settings2 },
+  { to: '/huong-dan', label: 'Hướng dẫn', icon: BookOpen },
 ]
 
 export function Layout() {
