@@ -30,6 +30,16 @@ export function isLeadInManagerTeam(
   return counselorIdsInManagerScope(manager, directory).includes(assigned)
 }
 
+/** Tạo hồ sơ ứng viên mới (form thủ công trên màn Hồ sơ). */
+export function canCreateLead(
+  profile: VietMyUserProfile | null | undefined,
+  can: (p: Permission) => boolean,
+): boolean {
+  if (!profile) return false
+  if (isAdminLikeRole(profile.role)) return true
+  return can('leads:write:self_assigned') || can('leads:write:team_scope')
+}
+
 /** Được sửa / cập nhật hồ sơ (form chi tiết, bulk). */
 export function canWriteLead(
   profile: VietMyUserProfile | null | undefined,

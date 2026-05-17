@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Library, Sparkles, Wand2, X, Zap } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Library, Sparkles, UserPlus, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -38,7 +38,7 @@ import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
-import { canWriteLead } from '../auth/leadAccess'
+import { canCreateLead, canWriteLead } from '../auth/leadAccess'
 import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
@@ -95,6 +95,7 @@ import {
 } from '../utils/leadWorkspaceUrlFilters'
 import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/counselorDisplay'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { CreateLeadModal } from '../components/CreateLeadModal'
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
   NEW: 'Mới',
@@ -248,6 +249,7 @@ export function LeadManagement() {
   const [adminDateTo, setAdminDateTo] = useState('')
   const [adminAssignedCounselorIds, setAdminAssignedCounselorIds] = useState<string[]>([])
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
+  const [createLeadOpen, setCreateLeadOpen] = useState(false)
 
   const [tagFilter, setTagFilter] = useState<string>('ALL')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
@@ -555,6 +557,40 @@ export function LeadManagement() {
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
+  const canCreateManualLead = canCreateLead(profile, can)
+
+  const openLeadById = useCallback(
+    async (leadId: string) => {
+      if (!db) return
+      try {
+        const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, leadId))
+        if (!snap.exists()) return
+        const row = mapDoc(leadId, snap.data() as Record<string, unknown>)
+        if (row) {
+          setSelected(row)
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev)
+              next.set('open', leadId)
+              return next
+            },
+            { replace: true },
+          )
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    },
+    [db, setSearchParams],
+  )
+
+  const handleManualLeadCreated = useCallback(
+    (leadId: string) => {
+      void refetchLeads()
+      void openLeadById(leadId)
+    },
+    [refetchLeads, openLeadById],
+  )
 
   const selectedWarmCount = useMemo(
     () => leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM').length,
@@ -1463,6 +1499,16 @@ export function LeadManagement() {
                 </div>
               </label>
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                {canCreateManualLead && configured && db ? (
+                  <button
+                    type="button"
+                    onClick={() => setCreateLeadOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500 bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                  >
+                    <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Tạo hồ sơ mới
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={!activeScoringProfile}
@@ -2528,6 +2574,20 @@ export function LeadManagement() {
             document.body,
           )
         : null}
+
+      <CreateLeadModal
+        open={createLeadOpen}
+        onClose={() => setCreateLeadOpen(false)}
+        db={db}
+        profile={profile}
+        assigneeOptions={reassignPickList}
+        directoryUsers={directoryUsers}
+        activeScoringProfile={activeScoringProfile}
+        scoringMasterBuckets={scoringMasterBuckets}
+        schoolTvvSignalDefs={schoolTvvSignalDefs}
+        onCreated={handleManualLeadCreated}
+        onOpenExisting={(id) => void openLeadById(id)}
+      />
     </div>
   )
 }

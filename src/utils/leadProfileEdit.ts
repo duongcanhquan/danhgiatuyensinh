@@ -28,6 +28,35 @@ export type LeadCoreDraft = {
   otherAttentionNotes: string
 }
 
+export function emptyLeadCoreDraft(): LeadCoreDraft {
+  return {
+    fullName: '',
+    customerId: '',
+    dateOfBirth: '',
+    phone: '',
+    parentPhone: '',
+    source: '',
+    province: '',
+    address: '',
+    highSchool: '',
+    gradeClass: '',
+    educationLevel: '',
+    majorInterest: '',
+    academicPerformance: '',
+    studyIntention: '',
+    schoolType: '',
+    financialStatus: '',
+    hanoiArea: '',
+    description: '',
+    aspirations: '',
+    hobbies: '',
+    fieldTripNotes: '',
+    profileNote1: '',
+    profileNote2: '',
+    otherAttentionNotes: '',
+  }
+}
+
 export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
   return {
     fullName: lead.fullName ?? '',
