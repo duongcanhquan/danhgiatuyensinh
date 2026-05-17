@@ -8,6 +8,7 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import { getDatabase, type Database } from 'firebase/database'
+import { getStorage, type FirebaseStorage } from 'firebase/storage'
 
 /**
  * Khởi tạo Firebase từ biến môi trường Vite (.env).
@@ -53,6 +54,7 @@ let db: Firestore | null = null
 let firestoreCacheKey: string | null = null
 let rtdb: Database | null = null
 let auth: Auth | null = null
+let storage: FirebaseStorage | null = null
 
 export function isFirebaseConfigured(): boolean {
   const { missing } = readFirebaseConfig()
@@ -140,6 +142,17 @@ export function getRealtimeDb(): Database | null {
   if (!databaseURL) return null
   rtdb = getDatabase(a)
   return rtdb
+}
+
+/** Firebase Storage — chứng từ thu tiền (thay Drive upload hệ cũ) */
+export function getFirebaseStorage(): FirebaseStorage | null {
+  if (storage) return storage
+  const a = ensureApp()
+  if (!a) return null
+  const bucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined
+  if (!bucket?.trim()) return null
+  storage = getStorage(a)
+  return storage
 }
 
 /** Firebase Auth */

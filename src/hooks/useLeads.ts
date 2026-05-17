@@ -18,7 +18,17 @@ import {
   type QueryFilterConstraint,
   type QuerySnapshot,
 } from 'firebase/firestore'
-import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag, VietMyUserProfile } from '../types'
+import type {
+  Lead,
+  LeadCounselorStatus,
+  LeadFinanceRecord,
+  LeadPaymentApprovalStatus,
+  LeadPaymentLine,
+  LeadPaymentSlotKey,
+  LeadPipelineStatus,
+  PriorityTag,
+  VietMyUserProfile,
+} from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
@@ -30,6 +40,52 @@ import {
   pipelineToCounselorStatus,
 } from '../utils/leadIdentity'
 import { parseScoringSignalsFromFirestore } from '../utils/leadScoringSignals'
+
+const PAYMENT_KEYS: LeadPaymentSlotKey[] = [
+  'deposit',
+  'supplementL1',
+  'supplementL2',
+  'supplementL3',
+  'supplementL4',
+]
+
+function parsePaymentLine(raw: unknown): LeadPaymentLine | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const amountVnd = o.amountVnd != null ? Number(o.amountVnd) : undefined
+  const collectedAt = String(o.collectedAt ?? '').trim() || undefined
+  const receiptUrl = String(o.receiptUrl ?? '').trim() || undefined
+  const approvalStatus = String(o.approvalStatus ?? '').trim() as LeadPaymentApprovalStatus
+  if (!amountVnd && !collectedAt && !receiptUrl && !approvalStatus) return undefined
+  return {
+    amountVnd: amountVnd && !Number.isNaN(amountVnd) ? amountVnd : undefined,
+    collectedAt,
+    receiptUrl,
+    approvalStatus: approvalStatus || undefined,
+  }
+}
+
+function parseFinanceFromFirestore(data: DocumentData): LeadFinanceRecord | undefined {
+  const raw = data.finance
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const payments: Partial<Record<LeadPaymentSlotKey, LeadPaymentLine>> = {}
+  const payRaw = o.payments
+  if (payRaw && typeof payRaw === 'object') {
+    for (const key of PAYMENT_KEYS) {
+      const line = parsePaymentLine((payRaw as Record<string, unknown>)[key])
+      if (line) payments[key] = line
+    }
+  }
+  const declaredTotalVnd = o.declaredTotalVnd != null ? Number(o.declaredTotalVnd) : undefined
+  return {
+    payments: Object.keys(payments).length ? payments : undefined,
+    declaredTotalVnd: declaredTotalVnd && !Number.isNaN(declaredTotalVnd) ? declaredTotalVnd : undefined,
+    reqFullNe: o.reqFullNe === true,
+    fullNeStatus: String(o.fullNeStatus ?? '').trim() || undefined,
+    n8nStatus: String(o.n8nStatus ?? '').trim() || undefined,
+  }
+}
 
 function parseScoringCustomSignalsFromFirestore(raw: unknown): Record<string, boolean> | undefined {
   if (!raw || typeof raw !== 'object') return undefined
@@ -225,6 +281,13 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       ...(String(data.guardian ?? '').trim() ? { guardian: String(data.guardian).trim() } : {}),
       ...(String(data.scholarship1Id ?? '').trim() ? { scholarship1Id: String(data.scholarship1Id).trim() } : {}),
       ...(String(data.scholarship2Id ?? '').trim() ? { scholarship2Id: String(data.scholarship2Id).trim() } : {}),
+      ...(() => {
+        const finance = parseFinanceFromFirestore(data)
+        return finance ? { finance } : {}
+      })(),
+      ...(String(data.inviteFolderUrl ?? '').trim()
+        ? { inviteFolderUrl: String(data.inviteFolderUrl).trim() }
+        : {}),
       highSchool,
       gradeClass,
       province,

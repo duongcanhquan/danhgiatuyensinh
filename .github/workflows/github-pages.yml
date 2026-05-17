@@ -86,5 +86,27 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # deploy-pages trả 404 nếu Pages chưa bật hoặc Source ≠ «GitHub Actions»
+      - name: Kiểm tra GitHub Pages đã bật (tránh lỗi 404 mơ hồ)
+        run: |
+          code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pages")
+          if [ "$code" = "404" ]; then
+            echo "::error::GitHub Pages chưa được cấu hình cho repo này."
+            echo ""
+            echo "Làm theo thứ tự:"
+            echo "  1. Mở https://github.com/${{ github.repository }}/settings/pages"
+            echo "  2. Mục «Build and deployment» → Source: chọn «GitHub Actions» (KHÔNG dùng «Deploy from a branch»)."
+            echo "  3. Lưu, rồi Actions → «Deploy GitHub Pages» → Run workflow."
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::warning::GET /pages trả HTTP $code"; cat /tmp/pages.json || true
+          else
+            echo "GitHub Pages đã bật:"; cat /tmp/pages.json
+          fi
+
       - id: deployment
         uses: actions/deploy-pages@v5

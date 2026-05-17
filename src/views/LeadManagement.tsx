@@ -16,6 +16,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import type {
+  InviteDocumentType,
   Lead,
   LeadCounselorStatus,
   LeadPipelineStatus,
@@ -79,7 +80,12 @@ import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
 import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
+import { LeadProfileFinanceSection } from '../components/LeadProfileFinanceSection'
+import { LeadProfileInviteSection } from '../components/LeadProfileInviteSection'
 import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft } from '../utils/leadProfileEdit'
+import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
+import { persistLeadFinance } from '../utils/persistLeadFinance'
+import { triggerInvitationN8n } from '../utils/n8nIntegration'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
@@ -2838,9 +2844,14 @@ function LeadDetailPanel({
 
   const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
   const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
+  const [financeDraft, setFinanceDraft] = useState(() => leadToFinanceDraft(lead))
+  const financeDirty = useMemo(() => isFinanceDraftDirty(lead, financeDraft), [lead, financeDraft])
+  const [financeSaving, setFinanceSaving] = useState(false)
+  const [inviteBusy, setInviteBusy] = useState(false)
 
   useEffect(() => {
     setCoreDraft(leadToCoreDraft(lead))
+    setFinanceDraft(leadToFinanceDraft(lead))
   }, [lead.id])
 
   const [note, setNote] = useState('')
@@ -2936,11 +2947,13 @@ function LeadDetailPanel({
   const hasUnsavedProgress = useMemo(
     () =>
       coreDirty ||
+      financeDirty ||
       (crmDirty !== null && crmForForm !== lead.status) ||
       (statusDirty !== null && statusForForm !== lead.pipelineStatus) ||
       note.trim().length > 0,
     [
       coreDirty,
+      financeDirty,
       crmDirty,
       crmForForm,
       lead.status,
@@ -3024,6 +3037,86 @@ function LeadDetailPanel({
     },
     [pickListUsers, counselorUsers],
   )
+
+  const saveFinanceProfile = async () => {
+    if (!db || !profile) {
+      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      return
+    }
+    if (!showCounselorProgressForm) {
+      setMsg('Bạn không có quyền chỉnh tài chính hồ sơ này.')
+      return
+    }
+    if (!financeDirty) {
+      setMsg('Không có thay đổi tài chính.')
+      return
+    }
+    setFinanceSaving(true)
+    setMsg(null)
+    try {
+      const performer = profile.displayName?.trim() || profile.email || profile.id
+      const { finance, updatedAt, lastTouchedAt } = await persistLeadFinance({
+        db,
+        lead,
+        draft: financeDraft,
+        counselorName: performer,
+      })
+      await commitAuditLog(db, {
+        leadId: lead.id,
+        actionType: 'SYSTEM_UPDATE',
+        description: 'Cập nhật tài chính / chứng từ (upload + n8n nếu đổi tiền hoặc file)',
+        performedBy: profile.id,
+        performedByName: performer,
+      })
+      const nextLead: Lead = { ...lead, finance, updatedAt, lastTouchedAt }
+      setFinanceDraft(leadToFinanceDraft(nextLead))
+      onUpdated({ finance, updatedAt, lastTouchedAt })
+      setMsg('Đã lưu tài chính.')
+    } catch (e) {
+      console.error(e)
+      const err = e instanceof Error ? e.message : 'Không lưu được tài chính.'
+      setMsg(err)
+    } finally {
+      setFinanceSaving(false)
+    }
+  }
+
+  const handleInvitation = async (docType: InviteDocumentType, scholarshipId: string) => {
+    if (!db || !profile) {
+      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      return
+    }
+    if (!showCounselorProgressForm) {
+      setMsg('Bạn không có quyền tạo giấy mời trên hồ sơ này.')
+      return
+    }
+    setInviteBusy(true)
+    setMsg(null)
+    try {
+      const scholarship = scholarshipId ? (scholarships.find((s) => s.id === scholarshipId) ?? null) : null
+      const { folderUrl } = await triggerInvitationN8n({
+        lead,
+        docType,
+        scholarship,
+        inviteFolderUrl: lead.inviteFolderUrl,
+      })
+      if (folderUrl) {
+        const touch = leadTouchPatch()
+        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
+          ...touch,
+          inviteFolderUrl: folderUrl,
+        })
+        onUpdated({ inviteFolderUrl: folderUrl, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt })
+      }
+      setMsg('Đã gửi yêu cầu tạo giấy tờ qua n8n.')
+    } catch (e) {
+      console.error(e)
+      const err = e instanceof Error ? e.message : 'Không tạo được giấy mời.'
+      setMsg(err)
+    } finally {
+      setInviteBusy(false)
+    }
+  }
 
   const saveCoreProfile = async () => {
     if (!db || !profile) {
@@ -3543,12 +3636,20 @@ function LeadDetailPanel({
                           </div>
                           {showCounselorProgressForm ? (
                             <div className="flex flex-wrap items-center gap-2">
-                              {coreDirty ? (
+                              {coreDirty || financeDirty ? (
                                 <span className="text-[10px] font-semibold text-amber-800">Chưa lưu thay đổi</span>
                               ) : null}
                               <button
                                 type="button"
-                                disabled={saving || !coreDirty}
+                                disabled={saving || financeSaving || !financeDirty}
+                                onClick={() => void saveFinanceProfile()}
+                                className="rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                {financeSaving ? 'Đang lưu…' : 'Lưu tài chính'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={saving || financeSaving || !coreDirty}
                                 onClick={() => void saveCoreProfile()}
                                 className="rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
                               >
@@ -3557,14 +3658,34 @@ function LeadDetailPanel({
                             </div>
                           ) : null}
                         </div>
+                        {msg && detailLeftTab === 'profile' ? (
+                          <p className="mt-1 shrink-0 text-xs font-medium text-amber-900">{msg}</p>
+                        ) : null}
                         <div className="mt-2 flex min-h-0 flex-1 flex-col">
                           <LeadProfileCoreForm
                             draft={coreDraft}
                             onChange={setCoreDraft}
-                            disabled={!showCounselorProgressForm}
+                            disabled={!showCounselorProgressForm || financeSaving}
                             leadSources={leadSources}
                             scholarships={scholarships}
                             layout="tabs"
+                            financePanel={
+                              <LeadProfileFinanceSection
+                                draft={financeDraft}
+                                onChange={setFinanceDraft}
+                                disabled={!showCounselorProgressForm || saving || financeSaving}
+                              />
+                            }
+                            invitePanel={
+                              <LeadProfileInviteSection
+                                lead={lead}
+                                scholarships={scholarships}
+                                inviteFolderUrl={lead.inviteFolderUrl}
+                                disabled={!showCounselorProgressForm || inviteBusy}
+                                busy={inviteBusy}
+                                onGenerate={handleInvitation}
+                              />
+                            }
                           />
                         </div>
                         {!showCounselorProgressForm ? (

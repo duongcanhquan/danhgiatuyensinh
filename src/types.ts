@@ -230,6 +230,39 @@ export type FinancialStatus =
   | 'FINANCIAL_AID'
   | 'UNKNOWN'
 
+/** Trạng thái kế toán duyệt từng khoản — cột valid1..5 hệ cũ */
+export type LeadPaymentApprovalStatus = '' | 'ĐỒNG Ý' | 'TỪ CHỐI' | 'KIỂM TRA LẠI'
+
+export type LeadPaymentSlotKey = 'deposit' | 'supplementL1' | 'supplementL2' | 'supplementL3' | 'supplementL4'
+
+export interface LeadPaymentLine {
+  amountVnd?: number
+  /** dd/MM/yyyy hoặc YYYY-MM-DD */
+  collectedAt?: string
+  receiptUrl?: string
+  approvalStatus?: LeadPaymentApprovalStatus
+}
+
+export interface LeadFinanceRecord {
+  payments?: Partial<Record<LeadPaymentSlotKey, LeadPaymentLine>>
+  declaredTotalVnd?: number
+  /** TVV tick «đã thu đủ FULL NE» — map cột 65: YÊU CẦU FULL NE / ĐÃ FULL NE */
+  reqFullNe?: boolean
+  fullNeStatus?: string
+  n8nStatus?: string
+}
+
+/** Loại giấy tờ gửi n8n `create_document` */
+export type InviteDocumentType =
+  | 'LE_PHI_CO_DAU'
+  | 'LE_PHI_KHONG_DAU'
+  | 'TRUNG_TUYEN_9_CO_DAU'
+  | 'TRUNG_TUYEN_9_KHONG_DAU'
+  | 'TRUNG_TUYEN_CD_CO_DAU'
+  | 'TRUNG_TUYEN_CD_KHONG_DAU'
+  | 'THU_MOI_CD_CO_DAU'
+  | 'THU_MOI_CD_KHONG_DAU'
+
 /**
  * Canonical Lead — collection `leads/{leadId}`
  * Schema aligned to VietMy Excel intake columns + persistence / analytics system fields.
@@ -311,6 +344,11 @@ export interface Lead {
   /** Doc id trong `scholarships` — rỗng = không có học bổng */
   scholarship1Id?: string
   scholarship2Id?: string
+
+  /** 5 khoản thu + FULL NE — đồng bộ logic hệ thống cũ (Sheet / n8n `full_data`) */
+  finance?: LeadFinanceRecord
+  /** Thư mục Drive giấy mời — cột 36 hệ cũ */
+  inviteFolderUrl?: string
 
   // --- System / analytics (not Excel columns) ---
   calculatedScore: number

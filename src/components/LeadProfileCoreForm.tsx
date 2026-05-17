@@ -8,12 +8,22 @@ import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
 const INPUT_CLS =
   'w-full max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500'
 
-export type LeadProfileFormTabId = 'contact' | 'family' | 'scholarship' | 'geo' | 'study' | 'notes'
+export type LeadProfileFormTabId =
+  | 'contact'
+  | 'family'
+  | 'scholarship'
+  | 'geo'
+  | 'study'
+  | 'notes'
+  | 'finance'
+  | 'invite'
 
 const PROFILE_TABS: { id: LeadProfileFormTabId; label: string; short: string }[] = [
   { id: 'contact', label: 'Liên hệ & nguồn', short: 'Liên hệ' },
   { id: 'family', label: 'Gia đình', short: 'Gia đình' },
-  { id: 'scholarship', label: 'Học bổng', short: 'Học bổng' },
+  { id: 'scholarship', label: 'Học bổng', short: 'HB' },
+  { id: 'finance', label: 'Tài chính', short: 'Tài chính' },
+  { id: 'invite', label: 'Giấy mời', short: 'Giấy mời' },
   { id: 'geo', label: 'Địa lý & trường', short: 'Địa lý' },
   { id: 'study', label: 'Học tập', short: 'Học tập' },
   { id: 'notes', label: 'Ghi chú', short: 'Ghi chú' },
@@ -188,6 +198,8 @@ export function LeadProfileCoreForm({
   layout = 'accordion',
   defaultTab = 'contact',
   wideGrid = false,
+  financePanel,
+  invitePanel,
 }: {
   draft: LeadCoreDraft
   onChange: (next: LeadCoreDraft) => void
@@ -197,6 +209,8 @@ export function LeadProfileCoreForm({
   layout?: 'accordion' | 'tabs'
   defaultTab?: LeadProfileFormTabId
   wideGrid?: boolean
+  financePanel?: ReactNode
+  invitePanel?: ReactNode
 }) {
   const [activeTab, setActiveTab] = useState<LeadProfileFormTabId>(defaultTab)
   const patch = <K extends keyof LeadCoreDraft>(k: K, v: LeadCoreDraft[K]) => onChange({ ...draft, [k]: v })
@@ -397,6 +411,9 @@ export function LeadProfileCoreForm({
   )
 
   if (tabMode) {
+    const tabPanel =
+      activeTab === 'finance' ? financePanel : activeTab === 'invite' ? invitePanel : body
+
     return (
       <div className="flex min-h-0 flex-col gap-3 text-sm text-slate-800">
         <ProfileTabBar active={activeTab} onChange={setActiveTab} compact={!wideGrid} />
@@ -404,7 +421,7 @@ export function LeadProfileCoreForm({
           role="tabpanel"
           className="min-h-[14rem] flex-1 overflow-y-auto overscroll-y-contain rounded-xl border border-slate-200/90 bg-white p-3 sm:p-4 [scrollbar-width:thin]"
         >
-          {body}
+          {tabPanel}
         </div>
       </div>
     )

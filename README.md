@@ -56,9 +56,11 @@ git push -u origin main
 
 1. Push code lên nhánh `main` (workflow trong `.github/workflows/github-pages.yml` sẽ chạy).
 2. Trên GitHub repo: **Settings → Pages → Build and deployment**.
-3. **Source**: chọn **GitHub Actions** (không dùng “Deploy from branch” cho workflow này).
+3. **Source**: chọn **GitHub Actions** (không dùng “Deploy from a branch” — nếu để nhánh `gh-pages`/`main` thì job `deploy-pages` thường **404 Not Found**).
 4. Sau khi workflow xanh, site tại:  
    **https://duongcanhquan.github.io/danhgiatuyensinh/**
+
+**Lỗi deploy `Failed to create deployment (status: 404)`** — build đã xong nhưng bước deploy thất bại: vào [Settings → Pages](https://github.com/duongcanhquan/danhgiatuyensinh/settings/pages), đổi **Source** sang **GitHub Actions**, rồi **Actions → Deploy GitHub Pages → Run workflow**. Repo private cần gói GitHub có hỗ trợ Pages.
 
 `vite.config.ts` dùng `base: '/danhgiatuyensinh/'` khi build production để asset đúng đường dẫn trên GitHub Pages.
 
