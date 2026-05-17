@@ -43,7 +43,7 @@ import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
-import { playbooksMatchingLead } from '../utils/playbookMatch'
+import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import {
   evaluateLead,
   leadToEvaluationRecord,
@@ -183,6 +183,24 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
+const LEAD_TABLE_COL_COUNT = 13
+
+/** Ghi chú bổ sung (các trường Excel / hồ sơ ngoài cột mô tả chính). */
+function leadSupplementaryNotesText(lead: Lead): string {
+  const chunks: string[] = []
+  const add = (label: string, val?: string) => {
+    const t = val?.trim()
+    if (t) chunks.push(`${label}: ${t}`)
+  }
+  add('Ghi chú 1', lead.profileNote1)
+  add('Ghi chú 2', lead.profileNote2)
+  add('Lưu ý khác', lead.otherAttentionNotes)
+  add('Nguyện vọng', lead.aspirations)
+  add('Sở thích', lead.hobbies)
+  add('Field trip', lead.fieldTripNotes)
+  return chunks.join(' · ')
+}
+
 export function LeadManagement() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
@@ -215,7 +233,6 @@ export function LeadManagement() {
     | 'score'
     | 'mlWin'
     | 'priorityTag'
-    | 'pipelineStatus'
   >('none')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -628,8 +645,6 @@ export function LeadManagement() {
           return (mlOf(a) - mlOf(b)) * dir
         case 'priorityTag':
           return String(tagOf(a)).localeCompare(String(tagOf(b))) * dir
-        case 'pipelineStatus':
-          return String(a.pipelineStatus).localeCompare(String(b.pipelineStatus)) * dir
         default:
           return 0
       }
@@ -1866,8 +1881,17 @@ export function LeadManagement() {
                     {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chú hoặc mô tả ngắn trên hồ sơ">
+                <th
+                  className="max-w-[11rem] px-2 py-3 text-sm font-medium normal-case"
+                  title="Mô tả / ghi chú chính trên hồ sơ"
+                >
                   Ghi chú
+                </th>
+                <th
+                  className="max-w-[11rem] px-2 py-3 text-sm font-medium normal-case"
+                  title="Ghi chú 1, ghi chú 2, nguyện vọng, sở thích… (khi có nhiều trường ghi chú)"
+                >
+                  Ghi chú thêm
                 </th>
                 <th className="px-4 py-3 font-medium">
                   <button
@@ -1914,25 +1938,6 @@ export function LeadManagement() {
                     ) : null}
                   </button>
                 </th>
-                <th className="px-4 py-3 font-medium">
-                  <button
-                    type="button"
-                    title="Giai đoạn tuyển sinh — khác với cột tình trạng tư vấn."
-                    onClick={() => toggleSort('pipelineStatus')}
-                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
-                  >
-                    Funnel
-                    {sortKey === 'pipelineStatus' ? (
-                      <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    ) : null}
-                  </button>
-                </th>
-                <th
-                  className="max-w-[7rem] px-2 py-3 text-sm font-medium normal-case"
-                  title="Tình trạng làm việc TVV (tư vấn)"
-                >
-                  Tư vấn
-                </th>
                 <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-sm font-medium normal-case">TVV</th>
               </tr>
             </thead>
@@ -1940,7 +1945,7 @@ export function LeadManagement() {
               {loading
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="border-b border-slate-100">
-                      {Array.from({ length: 14 }).map((__, j) => (
+                      {Array.from({ length: LEAD_TABLE_COL_COUNT }).map((__, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 rounded-md bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 ai-skeleton-shimmer" />
                         </td>
@@ -1950,7 +1955,7 @@ export function LeadManagement() {
                 : null}
               {!loading && !sortedFiltered.length ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
                     Không có hồ sơ khớp bộ lọc.
                   </td>
                 </tr>
@@ -1963,6 +1968,7 @@ export function LeadManagement() {
                 const displayTag = profileScoringLive ? (ev?.priorityTag ?? l.priorityTag) : l.priorityTag
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
+                const extraNotesFull = leadSupplementaryNotesText(l)
                 return (
                 <motion.tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
@@ -2006,10 +2012,16 @@ export function LeadManagement() {
                   <td className="px-4 py-3 text-slate-600">{l.educationLevel || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
                   <td
-                    className="max-w-[13rem] truncate px-2 py-3 leading-snug text-slate-600"
+                    className="max-w-[11rem] truncate px-2 py-3 leading-snug text-slate-600"
                     title={descForTable.trim() ? descForTable : undefined}
                   >
                     {formatDescPreview(l.description)}
+                  </td>
+                  <td
+                    className="max-w-[11rem] truncate px-2 py-3 leading-snug text-slate-600"
+                    title={extraNotesFull.trim() ? extraNotesFull : undefined}
+                  >
+                    {extraNotesFull.trim() ? formatDescPreview(extraNotesFull, 56) : '—'}
                   </td>
                   <td className="px-4 py-3 font-medium text-violet-700 transition-colors duration-300">{displayScore}</td>
                   <td className="cursor-help px-1 py-2 text-center" title={buildMlWinHoverText(ml)}>
@@ -2019,10 +2031,6 @@ export function LeadManagement() {
                     <motion.span layout key={`${l.id}-${displayTag}`}>
                       <TagBadge tag={displayTag} />
                     </motion.span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{PIPELINE_LABEL[l.pipelineStatus]}</td>
-                  <td className="max-w-[7rem] truncate px-2 py-3 text-slate-600" title={LEAD_COUNSELOR_STATUS_LABELS[l.status]}>
-                    {LEAD_COUNSELOR_STATUS_LABELS[l.status]}
                   </td>
                   <td
                     className="max-w-[9rem] truncate px-2 py-3 text-slate-600"
@@ -2972,7 +2980,6 @@ function LeadDetailPanel({
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
-  const matched = useMemo(() => playbooksMatchingLead(lead, playbooks).slice(0, 3), [lead, playbooks])
 
   const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
   const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
@@ -3472,41 +3479,6 @@ function LeadDetailPanel({
     </section>
   )
 
-  const playbooksBody = (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {matched.length ? (
-        matched.map(({ playbook: pb }) => (
-          <div
-            key={pb.id}
-            className="rounded-xl border border-amber-200/80 bg-amber-50/90 p-4 shadow-inner sm:p-5"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 sm:text-sm">{pb.title}</p>
-            {pb.keySellingPoints?.length ? (
-              <ul className="mt-2 list-inside list-disc text-sm leading-relaxed text-slate-700">
-                {pb.keySellingPoints.map((x: string) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            ) : null}
-            <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
-            {pb.objectionHandling?.length ? (
-              <div className="mt-3 border-t border-slate-200/80 pt-2">
-                <p className="text-xs font-medium text-amber-800 sm:text-sm">Phản đối dự kiến</p>
-                <ul className="mt-1.5 list-inside list-decimal text-sm leading-relaxed text-slate-600">
-                  {pb.objectionHandling.map((x: string) => (
-                    <li key={x}>{x}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        ))
-      ) : (
-        <p className="col-span-full text-sm text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
-      )}
-    </div>
-  )
-
   return (
     <div
       role="dialog"
@@ -3979,7 +3951,7 @@ function LeadDetailPanel({
                     Playbook tư vấn
                   </h2>
                   <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
-                    Gợi ý chiến lược, điểm bán, xử lý phản đối — khớp điều kiện hồ sơ; cấu hình trong Cài đặt.
+                    Tra cứu chiến lược, USP, phản đối theo dữ kiện sinh viên — tìm kiếm trong thư viện hoặc playbook khớp hồ sơ.
                   </p>
                 </div>
               </div>
@@ -3992,8 +3964,8 @@ function LeadDetailPanel({
                 Đóng
               </button>
             </div>
-            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              {playbooksBody}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
+              <LeadPlaybookPanel lead={lead} playbooks={playbooks} />
             </div>
           </div>
         </>

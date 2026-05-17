@@ -70,6 +70,10 @@ export function buildLeadConsultingInsights(
     lead.province?.trim(),
     lead.financialStatus?.trim(),
     lead.highSchool?.trim(),
+    lead.studyIntention?.trim(),
+    lead.priorityTag?.trim(),
+    lead.source?.trim(),
+    lead.aspirations?.trim(),
   ].filter((x): x is string => Boolean(x))
 
   return {
@@ -82,7 +86,7 @@ export function buildLeadConsultingInsights(
     calculatedScore: opts?.calculatedScore ?? lead.calculatedScore,
     playbookMatches,
     topKnowledge,
-    quickSearchTerms: [...new Set(quickSearchTerms)].slice(0, 5),
+    quickSearchTerms: [...new Set(quickSearchTerms)].slice(0, 8),
   }
 }
 

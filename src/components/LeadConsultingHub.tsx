@@ -154,7 +154,12 @@ export function LeadConsultingHub({
           />
         ) : null}
         {tab === 'playbook' ? (
-          <LeadPlaybookPanel lead={lead} playbooks={playbooks} showDraftHint={showDraftHint} />
+          <LeadPlaybookPanel
+            lead={lead}
+            playbooks={playbooks}
+            showDraftHint={showDraftHint}
+            quickSearchTerms={insights.quickSearchTerms}
+          />
         ) : null}
         {tab === 'knowledge' ? (
           <LeadKnowledgePanel
