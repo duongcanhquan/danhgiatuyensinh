@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { Lead, PriorityTag, ScoringProfile } from '../types'
-import { evaluateLead, leadToEvaluationRecord } from '../utils/scoring'
+import type { Lead, PriorityTag, ProfileCustomScoringSignal, ScoringProfile } from '../types'
+import { evaluateLead, leadToEvaluationRecord, type MasterDataBuckets } from '../utils/scoring'
 import { useScoringProfiles } from './useScoringProfiles'
 import { useMasterData } from './useMasterData'
 import { useSchoolTvvSignalDefinitions } from './useSchoolTvvSignalDefinitions'
@@ -9,12 +9,19 @@ export type LeadScorePreview = { calculatedScore: number; priorityTag: PriorityT
 
 const SCORING_PROFILE_LS = 'vietmy_selected_scoring_profile_id'
 
+export type UseLeadScoringOptions = {
+  /** Dùng chung bucket với màn hình cha — tránh lệch thời điểm tải master data. */
+  masterBuckets?: MasterDataBuckets
+  schoolTvvSignalDefs?: ProfileCustomScoringSignal[] | null
+}
+
 /**
  * Chọn profile chấm điểm + map lead → điểm/nhãn preview (đồng bộ Lead / Dashboard / Analytics).
  */
-export function useLeadScoring(leads: Lead[]) {
+export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
   const { profiles: scoringProfiles, loading: profilesLoading } = useScoringProfiles()
-  const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
+  const { items: hookSchoolDefs } = useSchoolTvvSignalDefinitions()
+  const schoolTvvSignalDefs = options?.schoolTvvSignalDefs ?? hookSchoolDefs
   const {
     regionLabels,
     highSchoolLabels,
@@ -24,7 +31,7 @@ export function useLeadScoring(leads: Lead[]) {
     catalogs,
   } = useMasterData()
 
-  const masterBuckets = useMemo(
+  const internalBuckets = useMemo(
     () => ({
       regionLabels,
       highSchoolLabels,
@@ -37,6 +44,8 @@ export function useLeadScoring(leads: Lead[]) {
     }),
     [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
   )
+
+  const masterBuckets = options?.masterBuckets ?? internalBuckets
 
   const [scoringProfileId, setScoringProfileIdState] = useState<string | null>(() => {
     try {

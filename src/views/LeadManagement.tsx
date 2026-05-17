@@ -67,6 +67,10 @@ import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
+import { InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
+import { SearchableFilterSelect } from '../components/SearchableFilterSelect'
+import { SearchableMultiFilter } from '../components/SearchableMultiFilter'
+import { profileHasActiveRules } from '../utils/scoringProfileUtils'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
@@ -216,7 +220,6 @@ export function LeadManagement() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const showAdminGlobalFilters = isElevatedForAdminFilters(profile?.role)
-  const [adminUploaderIds, setAdminUploaderIds] = useState<string[]>([])
   const [adminRegions, setAdminRegions] = useState<string[]>([])
   const [adminTags, setAdminTags] = useState<PriorityTag[]>([])
   const [adminSchools, setAdminSchools] = useState<string[]>([])
@@ -280,7 +283,6 @@ export function LeadManagement() {
     }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
     if (showAdminGlobalFilters) {
-      if (adminUploaderIds.length) o.uploadedByIn = adminUploaderIds.slice(0, 10)
       if (adminRegions.length) o.provinceIn = adminRegions.slice(0, 10)
       if (!tagClientEval) {
         if (adminTags.length === 1) {
@@ -308,7 +310,6 @@ export function LeadManagement() {
     sourceFilter,
     schoolFilter,
     showAdminGlobalFilters,
-    adminUploaderIds,
     adminRegions,
     adminTags,
     adminSchools,
@@ -369,11 +370,16 @@ export function LeadManagement() {
     activeScoringProfile,
     scoreByLeadId,
     schoolTvvSignalDefs,
-  } = useLeadScoring(leads)
+  } = useLeadScoring(leads, { masterBuckets: scoringMasterBuckets })
+
+  const profileScoringLive = Boolean(
+    activeScoringProfile && profileHasActiveRules(activeScoringProfile),
+  )
 
   const effectiveLeadTag = useCallback(
-    (l: Lead) => (activeScoringProfile ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag),
-    [activeScoringProfile, scoreByLeadId],
+    (l: Lead) =>
+      profileScoringLive ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag,
+    [profileScoringLive, scoreByLeadId],
   )
 
   /** Đếm theo từng nhãn trên tập `leads` đã tải (dùng khi tính lại nhãn theo profile — fullScope). */
@@ -415,21 +421,6 @@ export function LeadManagement() {
       formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
     )
   }, [counselorUsers, directoryUsers, profile?.role])
-
-  const uploaderOptions = useMemo(() => {
-    if (showAdminGlobalFilters) {
-      const out: [string, string][] = []
-      for (const u of directoryUsers) {
-        if (u.isActive && u.id) out.push([u.id, formatStaffDirectoryLabel(u)])
-      }
-      return out.sort((a, b) => a[1].localeCompare(b[1], 'vi'))
-    }
-    const m = new Map<string, string>()
-    for (const l of leads) {
-      if (l.uploadedBy) m.set(l.uploadedBy, (l.uploaderName || l.uploadedBy).trim())
-    }
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'vi'))
-  }, [showAdminGlobalFilters, directoryUsers, leads])
 
   const schoolOptions = useMemo(() => {
     if (showAdminGlobalFilters && highSchoolLabels.length) {
@@ -582,7 +573,7 @@ export function LeadManagement() {
     let rows = leads
     if (minScore != null || maxScore != null) {
       rows = leads.filter((l) => {
-        const displayScore = activeScoringProfile
+        const displayScore = profileScoringLive
           ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
           : l.calculatedScore
         if (minScore != null && displayScore < minScore) return false
@@ -616,7 +607,7 @@ export function LeadManagement() {
     if (sortKey === 'none') return rows
     const dir = sortDir === 'asc' ? 1 : -1
     const scoreOf = (l: Lead) =>
-      activeScoringProfile
+      profileScoringLive
         ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
         : l.calculatedScore
     const tagOf = (l: Lead) => effectiveLeadTag(l)
@@ -707,7 +698,6 @@ export function LeadManagement() {
     setScoreMinInput('')
     setScoreMaxInput('')
     setAiShortlistOnly(false)
-    setAdminUploaderIds([])
     setAdminRegions([])
     setAdminTags([])
     setAdminSchools([])
@@ -866,8 +856,7 @@ export function LeadManagement() {
     }
     const adminHas =
       showAdminGlobalFilters &&
-      (adminUploaderIds.length > 0 ||
-        adminRegions.length > 0 ||
+      (adminRegions.length > 0 ||
         adminTags.length > 0 ||
         adminSchools.length > 0 ||
         adminAssignedCounselorIds.length > 0 ||
@@ -878,7 +867,6 @@ export function LeadManagement() {
         id: 'admin',
         label: 'Bộ lọc Admin',
         onClear: () => {
-          setAdminUploaderIds([])
           setAdminRegions([])
           setAdminTags([])
           setAdminSchools([])
@@ -904,7 +892,6 @@ export function LeadManagement() {
     scoreMaxInput,
     aiShortlistOnly,
     showAdminGlobalFilters,
-    adminUploaderIds,
     adminRegions,
     adminTags,
     adminSchools,
@@ -1261,18 +1248,13 @@ export function LeadManagement() {
 
   return (
     <div className="space-y-3">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Hồ sơ
-          </VietMyAccentHeading>
-        </div>
-        {!configured || !db ? (
+      {!configured || !db ? (
+        <div className="flex justify-end">
           <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-xs text-amber-900">
             Firebase chưa cấu hình.
           </span>
-        ) : null}
-      </header>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-base text-rose-900 shadow-sm backdrop-blur-xl">
@@ -1281,221 +1263,124 @@ export function LeadManagement() {
       ) : null}
 
       {showAdminGlobalFilters ? (
-        <details className="app-card-glass group shadow-md open:shadow-lg">
-          <summary className="cursor-pointer list-none px-3 py-2 md:px-4 [&::-webkit-details-marker]:hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-900">
-                  Admin
-                </span>
-                <span className="text-sm font-semibold text-slate-800">Lọc theo ngày, TVV, người tải, vùng…</span>
-                <span className="text-slate-400 transition group-open:rotate-90">›</span>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault()
-                  setAdminUploaderIds([])
-                  setAdminRegions([])
-                  setAdminTags([])
-                  setAdminSchools([])
-                  setAdminAssignedCounselorIds([])
-                  setAdminDateFrom('')
-                  setAdminDateTo('')
-                  setAdminDateField('created')
-                }}
-                className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+        <section className="app-card-glass space-y-2 p-2.5 shadow-sm sm:p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-900">
+              Admin
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminRegions([])
+                setAdminTags([])
+                setAdminSchools([])
+                setAdminAssignedCounselorIds([])
+                setAdminDateFrom('')
+                setAdminDateTo('')
+                setAdminDateField('created')
+              }}
+              className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-0.5 text-xs font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50"
+            >
+              Xóa lọc admin
+            </button>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col text-xs font-medium text-slate-600">
+              Mốc
+              <select
+                value={adminDateField}
+                onChange={(e) => setAdminDateField(e.target.value as AdminDateField)}
+                className="mt-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs"
               >
-                Xóa lọc admin
-              </button>
-            </div>
-          </summary>
-          <div className="border-t border-slate-200/80 px-4 pb-4 pt-2 md:px-5 md:pb-5">
-            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/60 bg-white/40 p-3">
-              <label className="flex flex-col text-xs font-medium text-slate-600">
-                Mốc thời gian
-                <select
-                  value={adminDateField}
-                  onChange={(e) => setAdminDateField(e.target.value as AdminDateField)}
-                  className="mt-1 min-w-[9rem] rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-200"
+                <option value="created">Ngày tạo</option>
+                <option value="updated">Cập nhật</option>
+                <option value="imported">Nhập</option>
+              </select>
+            </label>
+            <label className="flex flex-col text-xs font-medium text-slate-600">
+              Từ
+              <input
+                type="date"
+                value={adminDateFrom}
+                onChange={(e) => setAdminDateFrom(e.target.value)}
+                className="mt-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs"
+              />
+            </label>
+            <label className="flex flex-col text-xs font-medium text-slate-600">
+              Đến
+              <input
+                type="date"
+                value={adminDateTo}
+                onChange={(e) => setAdminDateTo(e.target.value)}
+                className="mt-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs"
+              />
+            </label>
+          </div>
+          <div className="flex max-h-14 flex-wrap gap-1 overflow-y-auto">
+            {counselorUsers.map((c) => {
+              const on = adminAssignedCounselorIds.includes(c.id)
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() =>
+                    setAdminAssignedCounselorIds((prev) =>
+                      prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                    )
+                  }
+                  className={[
+                    'max-w-[9rem] truncate rounded-full border px-2 py-0.5 text-[11px]',
+                    on
+                      ? 'border-violet-400 bg-violet-100 text-violet-950'
+                      : 'border-slate-200 bg-white text-slate-700',
+                  ].join(' ')}
+                  title={formatStaffDirectoryLabel(c)}
                 >
-                  <option value="created">Ngày tạo</option>
-                  <option value="updated">Cập nhật gần nhất</option>
-                  <option value="imported">Ngày nhập (import)</option>
-                </select>
-              </label>
-              <label className="flex flex-col text-xs font-medium text-slate-600">
-                Từ ngày
-                <input
-                  type="date"
-                  value={adminDateFrom}
-                  onChange={(e) => setAdminDateFrom(e.target.value)}
-                  className="mt-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-200"
-                />
-              </label>
-              <label className="flex flex-col text-xs font-medium text-slate-600">
-                Đến ngày
-                <input
-                  type="date"
-                  value={adminDateTo}
-                  onChange={(e) => setAdminDateTo(e.target.value)}
-                  className="mt-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-200"
-                />
-              </label>
-            </div>
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tư vấn viên được gán</p>
-              <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto pr-1">
-                {counselorUsers.length ? (
-                  counselorUsers.map((c) => {
-                    const on = adminAssignedCounselorIds.includes(c.id)
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() =>
-                          setAdminAssignedCounselorIds((prev) =>
-                            prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
-                          )
-                        }
-                        className={[
-                          'max-w-[11rem] truncate rounded-full border px-2.5 py-1 text-xs transition',
-                          on
-                            ? 'border-violet-400 bg-violet-100 text-violet-950 shadow-sm'
-                            : 'border-slate-200 bg-white/90 text-slate-700 hover:border-violet-200',
-                        ].join(' ')}
-                        title={formatStaffDirectoryLabel(c)}
-                      >
-                        {formatStaffDirectoryLabel(c)}
-                      </button>
-                    )
-                  })
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    {counselorsLoading ? 'Đang tải danh bạ TVV…' : 'Chưa có tài khoản counselor trong hệ thống.'}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Người tải</p>
-                <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
-                  {uploaderOptions.length ? (
-                    uploaderOptions.map(([uid, label]) => {
-                      const on = adminUploaderIds.includes(uid)
-                      return (
-                        <button
-                          key={uid}
-                          type="button"
-                          onClick={() =>
-                            setAdminUploaderIds((prev) =>
-                              prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid],
-                            )
-                          }
-                          className={[
-                            'max-w-[10rem] truncate rounded-full border px-2 py-1 text-xs transition',
-                            on
-                              ? 'border-amber-400 bg-amber-100 text-amber-900'
-                              : 'border-slate-200 bg-white/90 text-slate-700 hover:border-amber-200',
-                          ].join(' ')}
-                        >
-                          {label}
-                        </button>
-                      )
-                    })
-                  ) : (
-                    <p className="text-xs text-slate-500">Chưa có dữ liệu người tải.</p>
-                  )}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Vùng / tỉnh</p>
-                <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
-                  {regionOptionsAdmin.map((reg) => {
-                    const on = adminRegions.includes(reg)
-                    return (
-                      <button
-                        key={reg}
-                        type="button"
-                        onClick={() =>
-                          setAdminRegions((prev) =>
-                            prev.includes(reg) ? prev.filter((x) => x !== reg) : [...prev, reg],
-                          )
-                        }
-                        className={[
-                          'max-w-[8rem] truncate rounded-full border px-2 py-1 text-xs transition',
-                          on
-                            ? 'border-fuchsia-400 bg-fuchsia-100 text-fuchsia-900'
-                            : 'border-slate-200 bg-white/90 text-slate-600 hover:border-fuchsia-200',
-                        ].join(' ')}
-                        title={reg}
-                      >
-                        {reg}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <div className="min-w-0 sm:col-span-2 xl:col-span-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Nhãn (profile)</p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {TAG_OPTIONS.map((tg) => {
-                    const on = adminTags.includes(tg)
-                    return (
-                      <button
-                        key={tg}
-                        type="button"
-                        onClick={() =>
-                          setAdminTags((prev) => (prev.includes(tg) ? prev.filter((x) => x !== tg) : [...prev, tg]))
-                        }
-                        className={[
-                          'rounded-full border px-2.5 py-1 text-xs font-semibold transition',
-                          on
-                            ? 'border-amber-400 bg-amber-100 text-amber-900'
-                            : 'border-slate-200 bg-white/90 text-slate-600 hover:border-amber-200',
-                        ].join(' ')}
-                      >
-                        {tg}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <div className="min-w-0 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trường THPT</p>
-                <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
-                  {schoolOptions.slice(0, 36).map((sc) => {
-                    const on = adminSchools.includes(sc)
-                    return (
-                      <button
-                        key={sc}
-                        type="button"
-                        onClick={() =>
-                          setAdminSchools((prev) =>
-                            prev.includes(sc) ? prev.filter((x) => x !== sc) : [...prev, sc],
-                          )
-                        }
-                        className={[
-                          'max-w-[10rem] truncate rounded-full border px-2 py-1 text-xs transition',
-                          on
-                            ? 'border-emerald-400 bg-emerald-100 text-emerald-900'
-                            : 'border-slate-200 bg-white/90 text-slate-600 hover:border-emerald-200',
-                        ].join(' ')}
-                        title={sc}
-                      >
-                        {sc}
-                      </button>
-                    )
-                  })}
-                  {schoolOptions.length > 36 ? (
-                    <span className="self-center text-xs text-slate-500">+{schoolOptions.length - 36}…</span>
-                  ) : null}
-                </div>
+                  {formatStaffDirectoryLabel(c)}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap items-start gap-3">
+            <SearchableMultiFilter
+              label="Vùng / tỉnh"
+              values={adminRegions}
+              onChange={setAdminRegions}
+              options={regionOptionsAdmin}
+            />
+            <SearchableMultiFilter
+              label="Trường THPT"
+              values={adminSchools}
+              onChange={setAdminSchools}
+              options={schoolOptions}
+            />
+            <div className="shrink-0">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Nhãn</p>
+              <div className="mt-0.5 flex flex-wrap gap-1">
+                {TAG_OPTIONS.map((tg) => {
+                  const on = adminTags.includes(tg)
+                  return (
+                    <button
+                      key={tg}
+                      type="button"
+                      onClick={() =>
+                        setAdminTags((prev) => (prev.includes(tg) ? prev.filter((x) => x !== tg) : [...prev, tg]))
+                      }
+                      className={[
+                        'rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+                        on
+                          ? 'border-amber-400 bg-amber-100 text-amber-900'
+                          : 'border-slate-200 bg-white text-slate-600',
+                      ].join(' ')}
+                    >
+                      {tg}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
-        </details>
+        </section>
       ) : null}
 
       <section className="app-card-glass-strong space-y-2 p-2 shadow-md sm:p-3">
@@ -1664,7 +1549,7 @@ export function LeadManagement() {
               ...TAG_OPTIONS.map((t) => ({ v: t, t })),
             ]}
           />
-          <FilterSelect
+          <SearchableFilterSelect
             compact
             label="Vùng"
             title="Tỉnh / thành trên hồ sơ."
@@ -1674,10 +1559,7 @@ export function LeadManagement() {
               setPage(1)
               mergeListFilterUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
             }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              ...regions.map((p) => ({ v: p, t: p })),
-            ]}
+            options={regions.map((p) => ({ v: p, t: p }))}
           />
           <FilterSelect
             compact
@@ -1739,23 +1621,20 @@ export function LeadManagement() {
             }}
             options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
           />
-          <FilterSelect
+          <SearchableFilterSelect
             compact
             label="Trường THPT"
-            title="Trường THPT của thí sinh. Địa chỉ trang có thể lưu lại để người khác mở cùng bộ lọc (nếu có quyền xem)."
+            title="Trường THPT của thí sinh."
             value={schoolFilter}
             onChange={(v) => {
               setSchoolFilter(v)
               setPage(1)
               mergeListFilterUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
             }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              ...schoolOptions.slice(0, 80).map((sc) => ({
-                v: sc,
-                t: sc.length > 40 ? `${sc.slice(0, 40)}…` : sc,
-              })),
-            ]}
+            options={schoolOptions.map((sc) => ({
+              v: sc,
+              t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
+            }))}
           />
           <FilterSelect
             compact
@@ -2002,7 +1881,7 @@ export function LeadManagement() {
                         <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                       ) : null}
                     </span>
-                    {activeScoringProfile ? (
+                    {profileScoringLive ? (
                       <span className="text-xs font-normal normal-case text-violet-700">theo profile</span>
                     ) : null}
                   </button>
@@ -2020,15 +1899,7 @@ export function LeadManagement() {
                         <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                       ) : null}
                     </button>
-                    <button
-                      type="button"
-                      className="rounded-full border border-violet-300/80 bg-violet-50 p-0.5 text-violet-900 shadow-sm hover:bg-violet-100"
-                      title={ML_WIN_COLUMN_HINT}
-                      aria-label="Giải thích cột điểm thông tin"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
-                    </button>
+                    <InfoScoreHelpPopover hint={ML_WIN_COLUMN_HINT} />
                   </div>
                 </th>
                 <th className="px-4 py-3 font-medium">
@@ -2085,9 +1956,11 @@ export function LeadManagement() {
                 </tr>
               ) : null}
               {pagedRows.map((l) => {
-                const ev = activeScoringProfile ? scoreByLeadId.get(l.id) : undefined
-                const displayScore = ev?.calculatedScore ?? l.calculatedScore
-                const displayTag = ev?.priorityTag ?? l.priorityTag
+                const ev = profileScoringLive ? scoreByLeadId.get(l.id) : undefined
+                const displayScore = profileScoringLive
+                  ? (ev?.calculatedScore ?? l.calculatedScore)
+                  : l.calculatedScore
+                const displayTag = profileScoringLive ? (ev?.priorityTag ?? l.priorityTag) : l.priorityTag
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
                 return (

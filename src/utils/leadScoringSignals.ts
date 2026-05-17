@@ -81,6 +81,18 @@ export function scoringSignalsToEvaluationFlat(s: LeadScoringSignals | undefined
   return out
 }
 
+/** Cờ tùy chỉnh (`scoringCustomSignals`) → trường phẳng để rule `IS_NOT_EMPTY` / `EQUALS` khớp theo `targetField`. */
+export function scoringCustomSignalsToEvaluationFlat(
+  flags: Record<string, boolean> | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!flags || typeof flags !== 'object') return out
+  for (const [id, on] of Object.entries(flags)) {
+    if (on === true && id.trim()) out[id.trim()] = '1'
+  }
+  return out
+}
+
 export function parseScoringSignalsFromFirestore(raw: unknown): LeadScoringSignals | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const o = raw as Record<string, unknown>

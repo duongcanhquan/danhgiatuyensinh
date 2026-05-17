@@ -12,7 +12,12 @@ import type {
   ScoringRuleConditionRow,
   RuleCategory,
 } from '../types'
-import { inferSignalRuleCategory, mergeSchoolAndProfileCustomSignals, scoringSignalsToEvaluationFlat } from './leadScoringSignals'
+import {
+  inferSignalRuleCategory,
+  mergeSchoolAndProfileCustomSignals,
+  scoringCustomSignalsToEvaluationFlat,
+  scoringSignalsToEvaluationFlat,
+} from './leadScoringSignals'
 import { evaluationRecordFieldValue } from './leadSemanticFieldValue'
 import { entryMatchesMasterValue, findMasterEntryForListItem } from './masterDataMatch'
 import { profileHasActiveRules } from './scoringProfileUtils'
@@ -335,11 +340,14 @@ function ruleMatches(
     const list = Array.isArray(rule.value) ? rule.value : [String(rule.value)]
     const rawField = getFieldValue(leadData, rule.targetField)
     const fieldVal = norm(rawField)
+    const set = new Set(list.map((x) => norm(String(x))).filter(Boolean))
     const resolved = resolveInListEntries(rule.targetField, buckets)
     if (resolved?.entries.length) {
-      return inListMatchesField(rawField, fieldVal, list, rule.targetField, buckets)
+      if (inListMatchesField(rawField, fieldVal, list, rule.targetField, buckets)) return true
+      // Master đã tải nhưng nhãn rule có thể là nhãn hiển thị — thử khớp trực tiếp.
+      if (set.has(fieldVal)) return true
+      return false
     }
-    const set = new Set(list.map((x) => norm(String(x))))
     return set.has(fieldVal)
   }
   return false
@@ -535,6 +543,7 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     assignedCounselorId: lead.assignedTo ?? lead.assignedCounselorId,
     aiSentimentScore: lead.aiSentimentScore,
     ...scoringSignalsToEvaluationFlat(lead.scoringSignals),
+    ...scoringCustomSignalsToEvaluationFlat(lead.scoringCustomSignals),
     scoringCustomSignals: lead.scoringCustomSignals ?? {},
   }
 }
