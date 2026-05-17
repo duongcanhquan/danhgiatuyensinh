@@ -15,6 +15,8 @@ import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import type { MasterDataBuckets } from '../utils/scoring'
+import { useLeadSources } from '../hooks/useLeadSources'
+import { useScholarships } from '../hooks/useScholarships'
 
 export function CreateLeadModal({
   open,
@@ -46,6 +48,8 @@ export function CreateLeadModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [duplicateId, setDuplicateId] = useState<string | null>(null)
+  const { active: leadSources } = useLeadSources()
+  const { active: scholarships } = useScholarships()
 
   const elevated = isAdminLikeRole(profile?.role)
   const teamLead = isTeamLeadRole(profile?.role)
@@ -162,9 +166,6 @@ export function CreateLeadModal({
               <UserPlus className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
               Tạo hồ sơ mới
             </p>
-            <p className="mt-0.5 text-sm text-slate-600">
-              Nhập thông tin ứng viên. Hệ thống chấm điểm theo profile đang chọn và kiểm tra trùng SĐT / fingerprint.
-            </p>
           </div>
           <button
             type="button"
@@ -215,7 +216,13 @@ export function CreateLeadModal({
             ) : null}
           </label>
 
-          <LeadProfileCoreForm draft={draft} onChange={setDraft} disabled={busy} />
+          <LeadProfileCoreForm
+            draft={draft}
+            onChange={setDraft}
+            disabled={busy}
+            leadSources={leadSources}
+            scholarships={scholarships}
+          />
         </div>
 
         <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">

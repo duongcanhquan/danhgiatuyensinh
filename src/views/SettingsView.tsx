@@ -48,9 +48,11 @@ import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSecti
 import { StaffManagementView } from '../views/StaffManagementView'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
+import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 
 type SettingsTabId =
   | 'master'
+  | 'lead_profile'
   | 'rule_templates'
   | 'scoring'
   | 'scoring_profiles'
@@ -84,6 +86,16 @@ const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight te
 
 function settingsGuideBody(tab: SettingsTabId): ReactNode {
   switch (tab) {
+    case 'lead_profile':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Cài đặt hồ sơ</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Quản lý danh mục <strong>Nguồn</strong> (Nguồn 1 / Nguồn 2 trên form hồ sơ) và <strong>Học bổng</strong> (theo nhóm
+            PHCD / CDCQ). Có thể nạp danh sách mặc định rồi chỉnh sửa; TVV chọn giá trị khi tạo hoặc sửa hồ sơ.
+          </p>
+        </>
+      )
     case 'master':
       return (
         <>
@@ -217,6 +229,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
 function parseSettingsTab(raw: string | null): SettingsTabId | null {
   if (
     raw === 'master' ||
+    raw === 'lead_profile' ||
     raw === 'rule_templates' ||
     raw === 'scoring' ||
     raw === 'scoring_profiles' ||
@@ -420,7 +433,10 @@ export function SettingsView() {
       base.push({ id: 'scoring_profiles', label: 'Cài đặt Profile', enabled: true })
     }
     if (db && canScoringRules) base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
-    if (db && canMaster) base.push({ id: 'master', label: 'Cài đặt danh mục', enabled: true })
+    if (db && canMaster) {
+      base.push({ id: 'master', label: 'Cài đặt danh mục', enabled: true })
+      base.push({ id: 'lead_profile', label: 'Cài đặt hồ sơ', enabled: true })
+    }
     if (db && canScoringRules) base.push({ id: 'rule_templates', label: 'Quy tắc mẫu', enabled: true })
     if (db && canPlaybooks) base.push({ id: 'consulting', label: 'Thông tin T.Vấn', enabled: true })
     if (db && canAiEngine) {
@@ -853,6 +869,12 @@ export function SettingsView() {
             </div>
           </div>
         </section>
+      ) : null}
+
+      {db && activeTab === 'lead_profile' ? (
+        <div role="tabpanel" aria-label="Cài đặt hồ sơ" className="min-w-0 max-w-full">
+          <LeadProfileSettingsTab db={db} canEdit={canMaster} />
+        </div>
       ) : null}
 
       {db && activeTab === 'rule_templates' ? (

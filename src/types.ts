@@ -292,6 +292,26 @@ export interface Lead {
   /** Nội dung lưu ý khác — targetField: otherAttentionNotes */
   otherAttentionNotes?: string
 
+  /** CCCD / CMND (10 chữ số) — bỏ qua khi `nationalIdNotAvailable` */
+  nationalId?: string
+  /** Tick «chưa có» trên form — không bắt buộc nhập CCCD */
+  nationalIdNotAvailable?: boolean
+  /** Email sinh viên */
+  studentEmail?: string
+  /** Nguồn tiếp nhận 1 (nhãn danh mục `leadSources`) */
+  source1?: string
+  /** Nguồn tiếp nhận 2 */
+  source2?: string
+  fatherName?: string
+  fatherPhone?: string
+  motherName?: string
+  motherPhone?: string
+  /** Người giám hộ (họ tên hoặc mô tả ngắn) */
+  guardian?: string
+  /** Doc id trong `scholarships` — rỗng = không có học bổng */
+  scholarship1Id?: string
+  scholarship2Id?: string
+
   // --- System / analytics (not Excel columns) ---
   calculatedScore: number
   priorityTag: PriorityTag
@@ -963,7 +983,40 @@ export const FS_COLLECTIONS = {
   auditLogs: 'auditLogs',
   /** RAG knowledge base — tuition, policy, major facts (admin-maintained). */
   knowledgeDocuments: 'knowledgeDocuments',
+  /** Danh mục nguồn lead (Nguồn 1 / 2 trên hồ sơ). */
+  leadSources: 'leadSources',
+  /** Danh mục học bổng (Học bổng 1 / 2). */
+  scholarships: 'scholarships',
 } as const
+
+/** Nhóm học bổng trên form hồ sơ. */
+export type ScholarshipCategoryId = 'phcd' | 'cdcq'
+
+export interface LeadSourceRecord {
+  id: DocumentId
+  label: string
+  sortOrder: number
+  isActive: boolean
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
+}
+
+export interface ScholarshipRecord {
+  id: DocumentId
+  label: string
+  category: ScholarshipCategoryId
+  /** Số tiền VNĐ (hiển thị trên nhãn) */
+  amountVnd: number
+  sortOrder: number
+  isActive: boolean
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
+}
+
+export const SCHOLARSHIP_CATEGORY_LABELS: Record<ScholarshipCategoryId, string> = {
+  phcd: 'PHỔ THÔNG CAO ĐẲNG',
+  cdcq: 'CAO ĐẲNG CHÍNH QUY',
+}
 
 export type FsCollectionKey = keyof typeof FS_COLLECTIONS
 

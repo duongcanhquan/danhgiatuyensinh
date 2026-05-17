@@ -209,6 +209,22 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       ...(profileNote2Raw ? { profileNote2: profileNote2Raw } : {}),
       ...(otherAttentionRaw ? { otherAttentionNotes: otherAttentionRaw } : {}),
       ...(dateOfBirth ? { dateOfBirth } : {}),
+      ...(data.nationalIdNotAvailable === true
+        ? { nationalIdNotAvailable: true }
+        : (() => {
+            const nid = String(data.nationalId ?? '').replace(/\D/g, '')
+            return nid ? { nationalId: nid } : {}
+          })()),
+      ...(String(data.studentEmail ?? '').trim() ? { studentEmail: String(data.studentEmail).trim() } : {}),
+      ...(String(data.source1 ?? '').trim() ? { source1: String(data.source1).trim() } : {}),
+      ...(String(data.source2 ?? '').trim() ? { source2: String(data.source2).trim() } : {}),
+      ...(String(data.fatherName ?? '').trim() ? { fatherName: String(data.fatherName).trim() } : {}),
+      ...(String(data.fatherPhone ?? '').trim() ? { fatherPhone: String(data.fatherPhone).trim() } : {}),
+      ...(String(data.motherName ?? '').trim() ? { motherName: String(data.motherName).trim() } : {}),
+      ...(String(data.motherPhone ?? '').trim() ? { motherPhone: String(data.motherPhone).trim() } : {}),
+      ...(String(data.guardian ?? '').trim() ? { guardian: String(data.guardian).trim() } : {}),
+      ...(String(data.scholarship1Id ?? '').trim() ? { scholarship1Id: String(data.scholarship1Id).trim() } : {}),
+      ...(String(data.scholarship2Id ?? '').trim() ? { scholarship2Id: String(data.scholarship2Id).trim() } : {}),
       highSchool,
       gradeClass,
       province,

@@ -14,7 +14,8 @@ import { FS_COLLECTIONS } from '../types'
 import { buildLeadFirestorePayload, type ExcelLeadRow } from './excelLeadMapper'
 import { computeLeadUniqueHash, normalizePhoneKey } from './leadIdentity'
 import { evaluateLead } from './scoring'
-import type { LeadCoreDraft } from './leadProfileEdit'
+import { leadCoreDraftToFirestoreFields, type LeadCoreDraft } from './leadProfileEdit'
+import { validateNationalIdInput } from './leadProfileCatalog'
 import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
 
@@ -58,6 +59,8 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
   if (!name && phoneKey.length < 9) {
     return 'Nhập ít nhất họ tên hoặc số điện thoại hợp lệ (≥ 9 chữ số).'
   }
+  const cccdErr = validateNationalIdInput(draft.nationalId, draft.nationalIdNotAvailable)
+  if (cccdErr) return cccdErr
   return null
 }
 
@@ -149,6 +152,7 @@ export async function createManualLead(
   const ref = doc(collection(db, FS_COLLECTIONS.leads))
   await setDoc(ref, {
     ...base,
+    ...leadCoreDraftToFirestoreFields(input.draft),
     createdAt: now,
     updatedAt: now,
     uploadedAt: now,

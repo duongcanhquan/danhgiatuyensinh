@@ -42,6 +42,8 @@ import { canCreateLead, canWriteLead } from '../auth/leadAccess'
 import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
+import { useLeadSources } from '../hooks/useLeadSources'
+import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import { LeadKnowledgePanel } from '../components/LeadKnowledgePanel'
@@ -72,7 +74,6 @@ import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
 import { InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
 import { SearchableFilterSelect } from '../components/SearchableFilterSelect'
-import { SearchableMultiFilter } from '../components/SearchableMultiFilter'
 import { profileHasActiveRules } from '../utils/scoringProfileUtils'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
@@ -142,20 +143,6 @@ const LEAD_DETAIL_PROFILE_HELP =
 
 function isElevatedForAdminFilters(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
-}
-
-type AdminDateField = 'created' | 'updated' | 'imported'
-
-function parseIsoDayStartMs(iso: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) return null
-  const t = new Date(`${iso.trim()}T00:00:00`).getTime()
-  return Number.isFinite(t) ? t : null
-}
-
-function parseIsoDayEndMs(iso: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) return null
-  const t = new Date(`${iso.trim()}T23:59:59.999`).getTime()
-  return Number.isFinite(t) ? t : null
 }
 
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
@@ -241,13 +228,6 @@ export function LeadManagement() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const showAdminGlobalFilters = isElevatedForAdminFilters(profile?.role)
-  const [adminRegions, setAdminRegions] = useState<string[]>([])
-  const [adminTags, setAdminTags] = useState<PriorityTag[]>([])
-  const [adminSchools, setAdminSchools] = useState<string[]>([])
-  const [adminDateField, setAdminDateField] = useState<AdminDateField>('created')
-  const [adminDateFrom, setAdminDateFrom] = useState('')
-  const [adminDateTo, setAdminDateTo] = useState('')
-  const [adminAssignedCounselorIds, setAdminAssignedCounselorIds] = useState<string[]>([])
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
 
@@ -269,9 +249,7 @@ export function LeadManagement() {
    * Lọc nhãn theo profile (hoặc admin nhãn) trên client — tránh `where(priorityTag)` + index composite;
    * cần quét gần đây (fullScope).
    */
-  const tagClientEval =
-    !urlQuery.trim() &&
-    (tagFilter !== 'ALL' || (showAdminGlobalFilters && adminTags.length > 0))
+  const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -303,30 +281,10 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
-    if (showAdminGlobalFilters && adminSchools.length) {
-      o.highSchoolIn = adminSchools.slice(0, 10)
-    } else if (schoolFilter !== 'ALL') {
+    if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
-    if (showAdminGlobalFilters) {
-      if (adminRegions.length) o.provinceIn = adminRegions.slice(0, 10)
-      if (!tagClientEval) {
-        if (adminTags.length === 1) {
-          o.priorityTag = adminTags[0]
-        } else if (adminTags.length > 1) {
-          o.priorityTagsIn = adminTags.slice(0, 10) as PriorityTag[]
-        }
-      }
-      if (adminAssignedCounselorIds.length) o.assignedCounselorIn = adminAssignedCounselorIds.slice(0, 10)
-      const fromMs = adminDateFrom ? parseIsoDayStartMs(adminDateFrom) : null
-      const toMs = adminDateTo ? parseIsoDayEndMs(adminDateTo) : null
-      if (fromMs != null || toMs != null) {
-        o.adminDateField = adminDateField
-        if (fromMs != null) o.adminDateFromMs = fromMs
-        if (toMs != null) o.adminDateToMs = toMs
-      }
-    }
     return Object.keys(o).length ? o : undefined
   }, [
     statusFilter,
@@ -336,14 +294,6 @@ export function LeadManagement() {
     majorFilter,
     sourceFilter,
     schoolFilter,
-    showAdminGlobalFilters,
-    adminRegions,
-    adminTags,
-    adminSchools,
-    adminAssignedCounselorIds,
-    adminDateFrom,
-    adminDateTo,
-    adminDateField,
     scoreMinInput,
     scoreMaxInput,
     aiShortlistOnly,
@@ -463,17 +413,6 @@ export function LeadManagement() {
     }
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [showAdminGlobalFilters, highSchoolLabels, leads])
-
-  const regionOptionsAdmin = useMemo(() => {
-    if (showAdminGlobalFilters && regionLabels.length) {
-      return [...regionLabels].sort((a, b) => a.localeCompare(b, 'vi'))
-    }
-    const s = new Set<string>()
-    for (const l of leads) {
-      if (l.province.trim()) s.add(l.province.trim())
-    }
-    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
-  }, [showAdminGlobalFilters, regionLabels, leads])
 
   const [selected, setSelected] = useState<Lead | null>(null)
   /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
@@ -645,14 +584,8 @@ export function LeadManagement() {
         return true
       })
     }
-    if (tagClientEval) {
-      if (tagFilter !== 'ALL') {
-        rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
-      }
-      if (showAdminGlobalFilters && adminTags.length > 0) {
-        const tagSet = new Set(adminTags)
-        rows = rows.filter((l) => tagSet.has(effectiveLeadTag(l)))
-      }
+    if (tagClientEval && tagFilter !== 'ALL') {
+      rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
     }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
@@ -670,8 +603,6 @@ export function LeadManagement() {
     tagFilter,
     effectiveLeadTag,
     assigneeFilter,
-    showAdminGlobalFilters,
-    adminTags,
   ])
 
   const sortedFiltered = useMemo(() => {
@@ -768,12 +699,6 @@ export function LeadManagement() {
     setScoreMinInput('')
     setScoreMaxInput('')
     setAiShortlistOnly(false)
-    setAdminRegions([])
-    setAdminTags([])
-    setAdminSchools([])
-    setAdminAssignedCounselorIds([])
-    setAdminDateFrom('')
-    setAdminDateTo('')
     setSearchParams((prev) => stripListFiltersKeepOpenView(prev), { replace: true })
     setPage(1)
   }, [setSearchParams, setPage])
@@ -924,29 +849,6 @@ export function LeadManagement() {
         },
       })
     }
-    const adminHas =
-      showAdminGlobalFilters &&
-      (adminRegions.length > 0 ||
-        adminTags.length > 0 ||
-        adminSchools.length > 0 ||
-        adminAssignedCounselorIds.length > 0 ||
-        Boolean(adminDateFrom.trim()) ||
-        Boolean(adminDateTo.trim()))
-    if (adminHas) {
-      out.push({
-        id: 'admin',
-        label: 'Bộ lọc Admin',
-        onClear: () => {
-          setAdminRegions([])
-          setAdminTags([])
-          setAdminSchools([])
-          setAdminAssignedCounselorIds([])
-          setAdminDateFrom('')
-          setAdminDateTo('')
-          setPage(1)
-        },
-      })
-    }
     return out
   }, [
     searchParams,
@@ -961,13 +863,6 @@ export function LeadManagement() {
     scoreMinInput,
     scoreMaxInput,
     aiShortlistOnly,
-    showAdminGlobalFilters,
-    adminRegions,
-    adminTags,
-    adminSchools,
-    adminAssignedCounselorIds,
-    adminDateFrom,
-    adminDateTo,
     mergeListFilterUrl,
     counselorDisplayNameById,
     reassignPickList,
@@ -1332,131 +1227,6 @@ export function LeadManagement() {
         </div>
       ) : null}
 
-      {showAdminGlobalFilters ? (
-        <section className="app-card-glass space-y-1.5 p-2 shadow-sm sm:p-2.5">
-          <motion.div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900">
-              Admin
-            </span>
-            <label className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-600">
-              Mốc
-              <select
-                value={adminDateField}
-                onChange={(e) => setAdminDateField(e.target.value as AdminDateField)}
-                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
-              >
-                <option value="created">Ngày tạo</option>
-                <option value="updated">Cập nhật</option>
-                <option value="imported">Nhập</option>
-              </select>
-            </label>
-            <label className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-600">
-              Từ
-              <input
-                type="date"
-                value={adminDateFrom}
-                onChange={(e) => setAdminDateFrom(e.target.value)}
-                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
-              />
-            </label>
-            <label className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-600">
-              Đến
-              <input
-                type="date"
-                value={adminDateTo}
-                onChange={(e) => setAdminDateTo(e.target.value)}
-                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
-              />
-            </label>
-            <span className="hidden h-4 w-px shrink-0 bg-slate-200 sm:inline" aria-hidden />
-            <motion.div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {counselorUsers.map((c) => {
-              const on = adminAssignedCounselorIds.includes(c.id)
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() =>
-                    setAdminAssignedCounselorIds((prev) =>
-                      prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
-                    )
-                  }
-                  className={[
-                    'max-w-[8rem] shrink-0 truncate rounded-full border px-2 py-0.5 text-[10px]',
-                    on
-                      ? 'border-violet-400 bg-violet-100 text-violet-950'
-                      : 'border-slate-200 bg-white text-slate-700',
-                  ].join(' ')}
-                  title={formatStaffDirectoryLabel(c)}
-                >
-                  {formatStaffDirectoryLabel(c)}
-                </button>
-              )
-            })}
-            </motion.div>
-            <button
-              type="button"
-              onClick={() => {
-                setAdminRegions([])
-                setAdminTags([])
-                setAdminSchools([])
-                setAdminAssignedCounselorIds([])
-                setAdminDateFrom('')
-                setAdminDateTo('')
-                setAdminDateField('created')
-              }}
-              className="ml-auto shrink-0 rounded-full border border-slate-200 bg-white/90 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50"
-            >
-              Xóa lọc
-            </button>
-          </motion.div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <SearchableMultiFilter
-              layout="inline"
-              label="Vùng"
-              title="Vùng / tỉnh"
-              values={adminRegions}
-              onChange={setAdminRegions}
-              options={regionOptionsAdmin}
-              maxVisibleChips={2}
-            />
-            <SearchableMultiFilter
-              layout="inline"
-              label="THPT"
-              title="Trường THPT"
-              values={adminSchools}
-              onChange={setAdminSchools}
-              options={schoolOptions}
-              maxVisibleChips={2}
-            />
-            <div className="flex shrink-0 items-center gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Nhãn</span>
-              <div className="flex flex-wrap gap-0.5">
-                {TAG_OPTIONS.map((tg) => {
-                  const on = adminTags.includes(tg)
-                  return (
-                    <button
-                      key={tg}
-                      type="button"
-                      onClick={() =>
-                        setAdminTags((prev) => (prev.includes(tg) ? prev.filter((x) => x !== tg) : [...prev, tg]))
-                      }
-                      className={[
-                        'rounded-full border px-1.5 py-0.5 text-[10px] font-semibold',
-                        on
-                          ? 'border-amber-400 bg-amber-100 text-amber-900'
-                          : 'border-slate-200 bg-white text-slate-600',
-                      ].join(' ')}
-                    >
-                      {tg}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <section className="app-card-glass-strong space-y-2 p-2 shadow-md sm:p-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
@@ -1536,30 +1306,6 @@ export function LeadManagement() {
                   <strong>Cài đặt → Cài đặt Profile</strong>. Cột điểm hiện theo dữ liệu đã lưu hoặc 0.
                 </p>
               ) : null}
-              {profileScoringActive && profileScoringLive ? (
-                <p className="text-xs text-slate-600">
-                  Điểm cột bảng = <strong>tính theo profile đang chọn</strong> (xem trước). Ghi Firestore khi lưu hồ sơ
-                  hoặc nhập Excel.
-                </p>
-              ) : null}
-              <p className="text-xs leading-snug text-slate-600">
-                <span className="font-semibold text-slate-800">Lọc nhanh theo nhãn (profile đang chọn)</span>
-                {urlQuery.trim() ? (
-                  <>
-                    {' '}
-                    — khi đang <strong>tìm kiếm</strong>, cột «Nhãn» bên dưới lọc theo <strong>nhãn đã lưu</strong> trên
-                    hồ sơ; số lượng trên các nút HOT/WARM… tạm ẩn (tìm kiếm là lọc client trên trang tải).
-                  </>
-                ) : (
-                  <>
-                    {' '}
-                    — HOT / WARM / COLD / LOSS: số trong ngoặc là <strong>tổng trong phạm vi lọc</strong> (Firestore),
-                    không chỉ 30 dòng trang hiện tại. Khi <strong>không</strong> đang tìm kiếm và bạn chọn nhãn, các
-                    nhãn được <strong>tính lại</strong> theo bộ điểm đang chọn (tối đa{' '}
-                    {LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ cập nhật gần đây).
-                  </>
-                )}
-              </p>
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc nhanh nhãn chấm điểm">
                 <button
                   type="button"
@@ -3080,6 +2826,8 @@ function LeadDetailPanel({
   const { playbooks } = useConsultingPlaybooks()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const { categories: knowledgeCategories } = useKnowledgeCategories()
+  const { active: leadSources } = useLeadSources()
+  const { active: scholarships } = useScholarships()
 
   const consultingInsights = useMemo(
     () =>
@@ -3757,6 +3505,8 @@ function LeadDetailPanel({
                             draft={coreDraft}
                             onChange={setCoreDraft}
                             disabled={!showCounselorProgressForm}
+                            leadSources={leadSources}
+                            scholarships={scholarships}
                           />
                         </div>
                         {!showCounselorProgressForm ? (

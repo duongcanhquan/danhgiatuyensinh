@@ -1,20 +1,14 @@
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
+import type { LeadSourceRecord, ScholarshipCategoryId, ScholarshipRecord } from '../types'
+import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
+import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
 
 const INPUT_CLS =
   'w-full max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500'
 
-function Field({
-  label,
-  span = 1,
-  children,
-}: {
-  label: string
-  /** 1 = một cột; 2 = trải full hàng (ô dài). */
-  span?: 1 | 2
-  children: ReactNode
-}) {
+function Field({ label, span = 1, children }: { label: string; span?: 1 | 2; children: ReactNode }) {
   return (
     <label className={['block min-w-0', span === 2 ? 'sm:col-span-2' : ''].filter(Boolean).join(' ')}>
       <span className="text-sm font-semibold text-slate-800">{label}</span>
@@ -38,10 +32,7 @@ function CollapsibleBlock({
       className="group rounded-xl border border-slate-200/90 bg-white shadow-sm open:shadow-md"
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 marker:content-none hover:bg-slate-50/80 [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          className="h-4 w-4 shrink-0 text-slate-500 transition group-open:rotate-90"
-          aria-hidden
-        />
+        <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition group-open:rotate-90" aria-hidden />
         <span className="min-w-0 flex-1">{title}</span>
       </summary>
       <div className="border-t border-slate-100 px-3 pb-3 pt-2">{children}</div>
@@ -49,17 +40,83 @@ function CollapsibleBlock({
   )
 }
 
+function SourceSelect({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: readonly LeadSourceRecord[]
+  disabled: boolean
+  onChange: (v: string) => void
+}) {
+  return (
+    <Field label={label}>
+      <select className={INPUT_CLS} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— Chọn —</option>
+        {options.map((s) => (
+          <option key={s.id} value={s.label}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
+function ScholarshipSelect({
+  label,
+  value,
+  scholarships,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: string
+  scholarships: readonly ScholarshipRecord[]
+  disabled: boolean
+  onChange: (v: string) => void
+}) {
+  const cats = Object.keys(SCHOLARSHIP_CATEGORY_LABELS) as ScholarshipCategoryId[]
+  return (
+    <Field label={label}>
+      <select className={INPUT_CLS} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— Không có học bổng —</option>
+        {cats.map((cat) => {
+          const rows = scholarships.filter((s) => s.category === cat)
+          if (!rows.length) return null
+          return (
+            <optgroup key={cat} label={SCHOLARSHIP_CATEGORY_LABELS[cat]}>
+              {rows.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {scholarshipSelectLabel(s)}
+                </option>
+              ))}
+            </optgroup>
+          )
+        })}
+      </select>
+    </Field>
+  )
+}
+
 export function LeadProfileCoreForm({
   draft,
   onChange,
   disabled,
+  leadSources = [],
+  scholarships = [],
 }: {
   draft: LeadCoreDraft
   onChange: (next: LeadCoreDraft) => void
   disabled: boolean
+  leadSources?: readonly LeadSourceRecord[]
+  scholarships?: readonly ScholarshipRecord[]
 }) {
-  const patch = <K extends keyof LeadCoreDraft>(k: K, v: string) => onChange({ ...draft, [k]: v })
-
+  const patch = <K extends keyof LeadCoreDraft>(k: K, v: LeadCoreDraft[K]) => onChange({ ...draft, [k]: v })
   const grid = 'grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2'
 
   return (
@@ -75,15 +132,95 @@ export function LeadProfileCoreForm({
           <Field label="Ngày sinh">
             <input className={INPUT_CLS} value={draft.dateOfBirth} disabled={disabled} onChange={(e) => patch('dateOfBirth', e.target.value)} />
           </Field>
+          <Field label="CCCD">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={draft.nationalIdNotAvailable}
+                  disabled={disabled}
+                  onChange={(e) =>
+                    onChange({
+                      ...draft,
+                      nationalIdNotAvailable: e.target.checked,
+                      nationalId: e.target.checked ? '' : draft.nationalId,
+                    })
+                  }
+                />
+                Chưa có CCCD
+              </label>
+              {!draft.nationalIdNotAvailable ? (
+                <input
+                  className={INPUT_CLS}
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="10 chữ số"
+                  value={draft.nationalId}
+                  disabled={disabled}
+                  onChange={(e) => patch('nationalId', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                />
+              ) : null}
+            </div>
+          </Field>
+          <Field label="Email sinh viên">
+            <input
+              type="email"
+              className={INPUT_CLS}
+              value={draft.studentEmail}
+              disabled={disabled}
+              onChange={(e) => patch('studentEmail', e.target.value)}
+            />
+          </Field>
           <Field label="Điện thoại SV">
             <input className={INPUT_CLS} inputMode="tel" value={draft.phone} disabled={disabled} onChange={(e) => patch('phone', e.target.value)} />
           </Field>
           <Field label="ĐT người liên hệ">
             <input className={INPUT_CLS} inputMode="tel" value={draft.parentPhone} disabled={disabled} onChange={(e) => patch('parentPhone', e.target.value)} />
           </Field>
-          <Field label="Nguồn tiếp nhận">
+          <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
+          <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
+          <Field label="Nguồn tiếp nhận (ghi chú)" span={2}>
             <input className={INPUT_CLS} value={draft.source} disabled={disabled} onChange={(e) => patch('source', e.target.value)} />
           </Field>
+        </div>
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Gia đình & giám hộ">
+        <div className={grid}>
+          <Field label="Họ tên Bố">
+            <input className={INPUT_CLS} value={draft.fatherName} disabled={disabled} onChange={(e) => patch('fatherName', e.target.value)} />
+          </Field>
+          <Field label="SĐT Bố">
+            <input className={INPUT_CLS} inputMode="tel" value={draft.fatherPhone} disabled={disabled} onChange={(e) => patch('fatherPhone', e.target.value)} />
+          </Field>
+          <Field label="Họ tên Mẹ">
+            <input className={INPUT_CLS} value={draft.motherName} disabled={disabled} onChange={(e) => patch('motherName', e.target.value)} />
+          </Field>
+          <Field label="SĐT Mẹ">
+            <input className={INPUT_CLS} inputMode="tel" value={draft.motherPhone} disabled={disabled} onChange={(e) => patch('motherPhone', e.target.value)} />
+          </Field>
+          <Field label="Người giám hộ" span={2}>
+            <input className={INPUT_CLS} value={draft.guardian} disabled={disabled} onChange={(e) => patch('guardian', e.target.value)} />
+          </Field>
+        </div>
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Học bổng">
+        <div className={grid}>
+          <ScholarshipSelect
+            label="Học bổng 1"
+            value={draft.scholarship1Id}
+            scholarships={scholarships}
+            disabled={disabled}
+            onChange={(v) => patch('scholarship1Id', v)}
+          />
+          <ScholarshipSelect
+            label="Học bổng 2"
+            value={draft.scholarship2Id}
+            scholarships={scholarships}
+            disabled={disabled}
+            onChange={(v) => patch('scholarship2Id', v)}
+          />
         </div>
       </CollapsibleBlock>
 
@@ -138,9 +275,7 @@ export function LeadProfileCoreForm({
             </Field>
           </div>
           <details className="rounded-lg border border-slate-200/80 bg-slate-50/60">
-            <summary className="cursor-pointer px-2.5 py-2 text-sm font-semibold text-slate-700">
-              Ghi chú bổ sung
-            </summary>
+            <summary className="cursor-pointer px-2.5 py-2 text-sm font-semibold text-slate-700">Ghi chú bổ sung</summary>
             <div className={`${grid} p-2.5 pt-0`}>
               <Field label="Ghi chú 1" span={2}>
                 <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.profileNote1} disabled={disabled} onChange={(e) => patch('profileNote1', e.target.value)} />
