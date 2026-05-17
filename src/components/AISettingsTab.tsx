@@ -16,6 +16,7 @@ import {
 } from '../utils/aiGatekeeper'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
+import { DEFAULT_COUNSELING_AI_TASK } from '../utils/counselingAiDefaults'
 
 const DEFAULT_MODELS: Record<AIProviderId, string> = {
   Gemini: 'gemini-2.0-flash',
@@ -63,15 +64,15 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   })
 
   const [taskName, setTaskName] = useState('')
-  const [systemPrompt, setSystemPrompt] = useState(
-    'Bạn là chuyên gia tuyển sinh VietMy. Phân tích khách quan dựa chỉ trên dữ liệu được cung cấp.',
+  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_COUNSELING_AI_TASK.systemPrompt)
+  const [userEmphasis, setUserEmphasis] = useState(DEFAULT_COUNSELING_AI_TASK.userEmphasis)
+  const [targetFields, setTargetFields] = useState<string[]>([...DEFAULT_COUNSELING_AI_TASK.targetFields])
+  const [schemaRows, setSchemaRows] = useState<SchemaRow[]>(() =>
+    Object.entries(DEFAULT_COUNSELING_AI_TASK.expectedOutputSchema).map(([key, typeHint]) => ({
+      key,
+      typeHint,
+    })),
   )
-  const [userEmphasis, setUserEmphasis] = useState('')
-  const [targetFields, setTargetFields] = useState<string[]>(['financialStatus', 'aspirations', 'fieldTripNotes'])
-  const [schemaRows, setSchemaRows] = useState<SchemaRow[]>([
-    { key: 'financialReadiness', typeHint: 'Tốt|Trung Bình|Kém' },
-    { key: 'reasoning', typeHint: 'string' },
-  ])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -136,7 +137,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
         return
       }
       setMsg(
-        'Đã lưu cấu hình API vào trình duyệt (localStorage). Phòng thử AI và Phân tích LLM / AI Miner trên cùng trình duyệt sẽ dùng bản này.',
+        'Đã lưu cấu hình API vào trình duyệt (localStorage). Phân tích LLM trên hồ sơ và AI Miner trên cùng trình duyệt sẽ dùng bản này.',
       )
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không lưu được vào localStorage.')
@@ -186,6 +187,49 @@ export function AISettingsTab({ db }: { db: Firestore }) {
     }
   }, [canTasks, db, taskName, systemPrompt, userEmphasis, targetFields, schemaRows])
 
+  const seedDefaultCounselingTask = useCallback(async () => {
+    if (!canTasks || !db) return
+    const exists = tasks.some((t) => t.name === DEFAULT_COUNSELING_AI_TASK.name)
+    if (exists) {
+      setMsg(`Đã có tác vụ «${DEFAULT_COUNSELING_AI_TASK.name}» — xem tab Tác vụ đã lưu.`)
+      setSubTab('library')
+      return
+    }
+    setBusy(true)
+    setMsg(null)
+    try {
+      const id = crypto.randomUUID()
+      const t = Timestamp.now()
+      await setDoc(doc(db, FS_COLLECTIONS.ai_tasks, id), {
+        ...DEFAULT_COUNSELING_AI_TASK,
+        createdAt: t,
+        updatedAt: t,
+      })
+      setMsg(`Đã tạo tác vụ mẫu «${DEFAULT_COUNSELING_AI_TASK.name}».`)
+      setSubTab('library')
+    } catch (e) {
+      console.error(e)
+      setMsg('Không tạo được tác vụ mẫu — kiểm tra Firestore Rules (collection ai_tasks).')
+    } finally {
+      setBusy(false)
+    }
+  }, [canTasks, db, tasks])
+
+  const applyDefaultToForm = useCallback(() => {
+    setTaskName(DEFAULT_COUNSELING_AI_TASK.name)
+    setSystemPrompt(DEFAULT_COUNSELING_AI_TASK.systemPrompt)
+    setUserEmphasis(DEFAULT_COUNSELING_AI_TASK.userEmphasis)
+    setTargetFields([...DEFAULT_COUNSELING_AI_TASK.targetFields])
+    setSchemaRows(
+      Object.entries(DEFAULT_COUNSELING_AI_TASK.expectedOutputSchema).map(([key, typeHint]) => ({
+        key,
+        typeHint,
+      })),
+    )
+    setSubTab('tasks')
+    setMsg('Đã điền form theo mẫu tư vấn tuyển sinh — chỉnh nếu cần rồi bấm Lưu tác vụ.')
+  }, [])
+
   const removeTask = useCallback(
     async (t: AITask) => {
       if (!canTasks || !db) return
@@ -223,7 +267,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
           <div className="flex flex-wrap items-center gap-2">
             <Sparkles className="h-6 w-6 shrink-0 text-rose-300" aria-hidden />
             <VietMyAccentHeading as="h2" tone="onDark" size="md" className="mb-0">
-              LLM &amp; tác vụ AI
+              LLM &amp; tư vấn AI trên hồ sơ
             </VietMyAccentHeading>
           </div>
         </div>
@@ -297,48 +341,59 @@ export function AISettingsTab({ db }: { db: Firestore }) {
         >
           {subTab === 'guide' ? (
             <div className="space-y-4 text-sm leading-relaxed text-slate-300">
-              <p className="text-xs font-semibold uppercase tracking-wide text-rose-200/90">Các bước nên làm (theo thứ tự)</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-200/90">
+                Quy trình tư vấn tuyển sinh bằng AI
+              </p>
               <ol className="list-decimal space-y-3 pl-4 marker:text-amber-400/90">
                 <li>
-                  <strong className="text-slate-100">Siêu quản trị</strong> mở tab <strong>API</strong>: chọn ChatGPT hoặc
-                  Gemini, dán khóa, chọn model → bấm <strong>Lưu API vào trình duyệt</strong>. Khóa chỉ lưu trên{' '}
-                  <strong>máy và trình duyệt hiện tại</strong>, không tự sang máy khác.
+                  <strong className="text-slate-100">Nạp tri thức</strong> — tab <strong>Thông tin TV &amp; Tri thức</strong>:
+                  học phí, quy chế, ngành (đã duyệt).
                 </li>
                 <li>
-                  Nếu dùng <strong>phân tích AI hàng loạt</strong> trên màn Hồ sơ: mở tab{' '}
-                  <strong>Lọc trước khi gọi AI</strong>, chỉnh ngưỡng (độ dài ghi chú, từ khóa, số ngày…) →{' '}
-                  <strong>Lưu quy tắc lọc</strong> — giúp bỏ hồ sơ chưa đủ tín hiệu, đỡ tốn chi phí gọi AI.
+                  <strong className="text-slate-100">Siêu quản trị</strong> — tab <strong>API</strong>: Gemini hoặc OpenAI →{' '}
+                  <strong>Lưu API vào trình duyệt</strong>.
                 </li>
                 <li>
-                  <strong>Admin / Siêu quản trị</strong> mở tab <strong>Tạo tác vụ</strong>: đặt tên, viết hướng dẫn
-                  cho AI, chọn thông tin hồ sơ gửi kèm, mô tả dạng kết quả mong muốn → <strong>Lưu tác vụ</strong>. Danh
-                  sách đã lưu xem ở tab <strong>Tác vụ đã lưu</strong>.
+                  <strong className="text-slate-100">Tác vụ</strong> — tạo mẫu «Tư vấn tuyển sinh» (nút bên dưới) hoặc tự soạn.
                 </li>
                 <li>
-                  Trong <strong>Cài đặt → Quản lý nhân sự</strong>, quản lý bật{' '}
-                  <strong>«Cho phép dùng AI trên hồ sơ»</strong> cho từng nhân viên cần chạy phân tích trên CRM (Siêu
-                  quản trị không cần bật dòng này).
+                  <strong className="text-slate-100">Nhân sự</strong> — bật «Cho phép dùng AI trên hồ sơ» cho TVV (Admin / Siêu
+                  quản trị không cần).
                 </li>
                 <li>
-                  Nhân viên được phép: mở <strong>chi tiết một hồ sơ</strong> → bấm <strong>Phân tích LLM</strong> → chọn
-                  tác vụ → chạy. Trình duyệt đó cần đã có <strong>khóa API đã lưu</strong> (thường do Siêu quản trị lưu
-                  trước trên máy dùng chung; hoặc lưu riêng trên máy nhân viên — kém an toàn hơn).
-                </li>
-                <li>
-                  Tab <strong>Phòng thử AI</strong> (trong Cài đặt, khác tab này): gõ câu hỏi thử, <strong>không</strong>{' '}
-                  ghi vào hồ sơ. Dùng sau khi đã lưu API để kiểm tra kết nối và model.
+                  <strong className="text-slate-100">Vận hành</strong> — chi tiết hồ sơ → <strong>LLM</strong> → chọn tác vụ → chạy.
                 </li>
               </ol>
+              {canTasks ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void seedDefaultCounselingTask()}
+                    className="rounded-xl border border-amber-400/45 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-50 transition hover:bg-amber-500/30 disabled:opacity-50"
+                  >
+                    Tạo tác vụ mẫu tư vấn
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyDefaultToForm}
+                    className="rounded-xl border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
+                  >
+                    Điền form mẫu
+                  </button>
+                </div>
+              ) : null}
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs text-slate-400">
-                <p className="font-medium text-slate-200">Nhớ giúp người dùng</p>
+                <p className="font-medium text-slate-200">Phân biệt module</p>
                 <ul className="mt-2 list-disc space-y-1 pl-4">
                   <li>
-                    <strong>Kho tri thức</strong> (tab riêng trong Cài đặt): tài liệu có thể được đưa vào câu hỏi gửi
-                    AI khi chạy tác vụ trên hồ sơ.
+                    <strong>Playbook / Script Hub</strong> — soạn sẵn, không gọi LLM.
                   </li>
                   <li>
-                    <strong>Chấm điểm profile</strong> là công thức trên máy chủ; <strong>Tác vụ AI</strong> là đoạn văn
-                    phân tích do AI tạo — hai thứ khác nhau.
+                    <strong>Chấm điểm profile</strong> — công thức CRM, khác đoạn tư vấn AI.
+                  </li>
+                  <li>
+                    <strong>AI Miner</strong> — lọc hàng loạt; cấu hình tab «Lọc trước khi gọi AI».
                   </li>
                 </ul>
               </div>
@@ -353,8 +408,8 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               <p className="text-xs leading-relaxed text-slate-400">
                 {localApiReady ? (
                   <>
-                    <span className="text-emerald-300/95">●</span> Trình duyệt này đã có khóa API hợp lệ — Phòng thử AI
-                    và phân tích trên hồ sơ sẽ dùng khóa đã lưu (trừ khi kỹ thuật cấu hình thêm máy chủ riêng).
+                    <span className="text-emerald-300/95">●</span> Trình duyệt này đã có khóa API hợp lệ — phân tích LLM
+                    trên hồ sơ và AI Miner sẽ dùng khóa đã lưu (trừ khi kỹ thuật cấu hình thêm máy chủ riêng).
                   </>
                 ) : (
                   <>

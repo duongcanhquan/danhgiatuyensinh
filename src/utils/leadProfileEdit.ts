@@ -104,3 +104,34 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
 export function isCoreDraftDirty(before: Lead, draft: LeadCoreDraft): boolean {
   return Object.keys(buildLeadCoreFirestorePatch(before, draft)).length > 0
 }
+
+/** Gộp bản nháp form vào lead — dùng preview chấm điểm trước khi lưu. */
+export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
+  return {
+    ...lead,
+    fullName: norm(draft.fullName),
+    customerId: norm(draft.customerId),
+    dateOfBirth: norm(draft.dateOfBirth) || undefined,
+    phone: norm(draft.phone),
+    parentPhone: norm(draft.parentPhone),
+    source: norm(draft.source),
+    province: norm(draft.province),
+    address: norm(draft.address),
+    highSchool: norm(draft.highSchool),
+    gradeClass: norm(draft.gradeClass),
+    educationLevel: norm(draft.educationLevel),
+    majorInterest: norm(draft.majorInterest) || undefined,
+    academicPerformance: norm(draft.academicPerformance) || undefined,
+    studyIntention: norm(draft.studyIntention) || undefined,
+    schoolType: norm(draft.schoolType) || undefined,
+    financialStatus: norm(draft.financialStatus) || undefined,
+    hanoiArea: norm(draft.hanoiArea) || undefined,
+    description: norm(draft.description),
+    aspirations: norm(draft.aspirations) || undefined,
+    hobbies: norm(draft.hobbies) || undefined,
+    fieldTripNotes: norm(draft.fieldTripNotes) || undefined,
+    profileNote1: norm(draft.profileNote1) || undefined,
+    profileNote2: norm(draft.profileNote2) || undefined,
+    otherAttentionNotes: norm(draft.otherAttentionNotes) || undefined,
+  }
+}

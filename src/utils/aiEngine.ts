@@ -97,7 +97,7 @@ export function loadAIConfigFromStorage(): AIIntegrationConfig | null {
 /**
  * Cấu hình gọi LLM cho toàn app: **ưu tiên** Cài đặt → LLM (localStorage), sau đó biến môi trường Vite:
  * `VITE_AI_API_KEY`, tuỳ chọn `VITE_AI_PROVIDER` (`OpenAI` | `Gemini`), `VITE_AI_MODEL`.
- * Dùng chung cho Phân tích hồ sơ, AI Lead Miner, Phòng thử AI (qua `callOpenAiCompatibleChat`).
+ * Dùng chung cho Phân tích hồ sơ và AI Lead Miner.
  */
 export function resolveAIIntegrationConfig(): AIIntegrationConfig | null {
   const fromLs = loadAIConfigFromStorage()
@@ -136,9 +136,7 @@ export function saveAIConfigToStorage(config: AIIntegrationConfig): void {
 
 export type IntegrationChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
-/**
- * Chat tự do (không bắt JSON) — dùng Phòng thử AI khi đã lưu API trong Cài đặt → LLM.
- */
+/** Chat tự do (không bắt JSON) — dùng khi cần hội thoại ngoài tác vụ có schema. */
 export async function callIntegrationChat(
   config: AIIntegrationConfig,
   messages: ReadonlyArray<IntegrationChatMessage>,
@@ -271,10 +269,10 @@ function buildUserContent(
     JSON.stringify(payload, null, 2),
     '',
     '## Đầu ra',
-    'You must respond ONLY in valid JSON format exactly matching this schema (types are hints; values must be in Vietnamese where applicable):',
+    'Trả lời CHỈ bằng JSON hợp lệ đúng schema sau (giá trị văn bản bằng tiếng Việt):',
     schema,
     '',
-    'Do not wrap in markdown. No prose before or after the JSON object.',
+    'Không bọc markdown. Không thêm lời dẫn trước/sau object JSON.',
   ].join('\n')
 }
 
@@ -345,10 +343,16 @@ async function callOpenAI(config: AIIntegrationConfig, system: string, user: str
 
 const RAG_SYSTEM_SUFFIX = `
 
-## Institutional knowledge (RAG — retrieval simulation)
-You must base tuition amounts, fee schedules, dorm rules, admission policies, and program-specific facts STRICTLY on the following institutional context. If the user or lead data asks for a detail that is NOT present in this context, state clearly that the information is not in the verified knowledge base — do not invent tuition, dates, or policies.
+## Tri thức nhà trường (đã duyệt — bắt buộc tham chiếu)
+Mọi con số học phí, lệ phí, quy chế tuyển sinh, điều kiện ngành, thời hạn… phải lấy từ khối dưới đây.
+Nếu thí sinh hỏi chi tiết không có trong khối này, ghi rõ «chưa có trong kho tri thức đã duyệt» — không được bịa.
 
-### Verified context
+### Nội dung đã duyệt
+`
+
+const PLAYBOOK_SYSTEM_SUFFIX = `
+
+## Playbook tư vấn khớp hồ sơ (nội dung soạn sẵn — tham khảo, không thay tri thức chính thức)
 `
 
 /**
@@ -361,12 +365,21 @@ export async function runAIAnalysis(
   task: AITask,
   config: AIIntegrationConfig,
   fieldExtras: Record<string, unknown> = {},
-  options?: { institutionalRagBlock?: string },
+  options?: { institutionalRagBlock?: string; playbookContextBlock?: string },
 ): Promise<Record<string, unknown>> {
   const rag = options?.institutionalRagBlock?.trim()
-  const system =
-    task.systemPrompt.trim() +
-    (rag ? `${RAG_SYSTEM_SUFFIX}${rag}\n\nYou must base your advice STRICTLY on the institutional context above. Do not invent tuition or policies.` : '')
+  const playbook = options?.playbookContextBlock?.trim()
+  let system = task.systemPrompt.trim()
+  if (playbook) {
+    system += `${PLAYBOOK_SYSTEM_SUFFIX}${playbook}`
+  }
+  if (rag) {
+    system += `${RAG_SYSTEM_SUFFIX}${rag}`
+  }
+  if (!rag) {
+    system +=
+      '\n\nLưu ý: Kho tri thức nhà trường hiện trống hoặc chưa nạp — không khẳng định học phí/quy chế cụ thể; đề xuất TVV tra cứu tài liệu nội bộ.'
+  }
   const user = buildUserContent(lead, task, fieldExtras)
   const raw =
     config.provider === 'Gemini'

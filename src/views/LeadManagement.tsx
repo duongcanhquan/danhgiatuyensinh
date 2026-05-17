@@ -1,9 +1,9 @@
-import type { MouseEvent, ReactNode } from 'react'
+﻿import type { MouseEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Sparkles, Wand2, X, Zap } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Save, Sparkles, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -42,6 +42,7 @@ import { isAdminLikeRole } from '../auth/roleUtils'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
 import { playbooksMatchingLead } from '../utils/playbookMatch'
+import { LeadConsultingHub, type ConsultingHubTab } from '../components/LeadConsultingHub'
 import {
   evaluateLead,
   leadToEvaluationRecord,
@@ -60,7 +61,8 @@ import {
   loadAiGatekeeperFromStorage,
   mergeGatekeeperConfig,
 } from '../utils/aiGatekeeper'
-import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
+import { buildLeadContextualRagBlock } from '../utils/knowledgeRag'
+import { buildPlaybookContextBlock } from '../utils/counselingAiDefaults'
 import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useAITasks } from '../hooks/useAITasks'
@@ -69,7 +71,12 @@ import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
 import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
-import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft } from '../utils/leadProfileEdit'
+import {
+  buildLeadCoreFirestorePatch,
+  isCoreDraftDirty,
+  leadToCoreDraft,
+  mergeCoreDraftIntoLead,
+} from '../utils/leadProfileEdit'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
@@ -88,24 +95,24 @@ import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/coun
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
-  NEW: 'Mới',
-  CONTACTED: 'Đã liên hệ',
-  QUALIFIED: 'Đủ điều kiện',
-  APPLIED: 'Đã nộp hồ sơ',
-  ENROLLED: 'Đã ghi danh',
-  LOST: 'Không còn tiềm năng',
-  ARCHIVED: 'Lưu trữ',
+  NEW: 'Má»›i',
+  CONTACTED: 'ÄÃ£ liÃªn há»‡',
+  QUALIFIED: 'Äá»§ Ä‘iá»u kiá»‡n',
+  APPLIED: 'ÄÃ£ ná»™p há»“ sÆ¡',
+  ENROLLED: 'ÄÃ£ ghi danh',
+  LOST: 'KhÃ´ng cÃ²n tiá»m nÄƒng',
+  ARCHIVED: 'LÆ°u trá»¯',
 }
 
 function interactionChannelVi(ch: string): string {
   const m: Record<string, string> = {
-    NOTE: 'Ghi chú',
-    CALL: 'Gọi',
+    NOTE: 'Ghi chÃº',
+    CALL: 'Gá»i',
     SMS: 'SMS',
     EMAIL: 'Email',
     ZALO: 'Zalo',
-    IN_PERSON: 'Trực tiếp',
-    SYSTEM: 'Hệ thống',
+    IN_PERSON: 'Trá»±c tiáº¿p',
+    SYSTEM: 'Há»‡ thá»‘ng',
   }
   return m[ch] ?? ch
 }
@@ -113,22 +120,19 @@ function interactionChannelVi(ch: string): string {
 const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
 const EVALUATION_TAGS = [
-  'Tích cực',
-  'Cần follow-up',
-  'Vấn đề tài chính',
-  'Chưa quyết định',
-  'Quan tâm cao',
-  'Tiêu cực',
-  'Không quan tâm',
-  'Chưa rõ ràng',
+  'TÃ­ch cá»±c',
+  'Cáº§n follow-up',
+  'Váº¥n Ä‘á» tÃ i chÃ­nh',
+  'ChÆ°a quyáº¿t Ä‘á»‹nh',
+  'Quan tÃ¢m cao',
+  'TiÃªu cá»±c',
+  'KhÃ´ng quan tÃ¢m',
+  'ChÆ°a rÃµ rÃ ng',
 ] as const
 
-/** Tooltip cột Điểm thông tin — đặt chuột lên nút ? hoặc gauge để xem chi tiết. */
+/** Tooltip cá»™t Äiá»ƒm thÃ´ng tin â€” Ä‘áº·t chuá»™t lÃªn nÃºt ? hoáº·c gauge Ä‘á»ƒ xem chi tiáº¿t. */
 const ML_WIN_COLUMN_HINT =
-  'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
-
-const LEAD_DETAIL_PROFILE_HELP =
-  'Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới. Điểm chấm HOT/WARM/COLD (profile) và % điểm thông tin (độ đầy hồ sơ) được tính lại sau lưu khi có cấu hình.'
+  'Äiá»ƒm thÃ´ng tin = Ä‘á»™ Ä‘áº§y dá»¯ liá»‡u tÄ©nh trÃªn há»“ sÆ¡ (Ä‘iá»ƒm ná»n + cÃ¡c tiÃªu chÃ­ báº­t vÃ  khá»›p; káº¹p minâ€“max theo CÃ i Ä‘áº·t â†’ Äiá»ƒm thÃ´ng tin). BÃ¡m theo 20 cá»™t Excel quy chuáº©n + tiÃªu chÃ­ má»Ÿ rá»™ng (educationLevel, description) náº¿u báº­t. CÃ³ thá»ƒ ghi Ä‘Ã¨ tá»«ng lead trÃªn Firestore (mlWinProbability + mlExplanation). Äáº·t chuá»™t lÃªn vÃ²ng % Ä‘á»ƒ xem báº£ng chi tiáº¿t.'
 
 function isElevatedForAdminFilters(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
@@ -150,8 +154,8 @@ function parseIsoDayEndMs(iso: string): number | null {
 
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
   const uid = l.assignedTo ?? l.assignedCounselorId
-  if (!uid) return '—'
-  return names.get(uid) ?? `${uid.slice(0, 8)}…`
+  if (!uid) return 'â€”'
+  return names.get(uid) ?? `${uid.slice(0, 8)}â€¦`
 }
 
 function effectiveLeadAssigneeUid(l: Lead): string {
@@ -159,7 +163,7 @@ function effectiveLeadAssigneeUid(l: Lead): string {
   return u ? String(u).trim() : ''
 }
 
-/** Bỏ dòng nhật ký nhập `[Import]…` khỏi mô tả — chỉ dùng khi hiển thị, không sửa dữ liệu gốc. */
+/** Bá» dÃ²ng nháº­t kÃ½ nháº­p `[Import]â€¦` khá»i mÃ´ táº£ â€” chá»‰ dÃ¹ng khi hiá»ƒn thá»‹, khÃ´ng sá»­a dá»¯ liá»‡u gá»‘c. */
 function leadDescriptionForDisplay(raw: string | undefined): string {
   if (!raw?.trim()) return ''
   const kept = raw.split('\n').filter((line) => {
@@ -169,12 +173,12 @@ function leadDescriptionForDisplay(raw: string | undefined): string {
   return kept.join('\n').replace(/^\s+|\s+$/g, '')
 }
 
-/** Rút gọn ghi chú / mô tả trên bảng — bản đầy đủ trong `title` ô hoặc trong panel chi tiết. */
+/** RÃºt gá»n ghi chÃº / mÃ´ táº£ trÃªn báº£ng â€” báº£n Ä‘áº§y Ä‘á»§ trong `title` Ã´ hoáº·c trong panel chi tiáº¿t. */
 function formatDescPreview(raw: string | undefined, max = 64): string {
   const cleaned = leadDescriptionForDisplay(raw)
   const t = cleaned.replace(/\s+/g, ' ').trim()
-  if (!t) return '—'
-  return t.length <= max ? t : `${t.slice(0, max).trim()}…`
+  if (!t) return 'â€”'
+  return t.length <= max ? t : `${t.slice(0, max).trim()}â€¦`
 }
 
 export function LeadManagement() {
@@ -192,10 +196,6 @@ export function LeadManagement() {
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
-  const institutionalRagBlock = useMemo(
-    () => buildInstitutionalRagBlock(knowledgeDocuments),
-    [knowledgeDocuments],
-  )
 
   const [searchParams, setSearchParams] = useSearchParams()
   const urlQuery = (searchParams.get(LWF.Q) ?? '').trim().toLowerCase()
@@ -231,14 +231,14 @@ export function LeadManagement() {
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
-  /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
+  /** Lá»c TVV phá»¥ trÃ¡ch (client); '' = táº¥t cáº£, __UNASSIGNED__ = chÆ°a gÃ¡n. */
   const [assigneeFilter, setAssigneeFilter] = useState<string>('')
   const [scoreMinInput, setScoreMinInput] = useState('')
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
   const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
 
-  /** Lọc HOT/WARM/COLD theo điểm profile hiện tại — không dùng `where(priorityTag)`; cần quét gần đây (fullScope). */
+  /** Lá»c HOT/WARM/COLD theo Ä‘iá»ƒm profile hiá»‡n táº¡i â€” khÃ´ng dÃ¹ng `where(priorityTag)`; cáº§n quÃ©t gáº§n Ä‘Ã¢y (fullScope). */
   const tagClientEval = tagFilter !== 'ALL' && !urlQuery.trim()
 
   const counselorDirectoryLabelById = useMemo(() => {
@@ -372,7 +372,7 @@ export function LeadManagement() {
     [activeScoringProfile, scoreByLeadId],
   )
 
-  /** Đếm theo từng nhãn trên tập `leads` đã tải (dùng khi tính lại nhãn theo profile — fullScope). */
+  /** Äáº¿m theo tá»«ng nhÃ£n trÃªn táº­p `leads` Ä‘Ã£ táº£i (dÃ¹ng khi tÃ­nh láº¡i nhÃ£n theo profile â€” fullScope). */
   const tagCountsFromLoadedLeads = useMemo(() => {
     const m: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
     for (const l of leads) {
@@ -383,9 +383,9 @@ export function LeadManagement() {
   }, [leads, effectiveLeadTag])
 
   /**
-   * Số trong ngoặc trên nút lọc nhanh: Firestore aggregation (đúng phạm vi lọc, không giới hạn 30/trang)
-   * khi dùng nhãn đã lưu; khi tính lại theo profile thì đếm trên tập fullScope đã tải.
-   * Khi đang tìm kiếm chuỗi: không hiển thị (full-text là client-side, không có chỉ số server tương ứng).
+   * Sá»‘ trong ngoáº·c trÃªn nÃºt lá»c nhanh: Firestore aggregation (Ä‘Ãºng pháº¡m vi lá»c, khÃ´ng giá»›i háº¡n 30/trang)
+   * khi dÃ¹ng nhÃ£n Ä‘Ã£ lÆ°u; khi tÃ­nh láº¡i theo profile thÃ¬ Ä‘áº¿m trÃªn táº­p fullScope Ä‘Ã£ táº£i.
+   * Khi Ä‘ang tÃ¬m kiáº¿m chuá»—i: khÃ´ng hiá»ƒn thá»‹ (full-text lÃ  client-side, khÃ´ng cÃ³ chá»‰ sá»‘ server tÆ°Æ¡ng á»©ng).
    */
   const tagChipCounts = useMemo((): Record<PriorityTag, number> | null => {
     if (urlQuery.trim()) return null
@@ -451,7 +451,14 @@ export function LeadManagement() {
   }, [showAdminGlobalFilters, regionLabels, leads])
 
   const [selected, setSelected] = useState<Lead | null>(null)
-  /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
+  const institutionalRagBlock = useMemo(
+    () =>
+      selected
+        ? buildLeadContextualRagBlock(selected, knowledgeDocuments)
+        : '',
+    [selected, knowledgeDocuments],
+  )
+  /** Chi tiáº¿t há»“ sÆ¡: form tiáº¿n Ä‘á»™/ghi chÃº cÃ²n thay Ä‘á»•i chÆ°a lÆ°u â€” dÃ¹ng trong onClose (confirm). */
   const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
@@ -477,7 +484,7 @@ export function LeadManagement() {
   const closeLeadDetailPanel = useCallback(() => {
     if (leadDetailUnsavedRef.current) {
       const ok = window.confirm(
-        'Có thay đổi chưa lưu (funnel, ghi chú hoặc tình trạng TVV nếu chỉnh ở cột trái). Đóng chi tiết và bỏ các thay đổi?',
+        'CÃ³ thay Ä‘á»•i chÆ°a lÆ°u (funnel, ghi chÃº hoáº·c tÃ¬nh tráº¡ng TVV náº¿u chá»‰nh á»Ÿ cá»™t trÃ¡i). ÄÃ³ng chi tiáº¿t vÃ  bá» cÃ¡c thay Ä‘á»•i?',
       )
       if (!ok) return
     }
@@ -641,7 +648,7 @@ export function LeadManagement() {
     return rows
   }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId, infoScoreRuntime])
 
-  /** Phân trang theo Firestore / bucket tìm kiếm — hook đã trả đúng một trang (≤30 dòng). */
+  /** PhÃ¢n trang theo Firestore / bucket tÃ¬m kiáº¿m â€” hook Ä‘Ã£ tráº£ Ä‘Ãºng má»™t trang (â‰¤30 dÃ²ng). */
   const displayTotalPages = Math.max(1, firestoreTotalPages)
 
   useEffect(() => {
@@ -718,10 +725,10 @@ export function LeadManagement() {
     const out: Chip[] = []
     const qRaw = (searchParams.get(LWF.Q) ?? '').trim()
     if (qRaw) {
-      const short = qRaw.length > 26 ? `${qRaw.slice(0, 26)}…` : qRaw
+      const short = qRaw.length > 26 ? `${qRaw.slice(0, 26)}â€¦` : qRaw
       out.push({
         id: 'q',
-        label: `Tìm «${short}»`,
+        label: `TÃ¬m Â«${short}Â»`,
         onClear: () => {
           setSearchParams(
             (prev) => {
@@ -738,7 +745,7 @@ export function LeadManagement() {
     if (tagFilter !== 'ALL') {
       out.push({
         id: 'tag',
-        label: `Nhãn: ${tagFilter}`,
+        label: `NhÃ£n: ${tagFilter}`,
         onClear: () => {
           setTagFilter('ALL')
           setPage(1)
@@ -749,7 +756,7 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') {
       out.push({
         id: 'region',
-        label: `Vùng: ${regionFilter}`,
+        label: `VÃ¹ng: ${regionFilter}`,
         onClear: () => {
           setRegionFilter('ALL')
           setPage(1)
@@ -760,7 +767,7 @@ export function LeadManagement() {
     if (majorFilter !== 'ALL') {
       out.push({
         id: 'major',
-        label: `Hệ: ${majorFilter.length > 20 ? `${majorFilter.slice(0, 20)}…` : majorFilter}`,
+        label: `Há»‡: ${majorFilter.length > 20 ? `${majorFilter.slice(0, 20)}â€¦` : majorFilter}`,
         onClear: () => {
           setMajorFilter('ALL')
           setPage(1)
@@ -782,7 +789,7 @@ export function LeadManagement() {
     if (crmStatusFilter !== 'ALL') {
       out.push({
         id: 'crm',
-        label: `Tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[crmStatusFilter as LeadCounselorStatus]}`,
+        label: `TÆ° váº¥n: ${LEAD_COUNSELOR_STATUS_LABELS[crmStatusFilter as LeadCounselorStatus]}`,
         onClear: () => {
           setCrmStatusFilter('ALL')
           setPage(1)
@@ -793,7 +800,7 @@ export function LeadManagement() {
     if (sourceFilter !== 'ALL') {
       out.push({
         id: 'source',
-        label: `Nguồn: ${sourceFilter.length > 18 ? `${sourceFilter.slice(0, 18)}…` : sourceFilter}`,
+        label: `Nguá»“n: ${sourceFilter.length > 18 ? `${sourceFilter.slice(0, 18)}â€¦` : sourceFilter}`,
         onClear: () => {
           setSourceFilter('ALL')
           setPage(1)
@@ -804,7 +811,7 @@ export function LeadManagement() {
     if (schoolFilter !== 'ALL') {
       out.push({
         id: 'school',
-        label: `Trường: ${schoolFilter.length > 18 ? `${schoolFilter.slice(0, 18)}…` : schoolFilter}`,
+        label: `TrÆ°á»ng: ${schoolFilter.length > 18 ? `${schoolFilter.slice(0, 18)}â€¦` : schoolFilter}`,
         onClear: () => {
           setSchoolFilter('ALL')
           setPage(1)
@@ -815,7 +822,7 @@ export function LeadManagement() {
     if (assigneeFilter) {
       const al =
         assigneeFilter === '__UNASSIGNED__'
-          ? 'Chưa gán TVV'
+          ? 'ChÆ°a gÃ¡n TVV'
           : counselorDisplayNameById.get(assigneeFilter) ??
             reassignPickList.find((c) => c.id === assigneeFilter)?.displayName ??
             assigneeFilter.slice(0, 8)
@@ -838,10 +845,10 @@ export function LeadManagement() {
         id: 'score',
         label:
           minN != null && maxN != null
-            ? `Điểm: ${minN}–${maxN}`
+            ? `Äiá»ƒm: ${minN}â€“${maxN}`
             : minN != null
-              ? `Điểm ≥ ${minN}`
-              : `Điểm ≤ ${maxN}`,
+              ? `Äiá»ƒm â‰¥ ${minN}`
+              : `Äiá»ƒm â‰¤ ${maxN}`,
         onClear: () => {
           setScoreMinInput('')
           setScoreMaxInput('')
@@ -852,7 +859,7 @@ export function LeadManagement() {
     if (aiShortlistOnly) {
       out.push({
         id: 'ai',
-        label: 'Chỉ hồ sơ AI đã đánh dấu',
+        label: 'Chá»‰ há»“ sÆ¡ AI Ä‘Ã£ Ä‘Ã¡nh dáº¥u',
         onClear: () => {
           setAiShortlistOnly(false)
           setPage(1)
@@ -871,7 +878,7 @@ export function LeadManagement() {
     if (adminHas) {
       out.push({
         id: 'admin',
-        label: 'Bộ lọc Admin',
+        label: 'Bá»™ lá»c Admin',
         onClear: () => {
           setAdminUploaderIds([])
           setAdminRegions([])
@@ -923,7 +930,7 @@ export function LeadManagement() {
       m.set(l.id, ev)
     }
     exportEvaluatedLeadsToXlsx(sortedFiltered, m, {
-      profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+      profileName: activeScoringProfile?.profileName ?? 'Máº·c Ä‘á»‹nh',
     })
   }
 
@@ -976,7 +983,7 @@ export function LeadManagement() {
         const owner = row?.assignedTo ?? row?.assignedCounselorId
         if (owner !== profile.id) {
           window.alert(
-            'Chỉ có thể «Giao việc hàng loạt» cho các hồ sơ đang gán cho bạn. Bỏ chọn hồ sơ của đồng nghiệp hoặc liên hệ Admin/Trưởng.',
+            'Chá»‰ cÃ³ thá»ƒ Â«Giao viá»‡c hÃ ng loáº¡tÂ» cho cÃ¡c há»“ sÆ¡ Ä‘ang gÃ¡n cho báº¡n. Bá» chá»n há»“ sÆ¡ cá»§a Ä‘á»“ng nghiá»‡p hoáº·c liÃªn há»‡ Admin/TrÆ°á»Ÿng.',
           )
           return
         }
@@ -1010,7 +1017,7 @@ export function LeadManagement() {
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
+          description: `PhÃ¢n cÃ´ng hÃ ng loáº¡t â†’ ${targetLabel}${prev ? ` (trÆ°á»›c: ${prev.assignedTo ?? prev.assignedCounselorId ?? 'â€”'})` : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -1068,7 +1075,7 @@ export function LeadManagement() {
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'STATUS_CHANGE',
-          description: `Tình trạng tư vấn (hàng loạt): ${prev ? LEAD_COUNSELOR_STATUS_LABELS[prev.status] : '—'} → ${LEAD_COUNSELOR_STATUS_LABELS[bulkCrmStatus]}`,
+          description: `TÃ¬nh tráº¡ng tÆ° váº¥n (hÃ ng loáº¡t): ${prev ? LEAD_COUNSELOR_STATUS_LABELS[prev.status] : 'â€”'} â†’ ${LEAD_COUNSELOR_STATUS_LABELS[bulkCrmStatus]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -1088,14 +1095,14 @@ export function LeadManagement() {
       if (!db || !profile) return
       if (!canRunLlmAnalysis) {
         setAiMinerError(
-          'Phân tích AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+          'PhÃ¢n tÃ­ch AI cáº§n Ä‘Æ°á»£c quáº£n lÃ½ báº­t Â«Cho phÃ©p dÃ¹ng AI trÃªn há»“ sÆ¡Â» trong CÃ i Ä‘áº·t â†’ Quáº£n lÃ½ nhÃ¢n sá»±, hoáº·c dÃ¹ng tÃ i khoáº£n SiÃªu quáº£n trá»‹.',
         )
         return
       }
       const cfg = resolveAIIntegrationConfig()
       if (!cfg) {
         setAiMinerError(
-          'Chưa có khóa AI — vào Cài đặt → LLM → API rồi bấm Lưu, hoặc đặt VITE_AI_API_KEY (tuỳ chọn VITE_AI_PROVIDER=OpenAI|Gemini, VITE_AI_MODEL) trong .env và chạy lại dev/build.',
+          'ChÆ°a cÃ³ khÃ³a AI â€” vÃ o CÃ i Ä‘áº·t â†’ LLM â†’ API rá»“i báº¥m LÆ°u, hoáº·c Ä‘áº·t VITE_AI_API_KEY (tuá»³ chá»n VITE_AI_PROVIDER=OpenAI|Gemini, VITE_AI_MODEL) trong .env vÃ  cháº¡y láº¡i dev/build.',
         )
         return
       }
@@ -1119,10 +1126,10 @@ export function LeadManagement() {
             isAiShortlisted: r.isShortlisted,
             aiShortlistReason:
               r.reasoning ||
-              (r.isShortlisted ? 'Được AI đánh dấu shortlist — xem nhật ký tương tác.' : 'Không đủ tín hiệu shortlist.'),
+              (r.isShortlisted ? 'ÄÆ°á»£c AI Ä‘Ã¡nh dáº¥u shortlist â€” xem nháº­t kÃ½ tÆ°Æ¡ng tÃ¡c.' : 'KhÃ´ng Ä‘á»§ tÃ­n hiá»‡u shortlist.'),
             recommendedAction:
               r.nextBestAction ||
-              (r.isShortlisted ? 'Liên hệ ngay theo kênh ưu tiên của phụ huynh.' : 'Tiếp tục nuôi lead trong nhóm WARM.'),
+              (r.isShortlisted ? 'LiÃªn há»‡ ngay theo kÃªnh Æ°u tiÃªn cá»§a phá»¥ huynh.' : 'Tiáº¿p tá»¥c nuÃ´i lead trong nhÃ³m WARM.'),
             aiProcessedAt: Timestamp.now(),
             ...leadTouchPatch(),
           })
@@ -1141,10 +1148,10 @@ export function LeadManagement() {
             isAiShortlisted: r.isShortlisted,
             aiShortlistReason:
               r.reasoning ||
-              (r.isShortlisted ? 'Được AI đánh dấu shortlist — xem nhật ký tương tác.' : 'Không đủ tín hiệu shortlist.'),
+              (r.isShortlisted ? 'ÄÆ°á»£c AI Ä‘Ã¡nh dáº¥u shortlist â€” xem nháº­t kÃ½ tÆ°Æ¡ng tÃ¡c.' : 'KhÃ´ng Ä‘á»§ tÃ­n hiá»‡u shortlist.'),
             recommendedAction:
               r.nextBestAction ||
-              (r.isShortlisted ? 'Liên hệ ngay theo kênh ưu tiên của phụ huynh.' : 'Tiếp tục nuôi lead trong nhóm WARM.'),
+              (r.isShortlisted ? 'LiÃªn há»‡ ngay theo kÃªnh Æ°u tiÃªn cá»§a phá»¥ huynh.' : 'Tiáº¿p tá»¥c nuÃ´i lead trong nhÃ³m WARM.'),
             aiProcessedAt: processedAt,
             ...touchAfter,
           }
@@ -1159,10 +1166,10 @@ export function LeadManagement() {
             isAiShortlisted: r.isShortlisted,
             aiShortlistReason:
               r.reasoning ||
-              (r.isShortlisted ? 'Được AI đánh dấu shortlist — xem nhật ký tương tác.' : 'Không đủ tín hiệu shortlist.'),
+              (r.isShortlisted ? 'ÄÆ°á»£c AI Ä‘Ã¡nh dáº¥u shortlist â€” xem nháº­t kÃ½ tÆ°Æ¡ng tÃ¡c.' : 'KhÃ´ng Ä‘á»§ tÃ­n hiá»‡u shortlist.'),
             recommendedAction:
               r.nextBestAction ||
-              (r.isShortlisted ? 'Liên hệ ngay theo kênh ưu tiên của phụ huynh.' : 'Tiếp tục nuôi lead trong nhóm WARM.'),
+              (r.isShortlisted ? 'LiÃªn há»‡ ngay theo kÃªnh Æ°u tiÃªn cá»§a phá»¥ huynh.' : 'Tiáº¿p tá»¥c nuÃ´i lead trong nhÃ³m WARM.'),
             aiProcessedAt: processedAt,
             ...touchAfter,
           }
@@ -1172,14 +1179,14 @@ export function LeadManagement() {
         await commitAuditLog(db, {
           leadId: warmPassed[0]!.id,
           actionType: 'AI_RUN',
-          description: `AI Lead Miner (shortlist, sau Gatekeeper): ${results.length} hồ sơ → ${shorted} shortlist`,
+          description: `AI Lead Miner (shortlist, sau Gatekeeper): ${results.length} há»“ sÆ¡ â†’ ${shorted} shortlist`,
           performedBy: profile.id,
           performedByName: performer,
         })
         refetchLeads()
       } catch (e) {
         console.error(e)
-        setAiMinerError(e instanceof Error ? e.message : 'Không chạy được AI Lead Miner.')
+        setAiMinerError(e instanceof Error ? e.message : 'KhÃ´ng cháº¡y Ä‘Æ°á»£c AI Lead Miner.')
       } finally {
         setAiMinerProgress(null)
         setSelectedIds(new Set())
@@ -1192,20 +1199,20 @@ export function LeadManagement() {
     if (!db || !profile) return
     if (!canRunLlmAnalysis) {
       setAiMinerError(
-        'Phân tích AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+        'PhÃ¢n tÃ­ch AI cáº§n Ä‘Æ°á»£c quáº£n lÃ½ báº­t Â«Cho phÃ©p dÃ¹ng AI trÃªn há»“ sÆ¡Â» trong CÃ i Ä‘áº·t â†’ Quáº£n lÃ½ nhÃ¢n sá»±, hoáº·c dÃ¹ng tÃ i khoáº£n SiÃªu quáº£n trá»‹.',
       )
       return
     }
     const cfg = resolveAIIntegrationConfig()
     if (!cfg) {
       setAiMinerError(
-        'Chưa có khóa AI — vào Cài đặt → LLM → API rồi bấm Lưu, hoặc đặt VITE_AI_API_KEY trong .env và chạy lại dev/build.',
+        'ChÆ°a cÃ³ khÃ³a AI â€” vÃ o CÃ i Ä‘áº·t â†’ LLM â†’ API rá»“i báº¥m LÆ°u, hoáº·c Ä‘áº·t VITE_AI_API_KEY trong .env vÃ  cháº¡y láº¡i dev/build.',
       )
       return
     }
     const warmRows = leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM')
     if (!warmRows.length) {
-      setAiMinerError('Chọn ít nhất một hồ sơ có nhãn WARM (theo profile chấm điểm hiện tại).')
+      setAiMinerError('Chá»n Ã­t nháº¥t má»™t há»“ sÆ¡ cÃ³ nhÃ£n WARM (theo profile cháº¥m Ä‘iá»ƒm hiá»‡n táº¡i).')
       return
     }
     setAiMinerError(null)
@@ -1226,7 +1233,7 @@ export function LeadManagement() {
     } catch (e) {
       console.error(e)
       setAiMinerError(
-        e instanceof Error ? e.message : 'Không tải được lịch sử tương tác để kiểm tra trước khi chạy AI.',
+        e instanceof Error ? e.message : 'KhÃ´ng táº£i Ä‘Æ°á»£c lá»‹ch sá»­ tÆ°Æ¡ng tÃ¡c Ä‘á»ƒ kiá»ƒm tra trÆ°á»›c khi cháº¡y AI.',
       )
     } finally {
       setGatekeeperBusy(false)
@@ -1236,7 +1243,7 @@ export function LeadManagement() {
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
     exportSelectedEvaluatedLeadsToXlsx(rows, selectedIds, evalMapForExport(rows), {
-      profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+      profileName: activeScoringProfile?.profileName ?? 'Máº·c Ä‘á»‹nh',
     })
   }, [leads, selectedIds, evalMapForExport, activeScoringProfile])
 
@@ -1245,12 +1252,12 @@ export function LeadManagement() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Hồ sơ
+            Há»“ sÆ¡
           </VietMyAccentHeading>
         </div>
         {!configured || !db ? (
           <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-xs text-amber-900">
-            Firebase chưa cấu hình.
+            Firebase chÆ°a cáº¥u hÃ¬nh.
           </span>
         ) : null}
       </header>
@@ -1269,8 +1276,8 @@ export function LeadManagement() {
                 <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-900">
                   Admin
                 </span>
-                <span className="text-sm font-semibold text-slate-800">Lọc theo ngày, TVV, người tải, vùng…</span>
-                <span className="text-slate-400 transition group-open:rotate-90">›</span>
+                <span className="text-sm font-semibold text-slate-800">Lá»c theo ngÃ y, TVV, ngÆ°á»i táº£i, vÃ¹ngâ€¦</span>
+                <span className="text-slate-400 transition group-open:rotate-90">â€º</span>
               </div>
               <button
                 type="button"
@@ -1287,26 +1294,26 @@ export function LeadManagement() {
                 }}
                 className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
               >
-                Xóa lọc admin
+                XÃ³a lá»c admin
               </button>
             </div>
           </summary>
           <div className="border-t border-slate-200/80 px-4 pb-4 pt-2 md:px-5 md:pb-5">
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/60 bg-white/40 p-3">
               <label className="flex flex-col text-xs font-medium text-slate-600">
-                Mốc thời gian
+                Má»‘c thá»i gian
                 <select
                   value={adminDateField}
                   onChange={(e) => setAdminDateField(e.target.value as AdminDateField)}
                   className="mt-1 min-w-[9rem] rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-200"
                 >
-                  <option value="created">Ngày tạo</option>
-                  <option value="updated">Cập nhật gần nhất</option>
-                  <option value="imported">Ngày nhập (import)</option>
+                  <option value="created">NgÃ y táº¡o</option>
+                  <option value="updated">Cáº­p nháº­t gáº§n nháº¥t</option>
+                  <option value="imported">NgÃ y nháº­p (import)</option>
                 </select>
               </label>
               <label className="flex flex-col text-xs font-medium text-slate-600">
-                Từ ngày
+                Tá»« ngÃ y
                 <input
                   type="date"
                   value={adminDateFrom}
@@ -1315,7 +1322,7 @@ export function LeadManagement() {
                 />
               </label>
               <label className="flex flex-col text-xs font-medium text-slate-600">
-                Đến ngày
+                Äáº¿n ngÃ y
                 <input
                   type="date"
                   value={adminDateTo}
@@ -1325,7 +1332,7 @@ export function LeadManagement() {
               </label>
             </div>
             <div className="mt-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tư vấn viên được gán</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">TÆ° váº¥n viÃªn Ä‘Æ°á»£c gÃ¡n</p>
               <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto pr-1">
                 {counselorUsers.length ? (
                   counselorUsers.map((c) => {
@@ -1353,14 +1360,14 @@ export function LeadManagement() {
                   })
                 ) : (
                   <p className="text-xs text-slate-500">
-                    {counselorsLoading ? 'Đang tải danh bạ TVV…' : 'Chưa có tài khoản counselor trong hệ thống.'}
+                    {counselorsLoading ? 'Äang táº£i danh báº¡ TVVâ€¦' : 'ChÆ°a cÃ³ tÃ i khoáº£n counselor trong há»‡ thá»‘ng.'}
                   </p>
                 )}
               </div>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Người tải</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">NgÆ°á»i táº£i</p>
                 <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
                   {uploaderOptions.length ? (
                     uploaderOptions.map(([uid, label]) => {
@@ -1386,12 +1393,12 @@ export function LeadManagement() {
                       )
                     })
                   ) : (
-                    <p className="text-xs text-slate-500">Chưa có dữ liệu người tải.</p>
+                    <p className="text-xs text-slate-500">ChÆ°a cÃ³ dá»¯ liá»‡u ngÆ°á»i táº£i.</p>
                   )}
                 </div>
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Vùng / tỉnh</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">VÃ¹ng / tá»‰nh</p>
                 <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
                   {regionOptionsAdmin.map((reg) => {
                     const on = adminRegions.includes(reg)
@@ -1419,7 +1426,7 @@ export function LeadManagement() {
                 </div>
               </div>
               <div className="min-w-0 sm:col-span-2 xl:col-span-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Nhãn (profile)</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">NhÃ£n (profile)</p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {TAG_OPTIONS.map((tg) => {
                     const on = adminTags.includes(tg)
@@ -1444,7 +1451,7 @@ export function LeadManagement() {
                 </div>
               </div>
               <div className="min-w-0 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trường THPT</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">TrÆ°á»ng THPT</p>
                 <div className="mt-1.5 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
                   {schoolOptions.slice(0, 36).map((sc) => {
                     const on = adminSchools.includes(sc)
@@ -1470,7 +1477,7 @@ export function LeadManagement() {
                     )
                   })}
                   {schoolOptions.length > 36 ? (
-                    <span className="self-center text-xs text-slate-500">+{schoolOptions.length - 36}…</span>
+                    <span className="self-center text-xs text-slate-500">+{schoolOptions.length - 36}â€¦</span>
                   ) : null}
                 </div>
               </div>
@@ -1488,16 +1495,16 @@ export function LeadManagement() {
                 strokeWidth={2}
                 aria-hidden
               />
-              <span className="shrink-0">Bộ chấm điểm</span>
+              <span className="shrink-0">Bá»™ cháº¥m Ä‘iá»ƒm</span>
               <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden">
                 {profilesLoading
-                  ? 'Đang tải…'
-                  : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'Chưa có profile' : '—')}
+                  ? 'Äang táº£iâ€¦'
+                  : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'ChÆ°a cÃ³ profile' : 'â€”')}
               </span>
             </summary>
             <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/60 pt-2 sm:flex-row sm:items-end">
               <label className="min-w-0 flex-1 text-xs font-bold uppercase tracking-wide text-slate-500">
-                Chọn profile
+                Chá»n profile
                 <div className="relative mt-0.5">
                   <select
                     value={resolvedScoringProfileId ?? ''}
@@ -1506,16 +1513,16 @@ export function LeadManagement() {
                     className="w-full appearance-none rounded-lg border border-slate-200/95 bg-white/95 py-1.5 pl-2 pr-7 text-xs font-medium text-slate-900 shadow-inner outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100 disabled:opacity-50 sm:min-w-[12rem]"
                   >
                     {!scoringProfiles.length ? (
-                      <option value="">Chưa có profile — Cấu hình</option>
+                      <option value="">ChÆ°a cÃ³ profile â€” Cáº¥u hÃ¬nh</option>
                     ) : null}
                     {scoringProfiles.map((p) => (
                       <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                        {p.profileName} · HOT≥{p.thresholds?.hotMinScore ?? '—'} · WARM≥{p.thresholds?.warmMinScore ?? '—'}
+                        {p.profileName} Â· HOTâ‰¥{p.thresholds?.hotMinScore ?? 'â€”'} Â· WARMâ‰¥{p.thresholds?.warmMinScore ?? 'â€”'}
                       </option>
                     ))}
                   </select>
                   <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-                    ▾
+                    â–¾
                   </span>
                 </div>
               </label>
@@ -1527,7 +1534,7 @@ export function LeadManagement() {
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
                 >
                   <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Quy tắc
+                  Quy táº¯c
                 </button>
                 <button
                   type="button"
@@ -1536,30 +1543,30 @@ export function LeadManagement() {
                   className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
                 >
                   <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Xuất Excel (trang hiện tại)
+                  Xuáº¥t Excel (trang hiá»‡n táº¡i)
                 </button>
               </div>
             </div>
             <div className="mt-2 flex flex-col gap-1.5 border-t border-amber-100/90 pt-2">
               <p className="text-xs leading-snug text-slate-600">
-                <span className="font-semibold text-slate-800">Lọc nhanh theo nhãn (profile đang chọn)</span>
+                <span className="font-semibold text-slate-800">Lá»c nhanh theo nhÃ£n (profile Ä‘ang chá»n)</span>
                 {urlQuery.trim() ? (
                   <>
                     {' '}
-                    — khi đang <strong>tìm kiếm</strong>, cột «Nhãn» bên dưới lọc theo <strong>nhãn đã lưu</strong> trên
-                    hồ sơ; số lượng trên các nút HOT/WARM… tạm ẩn (tìm kiếm là lọc client trên trang tải).
+                    â€” khi Ä‘ang <strong>tÃ¬m kiáº¿m</strong>, cá»™t Â«NhÃ£nÂ» bÃªn dÆ°á»›i lá»c theo <strong>nhÃ£n Ä‘Ã£ lÆ°u</strong> trÃªn
+                    há»“ sÆ¡; sá»‘ lÆ°á»£ng trÃªn cÃ¡c nÃºt HOT/WARMâ€¦ táº¡m áº©n (tÃ¬m kiáº¿m lÃ  lá»c client trÃªn trang táº£i).
                   </>
                 ) : (
                   <>
                     {' '}
-                    — HOT / WARM / COLD / LOSS: số trong ngoặc là <strong>tổng trong phạm vi lọc</strong> (Firestore),
-                    không chỉ 30 dòng trang hiện tại. Khi <strong>không</strong> đang tìm kiếm và bạn chọn nhãn, các
-                    nhãn được <strong>tính lại</strong> theo bộ điểm đang chọn (tối đa{' '}
-                    {LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ cập nhật gần đây).
+                    â€” HOT / WARM / COLD / LOSS: sá»‘ trong ngoáº·c lÃ  <strong>tá»•ng trong pháº¡m vi lá»c</strong> (Firestore),
+                    khÃ´ng chá»‰ 30 dÃ²ng trang hiá»‡n táº¡i. Khi <strong>khÃ´ng</strong> Ä‘ang tÃ¬m kiáº¿m vÃ  báº¡n chá»n nhÃ£n, cÃ¡c
+                    nhÃ£n Ä‘Æ°á»£c <strong>tÃ­nh láº¡i</strong> theo bá»™ Ä‘iá»ƒm Ä‘ang chá»n (tá»‘i Ä‘a{' '}
+                    {LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} há»“ sÆ¡ cáº­p nháº­t gáº§n Ä‘Ã¢y).
                   </>
                 )}
               </p>
-              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc nhanh nhãn chấm điểm">
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lá»c nhanh nhÃ£n cháº¥m Ä‘iá»ƒm">
                 <button
                   type="button"
                   disabled={!scoringProfiles.length}
@@ -1575,7 +1582,7 @@ export function LeadManagement() {
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
                   ].join(' ')}
                 >
-                  Tất cả
+                  Táº¥t cáº£
                 </button>
                 {TAG_OPTIONS.map((tg) => {
                   const on = tagFilter === tg
@@ -1611,19 +1618,19 @@ export function LeadManagement() {
               </div>
               {tagClientEval && scopeFetchTruncated ? (
                 <p className="text-xs font-medium text-amber-900">
-                  Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
-                  phần ở đuôi danh sách.
+                  ÄÃ£ Ä‘áº¡t giá»›i háº¡n táº£i ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} há»“ sÆ¡) â€” cÃ³ thá»ƒ thiáº¿u má»™t
+                  pháº§n á»Ÿ Ä‘uÃ´i danh sÃ¡ch.
                 </p>
               ) : null}
             </div>
           </details>
           <label className="min-w-0 w-full text-xs font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
-            Tìm kiếm
+            TÃ¬m kiáº¿m
             <input
               value={searchParams.get(LWF.Q) ?? ''}
               onChange={(e) => setUrlQuery(e.target.value)}
-              placeholder="Tên, SĐT, mã KH, TVV…"
-              title="Tìm trong các thông tin hiển thị trên hồ sơ (tên, SĐT, mã KH, mô tả, TVV…). Có thể dùng chung với các lọc bên dưới."
+              placeholder="TÃªn, SÄT, mÃ£ KH, TVVâ€¦"
+              title="TÃ¬m trong cÃ¡c thÃ´ng tin hiá»ƒn thá»‹ trÃªn há»“ sÆ¡ (tÃªn, SÄT, mÃ£ KH, mÃ´ táº£, TVVâ€¦). CÃ³ thá»ƒ dÃ¹ng chung vá»›i cÃ¡c lá»c bÃªn dÆ°á»›i."
               className="mt-0.5 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
@@ -1632,8 +1639,8 @@ export function LeadManagement() {
         <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin]">
           <FilterSelect
             compact
-            label="Nhãn"
-            title="Nhãn HOT / WARM / COLD theo bộ chấm điểm đang chọn ở đầu trang (khi đang tìm kiếm có thể dùng nhãn đã lưu trên hồ sơ)."
+            label="NhÃ£n"
+            title="NhÃ£n HOT / WARM / COLD theo bá»™ cháº¥m Ä‘iá»ƒm Ä‘ang chá»n á»Ÿ Ä‘áº§u trang (khi Ä‘ang tÃ¬m kiáº¿m cÃ³ thá»ƒ dÃ¹ng nhÃ£n Ä‘Ã£ lÆ°u trÃªn há»“ sÆ¡)."
             value={tagFilter}
             onChange={(v) => {
               setTagFilter(v)
@@ -1641,14 +1648,14 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
             }}
             options={[
-              { v: 'ALL', t: 'Tất cả' },
+              { v: 'ALL', t: 'Táº¥t cáº£' },
               ...TAG_OPTIONS.map((t) => ({ v: t, t })),
             ]}
           />
           <FilterSelect
             compact
-            label="Vùng"
-            title="Tỉnh / thành trên hồ sơ."
+            label="VÃ¹ng"
+            title="Tá»‰nh / thÃ nh trÃªn há»“ sÆ¡."
             value={regionFilter}
             onChange={(v) => {
               setRegionFilter(v)
@@ -1656,14 +1663,14 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
             }}
             options={[
-              { v: 'ALL', t: 'Tất cả' },
+              { v: 'ALL', t: 'Táº¥t cáº£' },
               ...regions.map((p) => ({ v: p, t: p })),
             ]}
           />
           <FilterSelect
             compact
-            label="Hệ ĐT"
-            title="Ngành / hệ đào tạo ghi trên hồ sơ."
+            label="Há»‡ ÄT"
+            title="NgÃ nh / há»‡ Ä‘Ã o táº¡o ghi trÃªn há»“ sÆ¡."
             value={majorFilter}
             onChange={(v) => {
               setMajorFilter(v)
@@ -1671,14 +1678,14 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
             }}
             options={[
-              { v: 'ALL', t: 'Tất cả' },
+              { v: 'ALL', t: 'Táº¥t cáº£' },
               ...majors.map((p) => ({ v: p, t: p })),
             ]}
           />
           <FilterSelect
             compact
             label="Funnel"
-            title="Giai đoạn tuyển sinh trên hồ sơ (khác với cột «Tư vấn» — tiến độ làm việc với TVV)."
+            title="Giai Ä‘oáº¡n tuyá»ƒn sinh trÃªn há»“ sÆ¡ (khÃ¡c vá»›i cá»™t Â«TÆ° váº¥nÂ» â€” tiáº¿n Ä‘á»™ lÃ m viá»‡c vá»›i TVV)."
             value={statusFilter}
             onChange={(v) => {
               setStatusFilter(v)
@@ -1686,7 +1693,7 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
             }}
             options={[
-              { v: 'ALL', t: 'Tất cả' },
+              { v: 'ALL', t: 'Táº¥t cáº£' },
               ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
                 v: k,
                 t: PIPELINE_LABEL[k],
@@ -1695,8 +1702,8 @@ export function LeadManagement() {
           />
           <FilterSelect
             compact
-            label="Tư vấn"
-            title="Tiến độ làm việc với tư vấn viên (CRM)."
+            label="TÆ° váº¥n"
+            title="Tiáº¿n Ä‘á»™ lÃ m viá»‡c vá»›i tÆ° váº¥n viÃªn (CRM)."
             value={crmStatusFilter}
             onChange={(v) => {
               setCrmStatusFilter(v)
@@ -1704,26 +1711,26 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
             }}
             options={[
-              { v: 'ALL', t: 'Tất cả' },
+              { v: 'ALL', t: 'Táº¥t cáº£' },
               ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
             ]}
           />
           <FilterSelect
             compact
-            label="Nguồn"
-            title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
+            label="Nguá»“n"
+            title="KÃªnh há»“ sÆ¡ Ä‘áº¿n (web, Zalo, giá»›i thiá»‡uâ€¦)."
             value={sourceFilter}
             onChange={(v) => {
               setSourceFilter(v)
               setPage(1)
               mergeListFilterUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
             }}
-            options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
+            options={[{ v: 'ALL', t: 'Táº¥t cáº£' }, ...sources.map((s) => ({ v: s, t: s }))]}
           />
           <FilterSelect
             compact
-            label="Trường THPT"
-            title="Trường THPT của thí sinh. Địa chỉ trang có thể lưu lại để người khác mở cùng bộ lọc (nếu có quyền xem)."
+            label="TrÆ°á»ng THPT"
+            title="TrÆ°á»ng THPT cá»§a thÃ­ sinh. Äá»‹a chá»‰ trang cÃ³ thá»ƒ lÆ°u láº¡i Ä‘á»ƒ ngÆ°á»i khÃ¡c má»Ÿ cÃ¹ng bá»™ lá»c (náº¿u cÃ³ quyá»n xem)."
             value={schoolFilter}
             onChange={(v) => {
               setSchoolFilter(v)
@@ -1731,17 +1738,17 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
             }}
             options={[
-              { v: 'ALL', t: 'Tất cả' },
+              { v: 'ALL', t: 'Táº¥t cáº£' },
               ...schoolOptions.slice(0, 80).map((sc) => ({
                 v: sc,
-                t: sc.length > 40 ? `${sc.slice(0, 40)}…` : sc,
+                t: sc.length > 40 ? `${sc.slice(0, 40)}â€¦` : sc,
               })),
             ]}
           />
           <FilterSelect
             compact
             label="TVV"
-            title="TVV được phân công (áp dụng trên danh sách đang hiển thị)."
+            title="TVV Ä‘Æ°á»£c phÃ¢n cÃ´ng (Ã¡p dá»¥ng trÃªn danh sÃ¡ch Ä‘ang hiá»ƒn thá»‹)."
             value={assigneeFilter}
             onChange={(v) => {
               setAssigneeFilter(v)
@@ -1749,31 +1756,31 @@ export function LeadManagement() {
               mergeListFilterUrl({ [LWF.ASSIGN]: v ? v : null })
             }}
             options={[
-              { v: '', t: 'Tất cả TVV' },
-              { v: '__UNASSIGNED__', t: 'Chưa gán TVV' },
+              { v: '', t: 'Táº¥t cáº£ TVV' },
+              { v: '__UNASSIGNED__', t: 'ChÆ°a gÃ¡n TVV' },
               ...reassignPickList.map((c) => ({
                 v: c.id,
                 t: formatStaffDirectoryLabel(c),
               })),
             ]}
           />
-          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
-            Điểm từ
+          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lá»c theo Ä‘iá»ƒm Ä‘Ã£ lÆ°u / Ä‘iá»ƒm preview profile (cá»™t Äiá»ƒm).">
+            Äiá»ƒm tá»«
             <input
               type="number"
               inputMode="numeric"
-              placeholder="—"
+              placeholder="â€”"
               value={scoreMinInput}
               onChange={(e) => setScoreMinInput(e.target.value)}
               className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
-          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
-            Điểm đến
+          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lá»c theo Ä‘iá»ƒm Ä‘Ã£ lÆ°u / Ä‘iá»ƒm preview profile (cá»™t Äiá»ƒm).">
+            Äiá»ƒm Ä‘áº¿n
             <input
               type="number"
               inputMode="numeric"
-              placeholder="—"
+              placeholder="â€”"
               value={scoreMaxInput}
               onChange={(e) => setScoreMaxInput(e.target.value)}
               className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
@@ -1784,13 +1791,13 @@ export function LeadManagement() {
             onClick={clearQuickFilters}
             className="shrink-0 self-end rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
           >
-            Xóa lọc nhanh
+            XÃ³a lá»c nhanh
           </button>
         </div>
 
         {activeFilterChips.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Đang lọc</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Äang lá»c</span>
             <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
               {activeFilterChips.map((c) => (
                 <button
@@ -1798,11 +1805,11 @@ export function LeadManagement() {
                   type="button"
                   onClick={() => c.onClear()}
                   className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50/95 px-2.5 py-1 text-xs font-medium text-amber-950 shadow-sm transition hover:border-amber-500 hover:bg-amber-100"
-                  title="Bỏ lọc này"
+                  title="Bá» lá»c nÃ y"
                 >
                   <span className="min-w-0 truncate">{c.label}</span>
                   <span className="shrink-0 font-bold text-amber-800" aria-hidden>
-                    ×
+                    Ã—
                   </span>
                 </button>
               ))}
@@ -1814,7 +1821,7 @@ export function LeadManagement() {
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              title="Chỉ hiện các hồ sơ đã được AI phân tích và đánh dấu ưu tiên (có tia sét vàng cạnh tên). Bấm lại để tắt."
+              title="Chá»‰ hiá»‡n cÃ¡c há»“ sÆ¡ Ä‘Ã£ Ä‘Æ°á»£c AI phÃ¢n tÃ­ch vÃ  Ä‘Ã¡nh dáº¥u Æ°u tiÃªn (cÃ³ tia sÃ©t vÃ ng cáº¡nh tÃªn). Báº¥m láº¡i Ä‘á»ƒ táº¯t."
               onClick={() => {
                 setAiShortlistOnly((v) => !v)
                 setPage(1)
@@ -1827,23 +1834,23 @@ export function LeadManagement() {
               ].join(' ')}
             >
               <Zap className="h-3.5 w-3.5 shrink-0 text-current" strokeWidth={2.5} aria-hidden />
-              ⚡ AI Shortlist
+              âš¡ AI Shortlist
             </button>
             <button
               type="button"
               onClick={() => setAiShortlistGuideOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-amber-400 hover:bg-amber-50/90 hover:text-amber-950"
-              title="Mở hướng dẫn từng bước (cửa sổ giữa màn hình)"
+              title="Má»Ÿ hÆ°á»›ng dáº«n tá»«ng bÆ°á»›c (cá»­a sá»• giá»¯a mÃ n hÃ¬nh)"
             >
               <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
-              Hướng dẫn
+              HÆ°á»›ng dáº«n
             </button>
           </div>
           {aiShortlistOnly ? (
             <span className="max-w-xl text-xs leading-snug text-slate-600">
-              Đang lọc: chỉ các hồ sơ đã được AI đánh dấu ưu tiên (có <strong className="text-amber-900">tia sét vàng</strong>{' '}
-              cạnh tên). Nếu chưa từng chạy bước phân tích AI cho nhóm WARM, danh sách có thể không có dòng nào — hãy
-              mở <strong>Hướng dẫn</strong> bên cạnh.
+              Äang lá»c: chá»‰ cÃ¡c há»“ sÆ¡ Ä‘Ã£ Ä‘Æ°á»£c AI Ä‘Ã¡nh dáº¥u Æ°u tiÃªn (cÃ³ <strong className="text-amber-900">tia sÃ©t vÃ ng</strong>{' '}
+              cáº¡nh tÃªn). Náº¿u chÆ°a tá»«ng cháº¡y bÆ°á»›c phÃ¢n tÃ­ch AI cho nhÃ³m WARM, danh sÃ¡ch cÃ³ thá»ƒ khÃ´ng cÃ³ dÃ²ng nÃ o â€” hÃ£y
+              má»Ÿ <strong>HÆ°á»›ng dáº«n</strong> bÃªn cáº¡nh.
             </span>
           ) : null}
         </div>
@@ -1862,14 +1869,14 @@ export function LeadManagement() {
               onClick={() => setAiMinerError(null)}
               className="shrink-0 rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-100"
             >
-              Đóng
+              ÄÃ³ng
             </button>
           </div>
         ) : null}
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">
-              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span> hồ sơ (trang{' '}
+              Äang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span> há»“ sÆ¡ (trang{' '}
               {currentPage}/{displayTotalPages})
             </span>
             <div className="flex flex-wrap items-center gap-1">
@@ -1879,7 +1886,7 @@ export function LeadManagement() {
                 onClick={() => setPage(1)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
-                « Đầu
+                Â« Äáº§u
               </button>
               <button
                 type="button"
@@ -1887,7 +1894,7 @@ export function LeadManagement() {
                 onClick={() => setPage(currentPage - 1)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
-                Trước
+                TrÆ°á»›c
               </button>
               <button
                 type="button"
@@ -1903,7 +1910,7 @@ export function LeadManagement() {
                 onClick={() => setPage(displayTotalPages)}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
-                Cuối »
+                Cuá»‘i Â»
               </button>
             </div>
           </div>
@@ -1920,7 +1927,7 @@ export function LeadManagement() {
                       onChange={toggleSelectAllVisible}
                       disabled={!pagedRows.length}
                       className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                      title="Chọn tất cả hồ sơ trên trang này"
+                      title="Chá»n táº¥t cáº£ há»“ sÆ¡ trÃªn trang nÃ y"
                     />
                   ) : null}
                 </th>
@@ -1930,31 +1937,31 @@ export function LeadManagement() {
                     onClick={() => toggleSort('fullName')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Họ tên
-                    {sortKey === 'fullName' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
+                    Há» tÃªn
+                    {sortKey === 'fullName' ? <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">Mã KH</th>
+                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">MÃ£ KH</th>
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
                     onClick={() => toggleSort('phone')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    SĐT
-                    {sortKey === 'phone' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
+                    SÄT
+                    {sortKey === 'phone' ? <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">SĐT PH</th>
+                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">SÄT PH</th>
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
                     onClick={() => toggleSort('educationLevel')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Hệ đào tạo
+                    Há»‡ Ä‘Ã o táº¡o
                     {sortKey === 'educationLevel' ? (
-                      <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                      <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span>
                     ) : null}
                   </button>
                 </th>
@@ -1964,12 +1971,12 @@ export function LeadManagement() {
                     onClick={() => toggleSort('province')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Tỉnh / TP
-                    {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
+                    Tá»‰nh / TP
+                    {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chú hoặc mô tả ngắn trên hồ sơ">
-                  Ghi chú
+                <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chÃº hoáº·c mÃ´ táº£ ngáº¯n trÃªn há»“ sÆ¡">
+                  Ghi chÃº
                 </th>
                 <th className="px-4 py-3 font-medium">
                   <button
@@ -1978,9 +1985,9 @@ export function LeadManagement() {
                     className="flex flex-col items-start gap-0.5 text-left transition hover:text-amber-700"
                   >
                     <span className="flex items-center gap-1">
-                      Điểm
+                      Äiá»ƒm
                       {sortKey === 'score' ? (
-                        <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span>
                       ) : null}
                     </span>
                     {activeScoringProfile ? (
@@ -1995,17 +2002,17 @@ export function LeadManagement() {
                       onClick={() => toggleSort('mlWin')}
                       className="inline-flex flex-col items-center gap-0.5 text-violet-900 transition hover:text-violet-700"
                     >
-                      <span className="leading-tight">Điểm</span>
-                      <span className="leading-tight">thông tin</span>
+                      <span className="leading-tight">Äiá»ƒm</span>
+                      <span className="leading-tight">thÃ´ng tin</span>
                       {sortKey === 'mlWin' ? (
-                        <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span>
                       ) : null}
                     </button>
                     <button
                       type="button"
                       className="rounded-full border border-violet-300/80 bg-violet-50 p-0.5 text-violet-900 shadow-sm hover:bg-violet-100"
                       title={ML_WIN_COLUMN_HINT}
-                      aria-label="Giải thích cột điểm thông tin"
+                      aria-label="Giáº£i thÃ­ch cá»™t Ä‘iá»ƒm thÃ´ng tin"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
@@ -2018,30 +2025,30 @@ export function LeadManagement() {
                     onClick={() => toggleSort('priorityTag')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Nhãn
+                    NhÃ£n
                     {sortKey === 'priorityTag' ? (
-                      <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                      <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span>
                     ) : null}
                   </button>
                 </th>
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
-                    title="Giai đoạn tuyển sinh — khác với cột tình trạng tư vấn."
+                    title="Giai Ä‘oáº¡n tuyá»ƒn sinh â€” khÃ¡c vá»›i cá»™t tÃ¬nh tráº¡ng tÆ° váº¥n."
                     onClick={() => toggleSort('pipelineStatus')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
                     Funnel
                     {sortKey === 'pipelineStatus' ? (
-                      <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                      <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span>
                     ) : null}
                   </button>
                 </th>
                 <th
                   className="max-w-[7rem] px-2 py-3 text-sm font-medium normal-case"
-                  title="Tình trạng làm việc TVV (tư vấn)"
+                  title="TÃ¬nh tráº¡ng lÃ m viá»‡c TVV (tÆ° váº¥n)"
                 >
-                  Tư vấn
+                  TÆ° váº¥n
                 </th>
                 <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-sm font-medium normal-case">TVV</th>
               </tr>
@@ -2061,7 +2068,7 @@ export function LeadManagement() {
               {!loading && !sortedFiltered.length ? (
                 <tr>
                   <td colSpan={14} className="px-4 py-12 text-center text-slate-500">
-                    Không có hồ sơ khớp bộ lọc.
+                    KhÃ´ng cÃ³ há»“ sÆ¡ khá»›p bá»™ lá»c.
                   </td>
                 </tr>
               ) : null}
@@ -2077,7 +2084,7 @@ export function LeadManagement() {
                   layout
                   transition={{ type: 'spring', stiffness: 380, damping: 28 }}
                   onClick={() => setSelected(l)}
-                  title="Bấm để xem chi tiết: hồ sơ sinh viên, ghi chú, đánh giá, lịch sử tương tác, AI…"
+                  title="Báº¥m Ä‘á»ƒ xem chi tiáº¿t: há»“ sÆ¡ sinh viÃªn, ghi chÃº, Ä‘Ã¡nh giÃ¡, lá»‹ch sá»­ tÆ°Æ¡ng tÃ¡c, AIâ€¦"
                   className="cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
                 >
                   <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
@@ -2087,7 +2094,7 @@ export function LeadManagement() {
                         checked={selectedIds.has(l.id)}
                         onChange={() => toggleSelectId(l.id)}
                         className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                        aria-label={`Chọn ${l.fullName}`}
+                        aria-label={`Chá»n ${l.fullName}`}
                       />
                     ) : null}
                   </td>
@@ -2098,21 +2105,21 @@ export function LeadManagement() {
                           className="h-4 w-4 shrink-0 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.95)]"
                           strokeWidth={2.5}
                           fill="currentColor"
-                          aria-label="Đã được AI đánh dấu ưu tiên"
+                          aria-label="ÄÃ£ Ä‘Æ°á»£c AI Ä‘Ã¡nh dáº¥u Æ°u tiÃªn"
                         />
                       ) : null}
-                      <span className="min-w-0 truncate">{l.fullName || '—'}</span>
+                      <span className="min-w-0 truncate">{l.fullName || 'â€”'}</span>
                     </span>
                   </td>
                   <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.customerId || undefined}>
-                    {l.customerId || '—'}
+                    {l.customerId || 'â€”'}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{l.phone || '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{l.phone || 'â€”'}</td>
                   <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.parentPhone || undefined}>
-                    {l.parentPhone || '—'}
+                    {l.parentPhone || 'â€”'}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{l.educationLevel || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{l.educationLevel || 'â€”'}</td>
+                  <td className="px-4 py-3 text-slate-600">{l.province || 'â€”'}</td>
                   <td
                     className="max-w-[13rem] truncate px-2 py-3 leading-snug text-slate-600"
                     title={descForTable.trim() ? descForTable : undefined}
@@ -2177,21 +2184,21 @@ export function LeadManagement() {
           <button
             type="button"
             className="fixed inset-0 z-[55] bg-slate-900/25 backdrop-blur-md"
-            aria-label="Đóng"
+            aria-label="ÄÃ³ng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="app-section-heading">Giao việc hàng loạt</h3>
+            <h3 className="app-section-heading">Giao viá»‡c hÃ ng loáº¡t</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.
+              GÃ¡n tÆ° váº¥n viÃªn má»›i cho {selectedIds.size} há»“ sÆ¡ Ä‘Ã£ chá»n.
               {!isElevatedLeadScope && canPeerReassignLeads ? (
                 <span className="mt-1 block font-medium text-amber-800">
-                  Bạn chỉ có thể chuyển các hồ sơ đang gán cho chính bạn sang đồng nghiệp (theo quyền TVV).
+                  Báº¡n chá»‰ cÃ³ thá»ƒ chuyá»ƒn cÃ¡c há»“ sÆ¡ Ä‘ang gÃ¡n cho chÃ­nh báº¡n sang Ä‘á»“ng nghiá»‡p (theo quyá»n TVV).
                 </span>
               ) : null}
             </p>
             <label className="mt-4 block text-sm font-medium text-slate-700">
-              Phụ trách (TVV / Admin)
+              Phá»¥ trÃ¡ch (TVV / Admin)
               <select
                 value={bulkReassignUid}
                 onChange={(e) => setBulkReassignUid(e.target.value)}
@@ -2212,7 +2219,7 @@ export function LeadManagement() {
                 onClick={() => setBulkModal(null)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
-                Hủy
+                Há»§y
               </button>
               <button
                 type="button"
@@ -2220,7 +2227,7 @@ export function LeadManagement() {
                 onClick={() => void applyBulkReassign()}
                 className="rounded-xl border border-violet-400 bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
-                {bulkBusy ? 'Đang xử lý…' : 'Áp dụng'}
+                {bulkBusy ? 'Äang xá»­ lÃ½â€¦' : 'Ãp dá»¥ng'}
               </button>
             </div>
           </div>
@@ -2232,14 +2239,14 @@ export function LeadManagement() {
           <button
             type="button"
             className="fixed inset-0 z-[55] bg-slate-900/25 backdrop-blur-md"
-            aria-label="Đóng"
+            aria-label="ÄÃ³ng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
           <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
-            <h3 className="app-section-heading">Đổi tình trạng tư vấn</h3>
-            <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
+            <h3 className="app-section-heading">Äá»•i tÃ¬nh tráº¡ng tÆ° váº¥n</h3>
+            <p className="mt-1 text-sm text-slate-600">Ãp dá»¥ng cho {selectedIds.size} há»“ sÆ¡ Ä‘Ã£ chá»n.</p>
             <label className="mt-4 block text-sm font-medium text-slate-700">
-              Tình trạng tư vấn mới
+              TÃ¬nh tráº¡ng tÆ° váº¥n má»›i
               <select
                 value={bulkCrmStatus}
                 onChange={(e) => setBulkCrmStatus(e.target.value as LeadCounselorStatus)}
@@ -2259,7 +2266,7 @@ export function LeadManagement() {
                 onClick={() => setBulkModal(null)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
-                Hủy
+                Há»§y
               </button>
               <button
                 type="button"
@@ -2267,7 +2274,7 @@ export function LeadManagement() {
                 onClick={() => void applyBulkCrmStatus()}
                 className="rounded-xl border border-amber-500 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
-                {bulkBusy ? 'Đang xử lý…' : 'Áp dụng'}
+                {bulkBusy ? 'Äang xá»­ lÃ½â€¦' : 'Ãp dá»¥ng'}
               </button>
             </div>
           </div>
@@ -2280,7 +2287,7 @@ export function LeadManagement() {
               <button
                 type="button"
                 className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
-                aria-label="Đóng hướng dẫn"
+                aria-label="ÄÃ³ng hÆ°á»›ng dáº«n"
                 onClick={() => setAiShortlistGuideOpen(false)}
               />
               <div
@@ -2295,85 +2302,85 @@ export function LeadManagement() {
                       id="ai-shortlist-guide-title"
                       className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
                     >
-                      AI Shortlist — làm thế nào?
+                      AI Shortlist â€” lÃ m tháº¿ nÃ o?
                     </p>
                     <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                      Có <strong className="text-slate-800">hai việc khác nhau</strong>: trước hết để AI phân tích và
-                      lưu gợi ý lên hồ sơ, sau đó (tuỳ chọn) dùng nút lọc để chỉ xem nhóm đó.
+                      CÃ³ <strong className="text-slate-800">hai viá»‡c khÃ¡c nhau</strong>: trÆ°á»›c háº¿t Ä‘á»ƒ AI phÃ¢n tÃ­ch vÃ 
+                      lÆ°u gá»£i Ã½ lÃªn há»“ sÆ¡, sau Ä‘Ã³ (tuá»³ chá»n) dÃ¹ng nÃºt lá»c Ä‘á»ƒ chá»‰ xem nhÃ³m Ä‘Ã³.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setAiShortlistGuideOpen(false)}
                     className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-900"
-                    aria-label="Đóng"
+                    aria-label="ÄÃ³ng"
                   >
                     <X className="h-5 w-5" strokeWidth={2} aria-hidden />
                   </button>
                 </div>
 
                 <section className="mt-5 space-y-3 rounded-xl border border-emerald-200/70 bg-emerald-50/50 p-4 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
-                  <p className="font-bold text-emerald-950">A. Chuẩn bị (làm một lần hoặc khi đổi máy)</p>
+                  <p className="font-bold text-emerald-950">A. Chuáº©n bá»‹ (lÃ m má»™t láº§n hoáº·c khi Ä‘á»•i mÃ¡y)</p>
                   <ol className="list-decimal space-y-2 pl-5 marker:font-semibold marker:text-emerald-800">
                     <li>
-                      Vào <strong>Cài đặt</strong> → tab <strong>LLM</strong> → mục <strong>API</strong>: chọn nhà cung
-                      cấp, dán khóa, bấm <strong>Lưu API vào trình duyệt</strong>. Phải lưu trên{' '}
-                      <strong>đúng máy và trình duyệt</strong> bạn đang dùng (hoặc cấu hình{' '}
+                      VÃ o <strong>CÃ i Ä‘áº·t</strong> â†’ tab <strong>LLM</strong> â†’ má»¥c <strong>API</strong>: chá»n nhÃ  cung
+                      cáº¥p, dÃ¡n khÃ³a, báº¥m <strong>LÆ°u API vÃ o trÃ¬nh duyá»‡t</strong>. Pháº£i lÆ°u trÃªn{' '}
+                      <strong>Ä‘Ãºng mÃ¡y vÃ  trÃ¬nh duyá»‡t</strong> báº¡n Ä‘ang dÃ¹ng (hoáº·c cáº¥u hÃ¬nh{' '}
                       <code className="rounded bg-white/80 px-1 py-0.5 text-xs">VITE_AI_API_KEY</code> trong{' '}
-                      <code className="rounded bg-white/80 px-1 py-0.5 text-xs">.env</code> khi dev/build — ưu tiên
-                      localStorage nếu đã lưu).
+                      <code className="rounded bg-white/80 px-1 py-0.5 text-xs">.env</code> khi dev/build â€” Æ°u tiÃªn
+                      localStorage náº¿u Ä‘Ã£ lÆ°u).
                     </li>
                     <li>
-                      Nếu bạn <strong>không phải Siêu quản trị</strong>: nhờ quản lý vào <strong>Quản lý nhân sự</strong>,
-                      mở hồ sơ của bạn và bật <strong>«Cho phép dùng AI trên hồ sơ»</strong>. Không bật thì các nút
-                      chạy AI sẽ không hoạt động.
+                      Náº¿u báº¡n <strong>khÃ´ng pháº£i SiÃªu quáº£n trá»‹</strong>: nhá» quáº£n lÃ½ vÃ o <strong>Quáº£n lÃ½ nhÃ¢n sá»±</strong>,
+                      má»Ÿ há»“ sÆ¡ cá»§a báº¡n vÃ  báº­t <strong>Â«Cho phÃ©p dÃ¹ng AI trÃªn há»“ sÆ¡Â»</strong>. KhÃ´ng báº­t thÃ¬ cÃ¡c nÃºt
+                      cháº¡y AI sáº½ khÃ´ng hoáº¡t Ä‘á»™ng.
                     </li>
                   </ol>
                 </section>
 
                 <section className="mt-4 space-y-3 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
-                  <p className="font-bold text-slate-900">B. Để AI phân tích và “đánh dấu” hồ sơ (có tia sét vàng)</p>
+                  <p className="font-bold text-slate-900">B. Äá»ƒ AI phÃ¢n tÃ­ch vÃ  â€œÄ‘Ã¡nh dáº¥uâ€ há»“ sÆ¡ (cÃ³ tia sÃ©t vÃ ng)</p>
                   <ol className="list-decimal space-y-2.5 pl-5 marker:font-semibold marker:text-amber-700">
                     <li>
-                      Ở trang <strong>Hồ sơ</strong>, ở bộ lọc nhãn, chọn <strong>WARM</strong> (nhãn theo bộ chấm điểm
-                      đang bật ở đầu trang).
+                      á»ž trang <strong>Há»“ sÆ¡</strong>, á»Ÿ bá»™ lá»c nhÃ£n, chá»n <strong>WARM</strong> (nhÃ£n theo bá»™ cháº¥m Ä‘iá»ƒm
+                      Ä‘ang báº­t á»Ÿ Ä‘áº§u trang).
                     </li>
                     <li>
-                      Tick ô vuông bên trái các dòng bạn muốn gửi cho AI (ít nhất một dòng WARM).
+                      Tick Ã´ vuÃ´ng bÃªn trÃ¡i cÃ¡c dÃ²ng báº¡n muá»‘n gá»­i cho AI (Ã­t nháº¥t má»™t dÃ²ng WARM).
                     </li>
                     <li>
-                      Kéo xuống <strong>thanh thao tác hàng loạt</strong> dưới cùng → bấm{' '}
-                      <strong>✨ Chạy AI Phân tích (Shortlist)</strong>.
+                      KÃ©o xuá»‘ng <strong>thanh thao tÃ¡c hÃ ng loáº¡t</strong> dÆ°á»›i cÃ¹ng â†’ báº¥m{' '}
+                      <strong>âœ¨ Cháº¡y AI PhÃ¢n tÃ­ch (Shortlist)</strong>.
                     </li>
                     <li>
-                      Đọc cửa sổ kiểm tra hiện ra (tiêu đề kiểu “tiết kiệm token”) → bấm xác nhận <strong>Chạy AI</strong>{' '}
-                      nếu đồng ý. Chờ đến khi xong; mỗi hồ sơ được xử lý sẽ có <strong>tia sét vàng</strong> cạnh tên trên
-                      bảng.
+                      Äá»c cá»­a sá»• kiá»ƒm tra hiá»‡n ra (tiÃªu Ä‘á» kiá»ƒu â€œtiáº¿t kiá»‡m tokenâ€) â†’ báº¥m xÃ¡c nháº­n <strong>Cháº¡y AI</strong>{' '}
+                      náº¿u Ä‘á»“ng Ã½. Chá» Ä‘áº¿n khi xong; má»—i há»“ sÆ¡ Ä‘Æ°á»£c xá»­ lÃ½ sáº½ cÃ³ <strong>tia sÃ©t vÃ ng</strong> cáº¡nh tÃªn trÃªn
+                      báº£ng.
                     </li>
                     <li>
-                      Mở chi tiết một hồ sơ: phần <strong>«Gợi ý từ AI»</strong> ở đầu panel hiển thị lý do và hành động
-                      gợi ý.
+                      Má»Ÿ chi tiáº¿t má»™t há»“ sÆ¡: pháº§n <strong>Â«Gá»£i Ã½ tá»« AIÂ»</strong> á»Ÿ Ä‘áº§u panel hiá»ƒn thá»‹ lÃ½ do vÃ  hÃ nh Ä‘á»™ng
+                      gá»£i Ã½.
                     </li>
                   </ol>
                 </section>
 
                 <section className="mt-4 space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
-                  <p className="font-bold text-amber-950">C. Nút «⚡ AI Shortlist» trên bộ lọc</p>
+                  <p className="font-bold text-amber-950">C. NÃºt Â«âš¡ AI ShortlistÂ» trÃªn bá»™ lá»c</p>
                   <p>
-                    Nút này chỉ <strong>lọc bảng</strong> để còn các hồ sơ <strong>đã có tia sét vàng</strong> (tức đã
-                    qua bước B). <strong>Không</strong> gọi AI, <strong>không</strong> tốn phí API.
+                    NÃºt nÃ y chá»‰ <strong>lá»c báº£ng</strong> Ä‘á»ƒ cÃ²n cÃ¡c há»“ sÆ¡ <strong>Ä‘Ã£ cÃ³ tia sÃ©t vÃ ng</strong> (tá»©c Ä‘Ã£
+                    qua bÆ°á»›c B). <strong>KhÃ´ng</strong> gá»i AI, <strong>khÃ´ng</strong> tá»‘n phÃ­ API.
                   </p>
                   <p className="font-semibold text-amber-950">
-                    Nếu bật lọc mà không thấy dòng nào: thường là vì chưa ai chạy bước B cho các hồ sơ trong phạm vi bạn
-                    được xem — không phải lỗi màn hình.
+                    Náº¿u báº­t lá»c mÃ  khÃ´ng tháº¥y dÃ²ng nÃ o: thÆ°á»ng lÃ  vÃ¬ chÆ°a ai cháº¡y bÆ°á»›c B cho cÃ¡c há»“ sÆ¡ trong pháº¡m vi báº¡n
+                    Ä‘Æ°á»£c xem â€” khÃ´ng pháº£i lá»—i mÃ n hÃ¬nh.
                   </p>
                 </section>
 
                 <div className="mt-5 rounded-xl border border-slate-200/90 bg-slate-50/90 p-4 text-sm text-slate-700">
-                  <p className="font-semibold text-slate-900">Tắt lọc nhanh</p>
+                  <p className="font-semibold text-slate-900">Táº¯t lá»c nhanh</p>
                   <p className="mt-1">
-                    Dải chip <strong>«Đang lọc»</strong> phía trên có dòng <strong>«Chỉ hồ sơ AI đã đánh dấu»</strong> —
-                    bấm dấu × trên chip đó, hoặc bấm lại nút <strong>⚡ AI Shortlist</strong>.
+                    Dáº£i chip <strong>Â«Äang lá»cÂ»</strong> phÃ­a trÃªn cÃ³ dÃ²ng <strong>Â«Chá»‰ há»“ sÆ¡ AI Ä‘Ã£ Ä‘Ã¡nh dáº¥uÂ»</strong> â€”
+                    báº¥m dáº¥u Ã— trÃªn chip Ä‘Ã³, hoáº·c báº¥m láº¡i nÃºt <strong>âš¡ AI Shortlist</strong>.
                   </p>
                 </div>
 
@@ -2383,7 +2390,7 @@ export function LeadManagement() {
                     onClick={() => setAiShortlistGuideOpen(false)}
                     className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                   >
-                    Đóng
+                    ÄÃ³ng
                   </button>
                   <button
                     type="button"
@@ -2394,7 +2401,7 @@ export function LeadManagement() {
                     }}
                     className="rounded-xl border border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 px-4 py-2.5 text-sm font-bold text-amber-950 shadow-sm transition hover:brightness-105"
                   >
-                    Chỉ xem hồ sơ đã có tia sét
+                    Chá»‰ xem há»“ sÆ¡ Ä‘Ã£ cÃ³ tia sÃ©t
                   </button>
                 </div>
               </div>
@@ -2409,7 +2416,7 @@ export function LeadManagement() {
               <button
                 type="button"
                 className="absolute inset-0 bg-slate-950/40 backdrop-blur-md"
-                aria-label="Đóng"
+                aria-label="ÄÃ³ng"
                 onClick={() => setGatekeeperModal(null)}
               />
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -2428,39 +2435,39 @@ export function LeadManagement() {
                     id="gatekeeper-title"
                     className="text-center text-xs font-bold uppercase tracking-[0.2em] text-slate-600"
                   >
-                    Kiểm tra trước khi chạy AI
+                    Kiá»ƒm tra trÆ°á»›c khi cháº¡y AI
                   </p>
                   <p className="mt-1 text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                    Giúp giảm chi phí — chỉ gửi hồ sơ đủ điều kiện
+                    GiÃºp giáº£m chi phÃ­ â€” chá»‰ gá»­i há»“ sÆ¡ Ä‘á»§ Ä‘iá»u kiá»‡n
                   </p>
                   <p className="mt-4 text-center text-base font-semibold text-slate-900">
-                    Bạn đã chọn {gatekeeperModal.totalSelected} hồ sơ
+                    Báº¡n Ä‘Ã£ chá»n {gatekeeperModal.totalSelected} há»“ sÆ¡
                     {gatekeeperModal.totalSelected !== gatekeeperModal.warmCount ? (
                       <span className="mt-1 block text-sm font-normal text-slate-600">
-                        Trong đó {gatekeeperModal.warmCount} hồ sơ có nhãn WARM được đưa vào bước kiểm tra (chỉ nhóm này
-                        mới được gửi cho AI phân tích).
+                        Trong Ä‘Ã³ {gatekeeperModal.warmCount} há»“ sÆ¡ cÃ³ nhÃ£n WARM Ä‘Æ°á»£c Ä‘Æ°a vÃ o bÆ°á»›c kiá»ƒm tra (chá»‰ nhÃ³m nÃ y
+                        má»›i Ä‘Æ°á»£c gá»­i cho AI phÃ¢n tÃ­ch).
                       </span>
                     ) : null}
                   </p>
                   {gatekeeperModal.warmCount > 0 ? (
                     <p className="mt-4 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm leading-relaxed text-emerald-950">
-                      🛡️ Bước kiểm tra tự động đã loại bỏ{' '}
-                      <span className="font-bold tabular-nums">{gatekeeperModal.skipped}</span> hồ sơ (ghi chú quá ngắn,
-                      chưa đủ tín hiệu theo cài đặt, hoặc chưa có tương tác trong khoảng thời gian cho phép).
+                      ðŸ›¡ï¸ BÆ°á»›c kiá»ƒm tra tá»± Ä‘á»™ng Ä‘Ã£ loáº¡i bá»{' '}
+                      <span className="font-bold tabular-nums">{gatekeeperModal.skipped}</span> há»“ sÆ¡ (ghi chÃº quÃ¡ ngáº¯n,
+                      chÆ°a Ä‘á»§ tÃ­n hiá»‡u theo cÃ i Ä‘áº·t, hoáº·c chÆ°a cÃ³ tÆ°Æ¡ng tÃ¡c trong khoáº£ng thá»i gian cho phÃ©p).
                     </p>
                   ) : null}
                   {gatekeeperModal.passed.length > 0 ? (
                     <>
                       <p className="mt-4 text-center text-sm font-medium text-slate-800">
-                        🚀 Chỉ có{' '}
+                        ðŸš€ Chá»‰ cÃ³{' '}
                         <span className="font-bold text-violet-800 tabular-nums">{gatekeeperModal.passed.length}</span>{' '}
-                        hồ sơ đạt chuẩn. Bạn có muốn bắt đầu chạy AI cho{' '}
-                        <span className="font-semibold tabular-nums">{gatekeeperModal.passed.length}</span> hồ sơ này
-                        không?
+                        há»“ sÆ¡ Ä‘áº¡t chuáº©n. Báº¡n cÃ³ muá»‘n báº¯t Ä‘áº§u cháº¡y AI cho{' '}
+                        <span className="font-semibold tabular-nums">{gatekeeperModal.passed.length}</span> há»“ sÆ¡ nÃ y
+                        khÃ´ng?
                         {gatekeeperModal.warmCount > 0 ? (
                           <span className="mt-2 block text-sm font-normal text-slate-600">
-                            (Ước tính tiết kiệm ~{Math.round((gatekeeperModal.skipped / gatekeeperModal.warmCount) * 100)}
-                            % chi phí so với việc gửi toàn bộ WARM đã chọn.)
+                            (Æ¯á»›c tÃ­nh tiáº¿t kiá»‡m ~{Math.round((gatekeeperModal.skipped / gatekeeperModal.warmCount) * 100)}
+                            % chi phÃ­ so vá»›i viá»‡c gá»­i toÃ n bá»™ WARM Ä‘Ã£ chá»n.)
                           </span>
                         ) : null}
                       </p>
@@ -2470,22 +2477,22 @@ export function LeadManagement() {
                           onClick={() => setGatekeeperModal(null)}
                           className="min-h-11 rounded-xl border border-slate-300/80 bg-white/70 px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition hover:bg-white"
                         >
-                          Hủy
+                          Há»§y
                         </button>
                         <button
                           type="button"
                           onClick={() => void executeBulkAiMiner(gatekeeperModal.passed)}
                           className="min-h-11 rounded-xl border border-amber-400/90 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 px-5 py-2.5 text-sm font-bold text-amber-950 shadow-[0_0_24px_rgba(251,191,36,0.45)] transition hover:brightness-105"
                         >
-                          Chạy AI ({gatekeeperModal.passed.length} hồ sơ)
+                          Cháº¡y AI ({gatekeeperModal.passed.length} há»“ sÆ¡)
                         </button>
                       </div>
                     </>
                   ) : (
                     <p className="mt-4 text-center text-sm text-slate-700">
-                      Không có hồ sơ WARM nào đủ điều kiện. Bạn có thể nới quy tắc trong{' '}
-                      <strong>Cài đặt → tab LLM → «Lọc trước khi gọi AI»</strong>, hoặc bổ sung ghi chú / tương tác rồi
-                      thử lại.
+                      KhÃ´ng cÃ³ há»“ sÆ¡ WARM nÃ o Ä‘á»§ Ä‘iá»u kiá»‡n. Báº¡n cÃ³ thá»ƒ ná»›i quy táº¯c trong{' '}
+                      <strong>CÃ i Ä‘áº·t â†’ tab LLM â†’ Â«Lá»c trÆ°á»›c khi gá»i AIÂ»</strong>, hoáº·c bá»• sung ghi chÃº / tÆ°Æ¡ng tÃ¡c rá»“i
+                      thá»­ láº¡i.
                     </p>
                   )}
                   {gatekeeperModal.passed.length === 0 ? (
@@ -2495,7 +2502,7 @@ export function LeadManagement() {
                         onClick={() => setGatekeeperModal(null)}
                         className="min-h-11 rounded-xl border border-slate-300/80 bg-white/70 px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition hover:bg-white"
                       >
-                        Đóng
+                        ÄÃ³ng
                       </button>
                     </div>
                   ) : null}
@@ -2514,19 +2521,19 @@ export function LeadManagement() {
               aria-valuemin={0}
               aria-valuemax={aiMinerProgress.total}
               aria-valuenow={aiMinerProgress.done}
-              aria-label="AI Lead Miner đang chạy"
+              aria-label="AI Lead Miner Ä‘ang cháº¡y"
             >
               <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(167,139,250,0.35),transparent_50%),radial-gradient(ellipse_at_70%_80%,rgba(45,212,191,0.25),transparent_45%),radial-gradient(ellipse_at_50%_50%,rgba(251,191,36,0.2),transparent_55%)]" />
               <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/40 bg-gradient-to-br from-white/30 via-violet-100/25 to-teal-100/20 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-2xl">
                 <p className="text-center text-xs font-bold uppercase tracking-wider text-slate-600">
-                  Đang phân tích AI theo lô
+                  Äang phÃ¢n tÃ­ch AI theo lÃ´
                 </p>
                 <p className="mt-2 text-center text-base font-semibold text-slate-900">
-                  {aiMinerProgress.done}/{aiMinerProgress.total} hồ sơ
+                  {aiMinerProgress.done}/{aiMinerProgress.total} há»“ sÆ¡
                 </p>
                 <p className="mt-1 text-center text-xs text-slate-600">
-                  Xử lý theo lô — tối đa 12 hồ sơ mỗi lần gọi AI (giúp giảm chi phí).
+                  Xá»­ lÃ½ theo lÃ´ â€” tá»‘i Ä‘a 12 há»“ sÆ¡ má»—i láº§n gá»i AI (giÃºp giáº£m chi phÃ­).
                 </p>
                 <div className="relative mt-5 h-2.5 overflow-hidden rounded-full border border-white/50 bg-white/20 shadow-inner">
                   <div
@@ -2609,7 +2616,7 @@ function ScoringProfileInspectModal({
       <button
         type="button"
         className="fixed inset-0 z-50 bg-slate-900/30 backdrop-blur-md"
-        aria-label="Đóng"
+        aria-label="ÄÃ³ng"
         onClick={onClose}
       />
       <div
@@ -2625,7 +2632,7 @@ function ScoringProfileInspectModal({
                 {profile.profileName}
               </p>
               <p className="mt-1 text-sm text-slate-600">
-                HOT ≥ {profile.thresholds?.hotMinScore ?? '—'} · WARM ≥ {profile.thresholds?.warmMinScore ?? '—'}
+                HOT â‰¥ {profile.thresholds?.hotMinScore ?? 'â€”'} Â· WARM â‰¥ {profile.thresholds?.warmMinScore ?? 'â€”'}
               </p>
             </div>
             <button
@@ -2633,14 +2640,14 @@ function ScoringProfileInspectModal({
               onClick={onClose}
               className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
             >
-              Đóng
+              ÄÃ³ng
             </button>
           </div>
           <p className="mt-4 text-base leading-relaxed text-slate-700">
-            {profile.description || 'Không có mô tả.'}
+            {profile.description || 'KhÃ´ng cÃ³ mÃ´ táº£.'}
           </p>
 
-          <h3 className="app-section-heading mt-6">Cấu hình quy tắc</h3>
+          <h3 className="app-section-heading mt-6">Cáº¥u hÃ¬nh quy táº¯c</h3>
           {blocks.length ? (
             <ul className="mt-3 space-y-3">
               {blocks.map((b) => (
@@ -2651,18 +2658,18 @@ function ScoringProfileInspectModal({
                   <p className="font-semibold text-slate-900">
                     {b.label}{' '}
                     <span className="font-normal text-slate-500">
-                      ({RULE_CATEGORY_LABELS[b.category]} · max {b.maxWeight} điểm)
+                      ({RULE_CATEGORY_LABELS[b.category]} Â· max {b.maxWeight} Ä‘iá»ƒm)
                     </span>
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">Trường: {String(b.targetField)}</p>
+                  <p className="mt-1 text-xs text-slate-500">TrÆ°á»ng: {String(b.targetField)}</p>
                   <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-400">
                     {b.rows.map((r) => (
                       <li key={r.id}>
                         {r.condition}{' '}
-                        {Array.isArray(r.value) ? r.value.join(', ') : String(r.value) || '—'} →{' '}
+                        {Array.isArray(r.value) ? r.value.join(', ') : String(r.value) || 'â€”'} â†’{' '}
                         {r.allocationKind === 'percent_of_max'
-                          ? `${r.allocationValue}% max khối`
-                          : `${r.allocationValue} điểm`}
+                          ? `${r.allocationValue}% max khá»‘i`
+                          : `${r.allocationValue} Ä‘iá»ƒm`}
                       </li>
                     ))}
                   </ul>
@@ -2676,13 +2683,13 @@ function ScoringProfileInspectModal({
                   key={r.id}
                   className="rounded-xl border border-slate-200/90 bg-white/80 px-3 py-2 text-sm text-slate-600 shadow-sm"
                 >
-                  {String(r.targetField)} · {r.condition} ·{' '}
-                  {Array.isArray(r.value) ? r.value.join(', ') : String(r.value)} → {r.points} điểm
+                  {String(r.targetField)} Â· {r.condition} Â·{' '}
+                  {Array.isArray(r.value) ? r.value.join(', ') : String(r.value)} â†’ {r.points} Ä‘iá»ƒm
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-xs text-slate-500">Chưa có quy tắc trong profile này.</p>
+            <p className="mt-3 text-xs text-slate-500">ChÆ°a cÃ³ quy táº¯c trong profile nÃ y.</p>
           )}
         </div>
       </div>
@@ -2699,7 +2706,7 @@ function FilterSelect({
   compact,
 }: {
   label: string
-  /** Tooltip — giải thích ngắn khi rê chuột lên nhãn lọc. */
+  /** Tooltip â€” giáº£i thÃ­ch ngáº¯n khi rÃª chuá»™t lÃªn nhÃ£n lá»c. */
   title?: string
   value: string
   onChange: (v: string) => void
@@ -2739,11 +2746,11 @@ function AiValueBadge({ text }: { text: string }) {
   const t = text.trim()
   const lower = t.toLowerCase()
   const cls =
-    lower.includes('tốt') || lower === 'hot'
+    lower.includes('tá»‘t') || lower === 'hot'
       ? 'border-emerald-400/60 bg-emerald-500/25 text-emerald-50 shadow-[0_0_14px_rgba(52,211,153,0.35)]'
       : lower.includes('trung') || lower.includes('warm')
         ? 'border-amber-400/55 bg-amber-500/20 text-amber-50'
-        : lower.includes('kém') || lower.includes('cold') || lower.includes('yếu')
+        : lower.includes('kÃ©m') || lower.includes('cold') || lower.includes('yáº¿u')
           ? 'border-rose-400/55 bg-rose-500/25 text-rose-50'
           : 'border-slate-200 bg-slate-100 text-slate-800'
   return (
@@ -2767,13 +2774,13 @@ function AiOutputValue({ value }: { value: unknown }) {
     return <span className="text-sm text-slate-700">{JSON.stringify(value)}</span>
   }
   if (typeof value === 'boolean') {
-    return <span className="text-sm text-slate-800">{value ? 'Có' : 'Không'}</span>
+    return <span className="text-sm text-slate-800">{value ? 'CÃ³' : 'KhÃ´ng'}</span>
   }
   if (typeof value === 'string') {
     return <AiValueBadge text={value} />
   }
   if (value === null || value === undefined) {
-    return <span className="text-sm text-slate-500">—</span>
+    return <span className="text-sm text-slate-500">â€”</span>
   }
   return <span className="text-sm text-slate-800">{String(value)}</span>
 }
@@ -2826,10 +2833,10 @@ function LeadCrmQuickBlock({
   lead: Lead
   db: NonNullable<ReturnType<typeof getFirestoreDb>>
   counselorUsers: VietMyUserProfile[]
-  /** Danh sách chọn trong dropdown (Admin/Trưởng: TVV + Admin; TVV: chỉ TVV). */
+  /** Danh sÃ¡ch chá»n trong dropdown (Admin/TrÆ°á»Ÿng: TVV + Admin; TVV: chá»‰ TVV). */
   pickListUsers: VietMyUserProfile[]
   counselorsLoading: boolean
-  /** Admin / Trưởng khoa / Trưởng ngành: mọi TVV + có thể bỏ gán. TVV chỉ đổi trong phạm vi quyền đồng nghiệp. */
+  /** Admin / TrÆ°á»Ÿng khoa / TrÆ°á»Ÿng ngÃ nh: má»i TVV + cÃ³ thá»ƒ bá» gÃ¡n. TVV chá»‰ Ä‘á»•i trong pháº¡m vi quyá»n Ä‘á»“ng nghiá»‡p. */
   reassignElevated: boolean
   onUpdated: (patch: Partial<Lead>) => void
   compact?: boolean
@@ -2860,9 +2867,9 @@ function LeadCrmQuickBlock({
   }, [lead.id, lead.assignedTo, lead.assignedCounselorId, lead.status])
 
   const labelForUid = (uid: string | null) => {
-    if (!uid) return '—'
+    if (!uid) return 'â€”'
     const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-    return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
+    return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}â€¦`
   }
 
   if (peerMode && !mine) return null
@@ -2875,11 +2882,11 @@ function LeadCrmQuickBlock({
     const sameAssign = (prevAssign ?? '') === (nextUid ?? '')
     const sameStatus = prevStatus === crmCounselorStatus
     if (sameAssign && sameStatus) {
-      setCrmMsg('Không có thay đổi.')
+      setCrmMsg('KhÃ´ng cÃ³ thay Ä‘á»•i.')
       return
     }
     if (peerMode && !nextUid) {
-      setCrmMsg('Không thể bỏ gán — chọn đồng nghiệp nhận hồ sơ hoặc liên hệ Admin.')
+      setCrmMsg('KhÃ´ng thá»ƒ bá» gÃ¡n â€” chá»n Ä‘á»“ng nghiá»‡p nháº­n há»“ sÆ¡ hoáº·c liÃªn há»‡ Admin.')
       return
     }
     setCrmBusy(true)
@@ -2910,7 +2917,7 @@ function LeadCrmQuickBlock({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'REASSIGNMENT',
-          description: `Cập nhật phân công: ${labelForUid(prevAssign)} → ${labelForUid(nextUid)}`,
+          description: `Cáº­p nháº­t phÃ¢n cÃ´ng: ${labelForUid(prevAssign)} â†’ ${labelForUid(nextUid)}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -2919,7 +2926,7 @@ function LeadCrmQuickBlock({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
-          description: `Tình trạng tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[prevStatus]} → ${LEAD_COUNSELOR_STATUS_LABELS[crmCounselorStatus]}`,
+          description: `TÃ¬nh tráº¡ng tÆ° váº¥n: ${LEAD_COUNSELOR_STATUS_LABELS[prevStatus]} â†’ ${LEAD_COUNSELOR_STATUS_LABELS[crmCounselorStatus]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -2930,10 +2937,10 @@ function LeadCrmQuickBlock({
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
-      setCrmMsg('Đã cập nhật phân công.')
+      setCrmMsg('ÄÃ£ cáº­p nháº­t phÃ¢n cÃ´ng.')
     } catch (e) {
       console.error(e)
-      setCrmMsg('Không lưu được. Kiểm tra quyền Firestore.')
+      setCrmMsg('KhÃ´ng lÆ°u Ä‘Æ°á»£c. Kiá»ƒm tra quyá»n Firestore.')
     } finally {
       setCrmBusy(false)
     }
@@ -2943,48 +2950,48 @@ function LeadCrmQuickBlock({
     <section
       className={
         compact
-          ? 'shrink-0 rounded-lg border border-violet-200/80 bg-violet-50/50 p-2 shadow-sm'
+          ? 'shrink-0 rounded-lg border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm'
           : 'rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 shadow-sm'
       }
     >
       <h3
         className={
           compact
-            ? 'text-xs font-bold uppercase tracking-wider text-slate-600'
+            ? 'text-sm font-bold uppercase tracking-wider text-slate-600 sm:text-base'
             : 'app-section-heading'
         }
       >
-        Phân công &amp; tình trạng
+        PhÃ¢n cÃ´ng &amp; tÃ¬nh tráº¡ng
       </h3>
       {peerMode ? (
         <p
           className={
-            compact
-              ? 'mt-0.5 text-xs leading-snug text-slate-600'
-              : 'mt-0.5 text-sm leading-snug text-slate-600'
+          compact
+            ? 'mt-0.5 text-sm leading-snug text-slate-600'
+            : 'mt-0.5 text-sm leading-snug text-slate-600'
           }
         >
-          Chuyển hồ sơ của bạn cho đồng nghiệp (danh sách: tên hiển thị · email). Không thể bỏ gán trống — chọn người
-          nhận.
+          Chuyá»ƒn há»“ sÆ¡ cá»§a báº¡n cho Ä‘á»“ng nghiá»‡p (danh sÃ¡ch: tÃªn hiá»ƒn thá»‹ Â· email). KhÃ´ng thá»ƒ bá» gÃ¡n trá»‘ng â€” chá»n ngÆ°á»i
+          nháº­n.
         </p>
       ) : null}
       <label
         className={
-          compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
+          compact ? 'mt-1.5 block text-sm font-semibold text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
         }
       >
-        {reassignElevated ? 'Phụ trách (TVV / Admin)' : 'Tư vấn viên'}
+        {reassignElevated ? 'Phá»¥ trÃ¡ch (TVV / Admin)' : 'TÆ° váº¥n viÃªn'}
         <select
           value={crmAssignUid}
           onChange={(e) => setCrmAssignUid(e.target.value)}
           disabled={counselorsLoading}
           className={
             compact
-              ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-violet-200 disabled:opacity-50'
+              ? 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-50'
               : 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-50'
           }
         >
-          {reassignElevated ? <option value="">— Chưa gán —</option> : null}
+          {reassignElevated ? <option value="">â€” ChÆ°a gÃ¡n â€”</option> : null}
           {assignableCounselors.map((c) => (
             <option key={c.id} value={c.id} className="bg-white">
               {formatStaffDirectoryLabel(c)}
@@ -2994,16 +3001,16 @@ function LeadCrmQuickBlock({
       </label>
       <label
         className={
-          compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
+          compact ? 'mt-1.5 block text-sm font-semibold text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
         }
       >
-        Tình trạng tư vấn
+        TÃ¬nh tráº¡ng tÆ° váº¥n
         <select
           value={crmCounselorStatus}
           onChange={(e) => setCrmCounselorStatus(e.target.value as LeadCounselorStatus)}
           className={
             compact
-              ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-violet-200'
+              ? 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200'
               : 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-200'
           }
         >
@@ -3015,7 +3022,7 @@ function LeadCrmQuickBlock({
         </select>
       </label>
       {crmMsg ? (
-        <p className={compact ? 'mt-1.5 text-xs text-violet-900' : 'mt-2 text-sm text-violet-900'}>{crmMsg}</p>
+        <p className={compact ? 'mt-1.5 text-sm text-violet-900' : 'mt-2 text-sm text-violet-900'}>{crmMsg}</p>
       ) : null}
       <button
         type="button"
@@ -3023,11 +3030,11 @@ function LeadCrmQuickBlock({
         onClick={() => void save()}
         className={
           compact
-            ? 'mt-2 w-full rounded-md border border-violet-500 bg-violet-600 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50'
+            ? 'mt-2 w-full rounded-lg border border-violet-500 bg-violet-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50'
             : 'mt-3 w-full rounded-lg border border-violet-500 bg-violet-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50'
         }
       >
-        {crmBusy ? 'Đang lưu…' : 'Lưu phân công'}
+        {crmBusy ? 'Äang lÆ°uâ€¦' : 'LÆ°u phÃ¢n cÃ´ng'}
       </button>
     </section>
   )
@@ -3057,21 +3064,21 @@ function LeadDetailPanel({
   scoringMasterBuckets?: MasterDataBuckets
   schoolTvvSignalDefs?: ProfileCustomScoringSignal[] | null
   db: ReturnType<typeof getFirestoreDb>
-  /** Nội dung RAG từ Knowledge Base (có thể rỗng). */
+  /** Ná»™i dung RAG tá»« Knowledge Base (cÃ³ thá»ƒ rá»—ng). */
   institutionalRagBlock: string
   counselorUsers: VietMyUserProfile[]
   pickListUsers: VietMyUserProfile[]
   counselorsLoading: boolean
-  /** Có hiển thị khối phân công nhanh (Admin/Trưởng hoặc TVV có quyền chuyển đồng nghiệp). */
+  /** CÃ³ hiá»ƒn thá»‹ khá»‘i phÃ¢n cÃ´ng nhanh (Admin/TrÆ°á»Ÿng hoáº·c TVV cÃ³ quyá»n chuyá»ƒn Ä‘á»“ng nghiá»‡p). */
   canReassignLead: boolean
-  /** Admin / Trưởng khoa / Trưởng ngành: toàn quyền gán; TVV: chỉ chuyển trong team với quyền peer. */
+  /** Admin / TrÆ°á»Ÿng khoa / TrÆ°á»Ÿng ngÃ nh: toÃ n quyá»n gÃ¡n; TVV: chá»‰ chuyá»ƒn trong team vá»›i quyá»n peer. */
   reassignElevated: boolean
-  /** Đóng panel — parent có thể bọc confirm khi còn dirty (đồng bộ qua onUnsavedChange). */
+  /** ÄÃ³ng panel â€” parent cÃ³ thá»ƒ bá»c confirm khi cÃ²n dirty (Ä‘á»“ng bá»™ qua onUnsavedChange). */
   onClose: () => void
-  /** Báo parent có thay đổi chưa lưu (funnel / ghi chú / CRM trái) để onClose hỏi xác nhận. */
+  /** BÃ¡o parent cÃ³ thay Ä‘á»•i chÆ°a lÆ°u (funnel / ghi chÃº / CRM trÃ¡i) Ä‘á»ƒ onClose há»i xÃ¡c nháº­n. */
   onUnsavedChange?: (dirty: boolean) => void
   onUpdated: (patch: Partial<Lead>) => void
-  /** Trợ lý kịch bản (nhúng trong layout fullscreen). */
+  /** Trá»£ lÃ½ ká»‹ch báº£n (nhÃºng trong layout fullscreen). */
   dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can, canRunLlmAnalysis } = useAuth()
@@ -3083,10 +3090,42 @@ function LeadDetailPanel({
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
-  const matched = useMemo(() => playbooksMatchingLead(lead, playbooks).slice(0, 3), [lead, playbooks])
+  const { documents: knowledgeDocs } = useKnowledgeDocuments()
 
   const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
   const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
+  const previewLeadForScore = useMemo(() => mergeCoreDraftIntoLead(lead, coreDraft), [lead, coreDraft])
+  const playbookMatches = useMemo(
+    () => playbooksMatchingLead(previewLeadForScore, playbooks),
+    [previewLeadForScore, playbooks],
+  )
+  const playbookMatchCount = playbookMatches.length
+  const consultingHubCount = playbookMatchCount + knowledgeDocs.length
+
+  const openConsultingHub = (tab: ConsultingHubTab) => {
+    setConsultingHubTab(tab)
+    setConsultingHubOpen(true)
+  }
+  const displayScoring = useMemo(() => {
+    if (activeScoringProfile && scoringMasterBuckets) {
+      return evaluateLead(
+        leadToEvaluationRecord(previewLeadForScore),
+        activeScoringProfile,
+        scoringMasterBuckets,
+        schoolTvvSignalDefs,
+      )
+    }
+    if (scoringPreview) return scoringPreview
+    return { calculatedScore: lead.calculatedScore, priorityTag: lead.priorityTag }
+  }, [
+    previewLeadForScore,
+    activeScoringProfile,
+    scoringMasterBuckets,
+    schoolTvvSignalDefs,
+    scoringPreview,
+    lead.calculatedScore,
+    lead.priorityTag,
+  ])
 
   useEffect(() => {
     setCoreDraft(leadToCoreDraft(lead))
@@ -3102,11 +3141,10 @@ function LeadDetailPanel({
   const [msg, setMsg] = useState<string | null>(null)
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
-  const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
+  const [consultingHubOpen, setConsultingHubOpen] = useState(false)
+  const [consultingHubTab, setConsultingHubTab] = useState<ConsultingHubTab>('playbook')
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
-  const signalsHelpRef = useRef<HTMLDialogElement>(null)
-
   useEffect(() => {
     setNote('')
     setEvalTag(EVALUATION_TAGS[0])
@@ -3115,7 +3153,6 @@ function LeadDetailPanel({
     setMsg(null)
     setDetailLeftTab('counselor')
     setDetailRightTab('history')
-    signalsHelpRef.current?.close()
   }, [lead.id])
 
   useEffect(() => {
@@ -3130,9 +3167,9 @@ function LeadDetailPanel({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (e.defaultPrevented) return
-      if (playbookPopupOpen) {
+      if (consultingHubOpen) {
         e.preventDefault()
-        setPlaybookPopupOpen(false)
+        setConsultingHubOpen(false)
         return
       }
       if (llmPopupOpen) {
@@ -3145,18 +3182,12 @@ function LeadDetailPanel({
         setAssistantPopupOpen(false)
         return
       }
-      const help = signalsHelpRef.current
-      if (help?.open) {
-        help.close()
-        e.preventDefault()
-        return
-      }
       e.preventDefault()
       onClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [playbookPopupOpen, llmPopupOpen, assistantPopupOpen, onClose])
+  }, [consultingHubOpen, llmPopupOpen, assistantPopupOpen, onClose])
 
   const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks()
   const notesAgg = useMemo(
@@ -3173,13 +3204,13 @@ function LeadDetailPanel({
     (Boolean(can('leads:write:self_assigned')) &&
       (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
 
-  /** Khối phân công bên phải ẩn khi TVV peer xem hồ sơ không phải của mình — khi đó không gỡ CRM bên trái. */
+  /** Khá»‘i phÃ¢n cÃ´ng bÃªn pháº£i áº©n khi TVV peer xem há»“ sÆ¡ khÃ´ng pháº£i cá»§a mÃ¬nh â€” khi Ä‘Ã³ khÃ´ng gá»¡ CRM bÃªn trÃ¡i. */
   const peerModeForCrmBlock = !reassignElevated && Boolean(can('leads:reassign:peer'))
   const leadIsMineForCrm = (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id
   const crmQuickBlockVisible =
     canReassignLead && Boolean(db) && !(peerModeForCrmBlock && !leadIsMineForCrm)
 
-  /** Một nguồn sự thật: khi khối phân công hiển thị thì chỉnh tình trạng TVV ở đó. */
+  /** Má»™t nguá»“n sá»± tháº­t: khi khá»‘i phÃ¢n cÃ´ng hiá»ƒn thá»‹ thÃ¬ chá»‰nh tÃ¬nh tráº¡ng TVV á»Ÿ Ä‘Ã³. */
   const crmEditOnRight = crmQuickBlockVisible
   const crmEditOnLeft = showCounselorProgressForm && !crmEditOnRight
 
@@ -3246,33 +3277,38 @@ function LeadDetailPanel({
   }, [aiPreview, storedAiInsight])
 
   useEffect(() => {
-    if (!llmPopupOpen && !assistantPopupOpen && !playbookPopupOpen) return
+    if (!llmPopupOpen && !assistantPopupOpen && !consultingHubOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setLlmPopupOpen(false)
         setAssistantPopupOpen(false)
-        setPlaybookPopupOpen(false)
+        setConsultingHubOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [llmPopupOpen, assistantPopupOpen, playbookPopupOpen])
+  }, [llmPopupOpen, assistantPopupOpen, consultingHubOpen])
 
   const canSaveInteraction = can('interactions:create:self_assigned')
   const canRunAi = canRunLlmAnalysis
+  const canUseUnifiedSave = showCounselorProgressForm || canSaveInteraction
+  const saveButtonLabel =
+    coreDirty && detailLeftTab === 'profile' && !note.trim() && statusForForm === lead.pipelineStatus && (!crmEditOnLeft || crmForForm === lead.status)
+      ? 'LÆ°u thÃ´ng tin há»“ sÆ¡'
+      : 'LÆ°u cáº­p nháº­t'
 
   const labelUid = useCallback(
     (uid: string) => {
-      if (!uid) return '—'
+      if (!uid) return 'â€”'
       const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-      return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
+      return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}â€¦`
     },
     [pickListUsers, counselorUsers],
   )
 
   const saveUnified = async () => {
     if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      setMsg('ChÆ°a cÃ³ káº¿t ná»‘i hoáº·c chÆ°a Ä‘Äƒng nháº­p.')
       return
     }
     const canMutateLead = showCounselorProgressForm
@@ -3283,25 +3319,25 @@ function LeadDetailPanel({
     const coreChanged = Object.keys(corePatch).length > 0
 
     if (!crmChanged && !pipeChanged && !noteTrim && !coreChanged) {
-      setMsg('Không có thay đổi.')
+      setMsg('KhÃ´ng cÃ³ thay Ä‘á»•i.')
       return
     }
     if (coreChanged && !canMutateLead) {
-      setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này (cần Admin hoặc TVV được gán + quyền ghi hồ sơ).')
+      setMsg('Báº¡n khÃ´ng cÃ³ quyá»n chá»‰nh thÃ´ng tin há»“ sÆ¡ nÃ y (cáº§n Admin hoáº·c TVV Ä‘Æ°á»£c gÃ¡n + quyá»n ghi há»“ sÆ¡).')
       return
     }
     if (crmChanged && !canMutateLead) {
-      setMsg('Bạn không có quyền đổi tình trạng tư vấn trên hồ sơ này.')
+      setMsg('Báº¡n khÃ´ng cÃ³ quyá»n Ä‘á»•i tÃ¬nh tráº¡ng tÆ° váº¥n trÃªn há»“ sÆ¡ nÃ y.')
       return
     }
     if (pipeChanged && !noteTrim && !canMutateLead) {
       setMsg(
-        'Để chỉnh funnel không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc nhập ghi chú rồi bấm «Lưu cập nhật»).',
+        'Äá»ƒ chá»‰nh funnel khÃ´ng kÃ¨m ghi chÃº, cáº§n quyá»n chá»‰nh sá»­a há»“ sÆ¡ Ä‘Æ°á»£c gÃ¡n (hoáº·c nháº­p ghi chÃº rá»“i báº¥m Â«LÆ°u cáº­p nháº­tÂ»).',
       )
       return
     }
     if (noteTrim && !canSaveInteraction) {
-      setMsg('Bạn không có quyền ghi tương tác.')
+      setMsg('Báº¡n khÃ´ng cÃ³ quyá»n ghi tÆ°Æ¡ng tÃ¡c.')
       return
     }
 
@@ -3344,9 +3380,9 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'SYSTEM_UPDATE',
-          description: `Cập nhật thông tin hồ sơ (${Object.keys(corePatch).length} trường): ${Object.keys(corePatch)
+          description: `Cáº­p nháº­t thÃ´ng tin há»“ sÆ¡ (${Object.keys(corePatch).length} trÆ°á»ng): ${Object.keys(corePatch)
             .slice(0, 12)
-            .join(', ')}${Object.keys(corePatch).length > 12 ? '…' : ''}`,
+            .join(', ')}${Object.keys(corePatch).length > 12 ? 'â€¦' : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -3356,7 +3392,7 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
-          description: `Tình trạng tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[nextCrm]}`,
+          description: `TÃ¬nh tráº¡ng tÆ° váº¥n: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} â†’ ${LEAD_COUNSELOR_STATUS_LABELS[nextCrm]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -3365,7 +3401,7 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
-          description: `Pipeline funnel: ${PIPELINE_LABEL[lead.pipelineStatus]} → ${PIPELINE_LABEL[nextPipeFinal]}`,
+          description: `Pipeline funnel: ${PIPELINE_LABEL[lead.pipelineStatus]} â†’ ${PIPELINE_LABEL[nextPipeFinal]}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -3392,7 +3428,7 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'NOTE_ADDED',
-          description: `Ghi chú tương tác (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
+          description: `Ghi chÃº tÆ°Æ¡ng tÃ¡c (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? 'â€¦' : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -3419,26 +3455,36 @@ function LeadDetailPanel({
       setNote('')
       setStatusDirty(null)
       setCrmDirty(null)
-      setMsg('Đã lưu cập nhật.')
+      setMsg('ÄÃ£ lÆ°u cáº­p nháº­t.')
     } catch (e) {
       console.error(e)
-      setMsg('Không lưu được. Kiểm tra Firestore Rules.')
+      setMsg('KhÃ´ng lÆ°u Ä‘Æ°á»£c. Kiá»ƒm tra Firestore Rules.')
     } finally {
       setSaving(false)
     }
   }
 
+  const leadForAi = previewLeadForScore
+  const contextualRagForRun = useMemo(
+    () => buildLeadContextualRagBlock(leadForAi, knowledgeDocs),
+    [leadForAi, knowledgeDocs],
+  )
+  const playbookContextForRun = useMemo(
+    () => buildPlaybookContextBlock(playbookMatches.map((m) => m.playbook)),
+    [playbookMatches],
+  )
+
   const runAiLlmAnalysis = async () => {
     if (!canRunLlmAnalysis) {
       setAiErr(
-        'Phân tích AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» trong Cài đặt → Quản lý nhân sự, hoặc dùng tài khoản Siêu quản trị.',
+        'Tư vấn AI cần được quản lý bật «Cho phép dùng AI trên hồ sơ» (Cài đặt → Quản lý nhân sự), hoặc dùng tài khoản Admin / Siêu quản trị.',
       )
       return
     }
     const config = resolveAIIntegrationConfig()
     if (!config?.apiKey?.trim()) {
       setAiErr(
-        'Chưa có khóa ChatGPT / Gemini — lưu trong Cài đặt → LLM, hoặc đặt VITE_AI_API_KEY (tuỳ chọn VITE_AI_PROVIDER, VITE_AI_MODEL) trong .env rồi chạy lại dev/build.',
+        'Chưa có khóa ChatGPT / Gemini — Siêu quản trị lưu tại Cài đặt → LLM → API trên trình duyệt này, hoặc cấu hình VITE_AI_API_KEY trong .env rồi build lại.',
       )
       return
     }
@@ -3450,6 +3496,10 @@ function LeadDetailPanel({
       setAiErr('Chưa kết nối Firestore.')
       return
     }
+    if (!aiTasks.length) {
+      setAiErr('Chưa có tác vụ AI — tạo mẫu tại Cài đặt → LLM & Tư vấn AI → Hướng dẫn.')
+      return
+    }
     setAiRunning(true)
     setAiErr(null)
     try {
@@ -3457,8 +3507,15 @@ function LeadDetailPanel({
       if (selectedAITask.targetFields.includes('counselorNote')) {
         extras.counselorNote = notesAgg || '(Chưa có ghi chú tương tác.)'
       }
-      const parsed = await runAIAnalysis(lead, selectedAITask, config, extras, {
-        institutionalRagBlock: institutionalRagBlock.trim() || undefined,
+      if (selectedAITask.targetFields.includes('calculatedScore')) {
+        extras.calculatedScore = displayScoring.calculatedScore
+      }
+      if (selectedAITask.targetFields.includes('priorityTag')) {
+        extras.priorityTag = displayScoring.priorityTag
+      }
+      const parsed = await runAIAnalysis(leadForAi, selectedAITask, config, extras, {
+        institutionalRagBlock: contextualRagForRun.trim() || institutionalRagBlock.trim() || undefined,
+        playbookContextBlock: playbookContextForRun || undefined,
       })
       setAiPreview(parsed)
       const prevInsights = { ...aiInsightTasksById }
@@ -3496,7 +3553,7 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'AI_RUN',
-          description: `Chạy phân tích AI: «${selectedAITask.name}»`,
+          description: `Cháº¡y phÃ¢n tÃ­ch AI: Â«${selectedAITask.name}Â»`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -3507,7 +3564,7 @@ function LeadDetailPanel({
       })
     } catch (e) {
       console.error(e)
-      setAiErr(e instanceof Error ? e.message : 'Không chạy được phân tích AI.')
+      setAiErr(e instanceof Error ? e.message : 'KhÃ´ng cháº¡y Ä‘Æ°á»£c phÃ¢n tÃ­ch AI.')
     } finally {
       setAiRunning(false)
     }
@@ -3515,25 +3572,25 @@ function LeadDetailPanel({
 
   const interactionsHistorySection = (
     <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm">
-      <h3 className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-600">
-        Lịch sử ghi chú &amp; đánh giá
+      <h3 className="shrink-0 text-sm font-bold uppercase tracking-wider text-slate-600 sm:text-base">
+        Lá»‹ch sá»­ ghi chÃº &amp; Ä‘Ã¡nh giÃ¡
       </h3>
-      {intLoading ? <p className="mt-0.5 shrink-0 text-xs text-slate-500">Đang tải…</p> : null}
+      {intLoading ? <p className="mt-0.5 shrink-0 text-sm text-slate-500">Äang táº£iâ€¦</p> : null}
       <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
         {interactions.map((it) => (
           <li
             key={it.id}
-            className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
+            className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2.5 text-sm text-slate-700"
           >
             <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-200/60 pb-1">
               <p className="font-semibold text-slate-900">
                 {interactionChannelVi(it.channel)}
                 {it.evaluationTag ? (
-                  <span className="font-normal text-slate-600"> · {it.evaluationTag}</span>
+                  <span className="font-normal text-slate-600"> Â· {it.evaluationTag}</span>
                 ) : null}
               </p>
               <p className="text-[11px] text-slate-500">
-                {labelUid(it.authorUid)} · {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
+                {labelUid(it.authorUid)} Â· {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
               </p>
             </div>
             {(it.snapshotCrmStatus || it.snapshotPipelineStatus || it.snapshotPriorityTag) && (
@@ -3541,7 +3598,7 @@ function LeadDetailPanel({
                 {it.snapshotCrmStatus ? (
                   <span
                     className="inline-flex max-w-full items-center rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-950"
-                    title="Tình trạng CRM tại lúc lưu"
+                    title="TÃ¬nh tráº¡ng CRM táº¡i lÃºc lÆ°u"
                   >
                     TVV: {LEAD_COUNSELOR_STATUS_LABELS[it.snapshotCrmStatus]}
                   </span>
@@ -3549,14 +3606,14 @@ function LeadDetailPanel({
                 {it.snapshotPipelineStatus ? (
                   <span
                     className="inline-flex max-w-full items-center rounded border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-950"
-                    title="Funnel tại lúc lưu"
+                    title="Funnel táº¡i lÃºc lÆ°u"
                   >
                     Funnel: {PIPELINE_LABEL[it.snapshotPipelineStatus]}
                   </span>
                 ) : null}
                 {it.snapshotPriorityTag ? (
                   <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-800">
-                    Nhãn: <TagBadge tag={it.snapshotPriorityTag} />
+                    NhÃ£n: <TagBadge tag={it.snapshotPriorityTag} />
                   </span>
                 ) : null}
               </div>
@@ -3565,55 +3622,20 @@ function LeadDetailPanel({
               <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
             ) : null}
             {it.callOutcome ? (
-              <p className="mt-1 text-[11px] font-medium text-slate-600">Kết quả: {it.callOutcome}</p>
+              <p className="mt-1 text-[11px] font-medium text-slate-600">Káº¿t quáº£: {it.callOutcome}</p>
             ) : null}
             {it.aiSentiment ? (
               <p className="mt-1 text-[11px] leading-snug text-violet-800">
-                AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
+                AI: {it.aiSentiment.label} ({it.aiSentiment.score}) â€” {it.aiSentiment.summary}
               </p>
             ) : null}
           </li>
         ))}
         {!intLoading && !interactions.length ? (
-          <li className="text-xs text-slate-500">Chưa có tương tác.</li>
+          <li className="text-xs text-slate-500">ChÆ°a cÃ³ tÆ°Æ¡ng tÃ¡c.</li>
         ) : null}
       </ul>
     </section>
-  )
-
-  const playbooksBody = (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {matched.length ? (
-        matched.map((pb) => (
-          <div
-            key={pb.id}
-            className="rounded-xl border border-amber-200/80 bg-amber-50/90 p-4 shadow-inner sm:p-5"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 sm:text-sm">{pb.title}</p>
-            {pb.keySellingPoints?.length ? (
-              <ul className="mt-2 list-inside list-disc text-sm leading-relaxed text-slate-700">
-                {pb.keySellingPoints.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            ) : null}
-            <p className="mt-2 text-sm leading-relaxed text-slate-800">{pb.strategy}</p>
-            {pb.objectionHandling?.length ? (
-              <div className="mt-3 border-t border-slate-200/80 pt-2">
-                <p className="text-xs font-medium text-amber-800 sm:text-sm">Phản đối dự kiến</p>
-                <ul className="mt-1.5 list-inside list-decimal text-sm leading-relaxed text-slate-600">
-                  {pb.objectionHandling.map((x) => (
-                    <li key={x}>{x}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        ))
-      ) : (
-        <p className="col-span-full text-sm text-slate-500">Không có playbook khớp điều kiện hiện tại.</p>
-      )}
-    </div>
   )
 
   return (
@@ -3621,54 +3643,67 @@ function LeadDetailPanel({
       role="dialog"
       aria-modal="true"
       aria-labelledby="lead-detail-title"
-      className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
+      className="lead-detail-panel fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-base text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
     >
       <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:px-5 lg:px-6">
         <div className="min-w-0 flex-1">
-          <p className="app-page-kicker text-slate-600">Chi tiết hồ sơ</p>
+          <p className="app-page-kicker text-slate-600">Chi tiáº¿t há»“ sÆ¡</p>
           <h2
             id="lead-detail-title"
-            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+            className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl"
           >
-            {lead.fullName || 'Chưa rõ tên'}
+            {lead.fullName || 'ChÆ°a rÃµ tÃªn'}
           </h2>
         </div>
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1.5">
           <button
             type="button"
-            onClick={() => setPlaybookPopupOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+            onClick={() => openConsultingHub('playbook')}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600"
           >
             <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-            Playbook
+            Tư vấn & Tri thức
+            {consultingHubCount > 0 ? (
+              <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[11px] font-bold tabular-nums">
+                {consultingHubCount}
+              </span>
+            ) : null}
           </button>
           {dynamicAssistantSlot ? (
-            <button
-              type="button"
-              onClick={() => setAssistantPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-300/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
-            >
-              <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              Trợ lý
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => openConsultingHub('knowledge')}
+                className="hidden rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100 sm:inline-flex"
+              >
+                Tri thức
+              </button>
+              <button
+                type="button"
+                onClick={() => openConsultingHub('scripts')}
+                className="hidden rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-2 text-xs font-semibold text-sky-900 hover:bg-sky-100 sm:inline-flex"
+              >
+                Kịch bản
+              </button>
+            </>
           ) : null}
           {canRunAi ? (
             <button
               type="button"
               onClick={() => setLlmPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              LLM
+              Tư vấn AI
             </button>
           ) : null}
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
-            Đóng
+            ÄÃ³ng
           </button>
         </div>
       </header>
@@ -3683,26 +3718,26 @@ function LeadDetailPanel({
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-900">
-                  Gợi ý từ AI (ưu tiên chốt sale)
+                  Gá»£i Ã½ tá»« AI (Æ°u tiÃªn chá»‘t sale)
                 </p>
                 {lead.aiProcessedAt?.toDate ? (
                   <p className="mt-0.5 text-xs text-amber-800/80">
-                    Cập nhật AI: {lead.aiProcessedAt.toDate().toLocaleString('vi-VN')}
+                    Cáº­p nháº­t AI: {lead.aiProcessedAt.toDate().toLocaleString('vi-VN')}
                   </p>
                 ) : null}
               </div>
             </div>
             <div className="min-w-0 flex-1 space-y-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-amber-900/90">Phân tích</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-900/90">PhÃ¢n tÃ­ch</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-900">
-                  {lead.aiShortlistReason?.trim() || '—'}
+                  {lead.aiShortlistReason?.trim() || 'â€”'}
                 </p>
               </div>
               <div className="rounded-xl border border-amber-300/60 bg-white/70 px-3 py-2.5 shadow-sm">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">Hành động đề xuất</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">HÃ nh Ä‘á»™ng Ä‘á» xuáº¥t</p>
                 <p className="mt-1 text-sm font-semibold leading-snug text-emerald-950">
-                  {lead.recommendedAction?.trim() || '—'}
+                  {lead.recommendedAction?.trim() || 'â€”'}
                 </p>
               </div>
             </div>
@@ -3717,7 +3752,7 @@ function LeadDetailPanel({
                 <nav
                   className="flex shrink-0 flex-wrap gap-2 rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm"
                   role="tablist"
-                  aria-label="Nội dung chính chi tiết hồ sơ"
+                  aria-label="Ná»™i dung chÃ­nh chi tiáº¿t há»“ sÆ¡"
                 >
                   <button
                     type="button"
@@ -3725,13 +3760,13 @@ function LeadDetailPanel({
                     aria-selected={detailLeftTab === 'counselor'}
                     onClick={() => setDetailLeftTab('counselor')}
                     className={[
-                      'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                      'min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-semibold tracking-tight transition sm:px-4 sm:text-base',
                       detailLeftTab === 'counselor'
                         ? 'border-violet-500/55 bg-gradient-to-r from-violet-600 to-violet-700 text-white shadow-md'
                         : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                     ].join(' ')}
                   >
-                    Thao tác TVV
+                    Thao tÃ¡c TVV
                   </button>
                   <button
                     type="button"
@@ -3739,42 +3774,28 @@ function LeadDetailPanel({
                     aria-selected={detailLeftTab === 'profile'}
                     onClick={() => setDetailLeftTab('profile')}
                     className={[
-                      'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                      'min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-semibold tracking-tight transition sm:px-4 sm:text-base',
                       detailLeftTab === 'profile'
                         ? 'border-slate-600/50 bg-slate-800 text-white shadow-md'
                         : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                     ].join(' ')}
                   >
-                    Thông tin hồ sơ
+                    ThÃ´ng tin há»“ sÆ¡
                   </button>
                 </nav>
                 <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                   {detailLeftTab === 'profile' ? (
-                    <aside className="space-y-2 text-sm leading-snug text-slate-800">
-                      <section className="rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
-                        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-2">
-                          <div className="min-w-0">
-                            <div className="flex items-start gap-1">
-                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
-                              <button
-                                type="button"
-                                className="mt-0.5 shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-slate-600 shadow-sm hover:bg-slate-50"
-                                title={LEAD_DETAIL_PROFILE_HELP}
-                                aria-label="Giải thích khối thông tin hồ sơ"
-                              >
-                                <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
-                              </button>
-                            </div>
-                            <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                              Sau khi chỉnh, chuyển sang tab <strong>Thao tác TVV</strong> để lưu funnel / ghi chú (nút «Lưu cập
-                              nhật») nếu cần đồng bộ cùng lúc với thông tin hồ sơ.
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <aside className="space-y-2 text-base leading-snug text-slate-800">
+                      <section className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-sm sm:p-3.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 sm:text-base">
+                            ThÃ´ng tin há»“ sÆ¡
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
                             <span className="tabular-nums">
-                              Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                              Äiá»ƒm: {String(displayScoring.calculatedScore)}
                             </span>
-                            <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                            <TagBadge tag={displayScoring.priorityTag} />
                           </div>
                         </div>
                         <div className="mt-2 max-h-[min(72dvh,44rem)] min-h-[12rem] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin] lg:max-h-[min(78dvh,48rem)]">
@@ -3785,66 +3806,42 @@ function LeadDetailPanel({
                           />
                         </div>
                         {!showCounselorProgressForm ? (
-                          <p className="mt-2 text-[10px] text-amber-800">
-                            Chỉ xem — không có quyền sửa thông tin hồ sơ (Admin hoặc TVV được gán).
+                          <p className="mt-2 text-xs text-amber-800 sm:text-sm">
+                            Chá»‰ xem â€” khÃ´ng cÃ³ quyá»n sá»­a thÃ´ng tin há»“ sÆ¡ (Admin hoáº·c TVV Ä‘Æ°á»£c gÃ¡n).
                           </p>
                         ) : null}
                       </section>
                     </aside>
                   ) : (
-                    <aside className="space-y-2 text-sm leading-snug text-slate-800">
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/90 bg-white px-2 py-1.5 text-[11px] text-slate-700 shadow-sm">
-                        <span className="font-semibold text-slate-800">Tóm tắt nhanh</span>
+                    <aside className="space-y-2 text-base leading-snug text-slate-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+                        <span className="font-semibold text-slate-800">TÃ³m táº¯t nhanh</span>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="tabular-nums">
-                            Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                            Äiá»ƒm: {String(displayScoring.calculatedScore)}
                           </span>
-                          <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
+                          <TagBadge tag={displayScoring.priorityTag} />
                         </div>
                       </div>
                       {db ? (
                         <div className="space-y-2">
                           {showCounselorProgressForm || canSaveInteraction ? (
                             <div className="space-y-1.5 border-b border-slate-200/70 pb-2">
-                              {hasUnsavedProgress ? (
+                              <details open className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 shadow-md ring-1 ring-amber-200/70">
+                                <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-bold text-amber-950 marker:content-none [&::-webkit-details-marker]:hidden">
+                                  Tiáº¿n Ä‘á»™ tÆ° váº¥n &amp; ghi chÃº
+                                </summary>
+                                <div className="space-y-2 border-t border-amber-200/60 px-3 pb-3 pt-2">
                                 <div
-                                  role="status"
-                                  className="rounded-lg border border-amber-300/90 bg-amber-50/95 px-2.5 py-2 text-xs font-semibold leading-snug text-amber-950 shadow-sm"
-                                >
-                                  Có thay đổi chưa lưu — bấm «Lưu cập nhật» (thông tin hồ sơ, tình trạng TVV, funnel và/hoặc
-                                  ghi chú tương tác). Đóng panel sẽ hỏi xác nhận; đóng tab trình duyệt cũng có thể được hỏi
-                                  trước khi rời trang.
-                                </div>
-                              ) : null}
-                              <div className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 p-2 shadow-md ring-1 ring-amber-200/70 sm:p-2.5">
-                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
-                                  Tiến độ tư vấn &amp; ghi chú
-                                </p>
-                                <p className="mt-1 text-xs leading-snug text-slate-600">
-                                  {crmEditOnRight ? (
-                                    <>
-                                      <strong>Tình trạng TVV</strong> chỉnh ở tab «Phân công &amp; tình trạng» (nút «Lưu phân
-                                      công»). Tại đây: funnel tuyển sinh, nhãn đánh giá, ghi chú tương tác — bấm{' '}
-                                      <strong>Lưu cập nhật</strong>
-                                      {canSaveInteraction ? '; có ghi chú thì ghi thêm vào lịch sử kèm snapshot.' : '.'}
-                                    </>
-                                  ) : (
-                                    <>
-                                      Một lần lưu: đồng bộ <strong>tình trạng TVV</strong>, funnel (theo quyền) và — nếu có
-                                      ghi chú — thêm dòng lịch sử kèm tình trạng &amp; nhãn tại thời điểm đó.
-                                    </>
-                                  )}
-                                </p>
-                                <div
-                                  className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+                                  className={`grid gap-2 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
                                 >
                                   {crmEditOnLeft ? (
-                                    <label className="block text-xs font-medium text-slate-800">
-                                      Tình trạng tư vấn
+                                    <label className="block text-sm font-semibold text-slate-800">
+                                      TÃ¬nh tráº¡ng tÆ° váº¥n
                                       <select
                                         value={crmForForm}
                                         onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
-                                        className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40"
                                       >
                                         {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
                                           <option key={s} value={s} className="bg-white">
@@ -3854,12 +3851,12 @@ function LeadDetailPanel({
                                       </select>
                                     </label>
                                   ) : null}
-                                  <label className="block text-xs font-medium text-slate-800">
-                                    Funnel tuyển sinh
+                                  <label className="block text-sm font-semibold text-slate-800">
+                                    Funnel tuyá»ƒn sinh
                                     <select
                                       value={statusForForm}
                                       onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                                      className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40"
                                     >
                                       {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
                                         <option key={k} value={k} className="bg-white">
@@ -3868,12 +3865,12 @@ function LeadDetailPanel({
                                       ))}
                                     </select>
                                   </label>
-                                  <label className="block text-xs font-medium text-slate-800">
-                                    Nhãn đánh giá
+                                  <label className="block text-sm font-semibold text-slate-800">
+                                    NhÃ£n Ä‘Ã¡nh giÃ¡
                                     <select
                                       value={evalTag}
                                       onChange={(e) => setEvalTag(e.target.value)}
-                                      className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-400/40"
                                     >
                                       {EVALUATION_TAGS.map((t) => (
                                         <option key={t} value={t} className="bg-white">
@@ -3883,98 +3880,33 @@ function LeadDetailPanel({
                                     </select>
                                   </label>
                                 </div>
-                                <label className="mt-2 block text-xs font-medium text-slate-800">
-                                  Ghi chú tương tác
+                                <label className="mt-2 block text-sm font-semibold text-slate-800">
+                                  Ghi chÃº tÆ°Æ¡ng tÃ¡c
                                   <textarea
                                     value={note}
                                     onChange={(e) => setNote(e.target.value)}
                                     rows={3}
                                     placeholder={
                                       crmEditOnRight
-                                        ? 'Ghi nhận buổi làm việc — lưu kèm funnel / nhãn phía trên…'
-                                        : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / funnel phía trên…'
+                                        ? 'Ghi nháº­n buá»•i lÃ m viá»‡c â€” lÆ°u kÃ¨m funnel / nhÃ£n phÃ­a trÃªnâ€¦'
+                                        : 'Ghi nháº­n buá»•i lÃ m viá»‡c â€” lÆ°u kÃ¨m tÃ¬nh tráº¡ng / funnel phÃ­a trÃªnâ€¦'
                                     }
-                                    className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                    className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-amber-400/40"
                                   />
                                 </label>
-                                {msg ? <p className="mt-1 text-xs font-medium text-amber-900">{msg}</p> : null}
-                                <button
-                                  type="button"
-                                  disabled={
-                                    saving ||
-                                    !db ||
-                                    (!showCounselorProgressForm && !canSaveInteraction) ||
-                                    !hasUnsavedProgress
-                                  }
-                                  onClick={() => void saveUnified()}
-                                  className="mt-2 w-full rounded-md border border-amber-600 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
-                                >
-                                  {saving ? 'Đang lưu…' : 'Lưu cập nhật'}
-                                </button>
-                              </div>
+                                </div>
+                              </details>
                             </div>
                           ) : null}
 
-                          <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
-                            <div className="flex items-start gap-1.5">
-                              <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
-                                Tín hiệu &amp; đánh giá tiềm năng
-                              </h3>
-                              <button
-                                type="button"
-                                className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
-                                aria-label="Giải thích khối tín hiệu đánh giá"
-                                title="Giải thích"
-                                onClick={() => signalsHelpRef.current?.showModal()}
-                              >
-                                <CircleHelp className="h-3.5 w-3.5" aria-hidden />
-                              </button>
-                            </div>
-                            <p className="mt-1 text-xs leading-snug text-slate-600">
-                              Cờ hành vi / rủi ro — mỗi thay đổi <strong>lưu ngay</strong> vào hồ sơ; điểm &amp; nhãn HOT/WARM/COLD
-                              theo profile chấm điểm đang chọn.
-                            </p>
-
-                            <dialog
-                              ref={signalsHelpRef}
-                              className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
-                              onClick={(e) => {
-                                if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
-                              }}
-                            >
-                              <div className="flex max-h-[min(85vh,32rem)] flex-col">
-                                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
-                                  <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
-                                    aria-label="Đóng"
-                                    onClick={() => signalsHelpRef.current?.close()}
-                                  >
-                                    <X className="h-4 w-4" aria-hidden />
-                                  </button>
-                                </div>
-                                <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
-                                  <p>
-                                    Khối <strong>Tín hiệu &amp; đánh giá tiềm năng</strong> phục vụ chấm điểm profile, nhãn{' '}
-                                    <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
-                                    <strong>AI</strong> (bước kiểm tra trước khi gọi AI, rồi phân tích và tóm tắt ghi chú tương
-                                    tác).
-                                  </p>
-                                  <p className="mt-2">
-                                    <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
-                                    <strong>lưu ngay</strong> từng mục (không dùng chung nút «Lưu cập nhật» của khối tiến độ).
-                                  </p>
-                                  <p className="mt-2">
-                                    <span className="font-semibold text-slate-900">Tiến độ &amp; ghi chú</span> — thẻ màu
-                                    cam: funnel, nhãn đánh giá, ghi chú tương tác và nút <strong>Lưu cập nhật</strong>. Khi có
-                                    tab «Phân công &amp; tình trạng», <strong>tình trạng TVV</strong> chỉnh ở đó để tránh trùng.
-                                  </p>
-                                </div>
-                              </div>
-                            </dialog>
-
-                            <div className="mt-2 min-h-0">
+                          <details open className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 shadow-md ring-1 ring-emerald-900/10">
+                            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 marker:content-none [&::-webkit-details-marker]:hidden">
+                              <span className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
+                                TÃ­n hiá»‡u &amp; Ä‘Ã¡nh giÃ¡ tiá»m nÄƒng
+                              </span>
+                            </summary>
+                            <div className="border-t border-emerald-200/50 px-3 pb-3 pt-2">
+                            <div className="min-h-0">
                               <LeadScoringSignalsPanel
                                 key={`sig-${lead.id}`}
                                 lead={lead}
@@ -3985,12 +3917,47 @@ function LeadDetailPanel({
                                 compact
                               />
                             </div>
-                          </section>
+                            </div>
+                          </details>
                         </div>
                       ) : null}
                     </aside>
                   )}
                 </div>
+                {canUseUnifiedSave && db ? (
+                  <div className="shrink-0 space-y-2 border-t border-slate-200 bg-white p-3 shadow-[0_-6px_24px_rgba(15,23,42,0.08)]">
+                    {hasUnsavedProgress ? (
+                      <p role="status" className="text-sm font-semibold leading-snug text-amber-900">
+                        CÃ³ thay Ä‘á»•i chÆ°a lÆ°u â€” báº¥m lÆ°u Ä‘á»ƒ ghi Firestore vÃ  cáº­p nháº­t Ä‘iá»ƒm / nhÃ£n ngay.
+                      </p>
+                    ) : (
+                      <p className="text-xs leading-snug text-slate-500">
+                        Sau khi chá»‰nh thÃ´ng tin hoáº·c ghi chÃº, báº¥m lÆ°u Ä‘á»ƒ há»‡ thá»‘ng ghi nháº­n.
+                      </p>
+                    )}
+                    {msg ? (
+                      <p
+                        className={`text-sm font-medium ${msg.startsWith('KhÃ´ng') || msg.includes('khÃ´ng') ? 'text-rose-800' : 'text-emerald-800'}`}
+                      >
+                        {msg}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={
+                        saving ||
+                        !db ||
+                        (!showCounselorProgressForm && !canSaveInteraction) ||
+                        !hasUnsavedProgress
+                      }
+                      onClick={() => void saveUnified()}
+                      className="flex w-full min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-gradient-to-r from-emerald-600 to-teal-600 py-2.5 text-sm font-bold text-white shadow-md transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
+                    >
+                      <Save className="h-4 w-4 shrink-0" aria-hidden strokeWidth={2} />
+                      {saving ? 'Äang lÆ°uâ€¦' : saveButtonLabel}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <aside className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-5 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
@@ -3999,7 +3966,7 @@ function LeadDetailPanel({
                     <nav
                       className="flex shrink-0 flex-wrap gap-2 rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm"
                       role="tablist"
-                      aria-label="Phân công và lịch sử"
+                      aria-label="PhÃ¢n cÃ´ng vÃ  lá»‹ch sá»­"
                     >
                       <button
                         type="button"
@@ -4007,13 +3974,13 @@ function LeadDetailPanel({
                         aria-selected={detailRightTab === 'assign'}
                         onClick={() => setDetailRightTab('assign')}
                         className={[
-                          'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                          'min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-semibold tracking-tight transition sm:px-4 sm:text-base',
                           detailRightTab === 'assign'
                             ? 'border-teal-500/55 bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md'
                             : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                         ].join(' ')}
                       >
-                        Phân công &amp; tình trạng
+                        PhÃ¢n cÃ´ng &amp; tÃ¬nh tráº¡ng
                       </button>
                       <button
                         type="button"
@@ -4021,13 +3988,13 @@ function LeadDetailPanel({
                         aria-selected={detailRightTab === 'history'}
                         onClick={() => setDetailRightTab('history')}
                         className={[
-                          'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                          'min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-semibold tracking-tight transition sm:px-4 sm:text-base',
                           detailRightTab === 'history'
                             ? 'border-sky-500/55 bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md'
                             : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                         ].join(' ')}
                       >
-                        Lịch sử &amp; ghi chú
+                        Lá»‹ch sá»­ &amp; ghi chÃº
                       </button>
                     </nav>
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -4064,13 +4031,13 @@ function LeadDetailPanel({
         </div>
       </div>
 
-      {playbookPopupOpen ? (
+      {consultingHubOpen ? (
         <>
           <button
             type="button"
             className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="Đóng cửa sổ playbook"
-            onClick={() => setPlaybookPopupOpen(false)}
+            aria-label="ÄÃ³ng cá»­a sá»• playbook"
+            onClick={() => setConsultingHubOpen(false)}
           />
           <div
             role="dialog"
@@ -4085,24 +4052,32 @@ function LeadDetailPanel({
                 </span>
                 <div className="min-w-0">
                   <h2 id="lead-playbook-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
-                    Playbook tư vấn
+                    Playbook tÆ° váº¥n
                   </h2>
                   <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
-                    Gợi ý chiến lược, điểm bán, xử lý phản đối — khớp điều kiện hồ sơ; cấu hình trong Cài đặt.
+                    {playbookMatchCount > 0
+                      ? `${playbookMatchCount} playbook khá»›p â€” Ä‘á»c vÃ  há»c táº­p ká»‹ch báº£n tÆ° váº¥n.`
+                      : 'Gá»£i Ã½ chiáº¿n lÆ°á»£c theo há»“ sÆ¡ â€” cáº¥u hÃ¬nh Ä‘iá»u kiá»‡n / tá»« khÃ³a trong CÃ i Ä‘áº·t â†’ TÆ° váº¥n.'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setPlaybookPopupOpen(false)}
+                onClick={() => setConsultingHubOpen(false)}
                 className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 <X className="h-4 w-4" aria-hidden />
-                Đóng
+                ÄÃ³ng
               </button>
             </div>
             <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              {playbooksBody}
+              <LeadConsultingHub
+                lead={previewLeadForScore}
+                playbooks={playbooks}
+                showDraftHint={coreDirty}
+                initialTab={consultingHubTab}
+                canRunAssistant={Boolean(dynamicAssistantSlot)}
+              />
             </div>
           </div>
         </>
@@ -4113,7 +4088,7 @@ function LeadDetailPanel({
           <button
             type="button"
             className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="Đóng cửa sổ phân tích AI"
+            aria-label="Đóng cửa sổ tư vấn AI"
             onClick={() => setLlmPopupOpen(false)}
           />
           <div
@@ -4132,11 +4107,11 @@ function LeadDetailPanel({
                 </span>
                 <div className="min-w-0">
                   <h2 id="lead-llm-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
-                    Phân tích AI
+                    PhÃ¢n tÃ­ch AI
                   </h2>
                   <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
-                    ChatGPT / Gemini (khóa do Siêu quản trị lưu trong Cài đặt → LLM) — kết quả lưu trên hệ thống. Cần
-                    quản lý bật «Cho phép dùng AI trên hồ sơ» cho tài khoản của bạn.
+                    ChatGPT / Gemini (khÃ³a do SiÃªu quáº£n trá»‹ lÆ°u trong CÃ i Ä‘áº·t â†’ LLM) â€” káº¿t quáº£ lÆ°u trÃªn há»‡ thá»‘ng. Cáº§n
+                    quáº£n lÃ½ báº­t Â«Cho phÃ©p dÃ¹ng AI trÃªn há»“ sÆ¡Â» cho tÃ i khoáº£n cá»§a báº¡n.
                   </p>
                 </div>
               </div>
@@ -4146,14 +4121,20 @@ function LeadDetailPanel({
                 className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 <X className="h-4 w-4" aria-hidden />
-                Đóng
+                ÄÃ³ng
               </button>
             </div>
 
             <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
               {aiTasksErr ? <p className="text-sm text-rose-700">{aiTasksErr}</p> : null}
 
-              <label className="mt-1 block text-sm font-medium text-slate-700">
+              <p className="text-xs text-slate-500">
+                Tri thức: {knowledgeDocs.length ? `${knowledgeDocs.length} tài liệu` : 'chưa nạp'}
+                {playbookMatchCount > 0 ? ` · Playbook khớp: ${playbookMatchCount}` : ''}
+                {coreDirty ? ' · Bản nháp chưa lưu' : ''}
+              </p>
+
+              <label className="mt-3 block text-sm font-medium text-slate-700">
                 Tác vụ phân tích
                 <select
                   value={resolvedAiTaskId}
@@ -4166,7 +4147,7 @@ function LeadDetailPanel({
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-50"
                 >
                   {!aiTasks.length ? (
-                    <option value="">Chưa có tác vụ — tạo trong Cài đặt</option>
+                    <option value="">Chưa có tác vụ — tạo tại Cài đặt → LLM</option>
                   ) : (
                     aiTasks.map((t) => (
                       <option key={t.id} value={t.id} className="bg-white">
@@ -4191,7 +4172,7 @@ function LeadDetailPanel({
               >
                 <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition group-hover:translate-x-full group-hover:opacity-100 group-hover:duration-700" />
                 <Wand2 className="relative h-4 w-4 shrink-0 text-amber-100" strokeWidth={1.75} />
-                <span className="relative">{aiRunning ? 'Đang phân tích…' : 'Chạy phân tích AI'}</span>
+                <span className="relative">{aiRunning ? 'Đang phân tích…' : 'Chạy tư vấn AI'}</span>
               </button>
 
               {aiErr ? <p className="mt-2 text-sm text-rose-700">{aiErr}</p> : null}
@@ -4206,14 +4187,14 @@ function LeadDetailPanel({
               ) : displayAiResult ? (
                 <div className="mt-4 rounded-2xl border border-rose-200/60 bg-gradient-to-br from-white to-rose-50/50 p-3 shadow-inner">
                   <VietMyAccentHeading as="p" tone="onLight" size="sm" className="mb-2 block">
-                    Kết quả
+                    Kết quả tư vấn
                   </VietMyAccentHeading>
                   <AiInsightsGrid data={displayAiResult} />
                 </div>
               ) : (
                 <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                  Chọn tác vụ và bấm chạy. Khóa API chỉ Siêu quản trị lưu được (Cài đặt → LLM). Nếu bị chặn, nhờ quản
-                  lý bật «Cho phép dùng AI trên hồ sơ» trong Quản lý nhân sự.
+                  Chọn tác vụ và bấm chạy. Cần khóa API (Cài đặt → LLM) và quyền AI. Nên nạp Kho tri thức trước để AI
+                  không bịa học phí / quy chế.
                 </p>
               )}
             </div>
@@ -4226,7 +4207,7 @@ function LeadDetailPanel({
           <button
             type="button"
             className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="Đóng cửa sổ trợ lý kịch bản"
+            aria-label="ÄÃ³ng cá»­a sá»• trá»£ lÃ½ ká»‹ch báº£n"
             onClick={() => setAssistantPopupOpen(false)}
           />
           <div
@@ -4242,9 +4223,9 @@ function LeadDetailPanel({
                 </span>
                 <div className="min-w-0">
                   <h2 id="lead-assistant-dialog-title" className="text-lg font-semibold text-slate-900 sm:text-xl">
-                    Trợ lý kịch bản
+                    Trá»£ lÃ½ ká»‹ch báº£n
                   </h2>
-                  <p className="text-sm text-slate-600 sm:text-base">Luồng Script Hub theo hồ sơ</p>
+                  <p className="text-sm text-slate-600 sm:text-base">Luá»“ng Script Hub theo há»“ sÆ¡</p>
                 </div>
                 <div
                   className="flex cursor-help items-center gap-2 rounded-xl border border-violet-200/80 bg-violet-50/80 px-2.5 py-1.5 shadow-sm"
@@ -4252,10 +4233,10 @@ function LeadDetailPanel({
                 >
                   <MlWinGauge value={leadMl.mlWinProbability} title={buildMlWinHoverText(leadMl)} />
                   <div className="min-w-0">
-                    <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Điểm thông tin</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-violet-900">Äiá»ƒm thÃ´ng tin</p>
                     <span className="text-sm font-bold text-violet-900">{leadMl.mlWinProbability}%</span>
                     <span className="ml-1.5 rounded bg-violet-200/80 px-1 text-xs font-semibold uppercase text-violet-950">
-                      {leadMl.source === 'mvp_mock' ? 'MVP' : 'Đã lưu'}
+                      {leadMl.source === 'mvp_mock' ? 'MVP' : 'ÄÃ£ lÆ°u'}
                     </span>
                   </div>
                 </div>
@@ -4266,7 +4247,7 @@ function LeadDetailPanel({
                 className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 <X className="h-4 w-4" aria-hidden />
-                Đóng
+                ÄÃ³ng
               </button>
             </div>
             <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">

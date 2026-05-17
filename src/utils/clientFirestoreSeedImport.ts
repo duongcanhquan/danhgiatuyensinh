@@ -7,7 +7,7 @@ import type {
 } from '../types'
 import { FS_COLLECTIONS } from '../types'
 
-const KNOWLEDGE_TYPES_ALLOWED = new Set<KnowledgeDocumentType>(['TUITION', 'POLICY', 'MAJOR_INFO'])
+import { normalizeKnowledgeCategoryId } from './knowledgeCategories'
 const PLAYBOOK_OPERATORS: Set<string> = new Set(['EQUALS', 'CONTAINS', 'IN', 'NOT_IN'])
 
 export type KnowledgeImportRow = {
@@ -35,17 +35,12 @@ export function parseKnowledgeDocumentsJson(raw: unknown, maxItems = 500): Knowl
     const o = item as Record<string, unknown>
     const id = String(o.id ?? '').trim()
     const title = String(o.title ?? '').trim()
-    const typeRaw = String(o.type ?? '').trim() as KnowledgeDocumentType
+    const type = normalizeKnowledgeCategoryId(String(o.type ?? 'POLICY')) || 'POLICY'
     const content = String(o.content ?? '').trim()
     if (!id) throw new Error(`Phần tử #${i}: thiếu trường "id" (chuỗi không rỗng).`)
     if (!title) throw new Error(`Phần tử #${i}: thiếu "title".`)
     if (!content) throw new Error(`Phần tử #${i}: thiếu "content".`)
-    if (!KNOWLEDGE_TYPES_ALLOWED.has(typeRaw)) {
-      throw new Error(
-        `Phần tử #${i}: "type" phải là TUITION, POLICY hoặc MAJOR_INFO (nhận được: ${typeRaw || '—'}).`,
-      )
-    }
-    out.push({ id, title, type: typeRaw, content })
+    out.push({ id, title, type, content })
   }
   return out
 }
@@ -112,6 +107,8 @@ export type PlaybookImportRow = {
   isActive: boolean
   priority: number
   triggerConditions: PlaybookTriggerCondition[]
+  matchKeywords?: string[]
+  matchAllLeads?: boolean
   strategy: string
   keySellingPoints: string[]
   objectionHandling: string[]
@@ -155,12 +152,18 @@ export function parseConsultingPlaybooksJson(raw: unknown, maxItems = 200): Play
       : []
     const priority = Number(o.priority)
     const isActive = o.isActive !== false
+    const matchKeywords = Array.isArray(o.matchKeywords)
+      ? o.matchKeywords.map((x) => String(x).trim()).filter(Boolean)
+      : undefined
+    const matchAllLeads = o.matchAllLeads === true
     out.push({
       id,
       title,
       isActive,
       priority: Number.isFinite(priority) ? priority : 10,
       triggerConditions,
+      matchKeywords: matchKeywords?.length ? matchKeywords : undefined,
+      matchAllLeads: matchAllLeads || undefined,
       strategy,
       keySellingPoints,
       objectionHandling,
@@ -187,6 +190,8 @@ export async function importConsultingPlaybooksBatch(
         isActive: e.isActive,
         priority: e.priority,
         triggerConditions: e.triggerConditions,
+        ...(e.matchKeywords?.length ? { matchKeywords: e.matchKeywords } : {}),
+        ...(e.matchAllLeads ? { matchAllLeads: true } : {}),
         strategy: e.strategy,
         keySellingPoints: e.keySellingPoints,
         objectionHandling: e.objectionHandling,

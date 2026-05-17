@@ -3,8 +3,11 @@ import { addDoc, collection, deleteDoc, doc, Timestamp, updateDoc } from 'fireba
 import type { KnowledgeDocumentType } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import type { Firestore } from 'firebase/firestore'
-import { BookOpen, Database, Download, Search, Upload, X } from 'lucide-react'
+import { Database, Download, Search, Settings2, Upload, X } from 'lucide-react'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
+import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
+import { KnowledgeCategoryManager } from './KnowledgeCategoryManager'
+import { knowledgeCategoryLabel } from '../utils/knowledgeCategories'
 import {
   importKnowledgeDocumentsBatch,
   importVietMyKnowledgeFromPublic,
@@ -16,16 +19,6 @@ import {
   KNOWLEDGE_UPLOAD_TEMPLATE_FILENAME,
 } from '../utils/configTemplateDownload'
 
-const TYPES: { v: KnowledgeDocumentType; label: string }[] = [
-  { v: 'TUITION', label: 'Học phí / lệ phí' },
-  { v: 'POLICY', label: 'Quy chế / chính sách' },
-  { v: 'MAJOR_INFO', label: 'Thông tin ngành' },
-]
-
-function typeLabel(ty: KnowledgeDocumentType): string {
-  return TYPES.find((t) => t.v === ty)?.label ?? ty
-}
-
 type MainTab = 'setup' | 'data'
 
 const panelTitle = 'text-base font-semibold tracking-tight text-slate-900'
@@ -36,12 +29,21 @@ const panelInput =
 const tabBtn =
   'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50'
 
-export function KnowledgeBaseTab({ db }: { db: Firestore }) {
+export function KnowledgeBaseTab({
+  db,
+  compactChrome,
+}: {
+  db: Firestore
+  /** Bố cục gọn trong workspace toàn màn */
+  compactChrome?: boolean
+}) {
   const { documents, loading, error } = useKnowledgeDocuments()
-  const [mainTab, setMainTab] = useState<MainTab>('setup')
+  const { categories, addCategory, removeCategory } = useKnowledgeCategories()
+  const [mainTab, setMainTab] = useState<MainTab>('data')
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
 
   const [title, setTitle] = useState('')
-  const [type, setType] = useState<KnowledgeDocumentType>('POLICY')
+  const [type, setType] = useState<KnowledgeDocumentType>('GENERAL')
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [seedBusy, setSeedBusy] = useState(false)
@@ -70,8 +72,13 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
     setEditingId(null)
     setTitle('')
     setContent('')
-    setType('POLICY')
+    setType('GENERAL')
   }
+
+  const selectedDoc = useMemo(() => {
+    const id = selectedDocId ?? filteredDocs[0]?.id ?? null
+    return filteredDocs.find((d) => d.id === id) ?? null
+  }, [filteredDocs, selectedDocId])
 
   const save = async () => {
     if (!title.trim() || !content.trim()) {
@@ -178,8 +185,17 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
   }
 
   return (
-    <div className="flex max-h-[min(78vh,720px)] min-h-[280px] flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white/90 shadow-inner">
-      <div className="shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2 py-2" role="tablist" aria-label="Kho tri thức">
+    <div
+      className={[
+        'flex min-h-[280px] flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white/90 shadow-inner',
+        compactChrome ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)]',
+      ].join(' ')}
+    >
+      <div
+        className={['shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2', compactChrome ? 'py-1' : 'py-2'].join(' ')}
+        role="tablist"
+        aria-label="Tri thức tuyển sinh"
+      >
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
@@ -193,7 +209,7 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
                 : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50',
             ].join(' ')}
           >
-            <BookOpen className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+            <Settings2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
             Thiết lập
           </button>
           <button
@@ -209,12 +225,17 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
             ].join(' ')}
           >
             <Database className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-            Dữ liệu
+            Dữ liệu ({documents.length})
           </button>
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-4 py-2 md:px-5">
+      <div
+        className={[
+          'shrink-0 border-b border-slate-100',
+          compactChrome ? 'space-y-1 px-2 py-1' : 'space-y-2 px-4 py-2 md:px-5',
+        ].join(' ')}
+      >
         {error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">{error}</div>
         ) : null}
@@ -223,10 +244,17 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-5 md:py-5" role="tabpanel">
+      <div
+        className={[
+          'min-h-0 flex-1 overflow-y-auto overscroll-contain',
+          compactChrome ? 'px-2 py-2' : 'px-4 py-4 md:px-5 md:py-5',
+        ].join(' ')}
+        role="tabpanel"
+      >
         {mainTab === 'setup' ? (
-          <div className="mx-auto max-w-3xl space-y-5">
-            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-4">
+          <div className={['grid min-h-0 lg:grid-cols-2 lg:items-start', compactChrome ? 'gap-3' : 'gap-4'].join(' ')}>
+            <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            <div className={['rounded-xl border border-emerald-200/80 bg-emerald-50/60', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
               <p className={`${panelTitle} text-emerald-950`}>Nạp từ bộ mẫu có sẵn (build)</p>
               <p className={`mt-1.5 ${panelSub} text-emerald-950/90`}>
                 Dùng file <code className="rounded bg-white/90 px-1 font-mono text-xs">public/seed/knowledge-documents.json</code>{' '}
@@ -267,7 +295,7 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
               </button>
             </div>
 
-            <div className="rounded-xl border border-sky-200/80 bg-sky-50/50 p-4">
+            <div className={['rounded-xl border border-sky-200/80 bg-sky-50/50', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
               <p className={`${panelTitle} text-sky-950`}>File mẫu &amp; tải lên từ máy</p>
               <p className={`mt-1.5 ${panelSub} text-sky-950/90`}>
                 Tải file JSON mẫu, chỉnh sửa trong trình soạn thảo, rồi chọn file để ghi vào Firestore. Định dạng:{' '}
@@ -304,8 +332,15 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
                 </button>
               </div>
             </div>
+            </div>
 
-            <section className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm md:p-5">
+            <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            <KnowledgeCategoryManager
+              categories={categories}
+              onAdd={addCategory}
+              onRemove={removeCategory}
+            />
+            <section className={['rounded-xl border border-slate-200/90 bg-white shadow-sm', compactChrome ? 'p-3' : 'p-4 md:p-5'].join(' ')}>
               <h3 className={`${panelTitle}`}>{editingId ? 'Sửa tài liệu' : 'Thêm tài liệu mới'}</h3>
               {editingId ? (
                 <p className="mt-2 text-sm text-amber-900">
@@ -329,8 +364,8 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
                     onChange={(e) => setType(e.target.value as KnowledgeDocumentType)}
                     className={panelInput}
                   >
-                    {TYPES.map((t) => (
-                      <option key={t.v} value={t.v}>
+                    {categories.map((t) => (
+                      <option key={t.id} value={t.id}>
                         {t.label}
                       </option>
                     ))}
@@ -372,15 +407,18 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
               </div>
             </section>
 
-            <p className={`text-center ${panelSub}`}>
-              Sau khi lưu, chuyển sang tab <strong>Dữ liệu</strong> để kiểm tra hoặc lọc.
-            </p>
+            </div>
           </div>
         ) : null}
 
         {mainTab === 'data' ? (
-          <div className="flex h-full min-h-0 flex-col gap-4">
-            <div className="shrink-0 space-y-3 rounded-xl border border-slate-200/90 bg-slate-50/80 p-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <div
+              className={[
+                'shrink-0 rounded-xl border border-slate-200/90 bg-slate-50/80',
+                compactChrome ? 'p-2' : 'p-3',
+              ].join(' ')}
+            >
               <div className="flex flex-wrap items-end gap-3">
                 <label className="min-w-[12rem] flex-1">
                   <span className={`${panelLabel} mb-1 flex items-center gap-1`}>
@@ -402,8 +440,8 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
                     className={panelInput}
                   >
                     <option value="">Tất cả</option>
-                    {TYPES.map((t) => (
-                      <option key={t.v} value={t.v}>
+                    {categories.map((t) => (
+                      <option key={t.id} value={t.id}>
                         {t.label}
                       </option>
                     ))}
@@ -427,60 +465,66 @@ export function KnowledgeBaseTab({ db }: { db: Firestore }) {
               </p>
             </div>
 
-            <div className="min-h-0 flex-1">
-              {loading ? <p className="text-sm text-slate-500">Đang tải…</p> : null}
-              {!loading && !documents.length ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-sm text-slate-600">
-                  <p>Chưa có tài liệu.</p>
-                  <p className={`mt-2 ${panelSub}`}>
-                    Dùng tab <strong>Thiết lập</strong> để thêm tay, tải file JSON, hoặc nạp mẫu. Terminal:{' '}
-                    <code className="rounded bg-white px-1 font-mono text-xs">npm run seed:knowledge-base</code>
-                  </p>
-                </div>
-              ) : null}
-              {!loading && documents.length > 0 && !filteredDocs.length ? (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                  Không có tài liệu khớp bộ lọc — thử đổi từ khóa hoặc danh mục.
-                </p>
-              ) : null}
-              <ul className="max-h-[min(52vh,420px)] space-y-2 overflow-y-auto pr-1">
-                {filteredDocs.map((d) => (
-                  <li
-                    key={d.id}
-                    className={[
-                      'flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-3 text-sm shadow-sm md:flex-row md:items-start md:justify-between',
-                      editingId === d.id ? 'ring-2 ring-amber-400/80 ring-offset-1' : '',
-                    ].join(' ')}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-900">{d.title}</p>
-                      <p className="mt-0.5 text-sm font-medium uppercase tracking-wide text-amber-800">
-                        {typeLabel(d.type)}
-                      </p>
-                      <p className="mt-1 line-clamp-3 text-sm text-slate-600">{d.content}</p>
-                      <p className="mt-1 text-sm text-slate-400">
-                        {d.uploadedAt.toDate?.().toLocaleString?.('vi-VN') ?? ''}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-1.5 self-start sm:flex-row">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(240px,34%)_1fr]">
+              <aside className="flex min-h-0 flex-col gap-2">
+                {loading ? <p className="text-xs text-slate-500">Đang tải…</p> : null}
+                <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
+                  {filteredDocs.map((d) => (
+                    <li key={d.id}>
                       <button
                         type="button"
-                        onClick={() => startEdit(d.id, d.title, d.content, d.type)}
-                        className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-100"
+                        onClick={() => setSelectedDocId(d.id)}
+                        className={[
+                          'w-full rounded-lg border px-2.5 py-2 text-left text-sm',
+                          selectedDoc?.id === d.id
+                            ? 'border-amber-400 bg-amber-50'
+                            : 'border-transparent bg-white hover:border-slate-200',
+                        ].join(' ')}
                       >
-                        Sửa
+                        <span className="font-medium">{d.title}</span>
+                        <span className="mt-0.5 block text-[11px] text-amber-800">
+                          {knowledgeCategoryLabel(d.type, categories)}
+                        </span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void remove(d.id)}
-                        className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-900 hover:bg-rose-100"
-                      >
-                        Xóa
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+                {selectedDoc ? (
+                  <div className="flex gap-1 border-t border-slate-200 pt-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        startEdit(selectedDoc.id, selectedDoc.title, selectedDoc.content, selectedDoc.type)
+                      }
+                      className="flex-1 rounded-lg border border-amber-300 bg-amber-50 py-1.5 text-xs font-medium text-amber-950"
+                    >
+                      Sửa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void remove(selectedDoc.id)}
+                      className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-900"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                ) : null}
+              </aside>
+              <main className="min-h-0 overflow-y-auto rounded-xl border border-amber-200/70 bg-white p-3">
+                {selectedDoc ? (
+                  <>
+                    <h3 className="text-base font-semibold text-slate-900">{selectedDoc.title}</h3>
+                    <p className="text-xs font-medium uppercase text-amber-800">
+                      {knowledgeCategoryLabel(selectedDoc.type, categories)}
+                    </p>
+                    <article className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                      {selectedDoc.content}
+                    </article>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-500">Chọn tài liệu bên trái.</p>
+                )}
+              </main>
             </div>
           </div>
         ) : null}

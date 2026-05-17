@@ -15,7 +15,6 @@ import type {
   MasterCatalogValueKind,
   MasterDataEntry,
   MasterEntryMatchMode,
-  PlaybookTriggerCondition,
   RuleCategory,
 } from '../types'
 import {
@@ -47,9 +46,8 @@ import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
-import { AiLabView } from '../views/AiLabView'
+import { PlaybookTriggerEditor, playbookToMatchConfig, type PlaybookMatchConfig } from '../components/PlaybookTriggerEditor'
 import { StaffManagementView } from '../views/StaffManagementView'
-import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 type SettingsTabId =
   | 'master'
@@ -59,7 +57,6 @@ type SettingsTabId =
   | 'consulting'
   | 'knowledge'
   | 'llm'
-  | 'ai_lab'
   | 'staff'
 
 function firestoreWriteErrorMessage(e: unknown): string {
@@ -141,7 +138,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className="mt-2 text-slate-700">
             <strong>Ứng dụng:</strong> hỗ trợ TVV gọi điện / chat đúng tình huống. <strong>Không thay</strong> Kho tri thức
-            (tài liệu cho AI đọc khi phân tích hồ sơ) và <strong>không thay</strong> tab LLM hay Phòng thử AI.
+            (tài liệu cho AI đọc khi phân tích hồ sơ) và <strong>không thay</strong> tab LLM.
           </p>
           <p className={`mt-2 border-t border-slate-200 pt-2 ${settingsCopyMuted}`}>
             <strong>Nạp từ app:</strong> trong khối Playbook — tab <strong>Thiết lập</strong> (tải file mẫu, tải JSON lên, nạp
@@ -160,7 +157,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className="mt-2 text-slate-700">
             <strong>Ứng dụng:</strong> chỉ đi kèm luồng <strong>phân tích AI trên hồ sơ</strong>. Không tự hiện trong Playbook
-            hay Script Hub; không dùng trong ô chat «Phòng thử AI». Khác tab <strong>Profile đánh giá</strong> /{' '}
+            hay Script Hub. Khác tab <strong>Profile đánh giá</strong> /{' '}
             <strong>Chấm điểm</strong> (điểm theo dữ liệu hồ sơ, không phải văn bản RAG).
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
@@ -172,26 +169,15 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'llm':
       return (
         <>
-          <p className="font-semibold text-slate-900">LLM &amp; tác vụ AI</p>
+          <p className="font-semibold text-slate-900">LLM &amp; tư vấn AI trên hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopy}`}>
-            Khối bên dưới có các tab: <strong>Hướng dẫn</strong> (cách setup &amp; dùng), <strong>API</strong>,{' '}
-            <strong>Lọc trước khi gọi AI</strong>, <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Bắt đầu từ tab Hướng dẫn
-            nếu lần đầu cấu hình.
+            Cấu hình khóa API, tác vụ phân tích và quy tắc lọc hàng loạt. TVV mở chi tiết hồ sơ →{' '}
+            <strong>LLM</strong> để AI đọc dữ liệu thí sinh + <strong>Kho tri thức</strong> (tab Thông tin TV &amp; Tri thức)
+            và đưa đánh giá, câu hỏi gợi ý, bước hành động.
           </p>
-        </>
-      )
-    case 'ai_lab':
-      return (
-        <>
-          <p className="font-semibold text-slate-900">Phòng thử AI là gì?</p>
-          <p className="mt-1.5">
-            Ô chat để <strong>thử khóa AI</strong>: gõ câu hỏi, xem câu trả lời. <strong>Không ghi</strong> lên hồ sơ,{' '}
-            <strong>không</strong> dùng Playbook / Script Hub, <strong>không</strong> lấy tài liệu từ Kho tri thức (khác với
-            khi phân tích trong chi tiết hồ sơ).
-          </p>
-          <p className="mt-2 text-slate-700">
-            <strong>Ứng dụng:</strong> kiểm tra nhanh sau khi lưu API ở tab <strong>LLM</strong>. Đừng nhầm với nút phân
-            tích AI trong từng hồ sơ.
+          <p className={`mt-2 ${settingsCopyMuted}`}>
+            Tab con: <strong>Hướng dẫn</strong>, <strong>API</strong>, <strong>Lọc trước khi gọi AI</strong>,{' '}
+            <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Nên nạp ít nhất một tác vụ mẫu «Tư vấn tuyển sinh».
           </p>
         </>
       )
@@ -225,10 +211,10 @@ function parseSettingsTab(raw: string | null): SettingsTabId | null {
     raw === 'consulting' ||
     raw === 'knowledge' ||
     raw === 'llm' ||
-    raw === 'ai_lab' ||
     raw === 'staff'
   )
     return raw
+  if (raw === 'ai_lab') return 'llm'
   return null
 }
 
@@ -315,7 +301,6 @@ export function SettingsView() {
   const canScoringRules = can('config:scoring_rules')
   const canPlaybooks = can('config:playbooks')
   const canAiEngine = can('config:ai_engine')
-  const canAiLab = can('ai:use')
   const canStaff = can('config:users')
 
   const activeMasterCatalog = useMemo(() => {
@@ -402,16 +387,14 @@ export function SettingsView() {
       { id: 'rule_templates', label: 'Quy tắc mẫu', enabled: Boolean(db) },
       { id: 'scoring', label: 'Chấm điểm', enabled: Boolean(db) },
       { id: 'scoring_profiles', label: 'Profile đánh giá', enabled: Boolean(db) },
-      { id: 'consulting', label: 'Tư vấn', enabled: Boolean(db) },
+      { id: 'consulting', label: 'Thông tin TV & Tri thức', enabled: Boolean(db) },
     ]
     if (db && canAiEngine) {
-      base.push({ id: 'knowledge', label: 'Kho tri thức (RAG)', enabled: true })
-      base.push({ id: 'llm', label: 'LLM', enabled: true })
+      base.push({ id: 'llm', label: 'LLM & Tư vấn AI', enabled: true })
     }
-    if (db && canAiLab) base.push({ id: 'ai_lab', label: 'Phòng thử AI', enabled: true })
     if (db && canStaff) base.push({ id: 'staff', label: 'Quản lý nhân sự', enabled: true })
     return base
-  }, [db, canAiEngine, canAiLab, canStaff])
+  }, [db, canAiEngine, canStaff])
 
   const tabParam = searchParams.get('tab')
   const scoringSubLegacy = searchParams.get('scoringSub')
@@ -420,6 +403,7 @@ export function SettingsView() {
 
   const activeTab: SettingsTabId = useMemo(() => {
     if (db && editSnippetParam) return 'consulting'
+    if (urlTab === 'knowledge') return 'consulting'
     if (urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled)) return urlTab
     return tabDefs.find((t) => t.enabled)?.id ?? 'master'
   }, [db, editSnippetParam, urlTab, tabDefs])
@@ -477,6 +461,17 @@ export function SettingsView() {
       )
       return
     }
+    if (tabParam === 'knowledge') {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'consulting')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
     const validTab = Boolean(urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled))
     if (validTab) return
     setSearchParams(
@@ -503,14 +498,10 @@ export function SettingsView() {
   }
 
   return (
-    <div className={`min-w-0 max-w-full space-y-4 md:space-y-5 ${settingsCopy}`}>
-      <header className="space-y-1">
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-          Cài đặt
-        </VietMyAccentHeading>
-      </header>
+    <div className={`min-w-0 max-w-full space-y-2 ${settingsCopy}`}>
+      <h1 className="sr-only">Cài đặt hệ thống</h1>
       {!configured || !db ? (
-        <div className={`rounded-2xl border border-rose-300/70 bg-rose-50 px-5 py-4 text-rose-900 backdrop-blur-xl ${settingsCopy}`}>
+        <div className={`rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2.5 text-rose-900 ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
         </div>
       ) : null}
@@ -627,7 +618,7 @@ export function SettingsView() {
             className={
               masterWorkspaceOpen
                 ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden overscroll-contain pt-4 md:gap-5 md:pt-5'
-                : 'mt-4 space-y-4 md:mt-5 md:space-y-5'
+                : 'mt-2 space-y-3'
             }
           >
             {authStatus === 'authenticated' && firebaseUser && !profile ? (
@@ -787,7 +778,7 @@ export function SettingsView() {
         <section
           role="tabpanel"
           aria-labelledby="tab-rule-templates"
-          className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8"
+          className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4"
         >
           <h2 id="tab-rule-templates" className={settingsHeading}>
             Quy tắc mẫu
@@ -805,7 +796,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeTab === 'scoring' ? (
-        <div role="tabpanel" aria-labelledby="tab-scoring" className="min-w-0 max-w-full space-y-6">
+        <div role="tabpanel" aria-labelledby="tab-scoring" className="min-w-0 max-w-full space-y-3">
           <h2 id="tab-scoring" className={settingsHeading}>
             Chấm điểm — điểm thông tin
           </h2>
@@ -817,7 +808,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeTab === 'scoring_profiles' ? (
-        <div role="tabpanel" aria-labelledby="tab-scoring-profiles" className="min-w-0 max-w-full space-y-6">
+        <div role="tabpanel" aria-labelledby="tab-scoring-profiles" className="min-w-0 max-w-full space-y-3">
           <h2 id="tab-scoring-profiles" className={settingsHeading}>
             Profile đánh giá (HOT / WARM / COLD)
           </h2>
@@ -826,7 +817,7 @@ export function SettingsView() {
             <strong>Chấm điểm</strong> bên cạnh dùng cho <strong>điểm thông tin</strong> (% đầy form).
           </p>
           <ProfileManagerTab db={db} />
-          <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-5 shadow-xl backdrop-blur-xl md:p-8">
+          <section className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4">
             <h3 className={settingsHeading}>Thử nghiệm chấm điểm (JSON)</h3>
             <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
               Dán JSON mẫu — dùng <strong>profile đầu tiên</strong> trong danh sách. Các khóa nên khớp{' '}
@@ -860,11 +851,11 @@ export function SettingsView() {
           className={
             consultingWorkspaceOpen
               ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : 'flex flex-col gap-6'
+              : 'flex flex-col gap-3'
           }
         >
           {consultingWorkspaceOpen ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 pb-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-200/90 pb-2">
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(false)}
@@ -878,8 +869,8 @@ export function SettingsView() {
           <div
             className={
               consultingWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain pt-4 md:pt-5'
-                : 'space-y-6'
+                ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain'
+                : 'space-y-3'
             }
           >
             <ConsultingPlaybookSection
@@ -890,22 +881,13 @@ export function SettingsView() {
               canPlaybooks={canPlaybooks}
               onEdit={(p) => setPlaybookEditor(p)}
               consultingWorkspaceOpen={consultingWorkspaceOpen}
+              compactChrome={!consultingWorkspaceOpen}
             />
             {db && canPlaybooks ? <ScriptHubManager db={db} /> : null}
+            {db && canAiEngine ? (
+              <KnowledgeBaseTab db={db} compactChrome={consultingWorkspaceOpen} />
+            ) : null}
           </div>
-        </div>
-      ) : null}
-
-      {db && activeTab === 'knowledge' && canAiEngine ? (
-        <div
-          role="tabpanel"
-          aria-labelledby="tab-knowledge"
-          className="rounded-2xl border border-slate-200/80 bg-white/75 p-5 shadow-xl backdrop-blur-xl md:p-8"
-        >
-          <h2 id="tab-knowledge" className="sr-only uppercase">
-            Kho tri thức RAG
-          </h2>
-          <KnowledgeBaseTab db={db} />
         </div>
       ) : null}
 
@@ -943,17 +925,8 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'ai_lab' && canAiLab ? (
-        <div role="tabpanel" aria-labelledby="tab-ai-lab" className="space-y-4">
-          <h2 id="tab-ai-lab" className="sr-only">
-            Phòng thử AI
-          </h2>
-          <AiLabView embedded />
-        </div>
-      ) : null}
-
       {db && activeTab === 'staff' && canStaff ? (
-        <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-4">
+        <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-3">
           <h2 id="tab-staff" className="sr-only">
             Quản lý nhân sự
           </h2>
@@ -1021,7 +994,7 @@ function PlaybookEditorModal({
   const [strategy, setStrategy] = useState(playbook.strategy)
   const [uspText, setUspText] = useState((playbook.keySellingPoints ?? []).join('\n'))
   const [objText, setObjText] = useState(playbook.objectionHandling.join('\n'))
-  const [triggersJson, setTriggersJson] = useState(JSON.stringify(playbook.triggerConditions ?? [], null, 2))
+  const [matchConfig, setMatchConfig] = useState<PlaybookMatchConfig>(() => playbookToMatchConfig(playbook))
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -1031,21 +1004,20 @@ function PlaybookEditorModal({
     setStrategy(playbook.strategy)
     setUspText((playbook.keySellingPoints ?? []).join('\n'))
     setObjText(playbook.objectionHandling.join('\n'))
-    setTriggersJson(JSON.stringify(playbook.triggerConditions ?? [], null, 2))
+    setMatchConfig(playbookToMatchConfig(playbook))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset form khi đổi playbook (theo id)
   }, [playbook.id])
 
   const save = async () => {
-    let triggerConditions: PlaybookTriggerCondition[]
-    try {
-      const parsed = JSON.parse(triggersJson) as unknown
-      if (!Array.isArray(parsed)) {
-        window.alert('Điều kiện kích hoạt phải là một mảng JSON.')
-        return
-      }
-      triggerConditions = parsed as PlaybookTriggerCondition[]
-    } catch {
-      window.alert('JSON điều kiện không hợp lệ — kiểm tra dấu phẩy và ngoặc.')
+    const { triggerConditions, matchKeywords, matchAllLeads } = matchConfig
+    if (
+      !matchAllLeads &&
+      !triggerConditions.length &&
+      !matchKeywords.length
+    ) {
+      window.alert(
+        'Chọn ít nhất một cách kích hoạt: «Áp dụng mọi hồ sơ», điều kiện, hoặc từ khóa liên quan.',
+      )
       return
     }
     const pri = Math.floor(Number.parseInt(priority, 10))
@@ -1069,6 +1041,8 @@ function PlaybookEditorModal({
           .map((s) => s.trim())
           .filter(Boolean),
         triggerConditions,
+        matchKeywords,
+        matchAllLeads,
         updatedAt: Timestamp.now(),
         ...(playbook.seedTag ? { seedTag: playbook.seedTag } : {}),
       })
@@ -1094,7 +1068,7 @@ function PlaybookEditorModal({
         aria-modal="true"
         aria-labelledby="playbook-editor-title"
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xl md:p-6"
+        className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xl md:p-6"
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
           <h2 id="playbook-editor-title" className={settingsHeading}>
@@ -1167,16 +1141,10 @@ function PlaybookEditorModal({
               className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
             />
           </label>
-          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
-            Điều kiện kích hoạt (JSON — mảng các điều kiện AND)
-            <textarea
-              value={triggersJson}
-              onChange={(e) => setTriggersJson(e.target.value)}
-              spellCheck={false}
-              rows={10}
-              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-slate-50 px-3 py-2.5 font-mono text-slate-900 ${settingsCopy}`}
-            />
-          </label>
+          <div className="rounded-xl border border-violet-200/80 bg-violet-50/30 p-4">
+            <p className={`mb-3 font-semibold text-slate-900 ${settingsCopy}`}>Khi nào hiện trên hồ sơ TVV</p>
+            <PlaybookTriggerEditor value={matchConfig} onChange={setMatchConfig} />
+          </div>
         </div>
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <button

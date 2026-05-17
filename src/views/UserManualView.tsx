@@ -338,7 +338,7 @@ function sectionsData(): Section[] {
             mẫu (Script Hub) hiển thị trong panel trợ lý khi mở hồ sơ. Toàn bộ là <strong>nội dung soạn sẵn</strong> trong
             hệ thống — không tính phí gọi AI từng câu như phân tích hồ sơ.
           </p>
-          <p className={p}>Khác với Kho tri thức (tài liệu cho AI đọc khi phân tích) và khác Phòng thử AI (chat thử).</p>
+          <p className={p}>Khác với Kho tri thức (tài liệu cho AI đọc khi phân tích) và khác nút Tư vấn AI trên hồ sơ.</p>
         </div>
       ),
     },
@@ -355,21 +355,21 @@ function sectionsData(): Section[] {
           </p>
           <ul className={ul}>
             <li>Không tự hiện trong playbook hay Script Hub.</li>
-            <li>Không dùng trong ô chat Phòng thử AI.</li>
+            <li>Chỉ đi kèm luồng Tư vấn AI trên chi tiết hồ sơ.</li>
           </ul>
         </div>
       ),
     },
     {
       id: 'khoa-ai-tac-vu',
-      title: 'Khóa AI & tác vụ phân tích',
-      blurb: 'Tab LLM trong Cài đặt',
+      title: 'LLM & Tư vấn AI',
+      blurb: 'Cấu hình và tác vụ phân tích hồ sơ',
       body: (
         <div className="space-y-1">
           <p className={p}>
-            Trong <strong>Cài đặt → LLM</strong> (hoặc tên tương đương trên menu tab): lưu khóa ChatGPT / Gemini, cấu
-            hình lọc trước khi gọi AI (để tránh gọi khi hồ sơ thiếu dữ liệu), và quản lý các <strong>tác vụ phân tích</strong>{' '}
-            (mẫu câu hỏi / cấu trúc kết quả) cho nút phân tích trên hồ sơ.
+            Trong <strong>Cài đặt → LLM &amp; Tư vấn AI</strong>: lưu khóa ChatGPT / Gemini, cấu hình lọc trước khi gọi AI
+            hàng loạt, và quản lý <strong>tác vụ phân tích</strong> (có sẵn mẫu «Tư vấn tuyển sinh»). TVV mở hồ sơ →{' '}
+            <strong>Tư vấn AI</strong> để chạy — kết quả lưu trên hồ sơ, kèm Kho tri thức và playbook khớp.
           </p>
           <p className={p}>
             Khóa API thường chỉ <strong>Siêu quản trị</strong> lưu được; nhân viên khác chỉ <em>dùng</em> sau khi được bật
@@ -378,21 +378,6 @@ function sectionsData(): Section[] {
           <p className={note}>
             Trong tab LLM có sẵn phần hướng dẫn ngắn theo từng bước cài đặt — nên đọc lần đầu trước khi bấm Lưu.
           </p>
-        </div>
-      ),
-    },
-    {
-      id: 'phong-thu-ai',
-      title: 'Phòng thử AI',
-      blurb: 'Chat thử, không ghi lên hồ sơ',
-      body: (
-        <div className="space-y-1">
-          <p className={p}>
-            <strong>Phòng thử AI</strong> nằm trong Cài đặt (một tab riêng). Đây là ô chat để thử khóa sau khi cấu
-            hình — <strong>không ghi</strong> kết quả lên hồ sơ thí sinh, không dùng playbook/script, không lấy tài liệu
-            từ Kho tri thức giống luồng phân tích trong hồ sơ.
-          </p>
-          <p className={p}>Chỉ tài khoản được phép dùng AI mới vào được màn này.</p>
         </div>
       ),
     },

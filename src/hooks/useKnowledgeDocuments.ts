@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, limit, onSnapshot, orderBy, query, Timestamp } from 'firebase/firestore'
-import type { KnowledgeDocument, KnowledgeDocumentType } from '../types'
+import type { KnowledgeDocument } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { normalizeKnowledgeCategoryId } from '../utils/knowledgeCategories'
 
 function mapDoc(id: string, data: Record<string, unknown>): KnowledgeDocument | null {
   try {
-    const typeRaw = String(data.type ?? 'POLICY').toUpperCase()
-    const allowed: KnowledgeDocumentType[] = ['TUITION', 'POLICY', 'MAJOR_INFO']
-    const type = (allowed.includes(typeRaw as KnowledgeDocumentType) ? typeRaw : 'POLICY') as KnowledgeDocumentType
+    const type = normalizeKnowledgeCategoryId(String(data.type ?? 'POLICY')) || 'POLICY'
     const uploadedAt =
       data.uploadedAt && typeof data.uploadedAt === 'object' && 'toMillis' in (data.uploadedAt as object)
         ? (data.uploadedAt as Timestamp)

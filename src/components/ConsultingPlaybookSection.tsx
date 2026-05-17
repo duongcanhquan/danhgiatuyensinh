@@ -3,7 +3,8 @@ import { FirebaseError } from 'firebase/app'
 import { addDoc, collection, deleteDoc, doc, Timestamp } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { BookOpen, Database, Download, Search, Upload, X } from 'lucide-react'
-import type { ConsultingPlaybook, PlaybookTriggerCondition } from '../types'
+import type { ConsultingPlaybook } from '../types'
+import { PlaybookTriggerEditor, playbookToMatchConfig, type PlaybookMatchConfig } from './PlaybookTriggerEditor'
 import { FS_COLLECTIONS } from '../types'
 import {
   importConsultingPlaybooksBatch,
@@ -38,7 +39,7 @@ function firestoreWriteErrorMessage(e: unknown): string {
 type MainTab = 'setup' | 'data'
 
 type StatusFilter = '' | 'active' | 'inactive'
-type KindFilter = '' | 'withConditions' | 'noConditions' | 'seed' | 'jsonUpload' | 'custom'
+type KindFilter = '' | 'withConditions' | 'withKeywords' | 'matchAll' | 'noRules' | 'seed' | 'jsonUpload' | 'custom'
 
 const panelTitle = 'text-base font-semibold tracking-tight text-slate-900'
 const panelSub = 'text-sm leading-relaxed text-slate-600'
@@ -51,31 +52,34 @@ const tabBtn =
 function playbookSearchBlob(p: ConsultingPlaybook): string {
   const usp = (p.keySellingPoints ?? []).join(' ')
   const obj = (p.objectionHandling ?? []).join(' ')
-  return [p.title, p.strategy, usp, obj].join(' ').toLowerCase()
+  const kws = (p.matchKeywords ?? []).join(' ')
+  return [p.title, p.strategy, usp, obj, kws].join(' ').toLowerCase()
 }
 
 function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void }) {
   const [title, setTitle] = useState('Playbook mới')
-  const [field, setField] = useState('region')
-  const [value, setValue] = useState('')
+  const [matchConfig, setMatchConfig] = useState<PlaybookMatchConfig>(() => playbookToMatchConfig({}))
   const [strategy, setStrategy] = useState('')
   const [usps, setUsps] = useState('')
   const [objections, setObjections] = useState('')
   const [busy, setBusy] = useState(false)
 
   const save = async () => {
+    const { triggerConditions, matchKeywords, matchAllLeads } = matchConfig
+    if (!matchAllLeads && !triggerConditions.length && !matchKeywords.length) {
+      window.alert('Thêm ít nhất một điều kiện, từ khóa, hoặc bật «Áp dụng mọi hồ sơ».')
+      return
+    }
     setBusy(true)
     try {
       const now = Timestamp.now()
-      const triggerConditions: PlaybookTriggerCondition[] =
-        field && value.trim()
-          ? [{ field: field as PlaybookTriggerCondition['field'], operator: 'EQUALS', value: value.trim() }]
-          : []
       await addDoc(collection(db, FS_COLLECTIONS.consultingPlaybooks), {
         title,
         isActive: true,
         priority: 10,
         triggerConditions,
+        matchKeywords,
+        matchAllLeads,
         strategy,
         keySellingPoints: usps
           .split('\n')
@@ -110,22 +114,10 @@ function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void
           className={panelInput}
         />
       </label>
-      <label className={panelLabel}>
-        Trường điều kiện
-        <input
-          value={field}
-          onChange={(e) => setField(e.target.value)}
-          className={panelInput}
-        />
-      </label>
-      <label className={panelLabel}>
-        Giá trị
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className={panelInput}
-        />
-      </label>
+      <div className={`${panelLabel} md:col-span-2`}>
+        <span className="mb-2 block">Khi nào hiện trên hồ sơ TVV</span>
+        <PlaybookTriggerEditor value={matchConfig} onChange={setMatchConfig} />
+      </div>
       <label className={`${panelLabel} md:col-span-2`}>
         Chiến lược (strategy)
         <textarea
@@ -175,6 +167,7 @@ export function ConsultingPlaybookSection({
   canPlaybooks,
   onEdit,
   consultingWorkspaceOpen,
+  compactChrome,
 }: {
   db: Firestore
   playbooks: ConsultingPlaybook[]
@@ -183,8 +176,10 @@ export function ConsultingPlaybookSection({
   canPlaybooks: boolean
   onEdit: (p: ConsultingPlaybook) => void
   consultingWorkspaceOpen: boolean
+  compactChrome?: boolean
 }) {
-  const [mainTab, setMainTab] = useState<MainTab>('setup')
+  const [mainTab, setMainTab] = useState<MainTab>('data')
+  const [selectedPbId, setSelectedPbId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [kindFilter, setKindFilter] = useState<KindFilter>('')
@@ -199,8 +194,12 @@ export function ConsultingPlaybookSection({
       if (statusFilter === 'active' && !p.isActive) return false
       if (statusFilter === 'inactive' && p.isActive) return false
       const hasTrig = (p.triggerConditions?.length ?? 0) > 0
+      const hasKws = (p.matchKeywords?.length ?? 0) > 0
+      const hasRules = hasTrig || hasKws || Boolean(p.matchAllLeads)
       if (kindFilter === 'withConditions' && !hasTrig) return false
-      if (kindFilter === 'noConditions' && hasTrig) return false
+      if (kindFilter === 'withKeywords' && !hasKws) return false
+      if (kindFilter === 'matchAll' && !p.matchAllLeads) return false
+      if (kindFilter === 'noRules' && hasRules) return false
       if (kindFilter === 'seed' && p.seedTag !== VIETMY_PLAYBOOK_SEED_TAG) return false
       if (kindFilter === 'jsonUpload' && p.seedTag !== VIETMY_PLAYBOOK_JSON_UPLOAD_TAG) return false
       if (kindFilter === 'custom' && Boolean(p.seedTag)) return false
@@ -214,6 +213,11 @@ export function ConsultingPlaybookSection({
   }, [playbooks, search, statusFilter, kindFilter])
 
   const hasActiveFilters = Boolean(search.trim() || statusFilter || kindFilter)
+
+  const selectedPb = useMemo(() => {
+    const id = selectedPbId ?? filteredPlaybooks[0]?.id ?? null
+    return filteredPlaybooks.find((p) => p.id === id) ?? null
+  }, [filteredPlaybooks, selectedPbId])
 
   const clearFilters = () => {
     setSearch('')
@@ -279,11 +283,33 @@ export function ConsultingPlaybookSection({
     <div
       className={[
         'flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white/70 shadow-2xl backdrop-blur-xl',
-        consultingWorkspaceOpen ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)] min-h-[280px]',
+        consultingWorkspaceOpen || compactChrome ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)] min-h-[280px]',
       ].join(' ')}
     >
-      <div className="shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2 py-2" role="tablist" aria-label="Playbook">
+      <div
+        className={[
+          'shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2',
+          compactChrome ? 'py-1' : 'py-2',
+        ].join(' ')}
+        role="tablist"
+        aria-label="Playbook"
+      >
         <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainTab === 'data'}
+            onClick={() => setMainTab('data')}
+            className={[
+              tabBtn,
+              mainTab === 'data'
+                ? 'bg-sky-700 text-white shadow-sm'
+                : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-sky-50',
+            ].join(' ')}
+          >
+            <Database className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+            Dữ liệu ({playbooks.length})
+          </button>
           <button
             type="button"
             role="tab"
@@ -299,25 +325,15 @@ export function ConsultingPlaybookSection({
             <BookOpen className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
             Thiết lập
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mainTab === 'data'}
-            onClick={() => setMainTab('data')}
-            className={[
-              tabBtn,
-              mainTab === 'data'
-                ? 'bg-sky-700 text-white shadow-sm'
-                : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-sky-50',
-            ].join(' ')}
-          >
-            <Database className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-            Dữ liệu
-          </button>
         </div>
       </div>
 
-      <div className="shrink-0 space-y-2 border-b border-slate-100 px-4 py-2 md:px-5">
+      <div
+        className={[
+          'shrink-0 border-b border-slate-100',
+          compactChrome ? 'space-y-1 px-2 py-1' : 'space-y-2 px-4 py-2 md:px-5',
+        ].join(' ')}
+      >
         {error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">{error}</div>
         ) : null}
@@ -328,14 +344,15 @@ export function ConsultingPlaybookSection({
 
       <div
         className={[
-          'min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-5 md:py-5',
-          consultingWorkspaceOpen ? '' : '',
+          'min-h-0 flex-1 overflow-y-auto overscroll-contain',
+          compactChrome ? 'px-2 py-2' : 'px-4 py-4 md:px-5 md:py-5',
         ].join(' ')}
         role="tabpanel"
       >
         {mainTab === 'setup' ? (
-          <div className="mx-auto max-w-4xl space-y-5">
-            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-4">
+          <div className={['grid min-h-0 lg:grid-cols-2 lg:items-start', compactChrome ? 'gap-3' : 'gap-4'].join(' ')}>
+            <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            <div className={['rounded-xl border border-emerald-200/80 bg-emerald-50/60', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
               <p className={`${panelTitle} text-emerald-950`}>Nạp từ bộ mẫu có sẵn (build)</p>
               {canPlaybooks ? (
                 <button
@@ -371,14 +388,15 @@ export function ConsultingPlaybookSection({
             </div>
 
             {canPlaybooks ? (
-              <div className="rounded-xl border border-sky-200/80 bg-sky-50/50 p-4">
+              <div className={['rounded-xl border border-sky-200/80 bg-sky-50/50', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
                 <p className={`${panelTitle} text-sky-950`}>File mẫu &amp; tải lên từ máy</p>
                 <p className={`mt-1.5 ${panelSub} text-sky-950/90`}>
                   Tải JSON mẫu, chỉnh trong trình soạn thảo, rồi chọn file để ghi Firestore. Mỗi phần tử cần{' '}
                   <code className="rounded bg-white/90 px-1 font-mono text-xs">id</code>,{' '}
                   <code className="rounded bg-white/90 px-1 font-mono text-xs">title</code>,{' '}
                   <code className="rounded bg-white/90 px-1 font-mono text-xs">strategy</code>,{' '}
-                  <code className="rounded bg-white/90 px-1 font-mono text-xs">triggerConditions</code> (mảng),{' '}
+                  <code className="rounded bg-white/90 px-1 font-mono text-xs">triggerConditions</code>,{' '}
+                  <code className="rounded bg-white/90 px-1 font-mono text-xs">matchKeywords</code> (tùy chọn),{' '}
                   <code className="rounded bg-white/90 px-1 font-mono text-xs">keySellingPoints</code>,{' '}
                   <code className="rounded bg-white/90 px-1 font-mono text-xs">objectionHandling</code> (mảng). Tham
                   chiếu đầy đủ: <code className="rounded bg-white/90 px-1 font-mono text-xs">public/seed/consulting-playbooks.json</code>.
@@ -412,7 +430,9 @@ export function ConsultingPlaybookSection({
                 </div>
               </div>
             ) : null}
+            </div>
 
+            <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
             {!canPlaybooks ? (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 Bạn không có quyền chỉnh playbook (<code className="font-mono text-sm">config:playbooks</code>).
@@ -432,12 +452,18 @@ export function ConsultingPlaybookSection({
                 />
               </>
             )}
+            </div>
           </div>
         ) : null}
 
         {mainTab === 'data' ? (
-          <div className="flex min-h-0 flex-col gap-4">
-            <div className="shrink-0 space-y-3 rounded-xl border border-slate-200/90 bg-slate-50/80 p-4">
+          <div className={['flex min-h-0 flex-col', compactChrome ? 'gap-2' : 'gap-4'].join(' ')}>
+            <div
+              className={[
+                'shrink-0 rounded-xl border border-slate-200/90 bg-slate-50/80',
+                compactChrome ? 'space-y-2 p-2.5' : 'space-y-3 p-4',
+              ].join(' ')}
+            >
               <div className="flex flex-wrap items-end gap-3">
                 <label className="min-w-[12rem] flex-1">
                   <span className={`${panelLabel} mb-1 flex items-center gap-1`}>
@@ -471,8 +497,10 @@ export function ConsultingPlaybookSection({
                     className={panelInput}
                   >
                     <option value="">Tất cả</option>
-                    <option value="withConditions">Có điều kiện kích hoạt</option>
-                    <option value="noConditions">Không điều kiện</option>
+                    <option value="withConditions">Có điều kiện (AND)</option>
+                    <option value="withKeywords">Có từ khóa</option>
+                    <option value="matchAll">Áp dụng mọi hồ sơ</option>
+                    <option value="noRules">Chưa cấu hình kích hoạt</option>
                     <option value="seed">Playbook mẫu (seed)</option>
                     <option value="jsonUpload">Nạp từ file JSON</option>
                     <option value="custom">Tự thêm (không seed)</option>
@@ -492,6 +520,12 @@ export function ConsultingPlaybookSection({
               <p className={panelSub}>
                 Hiển thị <strong className="font-semibold text-slate-900">{filteredPlaybooks.length}</strong> /{' '}
                 {playbooks.length} playbook{hasActiveFilters ? ' (đã lọc)' : ''}.
+                {selectedPb ? (
+                  <>
+                    {' '}
+                    — đang xem: <strong>{selectedPb.title}</strong>
+                  </>
+                ) : null}
               </p>
             </div>
 
@@ -519,7 +553,16 @@ export function ConsultingPlaybookSection({
                 {filteredPlaybooks.map((p) => (
                   <li
                     key={p.id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/60 px-4 py-3"
+                    className={[
+                      'flex cursor-pointer items-start justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/60 px-4 py-3',
+                      selectedPb?.id === p.id ? 'ring-2 ring-sky-400/70' : '',
+                    ].join(' ')}
+                    onClick={() => setSelectedPbId(p.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') setSelectedPbId(p.id)
+                    }}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900">{p.title}</p>
@@ -539,26 +582,35 @@ export function ConsultingPlaybookSection({
                           </span>
                         ) : null}
                       </p>
-                      {p.triggerConditions?.length ? (
-                        <span className="mt-0.5 block text-sm text-slate-500">
-                          {p.triggerConditions.length} điều kiện (AND)
-                        </span>
-                      ) : (
-                        <span className="mt-0.5 block text-sm text-slate-400">Không có điều kiện kích hoạt</span>
-                      )}
+                      <span className="mt-0.5 block text-sm text-slate-500">
+                        {p.matchAllLeads ? 'Mọi hồ sơ' : null}
+                        {p.matchAllLeads && (p.triggerConditions?.length || p.matchKeywords?.length) ? ' · ' : null}
+                        {p.triggerConditions?.length ? `${p.triggerConditions.length} điều kiện` : null}
+                        {p.triggerConditions?.length && p.matchKeywords?.length ? ' · ' : null}
+                        {p.matchKeywords?.length ? `${p.matchKeywords.length} từ khóa` : null}
+                        {!p.matchAllLeads && !p.triggerConditions?.length && !p.matchKeywords?.length ? (
+                          <span className="text-amber-700">Chưa cấu hình — sẽ không hiện trên hồ sơ</span>
+                        ) : null}
+                      </span>
                     </div>
                     {canPlaybooks ? (
                       <div className="flex shrink-0 gap-1">
                         <button
                           type="button"
-                          onClick={() => onEdit(p)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onEdit(p)
+                          }}
                           className="min-h-9 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
                         >
                           Sửa
                         </button>
                         <button
                           type="button"
-                          onClick={() => void remove(p)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void remove(p)
+                          }}
                           className="min-h-9 shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 hover:text-rose-900"
                         >
                           Xóa

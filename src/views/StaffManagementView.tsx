@@ -376,7 +376,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                     <span className="font-semibold text-violet-950">Cho phép dùng AI trên hồ sơ</span>
                     <span className="mt-0.5 block text-xs font-normal leading-snug text-slate-600">
                       Khi bật, người này được mở <strong>Phân tích AI</strong> trong chi tiết hồ sơ, chạy{' '}
-                      <strong>phân tích hàng loạt</strong> trên màn Hồ sơ và vào <strong>Phòng thử AI</strong> trong
+                      <strong>phân tích hàng loạt</strong> trên màn Hồ sơ và nút <strong>Tư vấn AI</strong> trong
                       Cài đặt. Vẫn cần trình duyệt đã <strong>lưu khóa API</strong> (thường do Siêu quản trị lưu trước).
                     </span>
                   </span>

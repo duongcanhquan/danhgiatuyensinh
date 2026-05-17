@@ -21,6 +21,10 @@ function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlayb
       objectionHandling: Array.isArray(data.objectionHandling)
         ? data.objectionHandling.map(String)
         : [],
+      matchKeywords: Array.isArray(data.matchKeywords)
+        ? data.matchKeywords.map((x) => String(x).trim()).filter(Boolean)
+        : undefined,
+      matchAllLeads: data.matchAllLeads === true,
       createdAt: (data.createdAt as Timestamp) ?? now,
       updatedAt: (data.updatedAt as Timestamp) ?? now,
       createdBy: data.createdBy ? String(data.createdBy) : undefined,

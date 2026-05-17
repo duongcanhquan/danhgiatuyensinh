@@ -29,7 +29,7 @@ export default function App() {
                 <Route path="counselor" element={<Navigate to="/leads" replace />} />
                 <Route path="import" element={<DataIntake />} />
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
-                <Route path="ai" element={<Navigate to="/settings?tab=ai_lab" replace />} />
+                <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
                 <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
                 <Route path="settings" element={<SettingsView />} />
                 <Route path="huong-dan" element={<UserManualView />} />

@@ -38,6 +38,8 @@ export function getPlaybookUploadTemplate(): Array<{
   priority: number
   isActive: boolean
   triggerConditions: Array<{ field: string; operator?: string; value: string | string[] }>
+  matchKeywords?: string[]
+  matchAllLeads?: boolean
   strategy: string
   keySellingPoints: string[]
   objectionHandling: string[]
@@ -49,6 +51,7 @@ export function getPlaybookUploadTemplate(): Array<{
       priority: 50,
       isActive: true,
       triggerConditions: [{ field: 'province', operator: 'EQUALS', value: 'Hà Nội' }],
+      matchKeywords: ['Hà Nội', 'học bổng'],
       strategy:
         'Khi lead ở Hà Nội: nhấn mạnh tiện đi lại, tham quan campus, lịch tư vấn. Thay `province` / `value` cho đúng dữ liệu CRM.',
       keySellingPoints: ['Gợi ý USP 1 (mỗi dòng trong JSON là một phần tử mảng)', 'Gợi ý USP 2'],

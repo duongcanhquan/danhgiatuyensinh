@@ -5,7 +5,7 @@ import type { AuthState, Permission, UserRole } from '../types'
 export type AuthContextValue = AuthState & {
   firebaseUser: User | null
   can: (p: Permission) => boolean
-  /** Chạy LLM trên lead / AI Miner / Phòng thử: cần `ai:use` + cờ nhân sự (trừ Siêu quản trị). */
+  /** Chạy LLM trên lead / AI Miner: cần `ai:use` + cờ nhân sự (Admin / Siêu quản trị luôn được). */
   canRunLlmAnalysis: boolean
   signOut: () => Promise<void>
   signInWithEmail: (email: string, password: string) => Promise<void>

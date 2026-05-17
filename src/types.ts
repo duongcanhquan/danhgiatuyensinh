@@ -77,7 +77,7 @@ export interface VietMyUserProfile {
   maxConcurrentLeads?: number
   isActive: boolean
   /**
-   * Quản lý nhân sự bật: được chạy phân tích LLM trên hồ sơ, AI Lead Miner, Phòng thử AI
+   * Quản lý nhân sự bật: được chạy phân tích LLM trên hồ sơ và AI Lead Miner (Admin / Siêu quản trị luôn được)
    * (vẫn cần API đã cấu hình trên trình duyệt nơi Siêu quản trị lưu khóa).
    * Siêu quản trị không cần cờ này.
    */
@@ -202,7 +202,8 @@ export const LEAD_COUNSELOR_STATUS_LABELS: Record<LeadCounselorStatus, string> =
 }
 
 /** Institutional knowledge for RAG-backed copilot (`knowledgeDocuments/{id}`). */
-export type KnowledgeDocumentType = 'TUITION' | 'POLICY' | 'MAJOR_INFO'
+/** Mã danh mục — mặc định + danh mục tự thêm trong Cài đặt (chữ in hoa, gạch dưới). */
+export type KnowledgeDocumentType = string
 
 export interface KnowledgeDocument {
   id: DocumentId
@@ -708,6 +709,13 @@ export interface ConsultingPlaybook {
   /** Higher wins on overlaps */
   priority: number
   triggerConditions: PlaybookTriggerCondition[]
+  /**
+   * Từ khóa (mỗi dòng hoặc cách nhau dấu phẩy): khớp nếu xuất hiện trong nội dung hồ sơ
+   * (tỉnh, ngành, mô tả, ghi chú…). Bổ sung cho triggerConditions — không bắt buộc AND cùng lúc.
+   */
+  matchKeywords?: string[]
+  /** Khi bật: hiển thị với mọi hồ sơ đang mở (không cần điều kiện / từ khóa). */
+  matchAllLeads?: boolean
   /** Core narrative / positioning */
   strategy: string
   /** Distilled USPs for UI bullet list (optional denormalization from strategy) */

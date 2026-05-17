@@ -177,29 +177,33 @@ export function LeadScoringSignalsPanel({
     : 'rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm'
   const titleCls = 'app-section-heading'
   const introCls = compact
-    ? 'mt-0.5 line-clamp-2 text-xs leading-snug text-slate-600'
+    ? 'mt-0.5 line-clamp-2 text-sm leading-snug text-slate-600'
     : 'mt-1 text-xs leading-snug text-slate-600'
-  const warnCls = compact ? 'mt-1 text-xs text-amber-800' : 'mt-2 text-xs text-amber-800'
+  const warnCls = compact ? 'mt-1 text-sm text-amber-800' : 'mt-2 text-xs text-amber-800'
   const groupsWrap = compact ? 'mt-2 grid grid-cols-1 gap-2 min-[380px]:grid-cols-2' : 'mt-3 space-y-3'
-  const subLbl = 'text-xs font-semibold uppercase tracking-wide'
+  const subLbl = compact ? 'text-sm font-semibold uppercase tracking-wide' : 'text-xs font-semibold uppercase tracking-wide'
   const ulSp = compact ? 'mt-1 space-y-1' : 'mt-1.5 space-y-1.5'
   const rowGap = compact ? 'gap-1.5' : 'gap-2'
   const chkB = compact
-    ? 'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50'
+    ? 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50'
     : 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50'
   const chkR = compact
-    ? 'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:opacity-50'
+    ? 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:opacity-50'
     : 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:opacity-50'
-  const lblCls = 'min-w-0 flex-1 cursor-pointer text-xs leading-snug text-slate-800'
+  const lblCls = compact
+    ? 'min-w-0 flex-1 cursor-pointer text-sm leading-snug text-slate-800'
+    : 'min-w-0 flex-1 cursor-pointer text-xs leading-snug text-slate-800'
   const ptSpan = compact ? 'ml-0.5 tabular-nums' : 'ml-1 tabular-nums'
 
   return (
     <section className={shell}>
-      <h3 className={titleCls}>Hành vi &amp; Rủi ro (chấm điểm)</h3>
-      <p className={introCls}>
-        TVV bật khi đúng tình huống — <strong>mỗi lần bật/tắt là lưu ngay</strong> lên hệ thống và cập nhật điểm/nhãn theo
-        bộ chấm điểm đang chọn (nếu có). Có mục cố định và mục tùy chỉnh (Cài đặt → Quy tắc mẫu → tín hiệu TVV).
-      </p>
+      {!compact ? <h3 className={titleCls}>Hành vi &amp; Rủi ro (chấm điểm)</h3> : null}
+      {!compact ? (
+        <p className={introCls}>
+          TVV bật khi đúng tình huống — <strong>mỗi lần bật/tắt là lưu ngay</strong> lên hệ thống và cập nhật điểm/nhãn theo
+          bộ chấm điểm đang chọn (nếu có).
+        </p>
+      ) : null}
       {!canEdit ? <p className={warnCls}>Bạn không có quyền ghi hồ sơ — chỉ xem.</p> : null}
       <div className={groupsWrap}>
         <div>
