@@ -8,6 +8,7 @@ import type {
 import { FS_COLLECTIONS } from '../types'
 
 import { normalizeKnowledgeCategoryId } from './knowledgeCategories'
+import { parsePlaybookContentCategory } from './playbookContentCategories'
 const PLAYBOOK_OPERATORS: Set<string> = new Set(['EQUALS', 'CONTAINS', 'IN', 'NOT_IN'])
 
 export type KnowledgeImportRow = {
@@ -112,6 +113,7 @@ export type PlaybookImportRow = {
   strategy: string
   keySellingPoints: string[]
   objectionHandling: string[]
+  contentCategory?: string
 }
 
 /** Seed bundle chính thức (public/seed/consulting-playbooks.json). */
@@ -156,6 +158,7 @@ export function parseConsultingPlaybooksJson(raw: unknown, maxItems = 200): Play
       ? o.matchKeywords.map((x) => String(x).trim()).filter(Boolean)
       : undefined
     const matchAllLeads = o.matchAllLeads === true
+    const contentCategory = parsePlaybookContentCategory(o.contentCategory)
     out.push({
       id,
       title,
@@ -167,6 +170,7 @@ export function parseConsultingPlaybooksJson(raw: unknown, maxItems = 200): Play
       strategy,
       keySellingPoints,
       objectionHandling,
+      ...(contentCategory ? { contentCategory } : {}),
     })
   }
   return out
@@ -195,6 +199,7 @@ export async function importConsultingPlaybooksBatch(
         strategy: e.strategy,
         keySellingPoints: e.keySellingPoints,
         objectionHandling: e.objectionHandling,
+        ...(e.contentCategory ? { contentCategory: e.contentCategory } : {}),
         seedTag,
         createdAt: now,
         updatedAt: now,

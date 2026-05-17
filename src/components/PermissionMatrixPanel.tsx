@@ -74,33 +74,14 @@ export function PermissionMatrixPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-relaxed text-slate-700">
-        <p className="font-semibold text-slate-900">Ba tầng nghiệp vụ</p>
-        <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700">
-          <li>
-            <strong>Tư vấn viên</strong> — cập nhật hồ sơ do mình phụ trách; tự tạo profile chấm điểm cá nhân.
-          </li>
-          <li>
-            <strong>Trưởng nhóm</strong> — toàn bộ hồ sơ & profile nhóm; đổi TVV trong nhóm; mẫu tư vấn (Thông tin TV);
-            quản lý TVV nhóm. Không cấu hình Tri thức / LLM / master data toàn trường.
-          </li>
-          <li>
-            <strong>Quản trị</strong> — full quyền (Siêu quản trị thêm khóa API LLM).
-          </li>
-        </ul>
-        <p className="mt-2 text-slate-600">
-          Trưởng nhóm: gán danh sách TVV qua <code className="rounded bg-white px-1 font-mono text-xs">managedCounselorIds</code>{' '}
-          trên hồ sơ user (màn Quản lý nhân sự → Sửa).
+      {extra.length || denied.length ? (
+        <p className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-2.5 text-sm text-amber-900">
+          Tài khoản đang đăng nhập:{' '}
+          {extra.length ? `+${extra.length} quyền bổ sung` : null}
+          {extra.length && denied.length ? ' · ' : null}
+          {denied.length ? `−${denied.length} quyền thu hồi` : null}.
         </p>
-        {extra.length || denied.length ? (
-          <p className="mt-2 text-amber-900">
-            Tài khoản đang đăng nhập:{' '}
-            {extra.length ? `+${extra.length} quyền bổ sung` : null}
-            {extra.length && denied.length ? ' · ' : null}
-            {denied.length ? `−${denied.length} quyền thu hồi` : null}.
-          </p>
-        ) : null}
-      </div>
+      ) : null}
 
       <div className="scroll-touch overflow-x-auto rounded-xl border border-slate-200">
         <table className="min-w-[720px] w-full border-collapse text-left text-sm">

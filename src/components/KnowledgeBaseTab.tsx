@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { ConfigQuickStartPanel } from './ConfigQuickStartPanel'
 import { addDoc, collection, deleteDoc, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { KnowledgeDocumentType } from '../types'
 import { FS_COLLECTIONS } from '../types'
@@ -43,14 +42,10 @@ export function KnowledgeBaseTab({
 }) {
   const { documents, loading, error } = useKnowledgeDocuments()
   const { categories, addCategory, removeCategory } = useKnowledgeCategories()
-  const [mainTab, setMainTab] = useState<MainTab>(() => (documents.length === 0 && canEdit ? 'setup' : 'data'))
-
-  useEffect(() => {
-    if (canEdit && !loading && documents.length === 0 && mainTab === 'data') {
-      setMainTab('setup')
-    }
-  }, [canEdit, loading, documents.length, mainTab])
+  const [mainTab, setMainTab] = useState<MainTab>('data')
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+  const [isNewDoc, setIsNewDoc] = useState(false)
+  const detailPanelRef = useRef<HTMLElement>(null)
 
   const [title, setTitle] = useState('')
   const [type, setType] = useState<KnowledgeDocumentType>('GENERAL')
@@ -86,9 +81,69 @@ export function KnowledgeBaseTab({
   }
 
   const selectedDoc = useMemo(() => {
-    const id = selectedDocId ?? filteredDocs[0]?.id ?? null
-    return filteredDocs.find((d) => d.id === id) ?? null
+    if (!selectedDocId) return null
+    return documents.find((d) => d.id === selectedDocId) ?? null
+  }, [documents, selectedDocId])
+
+  useEffect(() => {
+    if (!filteredDocs.length) {
+      if (selectedDocId !== null) setSelectedDocId(null)
+      return
+    }
+    if (!selectedDocId || !filteredDocs.some((d) => d.id === selectedDocId)) {
+      setSelectedDocId(filteredDocs[0].id)
+      setIsNewDoc(false)
+    }
   }, [filteredDocs, selectedDocId])
+
+  useEffect(() => {
+    if (isNewDoc) return
+    if (!selectedDoc) {
+      if (!isNewDoc) {
+        setEditingId(null)
+        setTitle('')
+        setContent('')
+        setType('GENERAL')
+      }
+      return
+    }
+    setEditingId(selectedDoc.id)
+    setTitle(selectedDoc.title)
+    setContent(selectedDoc.content)
+    setType(selectedDoc.type)
+    setMsg(null)
+  }, [selectedDoc?.id, selectedDoc?.uploadedAt?.seconds, isNewDoc])
+
+  const selectDocument = (id: string) => {
+    setIsNewDoc(false)
+    setSelectedDocId(id)
+    requestAnimationFrame(() => {
+      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
+
+  const startNewDocument = () => {
+    setIsNewDoc(true)
+    setSelectedDocId(null)
+    setEditingId(null)
+    setTitle('')
+    setContent('')
+    setType('GENERAL')
+    setMsg(null)
+    requestAnimationFrame(() => {
+      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
+
+  const detailDirty = useMemo(() => {
+    if (isNewDoc) return Boolean(title.trim() || content.trim())
+    if (!selectedDoc) return false
+    return (
+      title.trim() !== selectedDoc.title.trim() ||
+      content.trim() !== selectedDoc.content.trim() ||
+      type !== selectedDoc.type
+    )
+  }, [isNewDoc, selectedDoc, title, content, type])
 
   const save = async () => {
     if (!title.trim() || !content.trim()) {
@@ -105,17 +160,20 @@ export function KnowledgeBaseTab({
           content: content.trim(),
           uploadedAt: Timestamp.now(),
         })
-        setMsg('Đã cập nhật tài liệu trong kho tri thức (RAG).')
+        setMsg('Đã lưu thông tin tài liệu.')
+        setIsNewDoc(false)
       } else {
-        await addDoc(collection(db, FS_COLLECTIONS.knowledgeDocuments), {
+        const ref = await addDoc(collection(db, FS_COLLECTIONS.knowledgeDocuments), {
           title: title.trim(),
           type,
           content: content.trim(),
           uploadedAt: Timestamp.now(),
         })
-        setMsg('Đã thêm tài liệu mới vào kho tri thức (RAG).')
+        setSelectedDocId(ref.id)
+        setEditingId(ref.id)
+        setIsNewDoc(false)
+        setMsg('Đã thêm tài liệu mới.')
       }
-      resetForm()
       setMainTab('data')
     } catch (e) {
       console.error(e)
@@ -129,20 +187,16 @@ export function KnowledgeBaseTab({
     if (!window.confirm('Xóa tài liệu này khỏi kho tri thức?')) return
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.knowledgeDocuments, id))
-      if (editingId === id) resetForm()
+      if (editingId === id || selectedDocId === id) {
+        resetForm()
+        setSelectedDocId(null)
+        setIsNewDoc(false)
+      }
+      setMsg('Đã xóa tài liệu.')
     } catch (e) {
       console.error(e)
       window.alert('Không xóa được.')
     }
-  }
-
-  const startEdit = (id: string, t: string, c: string, ty: KnowledgeDocumentType) => {
-    setEditingId(id)
-    setTitle(t)
-    setContent(c)
-    setType(ty)
-    setMsg(null)
-    setMainTab('setup')
   }
 
   const clearFilters = () => {
@@ -201,31 +255,12 @@ export function KnowledgeBaseTab({
         compactChrome ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)]',
       ].join(' ')}
     >
-      <p className="shrink-0 border-b border-amber-200/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950 sm:px-4 sm:text-sm">
-        <strong>Tra cứu nhanh:</strong> Tài liệu được xếp theo liên quan hồ sơ trên tab Tri thức (hồ sơ lead). Thêm từ khóa
-        ngành/tỉnh trong tiêu đề hoặc nội dung để TVV tìm dễ hơn.
-      </p>
       <div
         className={['shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2', compactChrome ? 'py-1' : 'py-2'].join(' ')}
         role="tablist"
         aria-label="Tri thức tuyển sinh"
       >
         <div className="flex flex-wrap gap-1">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mainTab === 'setup'}
-            onClick={() => setMainTab('setup')}
-            className={[
-              tabBtn,
-              mainTab === 'setup'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50',
-            ].join(' ')}
-          >
-            <Settings2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-            Thiết lập
-          </button>
           <button
             type="button"
             role="tab"
@@ -240,6 +275,21 @@ export function KnowledgeBaseTab({
           >
             <Database className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
             Dữ liệu ({documents.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainTab === 'setup'}
+            onClick={() => setMainTab('setup')}
+            className={[
+              tabBtn,
+              mainTab === 'setup'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50',
+            ].join(' ')}
+          >
+            <Settings2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+            Thiết lập
           </button>
         </div>
       </div>
@@ -267,23 +317,11 @@ export function KnowledgeBaseTab({
       >
         {mainTab === 'setup' ? (
           <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
-            {canEdit ? (
-              <ConfigQuickStartPanel
-                tone="amber"
-                title="Thiết lập Kho tri thức (quản trị)"
-                intro="Tài liệu cho Phân tích AI. Chỉ quản trị chỉnh — TVV tra cứu trên hồ sơ."
-                itemCount={documents.length}
-                steps={[
-                  { label: 'Nạp mẫu', detail: 'Nạp JSON mẫu có sẵn.' },
-                  { label: 'Bổ sung', detail: 'Form hoặc upload.' },
-                  { label: 'Kiểm tra', detail: 'Phân tích AI trên hồ sơ.' },
-                ]}
-              />
-            ) : (
+            {!canEdit ? (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 Bạn không có quyền chỉnh kho tri thức — liên hệ quản trị.
               </p>
-            )}
+            ) : null}
           <div className={['grid min-h-0 lg:grid-cols-2 lg:items-start', compactChrome ? 'gap-3' : 'gap-4'].join(' ')}>
             <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
             {canEdit ? (
@@ -371,79 +409,15 @@ export function KnowledgeBaseTab({
             </div>
 
             {canEdit ? (
-            <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            <div className={['lg:col-span-2', compactChrome ? 'space-y-3' : 'space-y-4'].join(' ')}>
             <KnowledgeCategoryManager
               categories={categories}
               onAdd={addCategory}
               onRemove={removeCategory}
             />
-            <section className={['rounded-xl border border-slate-200/90 bg-white shadow-sm', compactChrome ? 'p-3' : 'p-4 md:p-5'].join(' ')}>
-              <h3 className={`${panelTitle}`}>{editingId ? 'Sửa tài liệu' : 'Thêm tài liệu mới'}</h3>
-              {editingId ? (
-                <p className="mt-2 text-sm text-amber-900">
-                  Đang sửa mục đã lưu — lưu để ghi đè Firestore, hoặc Hủy sửa để soạn mục mới.
-                </p>
-              ) : null}
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className={`${panelLabel} md:col-span-2`}>
-                  Tiêu đề
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className={panelInput}
-                    placeholder="vd. Học phí Cao đẳng 2025–2026"
-                  />
-                </label>
-                <label className={panelLabel}>
-                  Danh mục (loại)
-                  <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value as KnowledgeDocumentType)}
-                    className={panelInput}
-                  >
-                    {categories.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={`${panelLabel} md:col-span-2`}>
-                  Nội dung (markdown đơn giản được)
-                  <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    rows={8}
-                    className={`${panelInput} font-mono leading-relaxed`}
-                    placeholder="Dán quy định học phí, ký túc xá, điều kiện tuyển ngành…"
-                  />
-                </label>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void save()}
-                  className="rounded-lg border border-amber-800 bg-gradient-to-r from-amber-800 to-amber-950 px-5 py-2.5 text-sm font-semibold text-white shadow-md disabled:opacity-50"
-                >
-                  {busy ? 'Đang lưu…' : editingId ? 'Cập nhật Firestore' : 'Lưu vào Firestore'}
-                </button>
-                {editingId ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      resetForm()
-                      setMsg(null)
-                    }}
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 shadow-sm disabled:opacity-50"
-                  >
-                    Hủy sửa
-                  </button>
-                ) : null}
-              </div>
-            </section>
-
+            <p className={`${panelSub} rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-2`}>
+              Thêm hoặc sửa tài liệu tại tab <strong>Dữ liệu</strong> — bấm dòng bên trái hoặc «Thêm mới» bên phải.
+            </p>
             </div>
             ) : null}
           </div>
@@ -504,19 +478,31 @@ export function KnowledgeBaseTab({
               </p>
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(240px,34%)_1fr]">
-              <aside className="flex min-h-0 flex-col gap-2">
+            <div
+              className={[
+                'grid min-h-0 flex-1 gap-3',
+                compactChrome
+                  ? 'min-h-[min(70vh,720px)] md:grid-cols-[minmax(240px,34%)_1fr]'
+                  : 'min-h-[min(58vh,560px)] md:grid-cols-[minmax(220px,36%)_1fr]',
+              ].join(' ')}
+            >
+              <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/50">
+                <div className="shrink-0 border-b border-slate-200/80 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Danh sách tài liệu</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500">Bấm một dòng → sửa bên phải.</p>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                 {loading ? <p className="text-xs text-slate-500">Đang tải…</p> : null}
-                <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
+                <ul className="space-y-1" role="listbox" aria-label="Danh sách tài liệu">
                   {filteredDocs.map((d) => (
                     <li key={d.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedDocId(d.id)}
+                        onClick={() => selectDocument(d.id)}
                         className={[
                           'w-full rounded-lg border px-2.5 py-2 text-left text-sm',
-                          selectedDoc?.id === d.id
-                            ? 'border-amber-400 bg-amber-50'
+                          selectedDoc?.id === d.id && !isNewDoc
+                            ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-400/50'
                             : 'border-transparent bg-white hover:border-slate-200',
                         ].join(' ')}
                       >
@@ -528,41 +514,114 @@ export function KnowledgeBaseTab({
                     </li>
                   ))}
                 </ul>
-                {selectedDoc ? (
-                  <div className="flex gap-1 border-t border-slate-200 pt-2">
+                </div>
+              </aside>
+              <main
+                ref={detailPanelRef}
+                className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-amber-200/70 bg-white shadow-sm"
+                aria-label="Chi tiết tài liệu"
+              >
+                <div className="shrink-0 border-b border-slate-100 px-4 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className={panelTitle}>
+                        {isNewDoc ? 'Thêm tài liệu mới' : selectedDoc ? 'Chi tiết & chỉnh sửa' : 'Chọn tài liệu'}
+                      </h3>
+                      {selectedDoc && !isNewDoc ? (
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {knowledgeCategoryLabel(selectedDoc.type, categories)}
+                          {detailDirty ? (
+                            <span className="ml-2 font-semibold text-amber-700">· Chưa lưu</span>
+                          ) : null}
+                        </p>
+                      ) : null}
+                    </div>
+                    {canEdit ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={startNewDocument}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                        >
+                          Thêm mới
+                        </button>
+                        {selectedDoc && !isNewDoc ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void remove(selectedDoc.id)}
+                            className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-medium text-rose-800 hover:bg-rose-50 disabled:opacity-45"
+                          >
+                            Xóa
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+                  {!canEdit ? (
+                    selectedDoc ? (
+                      <article className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                        {selectedDoc.content}
+                      </article>
+                    ) : (
+                      <p className="text-sm text-slate-500">Chọn tài liệu bên trái.</p>
+                    )
+                  ) : selectedDoc || isNewDoc ? (
+                    <div className="grid gap-3">
+                      <label className={panelLabel}>
+                        Tiêu đề
+                        <input
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          className={panelInput}
+                          placeholder="vd. Học phí Cao đẳng 2025–2026"
+                        />
+                      </label>
+                      <label className={panelLabel}>
+                        Danh mục (loại)
+                        <select
+                          value={type}
+                          onChange={(e) => setType(e.target.value as KnowledgeDocumentType)}
+                          className={panelInput}
+                        >
+                          {categories.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={panelLabel}>
+                        Nội dung
+                        <textarea
+                          value={content}
+                          onChange={(e) => setContent(e.target.value)}
+                          rows={12}
+                          className={`${panelInput} font-mono leading-relaxed`}
+                          placeholder="Dán quy định học phí, ký túc xá, điều kiện tuyển ngành…"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Bấm một tài liệu bên trái hoặc «Thêm mới» để soạn nội dung.
+                    </p>
+                  )}
+                </div>
+                {canEdit && (selectedDoc || isNewDoc) ? (
+                  <div className="shrink-0 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
                     <button
                       type="button"
-                      onClick={() =>
-                        startEdit(selectedDoc.id, selectedDoc.title, selectedDoc.content, selectedDoc.type)
-                      }
-                      className="flex-1 rounded-lg border border-amber-300 bg-amber-50 py-1.5 text-xs font-medium text-amber-950"
+                      disabled={busy || (!isNewDoc && !detailDirty) || !title.trim() || !content.trim()}
+                      onClick={() => void save()}
+                      className="w-full rounded-lg border border-amber-800 bg-amber-800 py-2.5 text-sm font-semibold text-white hover:bg-amber-900 disabled:opacity-45 sm:w-auto sm:px-6"
                     >
-                      Sửa
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void remove(selectedDoc.id)}
-                      className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-900"
-                    >
-                      Xóa
+                      {busy ? 'Đang lưu…' : 'Lưu thông tin'}
                     </button>
                   </div>
                 ) : null}
-              </aside>
-              <main className="min-h-0 overflow-y-auto rounded-xl border border-amber-200/70 bg-white p-3">
-                {selectedDoc ? (
-                  <>
-                    <h3 className="text-base font-semibold text-slate-900">{selectedDoc.title}</h3>
-                    <p className="text-xs font-medium uppercase text-amber-800">
-                      {knowledgeCategoryLabel(selectedDoc.type, categories)}
-                    </p>
-                    <article className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
-                      {selectedDoc.content}
-                    </article>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-500">Chọn tài liệu bên trái.</p>
-                )}
               </main>
             </div>
           </div>

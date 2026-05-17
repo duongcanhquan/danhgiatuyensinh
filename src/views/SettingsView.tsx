@@ -5,12 +5,10 @@ import {
   getDoc,
   setDoc,
   Timestamp,
-  updateDoc,
   writeBatch,
 } from 'firebase/firestore'
 import { useSearchParams } from 'react-router-dom'
 import type {
-  ConsultingPlaybook,
   MasterCatalogDefinition,
   MasterCatalogValueKind,
   MasterDataEntry,
@@ -47,7 +45,6 @@ import { AISettingsTab } from '../components/AISettingsTab'
 import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
-import { PlaybookTriggerEditor, playbookToMatchConfig, type PlaybookMatchConfig } from '../components/PlaybookTriggerEditor'
 import { StaffManagementView } from '../views/StaffManagementView'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
@@ -90,13 +87,13 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'master':
       return (
         <>
-          <p className="font-semibold text-slate-900">Danh mục</p>
+          <p className="font-semibold text-slate-900">Cài đặt danh mục</p>
           <p className="mt-1.5">
             Đây là <strong>thư viện giá trị chung</strong> (mỗi loại = một nhóm mục + synonym / cách khớp). Khi chấm điểm,
             điều kiện <strong>IN_LIST</strong> trên trường trùng id catalog (vd. <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">province</code>,{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">financialStatus</code>) sẽ{' '}
             <strong>đối chiếu lead với danh sách mục ở đây</strong> — profile không “sao chép” cả catalog, mà chọn những
-            nhãn nào được cộng điểm trong canvas tab <strong>Chấm điểm hồ sơ</strong>.
+            nhãn nào được cộng điểm trong canvas tab <strong>Cài đặt Profile</strong>.
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
             Chọn loại ở cột trái, thêm hoặc chỉnh mục bên phải; thư viện mẫu quy tắc (kéo thả) nằm ở tab <strong>Quy tắc mẫu</strong>.
@@ -117,14 +114,14 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Cấu hình <strong>độ đầy dữ liệu</strong> trên hồ sơ (%, trọng số trường, kẹp min–max) lưu tại{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>. Khác{' '}
-            <strong>Chấm điểm hồ sơ</strong> (điểm tích lũy HOT/WARM/COLD theo quy tắc).
+            <strong>Cài đặt Profile</strong> (điểm tích lũy HOT/WARM/COLD theo quy tắc).
           </p>
         </>
       )
     case 'scoring_profiles':
       return (
         <>
-          <p className="font-semibold text-slate-900">Chấm điểm hồ sơ</p>
+          <p className="font-semibold text-slate-900">Cài đặt Profile</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Một hoặc nhiều <strong>profile</strong>: khối quy tắc kéo thả, điều kiện khớp trường lead, điểm có thể{' '}
             <strong>âm hoặc dương</strong>, ngưỡng HOT/WARM. Dùng tab <strong>Quy tắc mẫu</strong> để soạn mẫu tái sử dụng.
@@ -161,7 +158,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className="mt-2 text-slate-700">
             <strong>Ứng dụng:</strong> chỉ đi kèm luồng <strong>phân tích AI trên hồ sơ</strong>. Không tự hiện trong Playbook
-            hay Script Hub. Khác tab <strong>Chấm điểm hồ sơ</strong> /{' '}
+            hay Script Hub. Khác tab <strong>Cài đặt Profile</strong> /{' '}
             <strong>Điểm thông tin</strong> (điểm theo dữ liệu hồ sơ, không phải văn bản RAG).
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
@@ -188,7 +185,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'permissions':
       return (
         <>
-          <p className="font-semibold text-slate-900">Ma trận phân quyền</p>
+          <p className="font-semibold text-slate-900">Phân Quyền</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Ba tầng: Tư vấn viên → Trưởng nhóm → Quản trị. Trưởng nhóm được mẫu tư vấn (Thông tin TV), profile nhóm, đổi TVV
             trong nhóm. Siêu quản trị có thể bổ sung <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">extraPermissions</code>{' '}
@@ -199,7 +196,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'staff':
       return (
         <>
-          <p className="font-semibold text-slate-900">Quản lý nhân sự</p>
+          <p className="font-semibold text-slate-900">Quản lý Nhân Sự</p>
           <p className="mt-1.5">
             <strong>Sửa / vô hiệu:</strong> cập nhật <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">users/{'{uid}'}</code> trên Firestore.{' '}
             <strong>Đổi mật khẩu:</strong> trong form «Sửa» dùng nút gửi email đặt lại (Firebase) — app <strong>không</strong> gán
@@ -255,9 +252,9 @@ export function SettingsView() {
   const [addCatalogPresetGroup, setAddCatalogPresetGroup] = useState<RuleCategory | 'other' | null>(null)
   const addMasterCatalogFormAnchorRef = useRef<HTMLDivElement>(null)
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
+  const [consultingSubView, setConsultingSubView] = useState<'playbooks' | 'script_hub'>('playbooks')
   const [knowledgeWorkspaceOpen, setKnowledgeWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
-  const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
 
   const settingsWorkspaceOpen =
@@ -274,7 +271,6 @@ export function SettingsView() {
         setConsultingWorkspaceOpen(false)
         setKnowledgeWorkspaceOpen(false)
         setLlmWorkspaceOpen(false)
-        setPlaybookEditor(null)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -303,7 +299,7 @@ export function SettingsView() {
       const data = JSON.parse(demoJson) as Record<string, unknown>
       const profile = profiles[0]
       if (!profile) {
-        setDemoResult('Chưa có bộ chấm điểm — tạo profile trong tab Chấm điểm hồ sơ.')
+        setDemoResult('Chưa có bộ chấm điểm — tạo profile trong tab Cài đặt Profile.')
         return
       }
       const profileWithRules =
@@ -420,21 +416,25 @@ export function SettingsView() {
 
   const tabDefs = useMemo(() => {
     const base: { id: SettingsTabId; label: string; enabled: boolean }[] = []
-    if (db && canMaster) base.push({ id: 'master', label: 'Danh mục', enabled: true })
-    if (db && canScoringRules) base.push({ id: 'rule_templates', label: 'Quy tắc mẫu', enabled: true })
-    if (db && canScoringRules) base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
     if (db && (canScoringRules || canScoringProfilesOwn || canScoringProfilesTeam)) {
-      base.push({ id: 'scoring_profiles', label: 'Chấm điểm hồ sơ', enabled: true })
+      base.push({ id: 'scoring_profiles', label: 'Cài đặt Profile', enabled: true })
     }
-    if (db && canPlaybooks) base.push({ id: 'consulting', label: 'Thông tin TV', enabled: true })
+    if (db && canScoringRules) base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
+    if (db && canMaster) base.push({ id: 'master', label: 'Cài đặt danh mục', enabled: true })
+    if (db && canScoringRules) base.push({ id: 'rule_templates', label: 'Quy tắc mẫu', enabled: true })
+    if (db && canPlaybooks) base.push({ id: 'consulting', label: 'Thông tin T.Vấn', enabled: true })
     if (db && canAiEngine) {
-      base.push({ id: 'knowledge', label: 'Tri thức tuyển sinh', enabled: true })
+      base.push({ id: 'knowledge', label: 'Tri thức T.Sinh', enabled: true })
       base.push({ id: 'llm', label: 'LLM & Tư vấn AI', enabled: true })
     }
     if (db && (canStaff || canStaffTeam)) {
-      base.push({ id: 'staff', label: canStaff ? 'Quản lý nhân sự' : 'Nhóm tư vấn', enabled: true })
+      base.push({
+        id: 'staff',
+        label: canStaff ? 'Quản lý Nhân Sự' : 'Nhóm tư vấn',
+        enabled: true,
+      })
     }
-    if (canPermMatrix) base.push({ id: 'permissions', label: 'Phân quyền', enabled: true })
+    if (canPermMatrix) base.push({ id: 'permissions', label: 'Phân Quyền', enabled: true })
     return base
   }, [
     db,
@@ -532,7 +532,7 @@ export function SettingsView() {
       : canScoringProfilesTeam
         ? ' — quản lý: chỉnh bộ chấm điểm và nhân sự trong nhóm; không chỉnh Playbook / Tri thức.'
         : canScoringProfilesOwn
-          ? ' — chỉ tab «Chấm điểm hồ sơ» (profile do bạn tạo); không chỉnh Playbook hay Tri thức.'
+          ? ' — chỉ tab «Cài đặt Profile» (profile do bạn tạo); không chỉnh Playbook hay Tri thức.'
           : ' — chỉ các mục cấu hình được phép hiển thị bên dưới.'
 
   const setTab = (id: SettingsTabId) => {
@@ -858,12 +858,9 @@ export function SettingsView() {
       {db && activeTab === 'rule_templates' ? (
         <section
           role="tabpanel"
-          aria-labelledby="tab-rule-templates"
+          aria-label="Quy tắc mẫu"
           className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4"
         >
-          <h2 id="tab-rule-templates" className={settingsHeading}>
-            Quy tắc mẫu
-          </h2>
           {!canScoringRules ? (
             <p className={`mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ${settingsCopy}`}>
               Bạn chỉ xem được — chưa có quyền chỉnh phần này.
@@ -877,26 +874,13 @@ export function SettingsView() {
       ) : null}
 
       {db && activeTab === 'scoring' ? (
-        <div role="tabpanel" aria-labelledby="tab-scoring" className="min-w-0 max-w-full space-y-3">
-          <h2 id="tab-scoring" className={settingsHeading}>
-            Điểm thông tin
-          </h2>
-          <p className={`text-slate-600 ${settingsCopyMuted}`}>
-            Cấu hình % đầy hồ sơ theo trường (khác nhãn HOT/WARM từ profile — xem tab <strong>Chấm điểm hồ sơ</strong>).
-          </p>
+        <div role="tabpanel" aria-label="Điểm thông tin" className="min-w-0 max-w-full">
           <InfoCompletenessRulesPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 
       {db && activeTab === 'scoring_profiles' ? (
-        <div role="tabpanel" aria-labelledby="tab-scoring-profiles" className="min-w-0 max-w-full space-y-3">
-          <h2 id="tab-scoring-profiles" className={settingsHeading}>
-            Chấm điểm hồ sơ (HOT / WARM / COLD)
-          </h2>
-          <p className={`text-slate-600 ${settingsCopyMuted}`}>
-            Bộ quy tắc tích lũy điểm trên dữ liệu hồ sơ — có thể cộng hoặc <strong>trừ</strong> điểm theo từng điều kiện. Tab{' '}
-            <strong>Điểm thông tin</strong> bên cạnh dùng cho % đầy form (không phải điểm HOT/WARM).
-          </p>
+        <div role="tabpanel" aria-label="Cài đặt Profile" className="min-w-0 max-w-full space-y-3">
           <ProfileManagerTab db={db} />
           <section className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4">
             <h3 className={settingsHeading}>Thử nghiệm chấm điểm (JSON)</h3>
@@ -954,17 +938,53 @@ export function SettingsView() {
                 : 'space-y-3'
             }
           >
-            <ConsultingPlaybookSection
-              db={db}
-              playbooks={playbooks}
-              loading={pbLoading}
-              error={pbError}
-              canPlaybooks={canPlaybooks}
-              onEdit={(p) => setPlaybookEditor(p)}
-              consultingWorkspaceOpen={consultingWorkspaceOpen}
-              compactChrome={!consultingWorkspaceOpen}
-            />
-            {db && canPlaybooks ? <ScriptHubManager db={db} /> : null}
+            <div
+              className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/80 bg-white/80 p-1"
+              role="tablist"
+              aria-label="Thông tin T.Vấn"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={consultingSubView === 'playbooks'}
+                onClick={() => setConsultingSubView('playbooks')}
+                className={[
+                  'rounded-lg px-3 py-2 text-sm font-semibold transition',
+                  consultingSubView === 'playbooks'
+                    ? 'bg-sky-700 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-sky-50',
+                ].join(' ')}
+              >
+                Mẫu tư vấn (Playbook)
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={consultingSubView === 'script_hub'}
+                onClick={() => setConsultingSubView('script_hub')}
+                className={[
+                  'rounded-lg px-3 py-2 text-sm font-semibold transition',
+                  consultingSubView === 'script_hub'
+                    ? 'bg-slate-800 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-slate-100',
+                ].join(' ')}
+              >
+                Kịch bản Script Hub
+              </button>
+            </div>
+            {consultingSubView === 'playbooks' ? (
+              <ConsultingPlaybookSection
+                db={db}
+                playbooks={playbooks}
+                loading={pbLoading}
+                error={pbError}
+                canPlaybooks={canPlaybooks}
+                consultingWorkspaceOpen={consultingWorkspaceOpen}
+                compactChrome={!consultingWorkspaceOpen}
+              />
+            ) : (
+              <ScriptHubManager db={db} />
+            )}
           </div>
         </div>
       ) : null}
@@ -1047,10 +1067,7 @@ export function SettingsView() {
       ) : null}
 
       {activeTab === 'permissions' && canPermMatrix ? (
-        <div role="tabpanel" aria-labelledby="tab-permissions" className="space-y-3">
-          <h2 id="tab-permissions" className={settingsHeading}>
-            Ma trận phân quyền
-          </h2>
+        <div role="tabpanel" aria-label="Phân Quyền" className="space-y-3">
           <PermissionMatrixPanel />
         </div>
       ) : null}
@@ -1093,198 +1110,6 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {playbookEditor && db && canPlaybooks ? (
-        <PlaybookEditorModal db={db} playbook={playbookEditor} onClose={() => setPlaybookEditor(null)} />
-      ) : null}
-    </div>
-  )
-}
-
-function PlaybookEditorModal({
-  db,
-  playbook,
-  onClose,
-}: {
-  db: NonNullable<ReturnType<typeof getFirestoreDb>>
-  playbook: ConsultingPlaybook
-  onClose: () => void
-}) {
-  const [title, setTitle] = useState(playbook.title)
-  const [priority, setPriority] = useState(String(playbook.priority))
-  const [isActive, setIsActive] = useState(playbook.isActive)
-  const [strategy, setStrategy] = useState(playbook.strategy)
-  const [uspText, setUspText] = useState((playbook.keySellingPoints ?? []).join('\n'))
-  const [objText, setObjText] = useState(playbook.objectionHandling.join('\n'))
-  const [matchConfig, setMatchConfig] = useState<PlaybookMatchConfig>(() => playbookToMatchConfig(playbook))
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    setTitle(playbook.title)
-    setPriority(String(playbook.priority))
-    setIsActive(playbook.isActive)
-    setStrategy(playbook.strategy)
-    setUspText((playbook.keySellingPoints ?? []).join('\n'))
-    setObjText(playbook.objectionHandling.join('\n'))
-    setMatchConfig(playbookToMatchConfig(playbook))
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset form khi đổi playbook (theo id)
-  }, [playbook.id])
-
-  const save = async () => {
-    const { triggerConditions, matchKeywords, matchAllLeads } = matchConfig
-    if (
-      !matchAllLeads &&
-      !triggerConditions.length &&
-      !matchKeywords.length
-    ) {
-      window.alert(
-        'Chọn ít nhất một cách kích hoạt: «Áp dụng mọi hồ sơ», điều kiện, hoặc từ khóa liên quan.',
-      )
-      return
-    }
-    const pri = Math.floor(Number.parseInt(priority, 10))
-    if (!Number.isFinite(pri) || pri < 0 || pri > 1000) {
-      window.alert('Ưu tiên phải là số nguyên từ 0 đến 1000.')
-      return
-    }
-    setBusy(true)
-    try {
-      await updateDoc(doc(db, FS_COLLECTIONS.consultingPlaybooks, playbook.id), {
-        title: title.trim() || 'Playbook',
-        priority: pri,
-        isActive,
-        strategy: strategy.trim(),
-        keySellingPoints: uspText
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        objectionHandling: objText
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        triggerConditions,
-        matchKeywords,
-        matchAllLeads,
-        updatedAt: Timestamp.now(),
-        ...(playbook.seedTag ? { seedTag: playbook.seedTag } : {}),
-      })
-      onClose()
-    } catch (e) {
-      console.error(e)
-      window.alert(firestoreWriteErrorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" role="presentation">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/45"
-        aria-label="Đóng"
-        onClick={onClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="playbook-editor-title"
-        onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200/90 bg-white p-5 shadow-2xl md:p-6"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-          <h2 id="playbook-editor-title" className={settingsHeading}>
-            Sửa playbook
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Đóng"
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
-        <div className="mt-4 grid gap-4">
-          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
-            Tiêu đề
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
-            />
-          </label>
-          <div className="flex flex-wrap items-center gap-4">
-            <label className={`font-medium text-slate-700 ${settingsCopy}`}>
-              Ưu tiên (0–1000)
-              <input
-                type="number"
-                min={0}
-                max={1000}
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className={`mt-1.5 w-28 rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
-              />
-            </label>
-            <label className={`flex cursor-pointer items-center gap-2 pt-6 font-medium text-slate-700 ${settingsCopy}`}>
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              Đang bật
-            </label>
-          </div>
-          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
-            Chiến lược
-            <textarea
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              rows={4}
-              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
-            />
-          </label>
-          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
-            USP (mỗi dòng)
-            <textarea
-              value={uspText}
-              onChange={(e) => setUspText(e.target.value)}
-              rows={4}
-              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
-            />
-          </label>
-          <label className={`font-medium text-slate-700 ${settingsCopy}`}>
-            Xử lý từ chối (mỗi dòng)
-            <textarea
-              value={objText}
-              onChange={(e) => setObjText(e.target.value)}
-              rows={4}
-              className={`mt-1.5 w-full rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-slate-900 ${settingsCopy}`}
-            />
-          </label>
-          <div className="rounded-xl border border-violet-200/80 bg-violet-50/30 p-4">
-            <p className={`mb-3 font-semibold text-slate-900 ${settingsCopy}`}>Khi nào hiện trên hồ sơ TVV</p>
-            <PlaybookTriggerEditor value={matchConfig} onChange={setMatchConfig} />
-          </div>
-        </div>
-        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className={`rounded-lg border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 ${settingsCopy}`}
-          >
-            Hủy
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void save()}
-            className={`rounded-lg border border-violet-600 bg-violet-600 px-4 py-2.5 font-semibold text-white hover:bg-violet-700 disabled:opacity-50 ${settingsCopy}`}
-          >
-            {busy ? 'Đang lưu…' : 'Lưu'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

@@ -735,6 +735,11 @@ export interface ConsultingPlaybook {
   createdBy?: UserId
   /** Gắn khi seed — giữ khi «Sửa» để xóa hàng loạt theo seedTag vẫn khớp */
   seedTag?: string
+  /**
+   * Tính chất nội dung (Học phí, Chất lượng trường, Bằng cấp…).
+   * @see playbookContentCategories.ts
+   */
+  contentCategory?: string
 }
 
 // -----------------------------------------------------------------------------

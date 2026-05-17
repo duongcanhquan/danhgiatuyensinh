@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore'
 import type { ConsultingPlaybook } from '../types'
 import { FS_COLLECTIONS } from '../types'
+import { parsePlaybookContentCategory } from '../utils/playbookContentCategories'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 
 function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlaybook | null {
@@ -29,6 +30,7 @@ function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlayb
       updatedAt: (data.updatedAt as Timestamp) ?? now,
       createdBy: data.createdBy ? String(data.createdBy) : undefined,
       seedTag: data.seedTag ? String(data.seedTag) : undefined,
+      contentCategory: parsePlaybookContentCategory(data.contentCategory),
     }
   } catch {
     return null

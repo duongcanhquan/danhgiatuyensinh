@@ -43,11 +43,13 @@ export function getPlaybookUploadTemplate(): Array<{
   strategy: string
   keySellingPoints: string[]
   objectionHandling: string[]
+  contentCategory?: string
 }> {
   return [
     {
       id: 'mau_playbook_vietmy_001',
       title: 'Mẫu — Kịch bản theo tỉnh (chỉnh sửa điều kiện và nội dung)',
+      contentCategory: 'tuition',
       priority: 50,
       isActive: true,
       triggerConditions: [{ field: 'province', operator: 'EQUALS', value: 'Hà Nội' }],
