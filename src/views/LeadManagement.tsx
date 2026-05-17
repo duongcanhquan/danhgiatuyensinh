@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Sparkles, Wand2, X, Zap } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, CircleHelp, Download, Info as InfoIcon, Library, Sparkles, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -44,6 +44,7 @@ import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
+import { LeadKnowledgePanel } from '../components/LeadKnowledgePanel'
 import {
   evaluateLead,
   leadToEvaluationRecord,
@@ -65,6 +66,8 @@ import {
 import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
 import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
+import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
+import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
 import { InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
@@ -2980,6 +2983,18 @@ function LeadDetailPanel({
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
+  const { documents: knowledgeDocuments } = useKnowledgeDocuments()
+  const { categories: knowledgeCategories } = useKnowledgeCategories()
+
+  const consultingInsights = useMemo(
+    () =>
+      buildLeadConsultingInsights(lead, playbooks, knowledgeDocuments, {
+        infoScoreRuntime,
+        priorityTag: scoringPreview?.priorityTag,
+        calculatedScore: scoringPreview?.calculatedScore,
+      }),
+    [lead, playbooks, knowledgeDocuments, infoScoreRuntime, scoringPreview],
+  )
 
   const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
   const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
@@ -2999,6 +3014,7 @@ function LeadDetailPanel({
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
+  const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
@@ -3009,6 +3025,7 @@ function LeadDetailPanel({
     setCrmDirty(null)
     setStatusDirty(null)
     setMsg(null)
+    setPlaybookPopupTab('consulting')
     setDetailLeftTab('profile')
     setDetailRightTab('history')
     signalsHelpRef.current?.close()
@@ -3939,20 +3956,58 @@ function LeadDetailPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-playbook-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,88dvh)] max-h-[92dvh] w-[min(calc(100vw-1rem),85rem)] max-w-[min(96vw,85rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:h-[min(92dvh,76dvh)]"
+            className="fixed left-1/2 top-1/2 z-[120] flex h-[min(96dvh,calc(100dvh-0.75rem))] max-h-[min(96dvh,calc(100dvh-0.75rem))] w-[min(calc(100vw-0.75rem),100rem)] max-w-[calc(100vw-0.75rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl"
           >
-            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-4 py-3 sm:px-5 sm:py-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white shadow-sm sm:h-11 sm:w-11">
-                  <BookOpen className="h-5 w-5 text-amber-700 sm:h-6 sm:w-6" strokeWidth={1.75} aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <h2 id="lead-playbook-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
-                    Playbook tư vấn
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
-                    Tra cứu chiến lược, USP, phản đối theo dữ kiện sinh viên — tìm kiếm trong thư viện hoặc playbook khớp hồ sơ.
-                  </p>
+            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white shadow-sm sm:h-11 sm:w-11">
+                    <BookOpen className="h-5 w-5 text-amber-700 sm:h-6 sm:w-6" strokeWidth={1.75} aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 id="lead-playbook-dialog-title" className="text-base font-semibold text-slate-900 sm:text-xl">
+                      Tư vấn & tra cứu
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-600 sm:text-sm">
+                      {lead.fullName || 'Hồ sơ'} — kịch bản tham vấn và thông tin nhà trường
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-sm"
+                  role="tablist"
+                  aria-label="Loại tra cứu"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={playbookPopupTab === 'consulting'}
+                    onClick={() => setPlaybookPopupTab('consulting')}
+                    className={[
+                      'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm',
+                      playbookPopupTab === 'consulting'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-slate-700 hover:bg-slate-50',
+                    ].join(' ')}
+                  >
+                    <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+                    Tham vấn trả lời
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={playbookPopupTab === 'general'}
+                    onClick={() => setPlaybookPopupTab('general')}
+                    className={[
+                      'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm',
+                      playbookPopupTab === 'general'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-slate-700 hover:bg-slate-50',
+                    ].join(' ')}
+                  >
+                    <Library className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+                    Thông tin chung
+                  </button>
                 </div>
               </div>
               <button
@@ -3964,8 +4019,21 @@ function LeadDetailPanel({
                 Đóng
               </button>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
-              <LeadPlaybookPanel lead={lead} playbooks={playbooks} />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-5">
+              {playbookPopupTab === 'consulting' ? (
+                <LeadPlaybookPanel
+                  lead={lead}
+                  playbooks={playbooks}
+                  quickSearchTerms={consultingInsights.quickSearchTerms}
+                />
+              ) : (
+                <LeadKnowledgePanel
+                  lead={lead}
+                  documents={knowledgeDocuments}
+                  categories={knowledgeCategories}
+                  quickSearchTerms={consultingInsights.quickSearchTerms}
+                />
+              )}
             </div>
           </div>
         </>

@@ -880,9 +880,9 @@ export function SettingsView() {
       ) : null}
 
       {db && activeTab === 'scoring_profiles' ? (
-        <div role="tabpanel" aria-label="Cài đặt Profile" className="min-w-0 max-w-full space-y-3">
+        <div role="tabpanel" aria-label="Cài đặt Profile" className="min-w-0 max-w-full space-y-4">
           <ProfileManagerTab db={db} />
-          <section className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4">
+          <section className="border-t border-slate-200 pt-4">
             <h3 className={settingsHeading}>Thử nghiệm chấm điểm (JSON)</h3>
             <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
               Dán JSON mẫu — dùng <strong>profile đầu tiên</strong> trong danh sách. Các khóa nên khớp{' '}

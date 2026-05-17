@@ -20,16 +20,40 @@ export function normalizeKnowledgeCategoryId(raw: string): string {
     .slice(0, 48)
 }
 
+/** Builtin trước; mục custom trùng id ghi đè nhãn hiển thị (đổi tên danh mục mặc định). */
 export function mergeKnowledgeCategories(custom: KnowledgeCategoryDef[]): KnowledgeCategoryDef[] {
-  const seen = new Set<string>()
-  const out: KnowledgeCategoryDef[] = []
-  for (const c of [...KNOWLEDGE_BUILTIN_CATEGORIES, ...custom]) {
-    const id = normalizeKnowledgeCategoryId(c.id)
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    out.push({ id, label: c.label.trim() || id })
+  const byId = new Map<string, KnowledgeCategoryDef>()
+  for (const c of KNOWLEDGE_BUILTIN_CATEGORIES) {
+    byId.set(c.id, { id: c.id, label: c.label })
   }
-  return out
+  for (const c of custom) {
+    const id = normalizeKnowledgeCategoryId(c.id)
+    if (!id) continue
+    byId.set(id, { id, label: c.label.trim() || id })
+  }
+  return [...byId.values()]
+}
+
+/** Điểm khớp từ khóa — cao hơn = ưu tiên lên đầu danh sách. */
+export function knowledgeDocSearchScore(
+  doc: { title: string; content: string },
+  query: string,
+): number {
+  const q = query.trim().toLowerCase()
+  if (!q) return 0
+  const title = doc.title.toLowerCase()
+  const content = doc.content.toLowerCase()
+  let score = 0
+  if (title === q) score += 120
+  else if (title.startsWith(q)) score += 90
+  else if (title.includes(q)) score += 70
+  if (content.startsWith(q)) score += 35
+  else if (content.includes(q)) score += 25
+  for (const word of q.split(/\s+/).filter((w) => w.length >= 2)) {
+    if (title.includes(word)) score += 18
+    if (content.includes(word)) score += 8
+  }
+  return score
 }
 
 export function isBuiltinKnowledgeCategory(id: string): boolean {

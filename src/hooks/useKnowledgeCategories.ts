@@ -66,12 +66,43 @@ export function useKnowledgeCategories() {
     )
   }
 
+  const updateCategory = async (id: string, label: string) => {
+    const db = getFirestoreDb()
+    if (!db) throw new Error('Chưa cấu hình Firebase')
+    const norm = normalizeKnowledgeCategoryId(id)
+    const clean = label.trim()
+    if (!norm) throw new Error('Mã danh mục không hợp lệ')
+    if (!clean) throw new Error('Nhập tên danh mục')
+
+    const isBuiltin = KNOWLEDGE_BUILTIN_CATEGORIES.some((c) => c.id === norm)
+    const inCustom = custom.some((c) => c.id === norm)
+
+    if (!isBuiltin && !inCustom) throw new Error('Không tìm thấy danh mục')
+
+    let nextCustom: KnowledgeCategoryDef[]
+    if (inCustom) {
+      nextCustom = custom.map((c) => (c.id === norm ? { ...c, label: clean } : c))
+    } else {
+      nextCustom = [...custom, { id: norm, label: clean }]
+    }
+
+    await setDoc(
+      doc(db, DOC_PATH.collection, DOC_PATH.id),
+      { categories: nextCustom, updatedAt: Timestamp.now() },
+      { merge: true },
+    )
+  }
+
   const removeCategory = async (id: string) => {
     const db = getFirestoreDb()
     if (!db) throw new Error('Chưa cấu hình Firebase')
     const norm = normalizeKnowledgeCategoryId(id)
-    if (KNOWLEDGE_BUILTIN_CATEGORIES.some((c) => c.id === norm)) {
-      throw new Error('Không xóa được danh mục mặc định hệ thống')
+    const inCustom = custom.some((c) => c.id === norm)
+    if (!inCustom) {
+      if (KNOWLEDGE_BUILTIN_CATEGORIES.some((c) => c.id === norm)) {
+        throw new Error('Không xóa được danh mục mặc định — chỉ xóa được danh mục bạn tự thêm.')
+      }
+      throw new Error('Không tìm thấy danh mục')
     }
     const nextCustom = custom.filter((c) => c.id !== norm)
     await setDoc(
@@ -81,5 +112,5 @@ export function useKnowledgeCategories() {
     )
   }
 
-  return { categories, custom, loading, addCategory, removeCategory }
+  return { categories, custom, loading, addCategory, updateCategory, removeCategory }
 }

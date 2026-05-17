@@ -275,32 +275,14 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
   }
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-slate-100 shadow-2xl shadow-slate-950/50 backdrop-blur-2xl md:p-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_0%_0%,rgba(168,85,247,0.12),transparent_50%),radial-gradient(ellipse_at_100%_80%,rgba(245,158,11,0.1),transparent_45%)]" />
+    <section className="relative overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-white via-sky-50/50 to-amber-50/40 p-6 text-slate-900 shadow-lg backdrop-blur-xl md:p-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_0%_0%,rgba(56,189,248,0.08),transparent_50%),radial-gradient(ellipse_at_100%_80%,rgba(251,191,36,0.06),transparent_45%)]" />
       <div className="relative">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold uppercase tracking-wide text-white md:text-xl">
+            <h2 className="text-lg font-bold tracking-tight text-slate-900 md:text-xl">
               Trung tâm kịch bản tư vấn
             </h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-400">
-              Các đoạn kịch bản ghép nối — hệ thống tự ráp luồng tư vấn theo từng hồ sơ (trợ lý trên màn chi tiết).
-            </p>
-            <p className="mt-2 max-w-3xl text-xs leading-relaxed text-slate-500">
-              <strong className="text-slate-300">Nạp mẫu từ app:</strong> bấm «Nạp 20 snippet mẫu» (cần{' '}
-              <code className="rounded bg-black/30 px-1 text-slate-300">public/seed/vietmy-script-snippets.json</code>{' '}
-              — <code className="rounded bg-black/30 px-1 text-slate-300">npm run export:public-seed</code> rồi build).{' '}
-              <strong className="text-slate-300">Hoặc từ Terminal</strong> (service account):{' '}
-              <code className="rounded bg-black/30 px-1 text-slate-300">GOOGLE_APPLICATION_CREDENTIALS=./secrets/…json</code>{' '}
-              rồi <code className="rounded bg-black/30 px-1 text-slate-300">npm run seed:script-snippets</code>. Xóa
-              bộ đã seed:{' '}
-              <code className="rounded bg-black/30 px-1 text-slate-300">
-                DELETE_SCRIPT_SNIPPET_SEED=1 npm run seed:script-snippets
-              </code>
-              . Sửa nội dung: chỉnh trong bảng hoặc file{' '}
-              <code className="text-slate-400">scripts/data/vietmy-script-snippet-seed-entries.mjs</code> rồi export
-              lại hoặc chạy lại seed.
-            </p>
           </div>
           {canEdit ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -328,14 +310,14 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                     }
                   })()
                 }}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-500/25 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
               >
                 {seedBusy ? 'Đang nạp…' : 'Nạp 20 snippet mẫu'}
               </button>
               <button
                 type="button"
                 onClick={openCreate}
-                className="inline-flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-semibold text-amber-50 hover:bg-amber-500/30"
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-600"
               >
                 <Plus className="h-4 w-4" />
                 Snippet mới
@@ -345,47 +327,47 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
         </div>
 
         {!canEdit ? (
-          <p className="mt-4 text-sm text-amber-200">Bạn không có quyền chỉnh script hub.</p>
+          <p className="mt-4 text-sm text-amber-800">Bạn không có quyền chỉnh script hub.</p>
         ) : null}
-        {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
-        {msg && !modalOpen ? <p className="mt-2 text-sm text-emerald-300">{msg}</p> : null}
+        {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
+        {msg && !modalOpen ? <p className="mt-2 text-sm text-emerald-800">{msg}</p> : null}
 
-        <div className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-md">
-          <label className="text-xs font-medium text-slate-400">
+        <div className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/90 bg-white/90 p-4 shadow-sm">
+          <label className="text-xs font-medium text-slate-600">
             Danh mục
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory((e.target.value || '') as ScriptCategory | '')}
-              className="mt-1 block min-w-[10rem] rounded-lg border border-white/15 bg-slate-950/70 px-2 py-1.5 text-sm text-white"
+              className="mt-1 block min-w-[10rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
             >
               <option value="">Tất cả</option>
               {SCRIPT_CATEGORIES.map((c) => (
-                <option key={c} value={c} className="bg-slate-900">
+                <option key={c} value={c}>
                   {SCRIPT_CATEGORY_LABELS[c]}
                 </option>
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium text-slate-400">
+          <label className="text-xs font-medium text-slate-600">
             Ngành mục tiêu (điều kiện)
             <select
               value={filterMajor}
               onChange={(e) => setFilterMajor(e.target.value)}
-              className="mt-1 block min-w-[12rem] max-w-[16rem] rounded-lg border border-white/15 bg-slate-950/70 px-2 py-1.5 text-sm text-white"
+              className="mt-1 block min-w-[12rem] max-w-[16rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
             >
               {majorFilterOptions.map((o) => (
-                <option key={o.value || '__all__'} value={o.value} className="bg-slate-900">
+                <option key={o.value || '__all__'} value={o.value}>
                   {o.label}
                 </option>
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium text-slate-400">
+          <label className="text-xs font-medium text-slate-600">
             Trạng thái
             <select
               value={filterActive}
               onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
-              className="mt-1 block min-w-[8rem] rounded-lg border border-white/15 bg-slate-950/70 px-2 py-1.5 text-sm text-white"
+              className="mt-1 block min-w-[8rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900"
             >
               <option value="all">Tất cả</option>
               <option value="active">Đang bật</option>
@@ -396,7 +378,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
             <button
               type="button"
               onClick={clearFilters}
-              className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
             >
               Xóa bộ lọc
             </button>
@@ -404,19 +386,19 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
           {loading ? <span className="text-xs text-slate-500">Đang tải…</span> : null}
         </div>
         {!loading ? (
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-slate-600">
             Trên Firestore hiện có{' '}
-            <strong className="text-amber-100/95">{snippets.length}</strong> snippet
+            <strong className="text-amber-800">{snippets.length}</strong> snippet
             {filtersActive && filteredSnippets.length !== snippets.length
               ? ` — sau lọc còn ${filteredSnippets.length}.`
               : '.'}
           </p>
         ) : null}
 
-        <div className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/40 backdrop-blur-md">
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200/90 bg-white shadow-sm">
           <table className="min-w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-600">
                 <th className="px-3 py-2 font-medium">Tiêu đề</th>
                 <th className="px-3 py-2 font-medium">Danh mục</th>
                 <th className="px-3 py-2 font-medium">Điều kiện</th>
@@ -427,30 +409,30 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
             </thead>
             <tbody>
               {filteredSnippets.map((s) => (
-                <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.04]">
-                  <td className="max-w-[220px] truncate px-3 py-2 font-medium text-white">
+                <tr key={s.id} className="border-b border-slate-100 hover:bg-sky-50/50">
+                  <td className="max-w-[220px] truncate px-3 py-2 font-medium text-slate-900">
                     {s.title}
                     {s.seedTag ? (
                       <span
-                        className="ml-1 align-middle rounded bg-violet-500/25 px-1 text-xs font-normal uppercase tracking-wide text-violet-200"
+                        className="ml-1 align-middle rounded bg-violet-100 px-1 text-xs font-normal uppercase tracking-wide text-violet-800"
                         title={s.seedTag}
                       >
                         seed
                       </span>
                     ) : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-300">
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-700">
                     {SCRIPT_CATEGORY_LABELS[s.category]}
                   </td>
-                  <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">
+                  <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-600">
                     {s.matchConditions.length
                       ? s.matchConditions
                           .map((c) => `${String(c.field)} ${c.operator ?? '='} ${Array.isArray(c.value) ? c.value.join('|') : c.value}`)
                           .join(' · ')
                       : '—'}
                   </td>
-                  <td className="px-3 py-2 text-xs">{s.isActive ? 'Có' : 'Không'}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">{formatTs(s.lastUpdated)}</td>
+                  <td className="px-3 py-2 text-xs text-slate-800">{s.isActive ? 'Có' : 'Không'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{formatTs(s.lastUpdated)}</td>
                   <td className="px-3 py-2 text-right">
                     {canEdit ? (
                       <div className="flex justify-end gap-1">
@@ -458,7 +440,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                           type="button"
                           disabled={busy}
                           onClick={() => openEdit(s)}
-                          className="rounded-lg p-1.5 text-amber-200 hover:bg-white/10 disabled:opacity-40"
+                          className="rounded-lg p-1.5 text-amber-700 hover:bg-amber-50 disabled:opacity-40"
                           title="Sửa"
                         >
                           <Pencil className="h-4 w-4" />
@@ -467,7 +449,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                           type="button"
                           disabled={busy}
                           onClick={() => duplicateSnippet(s)}
-                          className="rounded-lg p-1.5 text-violet-200 hover:bg-white/10 disabled:opacity-40"
+                          className="rounded-lg p-1.5 text-violet-700 hover:bg-violet-50 disabled:opacity-40"
                           title="Nhân bản"
                         >
                           <Copy className="h-4 w-4" />
@@ -476,7 +458,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                           type="button"
                           disabled={busy}
                           onClick={() => void removeSnippet(s)}
-                          className="rounded-lg p-1.5 text-rose-300 hover:bg-rose-500/10 disabled:opacity-40"
+                          className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-40"
                           title="Xóa"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -488,21 +470,12 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
               ))}
               {!filteredSnippets.length && !loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-left text-sm text-slate-400">
+                  <td colSpan={6} className="px-3 py-6 text-left text-sm text-slate-600">
                     {snippets.length === 0 ? (
-                      <div className="mx-auto max-w-xl space-y-2 rounded-xl border border-amber-500/25 bg-amber-950/30 px-4 py-4 text-left">
-                        <p className="font-medium text-amber-100">Chưa có snippet trên Firestore</p>
-                        <p className="text-xs leading-relaxed text-slate-300">
-                          Giao diện web <strong>không</strong> tự tải file từ GitHub. Bạn cần mở Terminal trong thư mục
-                          project, cấu hình <code className="text-amber-200/90">GOOGLE_APPLICATION_CREDENTIALS</code>{' '}
-                          trỏ tới JSON service account của <strong>cùng</strong> Firebase project với app, rồi chạy:{' '}
-                          <code className="block mt-2 rounded bg-black/40 px-2 py-1.5 font-mono text-xs text-slate-100">
-                            npm run seed:script-snippets
-                          </code>
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Hoặc bấm «Snippet mới» ở trên để tạo tay. Sau khi seed, tải lại trang — bộ đếm «Trên
-                          Firestore» sẽ là 20.
+                      <div className="mx-auto max-w-xl space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-left">
+                        <p className="font-medium text-amber-950">Chưa có snippet trên Firestore</p>
+                        <p className="text-xs leading-relaxed text-slate-700">
+                          Bấm «Nạp 20 snippet mẫu» hoặc «Snippet mới» để thêm đoạn kịch bản.
                         </p>
                       </div>
                     ) : (
@@ -527,62 +500,62 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
           <button
             type="button"
             aria-label="Đóng"
-            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={closeModal}
           />
-          <div className="relative z-[121] m-4 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-amber-400/25 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 shadow-2xl shadow-amber-900/30 backdrop-blur-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <h3 className="text-base font-semibold uppercase tracking-wide text-white">
+          <div className="relative z-[121] m-4 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <h3 className="text-base font-semibold text-slate-900">
                 {editingId ? 'Sửa snippet' : 'Snippet mới'}
               </h3>
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-              {msg ? <p className="text-sm text-amber-200">{msg}</p> : null}
-              <label className="block text-xs font-medium text-slate-400">
+              {msg ? <p className="text-sm text-amber-800">{msg}</p> : null}
+              <label className="block text-xs font-medium text-slate-600">
                 Tiêu đề
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-amber-400/35"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-sky-300"
                 />
               </label>
-              <label className="block text-xs font-medium text-slate-400">
+              <label className="block text-xs font-medium text-slate-600">
                 Danh mục luồng
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as ScriptCategory)}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/60 px-3 py-2 text-sm text-white"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                 >
                   {SCRIPT_CATEGORIES.map((c) => (
-                    <option key={c} value={c} className="bg-slate-900">
+                    <option key={c} value={c}>
                       {SCRIPT_CATEGORY_LABELS[c]}
                     </option>
                   ))}
                 </select>
               </label>
-              <label className="flex items-center gap-2 text-xs text-slate-300">
+              <label className="flex items-center gap-2 text-xs text-slate-700">
                 <input
                   type="checkbox"
                   checked={isActive}
                   onChange={(e) => setIsActive(e.target.checked)}
-                  className="rounded border-white/30 bg-slate-900"
+                  className="rounded border-slate-300"
                 />
                 Đang kích hoạt
               </label>
-              <label className="block text-xs font-medium text-slate-400">
+              <label className="block text-xs font-medium text-slate-600">
                 Nội dung script
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   rows={8}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/60 px-3 py-2 font-mono text-sm leading-relaxed text-slate-100 outline-none focus:ring-2 focus:ring-amber-400/35"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-sm leading-relaxed text-slate-900 outline-none focus:ring-2 focus:ring-sky-300"
                   placeholder={
                     category === 'OBJECTION_HANDLING'
                       ? 'Dòng 1: lo ngại của PH\n---\nĐoạn sau: script trả lời mẫu'
@@ -593,21 +566,21 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
 
               <div>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
                     Điều kiện kích hoạt (AND)
                   </p>
                   <button
                     type="button"
                     onClick={() => setConditionRows((r) => [...r, newConditionRow()])}
-                    className="text-xs font-medium text-amber-200 hover:underline"
+                    className="text-xs font-medium text-amber-800 hover:underline"
                   >
                     + Điều kiện
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-slate-600">IN / NOT IN: nhiều giá trị cách nhau bởi dấu phẩy.</p>
+                <p className="mt-1 text-xs text-slate-500">IN / NOT IN: nhiều giá trị cách nhau bởi dấu phẩy.</p>
                 <ul className="mt-2 space-y-2">
                   {conditionRows.map((row) => (
-                    <li key={row.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                    <li key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <div className="grid gap-2 sm:grid-cols-3">
                         <select
                           value={row.field}
@@ -615,10 +588,10 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                             const v = e.target.value as PlaybookConditionField
                             setConditionRows((xs) => xs.map((x) => (x.id === row.id ? { ...x, field: v } : x)))
                           }}
-                          className="rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white"
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900"
                         >
                           {FIELD_OPTIONS.map((f) => (
-                            <option key={f.value} value={f.value} className="bg-slate-900">
+                            <option key={f.value} value={f.value}>
                               {f.label}
                             </option>
                           ))}
@@ -629,10 +602,10 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                             const v = e.target.value as PlaybookOperator
                             setConditionRows((xs) => xs.map((x) => (x.id === row.id ? { ...x, operator: v } : x)))
                           }}
-                          className="rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white"
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900"
                         >
                           {OPERATORS.map((o) => (
-                            <option key={o.value} value={o.value} className="bg-slate-900">
+                            <option key={o.value} value={o.value}>
                               {o.label}
                             </option>
                           ))}
@@ -643,7 +616,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                             const v = e.target.value
                             setConditionRows((xs) => xs.map((x) => (x.id === row.id ? { ...x, valueText: v } : x)))
                           }}
-                          className="rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white sm:col-span-1"
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 sm:col-span-1"
                           placeholder="Giá trị so khớp"
                         />
                       </div>
@@ -652,7 +625,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                           type="button"
                           disabled={conditionRows.length <= 1}
                           onClick={() => setConditionRows((xs) => xs.filter((x) => x.id !== row.id))}
-                          className="text-xs text-rose-300 hover:text-rose-200 disabled:opacity-30"
+                          className="text-xs text-rose-600 hover:text-rose-800 disabled:opacity-30"
                         >
                           Xóa dòng
                         </button>
@@ -662,11 +635,11 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                 </ul>
               </div>
             </div>
-            <div className="flex gap-2 border-t border-white/10 px-5 py-3">
+            <div className="flex gap-2 border-t border-slate-200 px-5 py-3">
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 Hủy
               </button>
@@ -674,7 +647,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                 type="button"
                 disabled={busy || !canEdit}
                 onClick={() => void persist()}
-                className="flex-1 rounded-xl border border-amber-400/40 bg-gradient-to-r from-violet-600/90 to-amber-600/85 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-40"
+                className="flex-1 rounded-xl border border-amber-400 bg-amber-500 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-40"
               >
                 {busy ? 'Đang lưu…' : 'Lưu vào Firestore'}
               </button>

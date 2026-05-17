@@ -3,11 +3,11 @@ import { addDoc, collection, deleteDoc, doc, Timestamp, updateDoc } from 'fireba
 import type { KnowledgeDocumentType } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import type { Firestore } from 'firebase/firestore'
-import { Database, Download, Search, Settings2, Upload, X } from 'lucide-react'
+import { Database, Download, FolderTree, Search, Settings2, Upload, X } from 'lucide-react'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { KnowledgeCategoryManager } from './KnowledgeCategoryManager'
-import { knowledgeCategoryLabel } from '../utils/knowledgeCategories'
+import { knowledgeCategoryLabel, knowledgeDocSearchScore } from '../utils/knowledgeCategories'
 import {
   importKnowledgeDocumentsBatch,
   importVietMyKnowledgeFromPublic,
@@ -19,7 +19,7 @@ import {
   KNOWLEDGE_UPLOAD_TEMPLATE_FILENAME,
 } from '../utils/configTemplateDownload'
 
-type MainTab = 'setup' | 'data'
+type MainTab = 'data' | 'categories' | 'setup'
 
 const panelTitle = 'text-base font-semibold tracking-tight text-slate-900'
 const panelSub = 'text-sm leading-relaxed text-slate-600'
@@ -41,7 +41,7 @@ export function KnowledgeBaseTab({
   canEdit?: boolean
 }) {
   const { documents, loading, error } = useKnowledgeDocuments()
-  const { categories, addCategory, removeCategory } = useKnowledgeCategories()
+  const { categories, addCategory, updateCategory, removeCategory } = useKnowledgeCategories()
   const [mainTab, setMainTab] = useState<MainTab>('data')
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [isNewDoc, setIsNewDoc] = useState(false)
@@ -60,18 +60,28 @@ export function KnowledgeBaseTab({
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'' | KnowledgeDocumentType>('')
 
+  const searchQuery = search.trim()
+
   const filteredDocs = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return documents.filter((d) => {
+    const q = searchQuery.toLowerCase()
+    const list = documents.filter((d) => {
       if (typeFilter && d.type !== typeFilter) return false
       if (!q) return true
       const t = d.title.toLowerCase()
       const c = d.content.toLowerCase()
       return t.includes(q) || c.includes(q)
     })
-  }, [documents, search, typeFilter])
+    if (!q) {
+      return [...list].sort((a, b) => a.title.localeCompare(b.title, 'vi'))
+    }
+    return [...list].sort((a, b) => {
+      const sb = knowledgeDocSearchScore(b, searchQuery) - knowledgeDocSearchScore(a, searchQuery)
+      if (sb !== 0) return sb
+      return a.title.localeCompare(b.title, 'vi')
+    })
+  }, [documents, searchQuery, typeFilter])
 
-  const hasActiveFilters = Boolean(search.trim() || typeFilter)
+  const hasActiveFilters = Boolean(searchQuery || typeFilter)
 
   const resetForm = () => {
     setEditingId(null)
@@ -279,6 +289,21 @@ export function KnowledgeBaseTab({
           <button
             type="button"
             role="tab"
+            aria-selected={mainTab === 'categories'}
+            onClick={() => setMainTab('categories')}
+            className={[
+              tabBtn,
+              mainTab === 'categories'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50',
+            ].join(' ')}
+          >
+            <FolderTree className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+            Danh mục ({categories.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={mainTab === 'setup'}
             onClick={() => setMainTab('setup')}
             className={[
@@ -289,7 +314,7 @@ export function KnowledgeBaseTab({
             ].join(' ')}
           >
             <Settings2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-            Thiết lập
+            Nạp dữ liệu
           </button>
         </div>
       </div>
@@ -408,19 +433,27 @@ export function KnowledgeBaseTab({
             ) : null}
             </div>
 
-            {canEdit ? (
-            <div className={['lg:col-span-2', compactChrome ? 'space-y-3' : 'space-y-4'].join(' ')}>
-            <KnowledgeCategoryManager
-              categories={categories}
-              onAdd={addCategory}
-              onRemove={removeCategory}
-            />
-            <p className={`${panelSub} rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-2`}>
-              Thêm hoặc sửa tài liệu tại tab <strong>Dữ liệu</strong> — bấm dòng bên trái hoặc «Thêm mới» bên phải.
+            <p className={`${panelSub} rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-2 lg:col-span-2`}>
+              Soạn tài liệu tại tab <strong>Dữ liệu</strong>; quản lý danh mục tại tab <strong>Danh mục</strong>.
             </p>
-            </div>
-            ) : null}
           </div>
+          </div>
+        ) : null}
+
+        {mainTab === 'categories' ? (
+          <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            {!canEdit ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                Bạn không có quyền chỉnh danh mục — liên hệ quản trị.
+              </p>
+            ) : (
+              <KnowledgeCategoryManager
+                categories={categories}
+                onAdd={addCategory}
+                onUpdate={updateCategory}
+                onRemove={removeCategory}
+              />
+            )}
           </div>
         ) : null}
 
@@ -471,10 +504,11 @@ export function KnowledgeBaseTab({
                   </button>
                 ) : null}
               </div>
-              <p className={panelSub}>
+              <p className={`${panelSub} mt-2`}>
                 Hiển thị <strong className="font-semibold text-slate-900">{filteredDocs.length}</strong> / {documents.length}{' '}
                 tài liệu
-                {hasActiveFilters ? ' (đã lọc)' : ''}.
+                {hasActiveFilters ? ' (đã lọc)' : ''}
+                {searchQuery ? ' — khớp từ khóa được xếp lên trên.' : ''}.
               </p>
             </div>
 
@@ -482,8 +516,8 @@ export function KnowledgeBaseTab({
               className={[
                 'grid min-h-0 flex-1 gap-3',
                 compactChrome
-                  ? 'min-h-[min(70vh,720px)] md:grid-cols-[minmax(240px,34%)_1fr]'
-                  : 'min-h-[min(58vh,560px)] md:grid-cols-[minmax(220px,36%)_1fr]',
+                  ? 'min-h-[min(72vh,760px)] lg:grid-cols-[minmax(280px,32%)_1fr]'
+                  : 'min-h-[min(62vh,640px)] lg:grid-cols-[minmax(260px,34%)_1fr]',
               ].join(' ')}
             >
               <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/50">
@@ -494,25 +528,37 @@ export function KnowledgeBaseTab({
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                 {loading ? <p className="text-xs text-slate-500">Đang tải…</p> : null}
                 <ul className="space-y-1" role="listbox" aria-label="Danh sách tài liệu">
-                  {filteredDocs.map((d) => (
-                    <li key={d.id}>
-                      <button
-                        type="button"
-                        onClick={() => selectDocument(d.id)}
-                        className={[
-                          'w-full rounded-lg border px-2.5 py-2 text-left text-sm',
-                          selectedDoc?.id === d.id && !isNewDoc
-                            ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-400/50'
-                            : 'border-transparent bg-white hover:border-slate-200',
-                        ].join(' ')}
-                      >
-                        <span className="font-medium">{d.title}</span>
-                        <span className="mt-0.5 block text-[11px] text-amber-800">
-                          {knowledgeCategoryLabel(d.type, categories)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                  {filteredDocs.map((d) => {
+                    const matchScore = searchQuery ? knowledgeDocSearchScore(d, searchQuery) : 0
+                    return (
+                      <li key={d.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectDocument(d.id)}
+                          className={[
+                            'w-full rounded-lg border px-2.5 py-2 text-left text-sm transition',
+                            selectedDoc?.id === d.id && !isNewDoc
+                              ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-400/50'
+                              : matchScore >= 70
+                                ? 'border-amber-200/80 bg-amber-50/40 hover:border-amber-300'
+                                : 'border-transparent bg-white hover:border-slate-200',
+                          ].join(' ')}
+                        >
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="font-medium leading-snug text-slate-900">{d.title}</span>
+                            {searchQuery && matchScore > 0 ? (
+                              <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-900">
+                                {matchScore >= 90 ? 'Khớp cao' : 'Khớp'}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-amber-800">
+                            {knowledgeCategoryLabel(d.type, categories)}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
                 </div>
               </aside>
@@ -537,7 +583,7 @@ export function KnowledgeBaseTab({
                       ) : null}
                     </div>
                     {canEdit ? (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={startNewDocument}
@@ -545,6 +591,18 @@ export function KnowledgeBaseTab({
                         >
                           Thêm mới
                         </button>
+                        {(selectedDoc || isNewDoc) ? (
+                          <button
+                            type="button"
+                            disabled={
+                              busy || (!isNewDoc && !detailDirty) || !title.trim() || !content.trim()
+                            }
+                            onClick={() => void save()}
+                            className="rounded-lg border border-amber-700 bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-45"
+                          >
+                            {busy ? 'Đang lưu…' : 'Lưu thông tin'}
+                          </button>
+                        ) : null}
                         {selectedDoc && !isNewDoc ? (
                           <button
                             type="button"
@@ -570,36 +628,38 @@ export function KnowledgeBaseTab({
                     )
                   ) : selectedDoc || isNewDoc ? (
                     <div className="grid gap-3">
-                      <label className={panelLabel}>
-                        Tiêu đề
-                        <input
-                          value={title}
-                          onChange={(e) => setTitle(e.target.value)}
-                          className={panelInput}
-                          placeholder="vd. Học phí Cao đẳng 2025–2026"
-                        />
-                      </label>
-                      <label className={panelLabel}>
-                        Danh mục (loại)
-                        <select
-                          value={type}
-                          onChange={(e) => setType(e.target.value as KnowledgeDocumentType)}
-                          className={panelInput}
-                        >
-                          {categories.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className={panelLabel}>
+                          Tiêu đề
+                          <input
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className={panelInput}
+                            placeholder="vd. Học phí Cao đẳng 2025–2026"
+                          />
+                        </label>
+                        <label className={panelLabel}>
+                          Danh mục
+                          <select
+                            value={type}
+                            onChange={(e) => setType(e.target.value as KnowledgeDocumentType)}
+                            className={panelInput}
+                          >
+                            {categories.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
                       <label className={panelLabel}>
                         Nội dung
                         <textarea
                           value={content}
                           onChange={(e) => setContent(e.target.value)}
-                          rows={12}
-                          className={`${panelInput} font-mono leading-relaxed`}
+                          rows={compactChrome ? 16 : 14}
+                          className={`${panelInput} min-h-[min(280px,40vh)] font-mono leading-relaxed`}
                           placeholder="Dán quy định học phí, ký túc xá, điều kiện tuyển ngành…"
                         />
                       </label>
@@ -610,18 +670,6 @@ export function KnowledgeBaseTab({
                     </p>
                   )}
                 </div>
-                {canEdit && (selectedDoc || isNewDoc) ? (
-                  <div className="shrink-0 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
-                    <button
-                      type="button"
-                      disabled={busy || (!isNewDoc && !detailDirty) || !title.trim() || !content.trim()}
-                      onClick={() => void save()}
-                      className="w-full rounded-lg border border-amber-800 bg-amber-800 py-2.5 text-sm font-semibold text-white hover:bg-amber-900 disabled:opacity-45 sm:w-auto sm:px-6"
-                    >
-                      {busy ? 'Đang lưu…' : 'Lưu thông tin'}
-                    </button>
-                  </div>
-                ) : null}
               </main>
             </div>
           </div>

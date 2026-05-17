@@ -48,10 +48,10 @@ export function RuleLibrarySidebar({
   return (
     <aside
       className={[
-        'flex min-h-0 w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm',
+        'flex min-h-0 w-full min-w-0 flex-col gap-2 p-2.5',
         fillHeight
-          ? 'h-full min-h-0 flex-1 max-h-none'
-          : 'min-h-[min(52vh,360px)] max-h-[min(78vh,640px)] lg:min-h-[min(56vh,400px)] lg:max-h-[min(82vh,680px)]',
+          ? 'h-full min-h-0 flex-1 max-h-none border-r border-slate-200 bg-slate-50/70'
+          : 'min-h-[min(52vh,360px)] max-h-[min(78vh,640px)] rounded-xl border border-slate-200 bg-white shadow-sm lg:min-h-[min(56vh,400px)] lg:max-h-[min(82vh,680px)]',
       ].join(' ')}
     >
       <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200/90 pb-2">

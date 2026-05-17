@@ -128,10 +128,6 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
               ?
             </button>
           </div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700 md:text-base">
-            % đo mức <strong>đã điền</strong> theo <strong>20 cột quy chuẩn</strong> + tiêu chí bạn bật bên dưới — bấm{' '}
-            <strong>?</strong> để đọc đầy đủ. Khác nhãn HOT/WARM của profile chấm điểm.
-          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
             {loading ? (
               <span className="inline-flex items-center gap-1.5">
@@ -146,11 +142,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-900 ring-1 ring-emerald-200/80">
                 Đang áp dụng: cấu hình trên server (scoringAux/infoScoreConfig)
               </span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-800 ring-1 ring-slate-200/90">
-                Đang áp dụng: mặc định app — lưu lần đầu để ghi lên server
-              </span>
-            )}
+            ) : null}
           </div>
           {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
           {msg ? <p className="mt-2 text-sm text-emerald-800">{msg}</p> : null}

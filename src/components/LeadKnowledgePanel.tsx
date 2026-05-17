@@ -4,6 +4,7 @@ import type { KnowledgeDocument, Lead } from '../types'
 import { knowledgeCategoryLabel } from '../utils/knowledgeCategories'
 import type { KnowledgeCategoryDef } from '../utils/knowledgeCategories'
 import { isKnowledgeDocRelevantToLead, knowledgeDocDisplayScore } from '../utils/knowledgeRag'
+import { knowledgeDocSearchScore } from '../utils/knowledgeCategories'
 
 function norm(s: string): string {
   return s.trim().toLowerCase()
@@ -35,7 +36,8 @@ export function LeadKnowledgePanel({
   }, [initialSelectedId])
 
   const ranked = useMemo(() => {
-    const q = norm(query)
+    const qRaw = query.trim()
+    const q = norm(qRaw)
     let list = documents.map((d) => ({ doc: d, score: knowledgeDocDisplayScore(lead, d) }))
     if (onlyRelevant) list = list.filter((x) => isKnowledgeDocRelevantToLead(lead, x.doc))
     if (typeFilter) list = list.filter((x) => x.doc.type === typeFilter)
@@ -45,7 +47,13 @@ export function LeadKnowledgePanel({
         return blob.includes(q)
       })
     }
-    return list.sort((a, b) => b.score - a.score || a.doc.title.localeCompare(b.doc.title, 'vi'))
+    return list.sort((a, b) => {
+      if (qRaw) {
+        const kw = knowledgeDocSearchScore(b.doc, qRaw) - knowledgeDocSearchScore(a.doc, qRaw)
+        if (kw !== 0) return kw
+      }
+      return b.score - a.score || a.doc.title.localeCompare(b.doc.title, 'vi')
+    })
   }, [documents, lead, query, typeFilter, onlyRelevant])
 
   const selected = useMemo(() => {
@@ -71,7 +79,7 @@ export function LeadKnowledgePanel({
           Gợi ý theo thông tin form (kể cả chưa lưu).
         </p>
       ) : null}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,32%)_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(260px,34%)_1fr]">
         <aside className="flex min-h-0 flex-col gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 p-2">
           <div className="shrink-0 space-y-2">
             <label className="relative block">

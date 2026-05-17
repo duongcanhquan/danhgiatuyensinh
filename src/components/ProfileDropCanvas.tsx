@@ -63,15 +63,10 @@ function allocationPreviewPoints(block: ScoringRuleBlock, r: ScoringRuleConditio
 /** Header canvas — một dòng để nhường chiều cao cho khối kéo thả. */
 function CumulativeScoringCanvasHeader() {
   return (
-    <header className="sticky top-0 z-30 mb-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
-      <p className="text-xs font-semibold leading-snug text-slate-700">
-        Canvas bên phải ·{' '}
-        <span className="text-slate-600">
-          kéo mẫu từ thư viện; mỗi dòng: bấm thanh tóm tắt để thu gọn / mở chi tiết
-        </span>{' '}
-        · cộng dồn ± theo dòng khớp
-      </p>
-    </header>
+    <p className="mb-2 shrink-0 text-xs leading-snug text-slate-600">
+      <span className="font-semibold text-slate-800">Canvas quy tắc</span> — kéo mẫu từ thư viện trái; bấm
+      thanh tóm tắt mỗi khối để thu gọn / mở chi tiết; điểm cộng dồn theo dòng khớp.
+    </p>
   )
 }
 
@@ -507,8 +502,8 @@ export function ProfileDropCanvas({
         onDragOver={onDragOverAllow}
         onDrop={onDropCanvas}
         className={[
-          'relative min-w-0 space-y-2 overflow-x-auto overflow-y-auto rounded-xl border-2 border-dashed border-sky-400/80 bg-gradient-to-b from-sky-50/60 to-white p-3 pb-6 shadow-inner ring-1 ring-sky-200/50',
-          workspaceLayout ? 'min-h-0 flex-1' : 'flex-1',
+          'relative min-w-0 flex-1 space-y-2 overflow-x-auto overflow-y-auto rounded-lg border border-dashed border-slate-300 bg-slate-50/40 p-3 pb-4',
+          workspaceLayout ? 'min-h-0' : 'min-h-[280px]',
         ].join(' ')}
       >
         {blocks.length === 0 ? (

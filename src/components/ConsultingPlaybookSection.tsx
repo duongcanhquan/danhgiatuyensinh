@@ -642,10 +642,6 @@ export function ConsultingPlaybookSection({
         consultingWorkspaceOpen || compactChrome ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)] min-h-[280px]',
       ].join(' ')}
     >
-      <p className="shrink-0 border-b border-amber-200/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950 sm:px-4 sm:text-sm">
-        <strong>Gợi ý cho TVV:</strong> Playbook khớp theo tỉnh, ngành, nhãn HOT/WARM trên hồ sơ — TVV xem tab{' '}
-        <strong>Tổng quan</strong> trong «Tư vấn & Tri thức» để thấy điểm yếu và gợi ý phù hợp.
-      </p>
       <div
         className={[
           'shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2',

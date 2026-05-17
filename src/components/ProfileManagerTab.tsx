@@ -222,18 +222,16 @@ function ProfileEditorPanel({
   return (
     <div
       className={[
-        'min-w-0 space-y-1.5',
-        workspaceLayout ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
+        'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+        workspaceLayout ? '' : 'space-y-1.5',
+      ].join(' ')}
     >
       {canCreateProfile && !canEditProfile ? (
         <p className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs leading-snug text-sky-950">
           Đang xem profile toàn trường hoặc của đồng nghiệp — chỉ xem; vẫn chọn profile này trên màn hồ sơ để chấm điểm. Không lưu hay xóa tại đây.
         </p>
       ) : null}
-      <div className="rounded-md border border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white p-1.5 shadow-sm">
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/60 px-3 py-2.5 sm:px-4">
         {metaCollapsed ? (
           <div className="flex w-full min-w-0 items-center gap-1.5 rounded border border-transparent px-0.5 py-0.5">
             <button
@@ -456,26 +454,28 @@ function ProfileEditorPanel({
 
       <div
         className={[
-          'border-t border-slate-200 pt-1.5',
-          workspaceLayout ? 'flex min-h-0 flex-1 flex-col' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
+          'flex min-h-0 min-w-0 flex-1 flex-col',
+          workspaceLayout ? 'overflow-hidden' : 'min-h-[min(420px,55vh)]',
+        ].join(' ')}
       >
         <div
           className={[
-            'grid min-h-0 min-w-0 flex-1 gap-2',
-            canEditProfile && ruleLibraryCollapsed ? 'lg:grid-cols-[2.875rem_1fr]' : canEditProfile ? 'lg:grid-cols-[minmax(288px,340px)_1fr]' : 'grid-cols-1',
-            workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : 'min-h-[220px]',
+            'grid min-h-0 min-w-0 flex-1 gap-0 overflow-hidden',
+            canEditProfile && ruleLibraryCollapsed
+              ? 'lg:grid-cols-[2.75rem_1fr]'
+              : canEditProfile
+                ? 'lg:grid-cols-[minmax(260px,300px)_1fr]'
+                : 'grid-cols-1',
+            workspaceLayout ? 'lg:min-h-0 lg:items-stretch' : '',
           ].join(' ')}
         >
           {canEditProfile && ruleLibraryCollapsed ? (
-            <div className="flex min-h-[10rem] w-full flex-col items-center gap-1.5 self-stretch rounded-lg border border-amber-200/90 bg-gradient-to-b from-amber-50 via-white to-slate-50 py-2 shadow-sm">
+            <div className="flex min-h-[10rem] w-full flex-col items-center gap-1.5 self-stretch border-r border-slate-200 bg-slate-50/80 py-2">
               <button
                 type="button"
                 onClick={() => setRuleLibraryCollapsed(false)}
                 title="Mở thư viện quy tắc"
-                className="rounded-lg border border-amber-400 bg-white p-2 text-amber-950 shadow-sm transition hover:bg-amber-100"
+                className="rounded-lg border border-amber-300 bg-white p-2 text-amber-950 transition hover:bg-amber-100"
               >
                 <ChevronsRight className="h-4 w-4" aria-hidden />
               </button>
@@ -503,7 +503,7 @@ function ProfileEditorPanel({
         </div>
       </div>
 
-      <div className="shrink-0 rounded-lg border border-slate-200/90 bg-slate-50/90 px-2.5 py-2 text-xs text-slate-800">
+      <div className="shrink-0 border-t border-slate-200 bg-slate-50/40 px-3 py-2 text-xs text-slate-800 sm:px-4">
         {!draftHasRules ? (
           <p className="font-medium text-amber-950">
             Chưa có quy tắc cộng điểm — kéo mẫu từ thư viện vào canvas, nhập điểm ± từng dòng, rồi bấm{' '}
@@ -523,7 +523,7 @@ function ProfileEditorPanel({
       </div>
 
       {canEditProfile ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200 px-3 py-2.5 sm:px-4">
           <button
             type="button"
             disabled={busy}
@@ -644,47 +644,39 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
       aria-label="Quản lý bộ chấm điểm"
       className={[
         workspaceFullscreen
-          ? 'fixed inset-0 z-[200] flex flex-col overflow-hidden bg-slate-100 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] sm:p-4 md:p-5'
-          : 'min-w-0 overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-white via-amber-50/40 to-sky-50/50 p-1 shadow-[0_20px_60px_rgba(15,23,42,0.08)]',
+          ? 'fixed inset-0 z-[200] flex flex-col overflow-hidden bg-slate-50 p-3 sm:p-4 md:p-5'
+          : 'flex min-h-[min(72vh,760px)] min-w-0 flex-col gap-3',
       ].join(' ')}
     >
-      <div
-        className={[
-          'flex min-h-0 flex-col border-slate-200/80',
-          workspaceFullscreen
-            ? 'h-full min-h-0 flex-1 overflow-hidden rounded-2xl border bg-white p-4 shadow-sm md:p-5'
-            : 'rounded-[22px] border bg-white/95 p-3 shadow-sm md:p-4',
-        ].join(' ')}
-      >
-        <h2 className="sr-only">Bộ chấm điểm — profiles</h2>
+      <h2 className="sr-only">Bộ chấm điểm — profiles</h2>
 
-        {templatesError ? (
-          <p className="mt-2 shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-900">
+      {templatesError ? (
+          <p className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900">
             Không tải được mẫu riêng của trường để hiện trong thư viện kéo: {templatesError}. Hãy thử lại sau, hoặc nhờ
             quản trị kiểm tra quyền đọc dữ liệu; có thể thử lưu một mẫu ở tab «Quy tắc mẫu».
           </p>
         ) : null}
         {!canAccessProfiles ? (
-          <p className="mt-4 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
             Bạn chỉ được xem — chưa có quyền tạo hay chỉnh bộ chấm điểm. Liên hệ quản trị nếu cần quyền TVV (profile riêng) hoặc quản trị toàn phần.
           </p>
         ) : null}
         {canAccessProfiles && (canManageOwn || canManageTeam) && !canManageAll ? (
-          <p className="mt-3 shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs leading-snug text-sky-950">
+          <p className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-snug text-sky-950">
             Profile toàn trường hoặc của đồng nghiệp ngoài nhóm: chỉ xem và chọn khi chấm điểm. Bạn sửa được profile{' '}
             <strong>do bạn tạo</strong>
             {canManageTeam ? ' hoặc do TVV trong nhóm bạn quản lý' : ''} (nhãn «Của bạn» / TVV nhóm).
           </p>
         ) : null}
         {error ? (
-          <p className="mt-4 shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <p className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">
             {error}
           </p>
         ) : null}
         {saveMsg ? (
           <p
             className={[
-              'mt-4 shrink-0 rounded-xl border px-4 py-3 text-sm',
+              'shrink-0 rounded-lg border px-3 py-2 text-sm',
               saveMsg.startsWith('Đã')
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                 : saveMsg.startsWith('Lưu thất bại')
@@ -696,20 +688,14 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
           </p>
         ) : null}
 
-        <div
-          className={[
-            'mt-2 flex min-h-0 flex-1 flex-col gap-1.5',
-            workspaceFullscreen ? 'min-h-0 overflow-hidden' : 'min-h-[240px]',
-          ].join(' ')}
-        >
-          <div
-            className={[
-              'flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-gradient-to-br from-sky-50/40 via-white to-amber-50/30 p-2 shadow-inner md:p-2',
-              workspaceFullscreen ? 'min-h-0 overflow-hidden' : '',
-            ].join(' ')}
-          >
+      <div
+        className={[
+          'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm',
+          workspaceFullscreen ? 'min-h-0' : 'min-h-[min(480px,60vh)]',
+        ].join(' ')}
+      >
             {!selectedProfile ? (
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-6">
                 <p className="min-w-0 flex-1 text-sm text-slate-600">
                   {loading ? 'Đang tải…' : 'Chưa có profile — bấm «+ Tạo» hoặc nhờ quản trị.'}
                 </p>
@@ -768,15 +754,13 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 setBusy={setBusy}
                 setSaveMsg={setSaveMsg}
                 onDeleted={() => setSelectedId(null)}
-                workspaceLayout={workspaceFullscreen}
+                workspaceLayout={true}
                 workspaceFullscreen={workspaceFullscreen}
                 setWorkspaceFullscreen={setWorkspaceFullscreen}
                 onCreateProfile={() => void createProfile()}
                 ruleTemplateExtras={ruleLibraryTemplates}
               />
             )}
-          </div>
-        </div>
       </div>
     </section>
   )
