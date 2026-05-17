@@ -8,6 +8,8 @@ type SearchableMultiFilterProps = {
   options: string[]
   placeholder?: string
   maxVisibleChips?: number
+  /** `inline`: nhãn và chip cùng một dòng (bộ lọc admin gọn). */
+  layout?: 'stacked' | 'inline'
 }
 
 /** Lọc nhiều giá trị: gõ tìm, bấm để thêm/bỏ; hiển thị chip gọn. */
@@ -19,6 +21,7 @@ export function SearchableMultiFilter({
   options,
   placeholder = 'Gõ để tìm…',
   maxVisibleChips = 4,
+  layout = 'stacked',
 }: SearchableMultiFilterProps) {
   const listId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -50,13 +53,23 @@ export function SearchableMultiFilter({
 
   const visible = values.slice(0, maxVisibleChips)
   const extra = values.length - visible.length
+  const inline = layout === 'inline'
 
   return (
-    <div ref={wrapRef} className="relative min-w-0 flex-1">
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500" title={title}>
+    <div
+      ref={wrapRef}
+      className={['relative min-w-0', inline ? 'flex max-w-full items-center gap-1.5' : 'flex-1'].join(' ')}
+    >
+      <p
+        className={[
+          'shrink-0 font-semibold uppercase tracking-wider text-slate-500',
+          inline ? 'text-[10px]' : 'text-xs',
+        ].join(' ')}
+        title={title ?? label}
+      >
         {label}
       </p>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
+      <div className={['flex min-w-0 flex-wrap items-center gap-1', inline ? '' : 'mt-1'].join(' ')}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}

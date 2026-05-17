@@ -263,8 +263,13 @@ export function LeadManagement() {
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
   const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
 
-  /** Lọc HOT/WARM/COLD theo điểm profile hiện tại — không dùng `where(priorityTag)`; cần quét gần đây (fullScope). */
-  const tagClientEval = tagFilter !== 'ALL' && !urlQuery.trim()
+  /**
+   * Lọc nhãn theo profile (hoặc admin nhãn) trên client — tránh `where(priorityTag)` + index composite;
+   * cần quét gần đây (fullScope).
+   */
+  const tagClientEval =
+    !urlQuery.trim() &&
+    (tagFilter !== 'ALL' || (showAdminGlobalFilters && adminTags.length > 0))
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -392,14 +397,17 @@ export function LeadManagement() {
     schoolTvvSignalDefs,
   } = useLeadScoring(leads, { masterBuckets: scoringMasterBuckets })
 
+  const profileScoringActive = Boolean(activeScoringProfile)
   const profileScoringLive = Boolean(
     activeScoringProfile && profileHasActiveRules(activeScoringProfile),
   )
 
   const effectiveLeadTag = useCallback(
     (l: Lead) =>
-      profileScoringLive ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag,
-    [profileScoringLive, scoreByLeadId],
+      profileScoringActive
+        ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
+        : l.priorityTag,
+    [profileScoringActive, scoreByLeadId],
   )
 
   /** Đếm theo từng nhãn trên tập `leads` đã tải (dùng khi tính lại nhãn theo profile — fullScope). */
@@ -593,7 +601,7 @@ export function LeadManagement() {
     let rows = leads
     if (minScore != null || maxScore != null) {
       rows = leads.filter((l) => {
-        const displayScore = profileScoringLive
+        const displayScore = profileScoringActive
           ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
           : l.calculatedScore
         if (minScore != null && displayScore < minScore) return false
@@ -601,8 +609,14 @@ export function LeadManagement() {
         return true
       })
     }
-    if (tagClientEval && tagFilter !== 'ALL') {
-      rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
+    if (tagClientEval) {
+      if (tagFilter !== 'ALL') {
+        rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
+      }
+      if (showAdminGlobalFilters && adminTags.length > 0) {
+        const tagSet = new Set(adminTags)
+        rows = rows.filter((l) => tagSet.has(effectiveLeadTag(l)))
+      }
     }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
@@ -620,6 +634,8 @@ export function LeadManagement() {
     tagFilter,
     effectiveLeadTag,
     assigneeFilter,
+    showAdminGlobalFilters,
+    adminTags,
   ])
 
   const sortedFiltered = useMemo(() => {
@@ -627,7 +643,7 @@ export function LeadManagement() {
     if (sortKey === 'none') return rows
     const dir = sortDir === 'asc' ? 1 : -1
     const scoreOf = (l: Lead) =>
-      profileScoringLive
+      profileScoringActive
         ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
         : l.calculatedScore
     const tagOf = (l: Lead) => effectiveLeadTag(l)
@@ -1281,60 +1297,43 @@ export function LeadManagement() {
       ) : null}
 
       {showAdminGlobalFilters ? (
-        <section className="app-card-glass space-y-2 p-2.5 shadow-sm sm:p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-900">
+        <section className="app-card-glass space-y-1.5 p-2 shadow-sm sm:p-2.5">
+          <motion.div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900">
               Admin
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAdminRegions([])
-                setAdminTags([])
-                setAdminSchools([])
-                setAdminAssignedCounselorIds([])
-                setAdminDateFrom('')
-                setAdminDateTo('')
-                setAdminDateField('created')
-              }}
-              className="rounded-full border border-slate-200 bg-white/90 px-2.5 py-0.5 text-xs font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50"
-            >
-              Xóa lọc admin
-            </button>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col text-xs font-medium text-slate-600">
+            <label className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-600">
               Mốc
               <select
                 value={adminDateField}
                 onChange={(e) => setAdminDateField(e.target.value as AdminDateField)}
-                className="mt-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs"
+                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
               >
                 <option value="created">Ngày tạo</option>
                 <option value="updated">Cập nhật</option>
                 <option value="imported">Nhập</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs font-medium text-slate-600">
+            <label className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-600">
               Từ
               <input
                 type="date"
                 value={adminDateFrom}
                 onChange={(e) => setAdminDateFrom(e.target.value)}
-                className="mt-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs"
+                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
               />
             </label>
-            <label className="flex flex-col text-xs font-medium text-slate-600">
+            <label className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-600">
               Đến
               <input
                 type="date"
                 value={adminDateTo}
                 onChange={(e) => setAdminDateTo(e.target.value)}
-                className="mt-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs"
+                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
               />
             </label>
-          </div>
-          <div className="flex max-h-14 flex-wrap gap-1 overflow-y-auto">
+            <span className="hidden h-4 w-px shrink-0 bg-slate-200 sm:inline" aria-hidden />
+            <motion.div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
             {counselorUsers.map((c) => {
               const on = adminAssignedCounselorIds.includes(c.id)
               return (
@@ -1347,7 +1346,7 @@ export function LeadManagement() {
                     )
                   }
                   className={[
-                    'max-w-[9rem] truncate rounded-full border px-2 py-0.5 text-[11px]',
+                    'max-w-[8rem] shrink-0 truncate rounded-full border px-2 py-0.5 text-[10px]',
                     on
                       ? 'border-violet-400 bg-violet-100 text-violet-950'
                       : 'border-slate-200 bg-white text-slate-700',
@@ -1358,23 +1357,45 @@ export function LeadManagement() {
                 </button>
               )
             })}
-          </div>
-          <div className="flex flex-wrap items-start gap-3">
+            </motion.div>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminRegions([])
+                setAdminTags([])
+                setAdminSchools([])
+                setAdminAssignedCounselorIds([])
+                setAdminDateFrom('')
+                setAdminDateTo('')
+                setAdminDateField('created')
+              }}
+              className="ml-auto shrink-0 rounded-full border border-slate-200 bg-white/90 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50"
+            >
+              Xóa lọc
+            </button>
+          </motion.div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <SearchableMultiFilter
-              label="Vùng / tỉnh"
+              layout="inline"
+              label="Vùng"
+              title="Vùng / tỉnh"
               values={adminRegions}
               onChange={setAdminRegions}
               options={regionOptionsAdmin}
+              maxVisibleChips={2}
             />
             <SearchableMultiFilter
-              label="Trường THPT"
+              layout="inline"
+              label="THPT"
+              title="Trường THPT"
               values={adminSchools}
               onChange={setAdminSchools}
               options={schoolOptions}
+              maxVisibleChips={2}
             />
-            <div className="shrink-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Nhãn</p>
-              <div className="mt-0.5 flex flex-wrap gap-1">
+            <div className="flex shrink-0 items-center gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Nhãn</span>
+              <div className="flex flex-wrap gap-0.5">
                 {TAG_OPTIONS.map((tg) => {
                   const on = adminTags.includes(tg)
                   return (
@@ -1385,7 +1406,7 @@ export function LeadManagement() {
                         setAdminTags((prev) => (prev.includes(tg) ? prev.filter((x) => x !== tg) : [...prev, tg]))
                       }
                       className={[
-                        'rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+                        'rounded-full border px-1.5 py-0.5 text-[10px] font-semibold',
                         on
                           ? 'border-amber-400 bg-amber-100 text-amber-900'
                           : 'border-slate-200 bg-white text-slate-600',
@@ -1463,6 +1484,18 @@ export function LeadManagement() {
               </div>
             </div>
             <div className="mt-2 flex flex-col gap-1.5 border-t border-amber-100/90 pt-2">
+              {profileScoringActive && !profileScoringLive ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950">
+                  Profile «{activeScoringProfile?.profileName}» chưa có quy tắc — thêm khối quy tắc trong{' '}
+                  <strong>Cài đặt → Cài đặt Profile</strong>. Cột điểm hiện theo dữ liệu đã lưu hoặc 0.
+                </p>
+              ) : null}
+              {profileScoringActive && profileScoringLive ? (
+                <p className="text-xs text-slate-600">
+                  Điểm cột bảng = <strong>tính theo profile đang chọn</strong> (xem trước). Ghi Firestore khi lưu hồ sơ
+                  hoặc nhập Excel.
+                </p>
+              ) : null}
               <p className="text-xs leading-snug text-slate-600">
                 <span className="font-semibold text-slate-800">Lọc nhanh theo nhãn (profile đang chọn)</span>
                 {urlQuery.trim() ? (
@@ -1908,8 +1941,10 @@ export function LeadManagement() {
                         <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                       ) : null}
                     </span>
-                    {profileScoringLive ? (
-                      <span className="text-xs font-normal normal-case text-violet-700">theo profile</span>
+                    {profileScoringActive ? (
+                      <span className="text-xs font-normal normal-case text-violet-700">
+                        {profileScoringLive ? 'theo profile' : 'profile (chưa có quy tắc)'}
+                      </span>
                     ) : null}
                   </button>
                 </th>
@@ -1964,11 +1999,11 @@ export function LeadManagement() {
                 </tr>
               ) : null}
               {pagedRows.map((l) => {
-                const ev = profileScoringLive ? scoreByLeadId.get(l.id) : undefined
-                const displayScore = profileScoringLive
+                const ev = profileScoringActive ? scoreByLeadId.get(l.id) : undefined
+                const displayScore = profileScoringActive
                   ? (ev?.calculatedScore ?? l.calculatedScore)
                   : l.calculatedScore
-                const displayTag = profileScoringLive ? (ev?.priorityTag ?? l.priorityTag) : l.priorityTag
+                const displayTag = profileScoringActive ? (ev?.priorityTag ?? l.priorityTag) : l.priorityTag
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
                 const extraNotesFull = leadSupplementaryNotesText(l)

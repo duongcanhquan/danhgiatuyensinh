@@ -15,7 +15,8 @@
     "seed:knowledge-base": "node scripts/seed-knowledge-base.mjs",
     "seed:consulting-playbooks": "node scripts/seed-consulting-playbooks.mjs",
     "seed:script-snippets": "node scripts/seed-script-snippets.mjs",
-    "migrate:strip-import-description": "node scripts/strip-lead-import-description.mjs"
+    "migrate:strip-import-description": "node scripts/strip-lead-import-description.mjs",
+    "deploy:firestore-indexes": "firebase deploy --only firestore:indexes"
   },
   "dependencies": {
     "@noble/hashes": "^1.8.0",
