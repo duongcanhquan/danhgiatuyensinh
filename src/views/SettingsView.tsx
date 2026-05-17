@@ -172,7 +172,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className="font-semibold text-slate-900">LLM &amp; tư vấn AI trên hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopy}`}>
             Cấu hình khóa API, tác vụ phân tích và quy tắc lọc hàng loạt. TVV mở chi tiết hồ sơ →{' '}
-            <strong>LLM</strong> để AI đọc dữ liệu thí sinh + <strong>Kho tri thức</strong> (tab Thông tin TV &amp; Tri thức)
+            <strong>LLM</strong> để AI đọc dữ liệu thí sinh + <strong>Tri thức tuyển sinh</strong> (tab riêng)
             và đưa đánh giá, câu hỏi gợi ý, bước hành động.
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
@@ -239,11 +239,13 @@ export function SettingsView() {
   const [addCatalogPresetGroup, setAddCatalogPresetGroup] = useState<RuleCategory | 'other' | null>(null)
   const addMasterCatalogFormAnchorRef = useRef<HTMLDivElement>(null)
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
+  const [knowledgeWorkspaceOpen, setKnowledgeWorkspaceOpen] = useState(false)
   const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
   const [playbookEditor, setPlaybookEditor] = useState<ConsultingPlaybook | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
 
-  const settingsWorkspaceOpen = masterWorkspaceOpen || consultingWorkspaceOpen || llmWorkspaceOpen
+  const settingsWorkspaceOpen =
+    masterWorkspaceOpen || consultingWorkspaceOpen || knowledgeWorkspaceOpen || llmWorkspaceOpen
 
   useEffect(() => {
     if (!settingsWorkspaceOpen) return
@@ -254,6 +256,7 @@ export function SettingsView() {
         setGuideOpen(false)
         setMasterWorkspaceOpen(false)
         setConsultingWorkspaceOpen(false)
+        setKnowledgeWorkspaceOpen(false)
         setLlmWorkspaceOpen(false)
         setPlaybookEditor(null)
       }
@@ -387,9 +390,10 @@ export function SettingsView() {
       { id: 'rule_templates', label: 'Quy tắc mẫu', enabled: Boolean(db) },
       { id: 'scoring', label: 'Chấm điểm', enabled: Boolean(db) },
       { id: 'scoring_profiles', label: 'Profile đánh giá', enabled: Boolean(db) },
-      { id: 'consulting', label: 'Thông tin TV & Tri thức', enabled: Boolean(db) },
+      { id: 'consulting', label: 'Thông tin TV', enabled: Boolean(db) },
     ]
     if (db && canAiEngine) {
+      base.push({ id: 'knowledge', label: 'Tri thức tuyển sinh', enabled: true })
       base.push({ id: 'llm', label: 'LLM & Tư vấn AI', enabled: true })
     }
     if (db && canStaff) base.push({ id: 'staff', label: 'Quản lý nhân sự', enabled: true })
@@ -403,7 +407,6 @@ export function SettingsView() {
 
   const activeTab: SettingsTabId = useMemo(() => {
     if (db && editSnippetParam) return 'consulting'
-    if (urlTab === 'knowledge') return 'consulting'
     if (urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled)) return urlTab
     return tabDefs.find((t) => t.enabled)?.id ?? 'master'
   }, [db, editSnippetParam, urlTab, tabDefs])
@@ -411,6 +414,7 @@ export function SettingsView() {
   useEffect(() => {
     setMasterWorkspaceOpen(false)
     setConsultingWorkspaceOpen(false)
+    setKnowledgeWorkspaceOpen(false)
     setLlmWorkspaceOpen(false)
     setGuideOpen(false)
   }, [activeTab])
@@ -455,17 +459,6 @@ export function SettingsView() {
           n.delete('scoringSub')
           if (scoringSubLegacy === 'profile') n.set('tab', 'scoring_profiles')
           else n.set('tab', 'scoring')
-          return n
-        },
-        { replace: true },
-      )
-      return
-    }
-    if (tabParam === 'knowledge') {
-      setSearchParams(
-        (prev) => {
-          const n = new URLSearchParams(prev)
-          n.set('tab', 'consulting')
           return n
         },
         { replace: true },
@@ -526,9 +519,11 @@ export function SettingsView() {
                         ? 'tab-master'
                         : t.id === 'consulting'
                           ? 'tab-consulting'
-                          : t.id === 'llm'
-                            ? 'tab-llm'
-                            : undefined
+                          : t.id === 'knowledge'
+                            ? 'tab-knowledge'
+                            : t.id === 'llm'
+                              ? 'tab-llm'
+                              : undefined
                     }
                     aria-selected={selected}
                     disabled={!t.enabled}
@@ -561,6 +556,16 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(true)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+              >
+                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                Toàn màn
+              </button>
+            ) : null}
+            {db && activeTab === 'knowledge' && !knowledgeWorkspaceOpen ? (
+              <button
+                type="button"
+                onClick={() => setKnowledgeWorkspaceOpen(true)}
                 className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
               >
                 <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
@@ -884,9 +889,40 @@ export function SettingsView() {
               compactChrome={!consultingWorkspaceOpen}
             />
             {db && canPlaybooks ? <ScriptHubManager db={db} /> : null}
-            {db && canAiEngine ? (
-              <KnowledgeBaseTab db={db} compactChrome={consultingWorkspaceOpen} />
-            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {db && activeTab === 'knowledge' && canAiEngine ? (
+        <div
+          role="tabpanel"
+          aria-labelledby="tab-knowledge"
+          className={
+            knowledgeWorkspaceOpen
+              ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
+              : ''
+          }
+        >
+          {knowledgeWorkspaceOpen ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-200/90 pb-2">
+              <button
+                type="button"
+                onClick={() => setKnowledgeWorkspaceOpen(false)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
+              >
+                <X className="h-4 w-4 shrink-0" aria-hidden />
+                Đóng (Esc)
+              </button>
+            </div>
+          ) : null}
+          <div
+            className={
+              knowledgeWorkspaceOpen
+                ? 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pt-2'
+                : 'mt-2 md:mt-3'
+            }
+          >
+            <KnowledgeBaseTab db={db} compactChrome={knowledgeWorkspaceOpen} />
           </div>
         </div>
       ) : null}

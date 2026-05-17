@@ -346,7 +346,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               </p>
               <ol className="list-decimal space-y-3 pl-4 marker:text-amber-400/90">
                 <li>
-                  <strong className="text-slate-100">Nạp tri thức</strong> — tab <strong>Thông tin TV &amp; Tri thức</strong>:
+                  <strong className="text-slate-100">Nạp tri thức</strong> — tab <strong>Tri thức tuyển sinh</strong>:
                   học phí, quy chế, ngành (đã duyệt).
                 </li>
                 <li>
