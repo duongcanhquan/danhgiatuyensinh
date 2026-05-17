@@ -1,0 +1,3119 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Quản trị Việt Mỹ</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        /* MODERN FLAT STYLES - TỐI ƯU TỐC ĐỘ VÀ SỰ RÕ RÀNG */
+        :root { 
+            --primary-color: #4a5568; 
+            --accent-color: #5a397d; /* Màu tím trầm, nghiêm túc hơn */
+            --card-bg: #ffffff; 
+            --border-color: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); 
+        }
+        
+        /* Nền xám nhạt chuyên nghiệp, tắt hoàn toàn animation nặng nề */
+        body { 
+            font-family: 'Montserrat', sans-serif; 
+            font-size: 0.85rem; /* Giảm nhẹ size chữ để bảng biểu gọn hơn */
+            color: #2d3748; 
+            background-color: #f4f7f6; 
+            min-height: 100vh; 
+            overflow-x: hidden; 
+        }
+        
+        /* Thẻ card phẳng, viền nét mảnh, bóng mờ nhẹ */
+        .glass-card { 
+            background: var(--card-bg); 
+            border-radius: 8px; /* Giảm độ bo tròn (từ 20px xuống 8px) */
+            border: 1px solid var(--border-color); 
+            box-shadow: var(--shadow); 
+            padding: 20px; 
+            margin-bottom: 20px; 
+        }
+        
+        #loginPage { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 9000; background-color: #f4f7f6; }
+        
+        .form-control, .form-select { border-radius: 6px; border: 1px solid #cbd5e0; padding: 8px 12px; font-weight: 500; font-size: 0.85rem; }
+        .form-control:focus, .form-select:focus { box-shadow: 0 0 0 3px rgba(90, 57, 125, 0.1); border-color: var(--accent-color); }
+        
+        /* Nút bấm gọn gàng, hiệu ứng hover dứt khoát */
+        .btn-luxury { 
+            background: var(--accent-color); 
+            border: none; 
+            color: white; 
+            border-radius: 6px; 
+            padding: 8px 20px; 
+            font-weight: 600; 
+            transition: all 0.2s ease; 
+        }
+        .btn-luxury:hover { 
+            background: #442a5e; 
+            color: white; 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); 
+        }
+        
+        .status-badge { padding: 5px 12px; border-radius: 4px; font-weight: 600; font-size: 0.7rem; letter-spacing: 0.5px; }
+        .badge-moi { background: #e2e8f0; color: #4a5568; border: 1px solid #cbd5e0; } 
+        .badge-coc { background: #c6f6d5; color: #22543d; border: 1px solid #9ae6b4; } 
+        .badge-hoanthien { background: #feebc8; color: #7b341e; border: 1px solid #fbd38d; } 
+        .badge-huy { background: #fed7d7; color: #822727; border: 1px solid #feb2b2; } 
+        
+        .money-input { font-family: 'Consolas', monospace; font-weight: 700; color: #2f855a; font-size: 1rem; text-align: right; }
+        
+        /* Hạ bớt các text quá đậm để tránh nhức mắt */
+        .fw-800 { font-weight: 700 !important; }
+        
+        /* Bỏ gradient text, dùng màu solid */
+        .text-gradient { color: var(--accent-color); font-weight: 700; }
+        
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 10000; display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .app-logo { max-width: 180px; margin-bottom: 20px; }
+        .d-none-im { display: none !important; } .d-block-im { display: block !important; }
+        .swal2-container { z-index: 200000 !important; } .modal { z-index: 100000 !important; }
+        .finance-row { background: #ffffff; border-radius: 8px; padding: 10px; margin-bottom: 10px; border: 1px solid var(--border-color); }
+        
+        .admin-col { display: none; }
+        .admin-visible .admin-col { display: table-cell !important; }
+        .chart-container { position: relative; height: 300px; width: 100%; margin-bottom: 20px; }
+        
+        .stat-card { background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.02); height: 100%; display:flex; flex-direction: column; justify-content: center;}
+        .stat-card h3 { font-size: 1.8rem; font-weight: 700; color: var(--accent-color); margin: 0; }
+        .stat-card p { font-size: 0.75rem; font-weight: 600; color: #718096; text-transform: uppercase; margin: 0; margin-top:5px; letter-spacing: 0.5px; }
+        
+        /* Chuẩn hóa lại bảng biểu */
+        .rp-table th { background-color: #f7fafc; color: #4a5568; font-weight: 700; text-transform: uppercase; font-size: 0.7rem; vertical-align: middle; border-bottom: 2px solid #e2e8f0; letter-spacing: 0.5px; }
+        .rp-table td { vertical-align: middle; font-size: 0.8rem; color: #2d3748; }
+        .table-hover tbody tr:hover { background-color: #edf2f7; }
+        
+        .nav-report .nav-link { color: #718096; font-weight: 600; border-radius: 6px; padding: 8px 15px; font-size: 0.85rem; margin-right: 5px; }
+        .nav-report .nav-link.active { background: var(--accent-color); color: white; }
+        
+        .pagination .page-item.active .page-link { background-color: var(--accent-color); border-color: var(--accent-color); }
+        .pagination .page-link { color: var(--accent-color); font-weight: 600; font-size: 0.85rem; }
+        
+        /* Thanh cuộn tinh tế hơn */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
+        
+        .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.03); }
+
+      /* =========================================
+           TỐI ƯU GIAO DIỆN MOBILE - DASHBOARD (APP UI)
+        ========================================= */
+        @media (max-width: 768px) {
+            /* 1. Hamburger Menu & Nút bấm */
+            .mobile-menu-btn { display: block; background: var(--accent-color); color: white; border: none; padding: 8px 15px; border-radius: 6px; font-size: 1.2rem; }
+            .desktop-buttons { display: none; flex-direction: column; position: absolute; top: 100%; right: 20px; background: white; box-shadow: 0 5px 20px rgba(0,0,0,0.3); border-radius: 8px; padding: 15px; z-index: 9999; width: 250px; border: 1px solid #eee; }
+            .desktop-buttons.show { display: flex !important; gap: 10px; }
+            .desktop-buttons button { width: 100%; margin: 0 !important; text-align: left; padding: 10px; font-size: 0.95rem; }
+            .top-actions-wrapper { display: flex; justify-content: flex-end; width: 100%; position: relative; }
+
+            /* 2. Bộ lọc tìm kiếm xếp 2 ô / 1 dòng */
+            .glass-card > .row.g-2 > div { width: 50%; padding: 0 5px; }
+            .glass-card > .row.g-2 > div:nth-child(5), /* Nguồn dropdown */
+            .glass-card > .row.g-2 > div:last-child { width: 100%; display: flex; justify-content: space-between; margin-top: 10px;}
+            
+            /* 3. BẢNG BIẾN THÀNH CARD (Không cần sửa JS) */
+            #mainTable, #mainTable thead, #mainTable tbody, #mainTable th, #mainTable td, #mainTable tr { display: block; width: 100%; }
+            #mainTable thead tr { position: absolute; top: -9999px; left: -9999px; } /* Ẩn tiêu đề ngang */
+            #mainTable tbody tr { border: 2px solid var(--accent-color); border-radius: 12px; margin-bottom: 15px; padding: 12px; background: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.08); }
+            #mainTable tbody td { border: none; border-bottom: 1px dashed #e2e8f0; position: relative; padding: 10px 10px 10px 40% !important; text-align: right; min-height: 45px; }
+            #mainTable tbody td:last-child { border-bottom: none; text-align: center; padding-left: 10px !important; margin-top: 10px; }
+            
+            /* Tự động gán nhãn cho các dòng bằng CSS */
+            #mainTable tbody td:before { position: absolute; top: 12px; left: 10px; width: 35%; white-space: nowrap; font-weight: 800; font-size: 0.8rem; text-align: left; color: var(--accent-color); }
+            #mainTable tbody td:nth-child(1):before { content: "Hồ sơ:"; }
+            #mainTable tbody td:nth-child(2):before { content: "Liên hệ:"; }
+            #mainTable tbody td:nth-child(3):before { content: "Nguyện vọng:"; }
+            #mainTable tbody td:nth-child(4):before { content: "TVV (Cập nhật):"; }
+            #mainTable tbody td:nth-child(5):before { content: "Nguồn:"; }
+            #mainTable tbody td:nth-child(6):before { content: "Đã nộp:"; }
+            #mainTable tbody td:nth-child(7):before { content: "Trạng thái:"; }
+
+            /* Nút chi tiết to ra, bo góc tràn viền dễ bấm */
+            #mainTable tbody td button { width: 100%; padding: 12px; font-size: 1.1rem; border-radius: 8px; background: var(--primary-color); color: white; }
+
+            /* 4. TABS VÀ FORM NHẬP LIỆU GỌN GÀNG */
+            .nav-pills { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 10px; }
+            .nav-pills .nav-link { white-space: nowrap; }
+            .finance-row .row { display: flex; flex-direction: column; }
+            .finance-row .row > div { width: 100%; text-align: left !important; margin-bottom: 8px; }
+            .finance-row .row > div.col-lg-3, .finance-row .row > div.col-lg-2 { width: 100%; }
+        }
+        @media (min-width: 769px) { .mobile-menu-btn { display: none; } .desktop-buttons { display: flex !important; flex-direction: row; gap: 0.5rem; } }
+    </style>
+</head>
+<body>
+
+<div id="loader"><div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div><div class="mt-3 fw-bold text-primary">Đang tải dữ liệu...</div></div>
+<div style="position: fixed; bottom: 0; left: 0; width: 0; height: 0; border-style: solid; border-width: 0 0 80px 80px; border-color: transparent transparent #fff transparent; cursor: pointer; z-index: 1000; filter: drop-shadow(2px -2px 5px rgba(0,0,0,0.2));" onclick="goToAccount()"><div style="position: absolute; bottom: -70px; left: -75px; font-size: 0.65rem; font-weight: 900; transform: rotate(45deg); width: 80px; text-align: center; color: #764ba2;">KẾ TOÁN</div></div>
+
+<div id="loginPage">
+    <div class="glass-card text-center animate__animated animate__zoomIn" style="width: 90%; max-width: 450px;">
+        <img src="https://raw.githubusercontent.com/duongcanhquan/image/main/Logo%20Cao%20%C4%91a%CC%86%CC%89ng%20Vie%CC%A3%CC%82t%20My%CC%83%20-%20ba%CC%89n%20chua%CC%82%CC%89n%202025-01.png" class="app-logo">
+        <h4 class="mb-4 text-gradient">CỔNG THÔNG TIN TVV</h4>
+        <div class="form-floating mb-3"><input type="email" id="email" class="form-control" placeholder="name@example.com"><label>Email đăng nhập</label></div>
+        <div class="form-floating mb-3"><input type="password" id="password" class="form-control" placeholder="Password"><label>Mật khẩu</label></div>
+        <div class="form-check mb-4 text-start ps-4">
+            <input class="form-check-input" type="checkbox" id="rememberMe">
+            <label class="form-check-label fw-bold text-muted small" for="rememberMe">Ghi nhớ đăng nhập</label>
+        </div>
+        <button onclick="handleLogin()" class="btn-luxury w-100 shadow-lg mb-3">ĐĂNG NHẬP HỆ THỐNG</button>
+        <a id="linkAccount" href="#" target="_blank" class="text-decoration-none fw-bold text-secondary small d-block p-2 rounded hover-bg-light"><i class="fa-solid fa-calculator me-1"></i> Đăng nhập Cổng Kế Toán</a>
+    </div>
+</div>
+
+<div id="mainPage" class="container-fluid py-4 d-none-im" style="max-width: 1600px;">
+    <div class="glass-card d-flex flex-wrap justify-content-between align-items-center sticky-top" style="z-index: 800; border-radius: 50px; padding: 10px 30px;">
+        <div class="d-flex align-items-center">
+            <img src="https://raw.githubusercontent.com/duongcanhquan/image/main/Logo%20Cao%20%C4%91a%CC%86%CC%89ng%20Vie%CC%A3%CC%82t%20My%CC%83%20-%20ba%CC%89n%20chua%CC%82%CC%89n%202025-01.png" style="height: 40px; margin-right: 20px;">
+            <div class="d-none d-md-block border-start ps-3"><div class="small fw-bold text-muted text-uppercase">Xin chào</div><div id="userLabel" class="fw-800 text-primary">---</div></div>
+        </div>
+        
+  <div class="top-actions-wrapper d-flex gap-2 align-items-center">
+            <button onclick="openCreate()" class="btn-luxury d-md-none"><i class="fa-solid fa-plus me-1"></i>Tạo HS</button>
+            <button class="mobile-menu-btn d-md-none" onclick="document.getElementById('navButtons').classList.toggle('show')"><i class="fa-solid fa-bars"></i></button>
+            
+            <div class="desktop-buttons" id="navButtons">
+                <button id="btnReport" onclick="openReport(); document.getElementById('navButtons').classList.remove('show')" class="btn btn-outline-primary rounded-pill fw-bold" style="display:none;"><i class="fa-solid fa-chart-pie me-2"></i>Báo Cáo</button>
+                <button id="btnAdminTools" onclick="openAdminTools(); document.getElementById('navButtons').classList.remove('show')" class="btn btn-danger rounded-pill fw-bold shadow-sm" style="display:none;"><i class="fa-solid fa-shield-halved me-1"></i> Trung tâm dữ liệu</button>
+                <button onclick="downloadExcelTemplate(); document.getElementById('navButtons').classList.remove('show')" class="btn btn-outline-info rounded-pill fw-bold bg-white shadow-sm"><i class="fa-solid fa-download me-1"></i> Tải File Mẫu</button>
+                <button onclick="document.getElementById('fileExcel').click(); document.getElementById('navButtons').classList.remove('show')" class="btn btn-outline-success rounded-pill fw-bold bg-white shadow-sm"><i class="fa-solid fa-file-excel me-1"></i> Tải lên Data</button>
+                <input type="file" id="fileExcel" accept=".xlsx, .xls" style="display:none;" onchange="handleExcelUpload(event)">
+                <button onclick="openCreate(); document.getElementById('navButtons').classList.remove('show')" class="btn-luxury d-none d-md-inline-block"><i class="fa-solid fa-plus me-2"></i>Tạo Hồ Sơ</button>
+                <button id="btnUserMgmt" onclick="openUserMgmt(); document.getElementById('navButtons').classList.remove('show')" class="btn btn-outline-dark rounded-pill fw-bold bg-white shadow-sm" style="display:none;"><i class="fa-solid fa-users-gear me-1"></i> Quản lý nhân sự</button>
+                <button onclick="logout()" class="btn btn-light border rounded-pill text-danger fw-bold"><i class="fa-solid fa-power-off"></i> Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card py-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-2"><input type="text" id="searchInput" class="form-control" placeholder="🔍 Tìm tên, SĐT, CCCD..." onkeyup="filterTable()"></div>
+            <div class="col-md-2"><input type="text" id="searchId" class="form-control" placeholder="#️⃣ Mã SV..." onkeyup="filterTable()"></div>
+            <div class="col-md-2">
+                <select id="filterStatus" class="form-select" onchange="filterTable()">
+                    <option value="">-- Trạng thái --</option>
+                </select>
+            </div>
+            
+            <div class="col-md-2">
+                <select id="filterFee" class="form-select border-primary text-primary fw-bold" onchange="filterTable()">
+                    <option value="">-- Tiến độ nộp phí --</option>
+                    <option value="CHUA_NOP">Chưa nộp phí</option>
+                    <option value="LPXT">Đã nộp LPXT</option>
+                    <option value="COC">Đã Cọc (NE)</option>
+                    <option value="FULL_NE">Đã Full NE</option>
+                </select>
+            </div>
+
+      <div class="col-md-2" id="adminFilterDiv" style="display:none;">
+    <div class="dropdown">
+        <button class="btn btn-outline-secondary w-100 text-start bg-white form-select text-truncate fw-bold" type="button" id="btnFilterTVV" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            -- Tất cả TVV --
+        </button>
+        <ul class="dropdown-menu w-100 shadow p-2" id="listFilterTVV" style="max-height: 300px; overflow-y: auto;">
+            </ul>
+    </div>
+</div>
+
+            <div class="col-md-2 d-flex gap-2 text-end">
+    <button class="btn btn-success flex-grow-1 rounded-pill fw-bold px-0 shadow-sm" onclick="exportMainTableToExcel()" title="Tải Excel">
+        <i class="fa-solid fa-file-excel"></i>
+    </button>
+    <button class="btn btn-dark flex-grow-1 rounded-pill fw-bold px-0 shadow-sm" onclick="refreshDataAndRender()" title="Làm mới DL">
+        <i class="fa-solid fa-rotate"></i>
+    </button>
+</div>
+
+        <div class="row g-2 mt-3 pt-3 border-top" id="tvvStatsBar" style="display:none;">
+            <div class="col"><div class="p-2 rounded bg-light border text-center shadow-sm h-100"><div class="small fw-bold text-muted text-uppercase mb-1">Tổng hồ sơ</div><div class="fs-4 fw-800 text-dark" id="st_tvv_total">0</div></div></div>
+            <div class="col"><div class="p-2 rounded bg-light border border-info text-center shadow-sm h-100"><div class="small fw-bold text-info text-uppercase mb-1">Nộp LPXT</div><div class="fs-4 fw-800 text-info" id="st_tvv_lpxt">0</div></div></div>
+            <div class="col"><div class="p-2 rounded bg-light border border-success text-center shadow-sm h-100"><div class="small fw-bold text-success text-uppercase mb-1">Cọc thành công</div><div class="fs-4 fw-800 text-success" id="st_tvv_coc">0</div></div></div>
+            <div class="col"><div class="p-2 rounded bg-light border border-warning text-center shadow-sm h-100"><div class="small fw-bold text-uppercase mb-1" style="color:#d97706!important;">Đang hoàn thiện</div><div class="fs-4 fw-800" style="color:#d97706!important;" id="st_tvv_dang">0</div></div></div>
+            <div class="col"><div class="p-2 rounded bg-dark border text-center shadow-sm h-100"><div class="small fw-bold text-warning text-uppercase mb-1"><i class="fa-solid fa-star me-1"></i>Full NE</div><div class="fs-4 fw-800 text-white" id="st_tvv_full">0</div></div></div>
+        </div>
+
+        <div id="filterSummary" class="mt-2 ps-2 text-muted fw-bold small" style="display:none;"></div>
+    </div>
+
+    <div class="glass-card p-0 overflow-hidden">
+        <div id="paginationTop" class="d-flex flex-wrap justify-content-between align-items-center p-2 border-bottom bg-light"></div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle" id="mainTable">
+                <thead class="bg-light text-secondary small text-uppercase">
+                    <tr>
+                        <th class="ps-4 py-3">Hồ sơ học sinh</th>
+                        <th>Liên hệ</th>
+                        <th>Nguyện vọng</th>
+                        <th class="admin-col">TVV</th>
+                        <th class="admin-col">Nguồn</th>
+                        <th>Đã nộp (VNĐ)</th>
+                        <th>Trạng thái</th>
+                        <th class="text-center">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="studentTableBody" class="bg-white"></tbody>
+            </table>
+        </div>
+        <div id="paginationBottom" class="d-flex flex-wrap justify-content-between align-items-center p-2 border-top bg-light"></div>
+    </div>
+</div>
+
+<div class="modal fade" id="reportModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen"> 
+        <div class="modal-content bg-light">
+            <div class="modal-header bg-white shadow-sm align-items-center" style="z-index: 10;">
+                <h4 class="fw-800 text-gradient m-0"><i class="fa-solid fa-chart-line me-2"></i> TRUNG TÂM BÁO CÁO TOÀN DIỆN</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            
+            <div class="modal-body p-4">
+                <div class="glass-card mb-4 p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <ul class="nav nav-pills nav-report" id="reportTabs" role="tablist">
+                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#rp-tongquan" onclick="switchReportTab('tongquan')"><i class="fa-solid fa-globe me-1"></i> Tổng quan</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#rp-tvv" onclick="switchReportTab('tvv')"><i class="fa-solid fa-users me-1"></i> Tư vấn viên</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#rp-mkt" onclick="switchReportTab('mkt')"><i class="fa-solid fa-bullhorn me-1"></i> Marketing</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#rp-nganh" onclick="switchReportTab('nganh')"><i class="fa-solid fa-book-open me-1"></i> Báo cáo Ngành</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#rp-tuyensinh" onclick="switchReportTab('tuyensinh')"><i class="fa-solid fa-filter-circle-dollar me-1"></i> Tuyển sinh</button></li>
+                    </ul>
+
+                    <div class="d-flex flex-wrap gap-2 align-items-center bg-white p-2 rounded-pill shadow-sm border" id="rp_filter_bar">
+                        <div class="fw-bold small text-muted ms-2"><i class="fa-regular fa-calendar me-1"></i> Từ:</div>
+                        <input type="date" id="rp_startDate" class="form-control form-control-sm rounded-pill border-0" onchange="runReportEngine()">
+                        <div class="fw-bold small text-muted ms-1">Đến:</div>
+                        <input type="date" id="rp_endDate" class="form-control form-control-sm rounded-pill border-0" onchange="runReportEngine()">
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success fw-bold rounded-pill shadow-sm" onclick="exportExcelReport()"><i class="fa-solid fa-file-excel me-1"></i> Xuất Excel</button>
+                        <button class="btn btn-danger fw-bold rounded-pill shadow-sm" onclick="exportPDFReport()"><i class="fa-solid fa-file-pdf me-1"></i> Tải PDF</button>
+                    </div>
+                </div>
+
+                <div id="pdf-export-area" class="pb-5 bg-light"> 
+                    <div class="tab-content">
+                        
+                        <div class="tab-pane fade show active" id="rp-tongquan">
+                        <div class="row g-2 mb-4">
+    <div class="col"><div class="stat-card"><h3 id="r_tq_hs">0</h3><p style="font-size:0.75rem;">Tổng Hồ Sơ</p></div></div>
+    <div class="col"><div class="stat-card border-info"><h3 id="r_tq_moi" class="text-info">0</h3><p style="font-size:0.75rem;">Mới Đăng Ký</p></div></div>
+    <div class="col"><div class="stat-card border-warning"><h3 id="r_tq_coc" class="text-warning">0</h3><p style="font-size:0.75rem;">Đang Cọc / Thiếu</p></div></div>
+    <div class="col"><div class="stat-card border-primary"><h3 id="r_tq_done" class="text-primary">0</h3><p style="font-size:0.75rem;">Cọc Đủ / Full NE</p></div></div>
+    <div class="col"><div class="stat-card border-success"><h3 id="r_tq_dt" class="text-success">0</h3><p style="font-size:0.75rem;">Tổng Doanh Thu</p></div></div>
+</div>
+                            <div class="row g-4">
+                                <div class="col-lg-5">
+                                    <div class="card border-0 shadow-sm p-4 h-100 rounded-4">
+                                        <h6 class="fw-800 text-center mb-3">TỶ LỆ TRẠNG THÁI HỒ SƠ</h6>
+                                        <div class="chart-container" style="height:280px;"><canvas id="chartTqStatus"></canvas></div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-7">
+                                    <div class="card border-0 shadow-sm p-4 h-100 rounded-4">
+                                        <h6 class="fw-800 text-center mb-3">DOANH THU THEO ĐỐI TƯỢNG (NGUYỆN VỌNG)</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-hover rp-table table-bordered mb-0 text-center bg-white">
+                                                <thead class="table-light"><tr><th class="text-start">Đối tượng</th><th>Số lượng HS</th><th class="text-end">Tiền thu được</th></tr></thead>
+                                                <tbody id="tb_tq_doituong"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="rp-tvv">
+                            <div class="row g-4">
+                                <div class="col-lg-3">
+                                    <div class="card border-0 shadow-sm p-4 rounded-4 mb-4 bg-primary text-white" id="tvv_filter_box">
+                                        <label class="fw-bold mb-2 small opacity-75">LỌC THEO PHÒNG BAN:</label>
+                                        <select id="rp_select_dept" class="form-select fw-bold text-dark border-0 mb-3" onchange="onDeptChange()">
+                                            <option value="ALL">-- Tất cả Phòng ban --</option>
+                                        </select>
+         <label class="fw-bold mb-2 small opacity-75">LỌC NHÂN SỰ:</label>
+<div class="dropdown mb-3">
+    <button class="btn btn-light w-100 text-start text-primary fw-bold text-truncate" type="button" id="btnRpTVV" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+        -- Tất cả Tư vấn viên --
+    </button>
+    <ul class="dropdown-menu w-100 shadow p-2" id="listRpTVV" style="max-height: 250px; overflow-y: auto;">
+        </ul>
+</div>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-6"><div class="stat-card p-3"><h3 id="r_tv_hs" class="fs-4">0</h3><p style="font-size:0.7rem">Tổng HS</p></div></div>
+                                        <div class="col-6"><div class="stat-card p-3 border-success"><h3 id="r_tv_dt" class="fs-4 text-success">0</h3><p style="font-size:0.7rem">Doanh Thu</p></div></div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-9">
+                                    <div class="card border-0 shadow-sm p-4 h-100 rounded-4">
+                                        <h6 class="fw-800 mb-3 text-uppercase text-primary border-bottom pb-2" id="tvv_title_1">BẢNG TỔNG HỢP / CHI TIẾT TƯ VẤN VIÊN</h6>
+                                        <div class="table-responsive" id="scroll_area_tvv" style="max-height: 500px; overflow-y: auto;">
+                                            <table class="table table-hover rp-table table-bordered bg-white">
+                                                <thead class="table-light sticky-top" id="th_tvv" style="z-index: 1;"></thead>
+                                                <tbody id="tb_tvv"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="rp-mkt">
+                            <div class="row g-4 mb-4">
+                                <div class="col-lg-4">
+                                    <div class="card border-0 shadow-sm p-4 h-100 rounded-4">
+                                        <h6 class="fw-800 text-center mb-3">TỶ TRỌNG NGUỒN MKT (TỪ NGUỒN CHÍNH)</h6>
+                                        <div class="chart-container" style="height:300px;"><canvas id="chartMktSource"></canvas></div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-8">
+                                    <div class="card border-0 shadow-sm p-4 h-100 rounded-4">
+                                        <div class="row h-100">
+                                            <div class="col-md-6 border-end">
+                                                <h6 class="fw-800 text-center mb-3 text-primary">TIẾN ĐỘ 10 NGÀY GẦN NHẤT</h6>
+                                                <div class="chart-container" style="height:300px;"><canvas id="chartMktLineDaily"></canvas></div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <h6 class="fw-800 text-center mb-3 text-success">TỔNG HỢP DATA THEO THÁNG</h6>
+                                                <div class="chart-container" style="height:300px;"><canvas id="chartMktLineMonthly"></canvas></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card border-0 shadow-sm p-4 rounded-4 mb-4">
+                                <h6 class="fw-800 text-center mb-3 text-uppercase">Chi tiết giao dịch theo ngày & Nguồn</h6>
+                                <div class="table-responsive" id="scroll_area_mkt" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="table table-bordered rp-table text-center mb-0 bg-white">
+                                        <thead class="table-light sticky-top" id="th_mkt_detail" style="z-index: 1;">
+                                            <tr>
+                                                <th>Ngày nộp</th>
+                                                <th>Nguồn</th>
+                                                <th>Ngành học</th>
+                                                <th>Trạng thái</th>
+                                                <th class="text-primary">Cao đẳng</th>
+                                                <th class="text-success">Hệ 9+</th>
+                                                <th class="text-warning">Du học/Ngắn hạn</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tb_mkt_detail"></tbody>
+                                        <tfoot id="tb_mkt_detail_foot" class="table-light fw-bold"></tfoot>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="card border-0 shadow-sm p-4 rounded-4">
+                                <h6 class="fw-800 text-center mb-3">BẢNG ĐÁNH GIÁ CHẤT LƯỢNG CHUYỂN ĐỔI THEO NGUỒN</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered rp-table text-center mb-0 bg-white">
+                                        <thead class="table-light"><tr><th class="text-start">Nguồn Truyền Thông</th><th>Tổng Data</th><th>HS Hoàn thiện/Cọc</th><th>Tỷ lệ chuyển đổi</th><th class="text-end">Doanh thu mang về</th></tr></thead>
+                                        <tbody id="tb_mkt_source"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="rp-nganh">
+                            <div class="card border-0 shadow-sm p-4 rounded-4">
+                                <h6 class="fw-800 text-center mb-3 text-uppercase text-primary border-bottom pb-2">BẢNG TỔNG HỢP THEO NGÀNH HỌC</h6>
+                                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                                    <table class="table table-bordered table-hover rp-table text-center mb-0 bg-white">
+                                        <thead class="table-light sticky-top" id="th_nganh">
+                                            <tr>
+                                                <th class="text-start">Ngành học</th>
+                                                <th>Tổng HS ghi nhận</th>
+                                                <th class="text-success fw-800" style="background-color:#e8f5e9;">Tổng Hoạt Động</th>
+                                                <th class="text-info">Đã nộp LPXT</th>
+                                                <th class="text-success">Đã hoàn thiện cọc</th>
+                                                <th class="text-warning">Đã full NE</th>
+                                                <th class="text-danger">Chưa hoàn thiện</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tb_nganh_body"></tbody>
+                                        <tfoot id="tb_nganh_foot" class="table-light fw-bold"></tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+<!-- BẮT ĐẦU TAB TUYỂN SINH -->
+                        <div class="tab-pane fade" id="rp-tuyensinh">
+                            <div class="card border-0 shadow-sm p-4 rounded-4 mb-4 bg-white">
+                                <div class="row g-4">
+                                    <!-- BỘ LỌC BÊN TRÁI -->
+                                    <div class="col-md-3 border-end">
+                                        <h6 class="fw-800 text-primary mb-3"><i class="fa-solid fa-filter me-2"></i>BỘ LỌC NÂNG CAO</h6>
+                                        <div class="mb-3">
+                                            <label class="small fw-bold text-muted mb-2">Hệ đào tạo</label>
+                                            <div id="admSystemBox" class="border rounded p-2 bg-light" style="max-height: 150px; overflow-y: auto; font-size: 0.8rem; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="small fw-bold text-muted mb-2">Nguồn dữ liệu</label>
+                                            <div id="admSourceBox" class="border rounded p-2 bg-light" style="max-height: 300px; overflow-y: auto; font-size: 0.8rem; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+                                            </div>
+                                        </div>
+                                        <button onclick="generateAdmReport()" class="btn btn-primary w-100 fw-bold shadow-sm rounded-pill mt-2 py-2">
+                                            <i class="fa-solid fa-magnifying-glass me-2"></i> Bắt Đầu Lọc
+                                        </button>
+                                    </div>
+
+                                    <!-- BẢNG BIỂU BÊN PHẢI -->
+                                    <div class="col-md-9">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="fw-bold text-dark m-0 text-uppercase" style="font-size: 0.85rem;">1. Chất lượng chuyển đổi theo nguồn</h6>
+                                            <button onclick="exportTableToExcel('tblAdmConversion', 'Danh_Gia_Chuyen_Doi')" class="btn btn-sm btn-success fw-bold py-1" style="font-size: 0.75rem;"><i class="fa-solid fa-file-excel me-1"></i> Xuất Excel</button>
+                                        </div>
+                                        <div class="table-responsive mb-4 shadow-sm rounded border">
+                                            <table class="table table-hover table-sm rp-table table-bordered mb-0 text-center align-middle" id="tblAdmConversion" style="font-size: 0.8rem;">
+                                                <thead class="table-primary">
+                                                    <tr>
+                                                        <th class="text-start py-2">Nguồn</th>
+                                                        <th class="py-2">Tổng Data (Có GD)</th>
+                                                        <th class="py-2">Đã nộp Lệ phí</th>
+                                                        <th class="py-2">Đã Cọc Xong</th>
+                                                        <th class="py-2">Đã Full NE</th>
+                                                        <th class="text-end py-2">Tổng Doanh Thu (VNĐ)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="admConvBody">
+                                                    <tr><td colspan="6" class="text-muted py-3">Vui lòng chọn bộ lọc bên trái và bấm Bắt Đầu Lọc</td></tr>
+                                                </tbody>
+                                                <tfoot id="admConvFoot" class="table-light fw-bold"></tfoot>
+                                            </table>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="fw-bold text-dark m-0 text-uppercase" style="font-size: 0.85rem;">2. Chi tiết giao dịch trong kỳ</h6>
+                                            <button onclick="exportTableToExcel('tblAdmTransactions', 'Chi_Tiet_Giao_Dich')" class="btn btn-sm btn-success fw-bold py-1" style="font-size: 0.75rem;"><i class="fa-solid fa-file-excel me-1"></i> Xuất Excel</button>
+                                        </div>
+                                        <div class="table-responsive shadow-sm rounded border" style="max-height: 350px; overflow-y: auto;">
+                                            <table class="table table-hover table-sm rp-table table-bordered mb-0 text-center align-middle" id="tblAdmTransactions" style="font-size: 0.8rem;">
+                                                <thead class="table-dark sticky-top">
+                                                    <tr>
+                                                        <th class="py-2">Ngày nộp</th>
+                                                        <th class="text-start py-2">Họ Tên</th>
+                                                        <th class="py-2">SĐT</th>
+                                                        <th class="py-2">Hệ</th>
+                                                        <th class="py-2">Nguồn</th>
+                                                        <th class="py-2">Loại phí</th>
+                                                        <th class="text-end py-2">Số tiền (VNĐ)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="admTransBody">
+                                                    <tr><td colspan="7" class="text-muted py-3">Vui lòng chọn bộ lọc bên trái và bấm Bắt Đầu Lọc</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- KẾT THÚC TAB TUYỂN SINH -->
+
+                    </div>
+                </div> 
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content glass-card border-0 p-0">
+            <div class="modal-header border-bottom-0 pb-0">
+                <div>
+                    <h4 class="fw-800 text-gradient m-0" id="modalTitle">HỒ SƠ CHI TIẾT</h4>
+                    <div class="badge bg-light text-dark border mt-1">ID: <span id="display_studentId">---</span></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-pills mb-4 nav-fill gap-3" id="pills-tab">
+                    <li class="nav-item"><button class="nav-link active fw-bold rounded-pill border" data-bs-toggle="pill" data-bs-target="#tab-info">1. THÔNG TIN</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold rounded-pill border" data-bs-toggle="pill" data-bs-target="#tab-finance">2. TÀI CHÍNH</button></li>
+                    <li class="nav-item"><button class="nav-link fw-bold rounded-pill border" data-bs-toggle="pill" data-bs-target="#tab-invite">3. GIẤY MỜI</button></li>
+                </ul>
+                
+                <form id="editForm">
+                    <input type="hidden" id="edit_studentId">
+                    <div class="tab-content" id="pills-tabContent">
+                        
+                        <div class="tab-pane fade show active" id="tab-info">
+                            <div id="duplicateWarning" class="alert d-none-im mb-3 shadow-sm" style="font-size: 0.85rem;"></div>
+
+                            <h6 class="text-uppercase fw-800 text-muted mb-3 border-bottom pb-2">Thông tin cá nhân</h6>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4"><label>Họ và tên *</label><input type="text" id="edit_fullName" class="form-control text-uppercase" oninput="checkDuplicate()"></div>
+                                <div class="col-md-2"><label>Giới tính</label><select id="edit_gender" class="form-select"><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select></div>
+                                <div class="col-md-3"><label>Ngày sinh (dd/mm/yyyy) *</label><input type="text" id="edit_dob" class="form-control" placeholder="VD: 15/05/2005" maxlength="10"></div>
+                                <div class="col-md-3">
+    <label class="text-danger">CCCD *</label>
+    <div class="input-group">
+        <input type="text" id="edit_cccd" class="form-control fw-bold" oninput="checkDuplicate()">
+        <div class="input-group-text" style="padding: 0 8px;">
+            <input class="form-check-input mt-0 me-1" type="checkbox" id="checkNoCCCD" onchange="handleNoCCCD(this)" style="cursor:pointer;">
+            <label for="checkNoCCCD" style="font-size:0.75rem; font-weight:bold; cursor:pointer; margin-bottom:0;">Chưa có</label>
+        </div>
+    </div>
+</div>
+                                <div class="col-md-3"><label>SĐT Sinh viên *</label><input type="text" id="edit_phone" class="form-control fw-bold text-primary" oninput="checkDuplicate()"></div>
+                                <div class="col-md-3"><label>Email</label><input type="email" id="edit_email" class="form-control"></div>
+                                <div class="col-md-3"><label>Nơi sinh</label><input type="text" id="edit_pob" class="form-control"></div>
+                                <div class="col-md-3"><label>Dân tộc</label><input type="text" id="edit_ethnicity" class="form-control"></div>
+                                
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-success">Nguồn dữ liệu chính (Source 1) *</label>
+                                  <select id="edit_source" class="form-select fw-bold text-success">
+    <option value="">-- Chọn Nguồn --</option>
+    <option value="Email Marketing">Email Marketing</option>
+    <option value="SchoolTour HN">SchoolTour HN</option>
+    <option value="School Tour Tỉnh">School Tour Tỉnh</option>
+    <option value="MOU">MOU</option>
+    <option value="CBNV">CBNV</option>
+    <option value="Sinh viên trường">Sinh viên trường</option>
+    <option value="Hotline">Hotline</option>
+    <option value="Facebook Ads">Facebook Ads</option>
+    <option value="Tiktok">Tiktok</option>
+    <option value="Zalo">Zalo</option>
+    <option value="Giới thiệu">Giới thiệu</option>
+    <option value="Seeding">Seeding</option>
+    <option value="Cộng tác viên">Cộng tác viên</option>
+    <option value="Google Ads">Google Ads</option>
+    <option value="Hội thảo">Hội thảo</option>
+    <option value="Đại lý">Đại lý</option>
+    <option value="TVV Tự kiếm">TVV Tự kiếm</option>
+    <option value="Khác">Khác</option>
+</select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-info">Nguồn phụ (Source 2)</label>
+                                  <select id="edit_source2" class="form-select fw-bold text-info">
+    <option value="">-- Không có --</option>
+    <option value="Email Marketing">Email Marketing</option>
+    <option value="SchoolTour HN">SchoolTour HN</option>
+    <option value="School Tour Tỉnh">School Tour Tỉnh</option>
+    <option value="MOU">MOU</option>
+    <option value="CBNV">CBNV</option>
+    <option value="Sinh viên trường">Sinh viên trường</option>
+    <option value="Hotline">Hotline</option>
+    <option value="Facebook Ads">Facebook Ads</option>
+    <option value="Tiktok">Tiktok</option>
+    <option value="Zalo">Zalo</option>
+    <option value="Giới thiệu">Giới thiệu</option>
+    <option value="Seeding">Seeding</option>
+    <option value="Cộng tác viên">Cộng tác viên</option>
+    <option value="Google Ads">Google Ads</option>
+    <option value="Hội thảo">Hội thảo</option>
+    <option value="Đại lý">Đại lý</option>
+    <option value="TVV Tự kiếm">TVV Tự kiếm</option>
+    <option value="Khác">Khác</option>
+</select>
+                                </div>
+                                <div class="col-md-6"><label>Địa chỉ thường trú</label><textarea id="edit_address" class="form-control" rows="1"></textarea></div>
+                                <div class="col-md-12"><label>Nơi ở hiện tại</label><textarea id="edit_currentAddress" class="form-control" rows="1"></textarea></div>
+                            </div>
+
+                            <h6 class="text-uppercase fw-800 text-muted mb-3 border-bottom pb-2">Nguyện vọng & Gia đình</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4"><label class="text-danger">Hệ Đào Tạo *</label><select id="edit_eduSystem" class="form-select fw-bold"><option value="">-- Đang tải --</option></select></div>
+                                <div class="col-md-4"><label class="text-primary">Ngành học *</label><select id="edit_major" class="form-select fw-bold"></select></div>
+                                <div class="col-md-4"><label>Cơ sở học</label><input type="text" id="edit_campus" class="form-control"></div>
+                                <div class="col-md-3"><label>Niên khóa</label><select id="edit_schoolYear" class="form-select"><option value="">-- Chọn --</option></select></div>
+                                <div class="col-md-3"><label>Trường THPT</label><input type="text" id="edit_school" class="form-control"></div>
+                                <div class="col-md-3"><label>Khu vực</label><input type="text" id="edit_area" class="form-control"></div>
+                                <div class="col-md-3"><label>Trạng thái</label><input type="text" id="edit_status_view" class="form-control bg-light" readonly></div>
+                                <input type="hidden" id="edit_status">
+                                <div class="col-md-3" id="admin_edit_tvv_div" style="display:none;">
+                                    <label class="text-danger fw-bold">Chuyển Tư vấn viên (Admin)</label>
+                                    <select id="edit_counselorName" class="form-select border-danger"></select>
+                                </div>
+                                <div class="col-md-3"><label>Họ tên Bố</label><input type="text" id="edit_fatherName" class="form-control"></div>
+                                <div class="col-md-3"><label>SĐT Bố</label><input type="text" id="edit_fatherPhone" class="form-control"></div>
+                                <div class="col-md-3"><label>Họ tên Mẹ</label><input type="text" id="edit_motherName" class="form-control"></div>
+                                <div class="col-md-3"><label>SĐT Mẹ</label><input type="text" id="edit_motherPhone" class="form-control"></div>
+                                <div class="col-md-6"><label>Người giám hộ</label><input type="text" id="edit_guardian" class="form-control"></div>
+                                <div class="col-md-6"><label>SĐT Giám hộ</label><input type="text" id="edit_guardianPhone" class="form-control"></div>
+
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-danger">Học bổng 1 (Lưu vào Cột AD)</label>
+                                    <select id="edit_scholarship" class="form-select fw-bold text-danger">
+                                        <option value="">-- Không có học bổng --</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-warning">Học bổng 2 (Lưu vào Cột BR)</label>
+                                    <select id="edit_scholarship2" class="form-select fw-bold text-warning">
+                                        <option value="">-- Không có học bổng --</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-12"><label>Ghi chú</label><textarea id="edit_note" class="form-control" rows="1"></textarea></div>
+                                <input type="hidden" id="edit_schoolProvince"><input type="hidden" id="edit_situation"><input type="hidden" id="edit_score">
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-finance">
+                            <div class="d-none d-lg-flex fw-800 text-muted small text-uppercase mb-2 ps-2">
+                                <div class="col-lg-2">Khoản thu</div><div class="col-lg-3">Số tiền (VNĐ)</div><div class="col-lg-3">Ngày thu</div><div class="col-lg-2">Chứng từ</div><div class="col-lg-2 text-end">Trạng thái</div>
+                            </div>
+                            <div class="finance-row"><div class="row align-items-center g-2"><div class="col-lg-2 fw-800 text-success">1. Cọc / Ứng</div><div class="col-lg-3"><input type="text" id="edit_deposit" class="form-control money-input" placeholder="0"></div><div class="col-lg-3"><input type="date" id="edit_date1" class="form-control form-control-sm"></div><div class="col-lg-2"><input type="file" id="file_deposit" class="form-control form-control-sm"></div><div class="col-lg-2 d-flex justify-content-between justify-content-lg-end align-items-center"><div id="st_deposit" class="fw-bold me-3"></div><div id="link_deposit"></div></div></div></div>
+                            <div class="finance-row"><div class="row align-items-center g-2"><div class="col-lg-2 fw-800 text-primary">2. Bổ sung L1</div><div class="col-lg-3"><input type="text" id="edit_secondAmount" class="form-control money-input" placeholder="0"></div><div class="col-lg-3"><input type="date" id="edit_date2" class="form-control form-control-sm"></div><div class="col-lg-2"><input type="file" id="file_second" class="form-control form-control-sm"></div><div class="col-lg-2 d-flex justify-content-between justify-content-lg-end align-items-center"><div id="st_secondAmount" class="fw-bold me-3"></div><div id="link_second"></div></div></div></div>
+                            <div class="finance-row"><div class="row align-items-center g-2"><div class="col-lg-2 fw-800 text-primary">3. Bổ sung L2</div><div class="col-lg-3"><input type="text" id="edit_thirdAmount" class="form-control money-input" placeholder="0"></div><div class="col-lg-3"><input type="date" id="edit_date3" class="form-control form-control-sm"></div><div class="col-lg-2"><input type="file" id="file_third" class="form-control form-control-sm"></div><div class="col-lg-2 d-flex justify-content-between justify-content-lg-end align-items-center"><div id="st_thirdAmount" class="fw-bold me-3"></div><div id="link_third"></div></div></div></div>
+                            <div class="finance-row"><div class="row align-items-center g-2"><div class="col-lg-2 fw-800 text-primary">4. Bổ sung L3</div><div class="col-lg-3"><input type="text" id="edit_fourthAmount" class="form-control money-input" placeholder="0"></div><div class="col-lg-3"><input type="date" id="edit_date4" class="form-control form-control-sm"></div><div class="col-lg-2"><input type="file" id="file_fourth" class="form-control form-control-sm"></div><div class="col-lg-2 d-flex justify-content-between justify-content-lg-end align-items-center"><div id="st_fourthAmount" class="fw-bold me-3"></div><div id="link_fourth"></div></div></div></div>
+                            <div class="finance-row"><div class="row align-items-center g-2"><div class="col-lg-2 fw-800 text-primary">5. Bổ sung L4</div><div class="col-lg-3"><input type="text" id="edit_fifthAmount" class="form-control money-input" placeholder="0"></div><div class="col-lg-3"><input type="date" id="edit_date5" class="form-control form-control-sm"></div><div class="col-lg-2"><input type="file" id="file_fifth" class="form-control form-control-sm"></div><div class="col-lg-2 d-flex justify-content-between justify-content-lg-end align-items-center"><div id="st_fifthAmount" class="fw-bold me-3"></div><div id="link_fifth"></div></div></div></div>
+                            
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mt-4 border-top pt-4">
+                                <div class="form-check form-switch ms-2">
+                                    <input class="form-check-input" type="checkbox" id="edit_req_full_ne" style="transform: scale(1.5); cursor:pointer; margin-right: 10px;">
+                                    <label class="form-check-label fw-800 text-primary mt-1" for="edit_req_full_ne" style="cursor:pointer;">ĐÁNH DẤU: ĐÃ THU ĐỦ FULL NE</label>
+                                    <div class="small text-muted fw-bold">Tick vào đây để báo cho Kế toán biết</div>
+                                </div>
+                                <div class="bg-dark text-white p-3 rounded-pill px-5 shadow mt-3 mt-md-0">
+                                    <span class="opacity-75 text-uppercase small me-2">Tổng khai báo:</span>
+                                    <span class="fs-4 fw-800 text-warning" id="display_total_money">0 VNĐ</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade p-4 bg-white rounded shadow-sm" id="tab-invite">
+                            <div class="alert alert-success d-flex align-items-center justify-content-between mb-3" id="folder_alert" style="display:none !important;">
+                                <div><i class="fa-regular fa-folder-open me-2 fa-lg"></i> <span class="fw-bold">Thư mục hồ sơ:</span> <a href="#" id="folder_link_display" target="_blank" class="ms-2 fw-bold text-decoration-underline text-success">Mở ngay</a></div>
+                            </div>
+
+                            <div class="bg-light p-3 rounded border mb-4">
+                                <h6 class="fw-800 text-primary mb-3"><i class="fa-solid fa-graduation-cap me-2"></i>THÔNG TIN HỌC BỔNG</h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-bold mb-3" data-bs-toggle="collapse" data-bs-target="#scholarshipTable"><i class="fa-solid fa-list me-1"></i> Tra cứu danh sách Học bổng</button>
+                                <div class="collapse mb-3" id="scholarshipTable"><div class="table-responsive bg-white rounded border"><table class="table table-sm table-bordered mb-0" style="font-size: 0.8rem;"><thead class="bg-primary text-white"><tr><th>Hệ</th><th>Tên Học Bổng</th><th>Mức HB</th><th>Điều kiện</th></tr></thead><tbody id="hb_table_body"></tbody></table></div></div>
+                                <div class="form-floating"><select class="form-select border-primary fw-bold text-primary" id="scholarshipSelect"><option value="">-- Không áp dụng học bổng --</option></select><label class="fw-bold text-dark">Chọn Học bổng áp dụng cho giấy mời này:</label></div>
+                            </div>
+
+                            <h6 class="fw-800 text-muted text-uppercase mb-3"><i class="fa-solid fa-print me-2"></i>Chọn loại giấy tờ cần tạo</h6>
+                            <div class="row g-3">
+                                <div class="col-md-6"><div class="p-3 border rounded bg-white h-100"><div class="fw-bold text-primary mb-2">1. Thông báo Lệ phí xét tuyển</div><div class="d-grid gap-2"><button type="button" class="btn btn-outline-primary btn-sm fw-bold rounded-pill" onclick="callN8N('LE_PHI_CO_DAU')">Có dấu đỏ</button><button type="button" class="btn btn-outline-secondary btn-sm fw-bold rounded-pill" onclick="callN8N('LE_PHI_KHONG_DAU')">Không dấu</button></div></div></div>
+                                <div class="col-md-6"><div class="p-3 border rounded bg-white h-100"><div class="fw-bold text-success mb-2">2. Thông báo Trúng tuyển (9+)</div><div class="d-grid gap-2"><button type="button" class="btn btn-outline-success btn-sm fw-bold rounded-pill" onclick="callN8N('TRUNG_TUYEN_9_CO_DAU')">Có dấu đỏ</button><button type="button" class="btn btn-outline-secondary btn-sm fw-bold rounded-pill" onclick="callN8N('TRUNG_TUYEN_9_KHONG_DAU')">Không dấu</button></div></div></div>
+                                <div class="col-md-6"><div class="p-3 border rounded bg-white h-100"><div class="fw-bold text-warning mb-2">3. Thông báo Trúng tuyển (CĐ)</div><div class="d-grid gap-2"><button type="button" class="btn btn-outline-warning text-dark btn-sm fw-bold rounded-pill" onclick="callN8N('TRUNG_TUYEN_CD_CO_DAU')">Có dấu đỏ</button><button type="button" class="btn btn-outline-secondary btn-sm fw-bold rounded-pill" onclick="callN8N('TRUNG_TUYEN_CD_KHONG_DAU')">Không dấu</button></div></div></div>
+                                <div class="col-md-6"><div class="p-3 border rounded bg-white h-100"><div class="fw-bold text-danger mb-2">4. Thư mời nhập học (CĐCQ)</div><div class="d-grid gap-2"><button type="button" class="btn btn-outline-danger btn-sm fw-bold rounded-pill" onclick="callN8N('THU_MOI_CD_CO_DAU')">Có dấu đỏ</button><button type="button" class="btn btn-outline-secondary btn-sm fw-bold rounded-pill" onclick="callN8N('THU_MOI_CD_KHONG_DAU')">Không dấu</button></div></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top-0 pt-0 pb-4 pe-4">
+                <button type="button" class="btn btn-light rounded-pill fw-bold px-4" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" id="btnSave" class="btn-luxury px-5 shadow" onclick="submitForm()">LƯU HỒ SƠ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+let ALL_STUDENTS = [], LIST_MAJORS = [], LIST_SCHOLARSHIPS = [], CURRENT_USER = {};
+let editModalJS, reportModalJS;
+
+let GLOBAL_TVV_MAP = {}; 
+let GLOBAL_ALL_TVV = []; 
+
+// BIẾN QUẢN LÝ PHÂN TRANG VÀ LỌC DỮ LIỆU CHÍNH
+let currentFilteredDataMain = [];
+let currentPage = 1;
+const rowsPerPage = 25;
+
+let isSavingProfile = false;
+let charts = { chartTqStatus: null, chartMktSource: null, chartMktLineDaily: null, chartMktLineMonthly: null };
+let currentReportTab = 'tongquan'; 
+let cachedFilteredData = []; 
+
+// Biến kiểm soát Lazy Load ngầm
+let isMetaLoaded = false;
+let isStudentLoaded = false;
+
+function sVal(id, v) { 
+    const el = document.getElementById(id); 
+    if(el) {
+        let val = v || '';
+        // Nếu chuỗi bắt đầu bằng dấu nháy đơn, cắt bỏ nó đi
+        if (typeof val === 'string' && val.startsWith("'")) {
+            val = val.substring(1);
+        }
+        el.value = val; 
+    }
+}
+function sHtml(id, v) { const el = document.getElementById(id); if(el) el.innerHTML = v||''; }
+function sGet(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+function setDateInput(id, dateStr) {
+    if(!dateStr) { sVal(id, ""); return; }
+    let d = dateStr.replace(/'/g, '').trim();
+    const parts = d.split('/');
+    if(parts.length === 3) sVal(id, `${parts[2]}-${parts[1]}-${parts[0]}`);
+    else sVal(id, "");
+}
+function getDateInput(id) {
+    const val = sGet(id);
+    if(!val) return "";
+    const parts = val.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function showScreen(screenId) { 
+    document.getElementById('loginPage').classList.add('d-none-im'); 
+    document.getElementById('mainPage').classList.add('d-none-im'); 
+    document.getElementById(screenId).classList.remove('d-none-im'); 
+    document.getElementById(screenId).classList.add('d-block-im'); 
+}
+
+function logout() { 
+    document.getElementById('mainPage').classList.add('d-none-im'); 
+    document.getElementById('loginPage').classList.remove('d-none-im'); 
+    document.getElementById('email').value = ''; 
+    document.getElementById('password').value = ''; 
+    CURRENT_USER = {}; 
+    localStorage.removeItem('tvv_email'); 
+    localStorage.removeItem('tvv_pass'); 
+    localStorage.setItem('tvv_auto_login', 'false'); 
+}
+
+// -----------------------------------------------------
+// KHỞI TẠO DỮ LIỆU BẤT ĐỒNG BỘ (LAZY LOAD)
+// -----------------------------------------------------
+window.onload = function() {
+    try {
+        editModalJS = new bootstrap.Modal(document.getElementById('editModal'));
+        reportModalJS = new bootstrap.Modal(document.getElementById('reportModal'));
+        
+        const savedEmail = localStorage.getItem('tvv_email');
+        const savedPass = localStorage.getItem('tvv_pass');
+        const autoLogin = localStorage.getItem('tvv_auto_login');
+        
+        if (savedEmail && savedPass) { 
+            document.getElementById('email').value = savedEmail; 
+            document.getElementById('password').value = savedPass; 
+            document.getElementById('rememberMe').checked = true; 
+            if(autoLogin === 'true') {
+                handleLogin(); 
+            }
+        } else {
+            preloadMetaData();
+        }
+
+        ['edit_deposit','edit_secondAmount','edit_thirdAmount','edit_fourthAmount','edit_fifthAmount'].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener('keyup', function() { this.value = this.value.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ","); calculateTotal(); }); });
+        
+        const dobInput = document.getElementById('edit_dob'); if (dobInput) { dobInput.addEventListener('input', function(e) { let v = this.value.replace(/\D/g, ''); if (v.length > 8) v = v.slice(0, 8); if (v.length > 4) this.value = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`; else if (v.length > 2) this.value = `${v.slice(0, 2)}/${v.slice(2)}`; else this.value = v; }); }
+
+        const cccdInput = document.getElementById('edit_cccd'); if (cccdInput) { cccdInput.addEventListener('input', function() { if(this.value !== "CHƯA CÓ") this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase(); }); }
+        ['edit_phone', 'edit_fatherPhone', 'edit_motherPhone', 'edit_guardianPhone'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.addEventListener('input', function() { this.value = this.value.replace(/[^0-9+]/g, ''); }); }
+        });
+    } catch(e){ console.error(e); }
+};
+
+function checkAllDataLoaded() {
+    if (isMetaLoaded && isStudentLoaded) {
+        toggleLoader(false);
+        filterTable(); 
+    }
+}
+
+
+
+function calculateTotal() { let total = 0; ['edit_deposit','edit_secondAmount','edit_thirdAmount','edit_fourthAmount','edit_fifthAmount'].forEach(id => { const el = document.getElementById(id); if(el) total += parseInt(el.value.replace(/,/g, '') || 0); }); document.getElementById('display_total_money').innerText = total.toLocaleString() + " VNĐ"; }
+function toggleLoader(s) { document.getElementById('loader').style.display = s ? 'flex' : 'none'; }
+function goToAccount() { google.script.run.withSuccessHandler(u => window.open(u+"?p=account","_blank")).getScriptUrl(); }
+
+function handleLogin() {
+    const e = document.getElementById('email').value, 
+          p = document.getElementById('password').value, 
+          remember = document.getElementById('rememberMe').checked; 
+    
+    toggleLoader(true);
+    
+    google.script.run.withSuccessHandler(res => {
+        if(res && res.status === "success") {
+            CURRENT_USER = res; 
+            showScreen('mainPage'); 
+            document.getElementById('userLabel').innerText = res.displayName;
+            
+            // --- HỆ THỐNG PHÂN QUYỀN GIAO DIỆN (UI CONTROL) ---
+            if (res.role === "marketing") {
+                // 1. Quyền Marketing: Chỉ xem báo cáo, không sửa/tạo
+                document.getElementById('adminFilterDiv').style.display = 'block'; 
+                document.getElementById('btnReport').style.display = 'inline-block';
+                
+                if(document.getElementById('btnSyncFirebase')) document.getElementById('btnSyncFirebase').style.display = 'none';
+                if(document.getElementById('btnUserMgmt')) document.getElementById('btnUserMgmt').style.display = 'none';
+                if(document.getElementById('admin_edit_tvv_div')) document.getElementById('admin_edit_tvv_div').style.display = 'none';
+                
+                // Ẩn nút Tạo hồ sơ của Marketing
+                const btnCreate = document.getElementById('btnCreate') || document.querySelector('button[onclick="openCreate()"]');
+                if(btnCreate) btnCreate.style.display = 'none';
+                
+                // Ẩn các nút "Chi tiết/Sửa" trên bảng để Marketing không bấm vào được
+                const style = document.createElement('style');
+                style.innerHTML = `#studentTableBody .btn-outline-dark { display: none !important; }`;
+                document.head.appendChild(style);
+
+                // Tự động mở báo cáo sau khi load dữ liệu xong
+                setTimeout(() => { openReport(); }, 1200);
+
+            } else if(res.role === "admin" || res.role === "teamlead") {
+                // 2. Quyền Admin & Teamlead: Mở bộ lọc nhân sự và Báo cáo
+                document.getElementById('adminFilterDiv').style.display = 'block';
+                document.getElementById('mainTable').classList.add('admin-visible');
+                document.getElementById('btnReport').style.display = 'inline-block';
+                
+              // ĐÃ SỬA: Cả Admin và Teamlead đều được phép đổi TVV
+              if (res.role === "admin" || res.role === "teamlead") {
+                    if(document.getElementById('admin_edit_tvv_div')) document.getElementById('admin_edit_tvv_div').style.display = 'block';
+              } else {
+                    if(document.getElementById('admin_edit_tvv_div')) document.getElementById('admin_edit_tvv_div').style.display = 'none';
+              }
+
+              // Các nút công cụ cấp cao thì chỉ Admin mới thấy
+              if (res.role === "admin") {
+                    if(document.getElementById('btnUserMgmt')) document.getElementById('btnUserMgmt').style.display = 'inline-block';
+                    if(document.getElementById('btnAdminTools')) document.getElementById('btnAdminTools').style.display = 'inline-block';
+                } else {
+                    if(document.getElementById('btnUserMgmt')) document.getElementById('btnUserMgmt').style.display='none';
+                    if(document.getElementById('btnAdminTools')) document.getElementById('btnAdminTools').style.display='none';
+                }
+                
+                // Hiện lại nút Tạo hồ sơ nếu trước đó bị Marketing ẩn
+                const btnCreate = document.getElementById('btnCreate') || document.querySelector('button[onclick="openCreate()"]');
+                if(btnCreate) btnCreate.style.display = 'inline-block';
+
+            } else {
+                // 3. Quyền TVV thường: Thu gọn giao diện tối đa
+                document.getElementById('adminFilterDiv').style.display = 'none';
+                document.getElementById('mainTable').classList.remove('admin-visible');
+                document.getElementById('btnReport').style.display = 'none';
+                if(document.getElementById('btnSyncFirebase')) document.getElementById('btnSyncFirebase').style.display = 'none';
+                if(document.getElementById('btnUserMgmt')) document.getElementById('btnUserMgmt').style.display = 'none';
+                
+                const btnCreate = document.getElementById('btnCreate') || document.querySelector('button[onclick="openCreate()"]');
+                if(btnCreate) btnCreate.style.display = 'inline-block';
+            }
+
+            // Ghi nhớ đăng nhập
+            if (remember) { 
+                localStorage.setItem('tvv_email', e); 
+                localStorage.setItem('tvv_pass', p); 
+                localStorage.setItem('tvv_auto_login', 'true'); 
+            } else { 
+                localStorage.removeItem('tvv_email'); 
+                localStorage.removeItem('tvv_pass'); 
+                localStorage.setItem('tvv_auto_login', 'false'); 
+            }
+            
+            // Tải dữ liệu hồ sơ
+            isStudentLoaded = false;
+            preloadMetaData();
+            refreshDataAndRender();
+            
+        } else {
+            toggleLoader(false);
+            Swal.fire("Lỗi đăng nhập", (res && res.message) || "Sai email hoặc mật khẩu!", "error");
+        }
+    }).loginUser(e, p);
+}
+
+
+
+function refreshDataAndRender() {
+    toggleLoader(true);
+    google.script.run.withSuccessHandler(res => {
+        if (res && res.status === "success") { 
+            ALL_STUDENTS = res.data.map(row => row.map(cell => {
+                if (typeof cell === 'string' && cell.startsWith("'")) return cell.substring(1);
+                return cell;
+            }));
+            
+            isStudentLoaded = true;
+            checkAllDataLoaded();
+        } else {
+            toggleLoader(false);
+            Swal.fire("Lỗi", (res && res.message) || "Không tải được dữ liệu", "error");
+        }
+    }).getStudentData(CURRENT_USER.name, CURRENT_USER.role, CURRENT_USER.teamMembers); // <-- Đã thêm mảng lính vào đây
+}
+
+function loadData() {
+    refreshDataAndRender();
+}
+
+function toNormal(str) { return String(str || "").normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim(); }
+
+function checkDuplicate() {
+    const currentId = document.getElementById('edit_studentId').value;
+    const nameVal = toNormal(document.getElementById('edit_fullName').value);
+    const phoneVal = document.getElementById('edit_phone').value.replace(/[^0-9+]/g, ''); 
+    let cccdVal = document.getElementById('edit_cccd').value;
+if (cccdVal !== "CHƯA CÓ") cccdVal = cccdVal.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    
+    const btnSave = document.getElementById('btnSave');
+    const warnDiv = document.getElementById('duplicateWarning');
+    
+    if (!nameVal && !phoneVal && !cccdVal) {
+        warnDiv.classList.add('d-none-im');
+        btnSave.disabled = false;
+        return;
+    }
+
+    let isError = false;
+    let isWarning = false;
+    let msg = "";
+
+    for (let i = 0; i < ALL_STUDENTS.length; i++) {
+        const r = ALL_STUDENTS[i];
+        const rId = String(r[1]).trim();
+        if (currentId && currentId !== "NEW" && rId === currentId) continue; 
+
+        const rName = toNormal(r[2]);
+        const rPhone = String(r[5] || "").replace(/[^0-9+]/g, '');
+        let rCccdRaw = String(r[16] || "");
+const rCccd = (rCccdRaw === "CHƯA CÓ") ? "CHƯA CÓ" : rCccdRaw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+        if (phoneVal && rPhone && phoneVal === rPhone) { isError = true; msg = `Số điện thoại này đã thuộc về <b>${r[2]}</b> (Mã: ${r[1]} - TVV: ${r[18]}). <br>Tuyệt đối không tạo trùng lặp!`; break; }
+        if (cccdVal && rCccd && cccdVal === rCccd && cccdVal !== "CHƯA CÓ") { isError = true; msg = `CCCD/Passport này đã thuộc về <b>${r[2]}</b> (Mã: ${r[1]} - TVV: ${r[18]}). <br>Tuyệt đối không tạo trùng lặp!`; break; }
+        if (nameVal && rName && nameVal === rName) { isWarning = true; msg = `Hệ thống đã có học sinh tên <b>${r[2]}</b> (Mã: ${r[1]} - TVV: ${r[18]}). <br><i>(Trùng tên có thể xảy ra, hãy kiểm tra kỹ SĐT/CCCD trước khi Lưu)</i>`; }
+    }
+
+    if (isError) { warnDiv.className = "alert mb-3 shadow-sm alert-danger border-danger animate__animated animate__headShake d-block-im"; warnDiv.innerHTML = `<i class="fa-solid fa-ban me-2"></i> ${msg}`; btnSave.disabled = true; } 
+    else if (isWarning) { warnDiv.className = "alert mb-3 shadow-sm alert-warning border-warning d-block-im"; warnDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-2"></i> ${msg}`; btnSave.disabled = false; } 
+    else { warnDiv.classList.add('d-none-im'); warnDiv.classList.remove('d-block-im'); btnSave.disabled = false; }
+}
+
+
+function updateTvvStats(data, tvvName) {
+    if (!tvvName) {
+        document.getElementById('tvvStatsBar').style.display = 'none';
+        return;
+    }
+
+    let tTotal = data.length;
+    let tCoc = 0;
+    let tLpxt = 0;
+    let tDang = 0;
+    let tFull = 0;
+
+    data.forEach(r => {
+        let money = parseInt(String(r[37]).replace(/\D/g, '')) || 0;
+        let is9Plus = String(r[10]).toUpperCase().includes("9+");
+        let cocThreshold = is9Plus ? 2000000 : 1000000;
+        let status = String(r[39]).trim();
+        let isFullNE = String(r[65]).trim() === "ĐÃ FULL NE";
+        
+        let isCoc = money >= cocThreshold || status === "CỌC THÀNH CÔNG";
+        let isLpxt = money >= 150000 && !isCoc;
+
+        if (isCoc) tCoc++;
+        if (isLpxt) tLpxt++;
+        if (status === "ĐANG HOÀN THIỆN") tDang++;
+        if (isFullNE) tFull++;
+    });
+
+    const elTotal = document.getElementById('st_tvv_total');
+    if (elTotal) {
+        elTotal.innerText = tTotal;
+        document.getElementById('st_tvv_coc').innerText = tCoc;
+        document.getElementById('st_tvv_lpxt').innerText = tLpxt;
+        document.getElementById('st_tvv_dang').innerText = tDang;
+        document.getElementById('st_tvv_full').innerText = tFull;
+        document.getElementById('tvvStatsBar').style.display = 'flex';
+    }
+}
+
+function renderTablePage() {
+    const totalItems = currentFilteredDataMain.length;
+    const totalPages = Math.ceil(totalItems / rowsPerPage);
+    
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    
+    const startIdx = (currentPage - 1) * rowsPerPage;
+    const endIdx = startIdx + rowsPerPage;
+    const pageData = currentFilteredDataMain.slice(startIdx, endIdx);
+    
+    renderTable(pageData);
+    renderPaginationControls(totalPages, totalItems);
+}
+
+function changePage(page) {
+    currentPage = page;
+    renderTablePage();
+}
+
+function renderPaginationControls(totalPages, totalItems) {
+    let html = '';
+    if (totalItems > 0) {
+        html += `<div class="small fw-bold text-muted ps-3">Tổng: <span class="text-primary">${totalItems}</span> Sinh viên</div>`;
+    } else {
+        html += `<div class="small fw-bold text-muted ps-3">Không có dữ liệu</div>`;
+    }
+
+    if (totalPages > 1) {
+        html += `<ul class="pagination pagination-sm mb-0 pe-3 shadow-sm rounded-pill">`;
+        html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><a class="page-link rounded-start-pill" href="#" onclick="changePage(${currentPage - 1}); return false;">&laquo;</a></li>`;
+        
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+        
+        if (startPage > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(1); return false;">1</a></li>`;
+            if (startPage > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<li class="page-item ${currentPage === i ? 'active' : ''}"><a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a></li>`;
+        }
+        
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${totalPages}); return false;">${totalPages}</a></li>`;
+        }
+        
+        html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><a class="page-link rounded-end-pill" href="#" onclick="changePage(${currentPage + 1}); return false;">&raquo;</a></li>`;
+        html += `</ul>`;
+    } else {
+         html += `<div></div>`;
+    }
+    
+    const pagTop = document.getElementById('paginationTop');
+    const pagBot = document.getElementById('paginationBottom');
+    if (pagTop) pagTop.innerHTML = html;
+    if (pagBot) pagBot.innerHTML = html;
+}
+
+// =========================================================
+// HÀM VẼ BẢNG DANH SÁCH SINH VIÊN (BẤM VÀO ĐÂU TRÊN DÒNG CŨNG MỞ CHI TIẾT)
+// =========================================================
+function renderTable(data) {
+    const tbody = document.getElementById('studentTableBody');
+    if(!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="text-center p-4">Chưa có dữ liệu</td></tr>'; return; }
+    const isAdmin = CURRENT_USER.role === 'admin'; const displayStyle = isAdmin ? '' : 'display:none;';
+    
+    // ĐÃ SỬA: Thêm onclick và cursor: pointer vào thẻ <tr>
+    tbody.innerHTML = data.map(r => `
+        <tr onclick="openEdit('${r[1]}')" style="cursor: pointer;" title="Bấm để xem chi tiết">
+        <td class="ps-4">
+            <div class="fw-800 text-primary text-uppercase">${r[2]||'---'}</div>
+            <div class="small text-muted fw-bold">ID: ${r[1]||'---'}</div>
+            <div class="small fw-bold mt-1" style="font-size: 0.75rem; color: #d97706;">
+                <i class="fa-regular fa-calendar-check me-1"></i>Ngày đăng ký: ${String(r[17]||'---').split(' ')[0]}
+            </div>
+        </td>
+        <td><div><i class="fa-solid fa-phone me-1 text-success"></i> ${r[5]||'---'}</div></td>
+        <td><div class="fw-bold small">${r[12]||'---'}</div><span class="badge bg-light text-dark border">${r[10]||'---'}</span></td>
+        <td class="admin-col" style="${displayStyle}">
+            <div class="badge bg-info text-dark mb-1">${r[18]||'---'}</div>
+            <div class="small text-muted fw-bold" style="font-size: 0.75rem;"><i class="fa-regular fa-calendar-plus me-1"></i>${String(r[17]||'---').split(' ')[0]}</div>
+        </td>
+        <td class="admin-col" style="${displayStyle}"><small class="fw-bold text-secondary">${r[56]||'---'}</small></td>
+        <td><div class="fw-800 text-success fs-6">${parseInt(r[37]||0).toLocaleString()}</div></td>
+        <td><span class="status-badge ${getBadgeClass(r[39])}">${r[39]||'MỚI'}</span></td>
+        <td class="text-center"><button class="btn btn-sm btn-outline-dark rounded-pill px-3 fw-bold"><i class="fa-solid fa-pen-to-square"></i> Chi tiết</button></td>
+        </tr>`).join('');
+}
+
+function getBadgeClass(s) { if(s==='CỌC THÀNH CÔNG') return 'badge-coc'; if(s==='ĐANG HOÀN THIỆN') return 'badge-hoanthien'; if(s==='KIỂM TRA LẠI') return 'badge-huy'; return 'badge-moi'; }
+
+function openCreate() {
+    document.getElementById('editForm').reset();
+    sVal('edit_studentId', ""); sHtml('display_studentId', "NEW"); sHtml('modalTitle', "TẠO HỒ SƠ MỚI");
+    ['link_deposit','link_second','link_third','link_fourth','link_fifth','st_deposit','st_secondAmount','st_thirdAmount','st_fourthAmount','st_fifthAmount'].forEach(id => sHtml(id, ""));
+    ['edit_date1','edit_date2','edit_date3','edit_date4','edit_date5'].forEach(id => sVal(id, ""));
+    calculateTotal(); sVal('edit_status_view', "MỚI"); sVal('edit_status', "MỚI"); sVal('edit_scholarship', ""); sVal('edit_scholarship2', ""); sVal('edit_source2', "");
+    sVal('edit_counselorName', ""); 
+    
+    const fullNeSwitch = document.getElementById('edit_req_full_ne');
+    if (fullNeSwitch) fullNeSwitch.checked = false;
+
+    document.getElementById('duplicateWarning').classList.add('d-none-im'); document.getElementById('btnSave').disabled = false;
+    const hbSel = document.getElementById('scholarshipSelect'); if(hbSel) hbSel.value = "";
+    const alertBox = document.getElementById('folder_alert'); if(alertBox) alertBox.style.display = 'none';
+    document.querySelector('button[data-bs-target="#tab-invite"]').classList.add('d-none'); document.querySelector('button[data-bs-target="#tab-info"]').click();
+    const noCccdBox = document.getElementById('checkNoCCCD');
+if(noCccdBox) { noCccdBox.checked = false; handleNoCCCD(noCccdBox); }
+    editModalJS.show();
+}
+
+function openEdit(id) {
+    const sv = ALL_STUDENTS.find(x => String(x[1]) === String(id)); if(!sv) return;
+    sHtml('modalTitle', "CẬP NHẬT HỒ SƠ"); sHtml('display_studentId', sv[1]); sVal('edit_studentId', sv[1]);
+    document.querySelector('button[data-bs-target="#tab-invite"]').classList.remove('d-none'); document.querySelector('button[data-bs-target="#tab-info"]').click();
+    document.getElementById('duplicateWarning').classList.add('d-none-im'); document.getElementById('btnSave').disabled = false;
+    sVal('edit_fullName', sv[2]); sVal('edit_gender', sv[3]); sVal('edit_dob', sv[4]); sVal('edit_phone', sv[5]); sVal('edit_email', sv[6]);
+    sVal('edit_address', sv[8]); sVal('edit_currentAddress', sv[9]); sVal('edit_eduSystem', sv[10]); sVal('edit_major', sv[12]);
+    sVal('edit_schoolYear', sv[13]); sVal('edit_pob', sv[14]); sVal('edit_ethnicity', sv[15]); 
+    const noCccdBox = document.getElementById('checkNoCCCD');
+if(noCccdBox) { 
+    noCccdBox.checked = (sv[16] === "CHƯA CÓ"); 
+    handleNoCCCD(noCccdBox); 
+    if(sv[16] !== "CHƯA CÓ") sVal('edit_cccd', sv[16]); 
+}
+    sVal('edit_campus', sv[19]);
+    sVal('edit_fatherName', sv[20]); sVal('edit_fatherPhone', sv[21]); sVal('edit_motherName', sv[22]); sVal('edit_motherPhone', sv[23]);
+    sVal('edit_guardian', sv[24]); sVal('edit_guardianPhone', sv[25]); sVal('edit_school', sv[26]); sVal('edit_schoolProvince', sv[27]);
+    sVal('edit_area', sv[28]); sVal('edit_status', sv[39]); sVal('edit_status_view', sv[39]); sVal('edit_note', sv[41]); sVal('edit_situation', sv[42]); sVal('edit_score', sv[43]);
+    sVal('edit_scholarship', sv[29]); sVal('edit_deposit', sv[30]); sVal('edit_secondAmount', sv[31]); sVal('edit_thirdAmount', sv[44]); sVal('edit_fourthAmount', sv[46]); sVal('edit_fifthAmount', sv[48]); sVal('edit_source', sv[56]);
+    
+    // Nguồn 2 và Học bổng 2 (Cột BQ và BR tương ứng index 68 và 69)
+    sVal('edit_source2', sv[68] || "");
+    sVal('edit_scholarship2', sv[69] || "");
+    
+    sVal('edit_counselorName', sv[18]); 
+    
+    setDateInput('edit_date1', sv[60]); setDateInput('edit_date2', sv[61]); setDateInput('edit_date3', sv[62]); setDateInput('edit_date4', sv[63]); setDateInput('edit_date5', sv[64]);
+    calculateTotal(); document.getElementById('scholarshipSelect').value = "";
+    
+    if(sv[50]) sHtml('st_deposit', `<span class="badge ${sv[50] === 'ĐỒNG Ý' ? 'bg-success' : 'bg-danger'}">${sv[50]}</span>`);
+    if(sv[51]) sHtml('st_secondAmount', `<span class="badge ${sv[51] === 'ĐỒNG Ý' ? 'bg-success' : 'bg-danger'}">${sv[51]}</span>`);
+    if(sv[52]) sHtml('st_thirdAmount', `<span class="badge ${sv[52] === 'ĐỒNG Ý' ? 'bg-success' : 'bg-danger'}">${sv[52]}</span>`);
+    if(sv[53]) sHtml('st_fourthAmount', `<span class="badge ${sv[53] === 'ĐỒNG Ý' ? 'bg-success' : 'bg-danger'}">${sv[53]}</span>`);
+    if(sv[54]) sHtml('st_fifthAmount', `<span class="badge ${sv[54] === 'ĐỒNG Ý' ? 'bg-success' : 'bg-danger'}">${sv[54]}</span>`);
+    
+    if(sv[34]) sHtml('link_deposit', `<a href="${sv[34]}" target="_blank" class="small fw-bold">Xem Bill</a>`);
+    if(sv[35]) sHtml('link_second', `<a href="${sv[35]}" target="_blank" class="small fw-bold">Xem Bill</a>`);
+    if(sv[45]) sHtml('link_third', `<a href="${sv[45]}" target="_blank" class="small fw-bold">Xem Bill</a>`);
+    if(sv[47]) sHtml('link_fourth', `<a href="${sv[47]}" target="_blank" class="small fw-bold">Xem Bill</a>`);
+    if(sv[49]) sHtml('link_fifth', `<a href="${sv[49]}" target="_blank" class="small fw-bold">Xem Bill</a>`);
+    
+    const fullNeSwitch = document.getElementById('edit_req_full_ne');
+    if (fullNeSwitch) {
+        fullNeSwitch.checked = String(sv[65] || "").includes("FULL NE");
+    }
+
+    const folderLink = sv[36]; const alertBox = document.getElementById('folder_alert'); const linkDisplay = document.getElementById('folder_link_display');
+    if (folderLink && folderLink.includes('http')) { alertBox.style.display = 'flex'; alertBox.classList.remove('d-none-im'); linkDisplay.href = folderLink; } else { alertBox.style.display = 'none'; }
+    editModalJS.show();
+}
+
+function switchReportTab(tabId) {
+    currentReportTab = tabId;
+    runReportEngine(); 
+}
+
+function parseDateForReport(dateStr) {
+    if(!dateStr) return 0;
+    let s = String(dateStr).replace(/'/g, '').trim().split(' ')[0];
+    let parts = s.split('/'); 
+    if(parts.length !== 3) return 0;
+    return new Date(parts[2], parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+}
+
+function openReport() {
+    const now = new Date();
+    
+    // Tính ngày 01 của tháng hiện tại
+    const firstDayOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    // Tính ngày hôm nay
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    document.getElementById('rp_startDate').value = firstDayOfMonth;
+    document.getElementById('rp_endDate').value = todayStr;
+    
+    const deptSel = document.getElementById('rp_select_dept');
+    if(deptSel) deptSel.value = "ALL";
+    const tvvSel = document.getElementById('rp_select_tvv');
+    if(tvvSel) tvvSel.innerHTML = '<option value="ALL">-- TẤT CẢ TƯ VẤN VIÊN --</option>' + GLOBAL_ALL_TVV.map(n => `<option value="${n}">${n}</option>`).join('');
+    
+    // Tự động quét Hệ và Nguồn để tạo Checkbox
+    let admSystems = new Set(); 
+    let admSources = new Set();
+    
+    ALL_STUDENTS.forEach(r => {
+        let sys = String(r[10] || "").trim(); 
+        let src = String(r[56] || "").trim();
+        if (sys) admSystems.add(sys); 
+        if (src) admSources.add(src);
+    });
+    
+    let sysHtml = Array.from(admSystems).map((s, i) => `
+        <div class="form-check mb-1">
+            <input class="form-check-input chk-adm-sys" type="checkbox" value="${s}" id="chk_sys_${i}" style="cursor:pointer;">
+            <label class="form-check-label text-dark fw-bold" for="chk_sys_${i}" style="cursor:pointer;">${s}</label>
+        </div>
+    `).join('');
+    
+    let srcHtml = Array.from(admSources).map((s, i) => `
+        <div class="form-check mb-1">
+            <input class="form-check-input chk-adm-src" type="checkbox" value="${s}" id="chk_src_${i}" style="cursor:pointer;">
+            <label class="form-check-label text-dark fw-bold" for="chk_src_${i}" style="cursor:pointer;">${s}</label>
+        </div>
+    `).join('');
+    
+    const boxSys = document.getElementById('admSystemBox'); 
+    if(boxSys) boxSys.innerHTML = sysHtml;
+    
+    const boxSrc = document.getElementById('admSourceBox'); 
+    if(boxSrc) boxSrc.innerHTML = srcHtml;
+
+    currentReportTab = 'tongquan';
+    document.querySelector('button[data-bs-target="#rp-tongquan"]').click();
+    
+    runReportEngine();
+    reportModalJS.show();
+}
+
+function onDeptChange() {
+    const selectedDept = document.getElementById('rp_select_dept').value;
+    const listRpTVV = document.getElementById('listRpTVV');
+    
+    let html = '';
+    GLOBAL_ALL_TVV.forEach((tvv, i) => {
+        let deptOfTvv = GLOBAL_TVV_MAP[tvv] || "Chưa phân phòng";
+        if (selectedDept === "ALL" || deptOfTvv === selectedDept) {
+            html += `<li>
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" value="${tvv}" id="cb_rp_change_${i}" onchange="updateDropdownText('listRpTVV', 'btnRpTVV', '-- Tất cả Tư vấn viên --'); runReportEngine()">
+                    <label class="form-check-label small fw-bold text-dark w-100" for="cb_rp_change_${i}">${tvv}</label>
+                </div>
+            </li>`;
+        }
+    });
+    
+    if(listRpTVV) listRpTVV.innerHTML = html;
+    document.getElementById('btnRpTVV').innerText = "-- Tất cả Tư vấn viên --";
+    runReportEngine();
+}
+
+// =========================================================
+// 2 HÀM HELPER HỖ TRỢ CHỌN NHIỀU TVV (CẦN THÊM VÀO SCRIPT)
+// =========================================================
+function updateDropdownText(containerId, buttonId, defaultText) {
+    const checkedBoxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`);
+    const btn = document.getElementById(buttonId);
+    if(checkedBoxes.length === 0) btn.innerText = defaultText;
+    else if(checkedBoxes.length === 1) btn.innerText = checkedBoxes[0].value;
+    else btn.innerText = `Đã chọn ${checkedBoxes.length} TVV`;
+}
+
+function getSelectedTVVs(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`)).map(cb => toNormal(cb.value));
+}
+
+// =========================================================
+// 1. HÀM PRELOAD METADATA (Đã tích hợp Checkbox TVV)
+// =========================================================
+function preloadMetaData() {
+    if (isMetaLoaded) return;
+    google.script.run.withSuccessHandler(res => {
+        isMetaLoaded = true;
+        
+        LIST_MAJORS = res.nganh || [];
+        let htmlNganh = '<option value="">-- Chọn Ngành --</option>'; let inGroup = false;
+        LIST_MAJORS.forEach(item => { if (item.isGroup) { if (inGroup) htmlNganh += '</optgroup>'; htmlNganh += `<optgroup label="${item.name}">`; inGroup = true; } else { htmlNganh += `<option value="${item.name}">${item.name}</option>`; } });
+        if (inGroup) htmlNganh += '</optgroup>'; document.getElementById('edit_major').innerHTML = htmlNganh;
+
+        if (res.tuvan && res.tuvan.length > 0) {
+            GLOBAL_ALL_TVV = res.tuvan;
+            GLOBAL_TVV_MAP = res.tvvDeptMap || {};
+            
+        // TẠO CHECKBOX ĐỂ CHỌN NHIỀU TVV
+            let cbHtmlMain = '';
+            let cbHtmlRp = '';
+            
+        
+           // MỚI: Quyết định danh sách hiển thị trong Dropdown dựa theo Quyền
+            let listToRender = [];
+            if (CURRENT_USER.role === "admin" || CURRENT_USER.role === "marketing") { // <-- Thêm marketing vào đây
+                listToRender = GLOBAL_ALL_TVV; // Marketing cũng cần thấy tất cả TVV để lọc báo cáo
+            } else if (CURRENT_USER.role === "teamlead") {
+                listToRender = CURRENT_USER.teamMembers || []; // Teamlead chỉ thấy lính mình
+            }
+            
+            listToRender.forEach((n, i) => {
+                // Cho màn hình Dashboard chính
+                cbHtmlMain += `<li><div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" value="${n}" id="cb_main_${i}" onchange="updateDropdownText('listFilterTVV', 'btnFilterTVV', '-- Tất cả nhân sự --'); filterTable()">
+                    <label class="form-check-label small fw-bold text-dark w-100" for="cb_main_${i}">${n}</label>
+                </div></li>`;
+                
+                // Cho màn hình Báo cáo
+                cbHtmlRp += `<li><div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" value="${n}" id="cb_rp_${i}" onchange="updateDropdownText('listRpTVV', 'btnRpTVV', '-- Tất cả nhân sự --'); runReportEngine()">
+                    <label class="form-check-label small fw-bold text-dark w-100" for="cb_rp_${i}">${n}</label>
+                </div></li>`;
+            });
+            
+            const listMain = document.getElementById('listFilterTVV');
+            if (listMain) listMain.innerHTML = cbHtmlMain;
+            
+            const listRp = document.getElementById('listRpTVV');
+            if (listRp) listRp.innerHTML = cbHtmlRp;
+
+           // Chỗ đổi TVV cho 1 học sinh thì vẫn dùng thẻ <select> 1 người
+            // MỚI: Chỉ hiển thị danh sách nhân sự được phép theo quyền
+            const selEditTvv = document.getElementById('edit_counselorName');
+            if (selEditTvv) {
+                // Sử dụng listToRender (đã lọc theo quyền ở trên) thay vì GLOBAL_ALL_TVV
+                selEditTvv.innerHTML = '<option value="">-- Không đổi TVV --</option>' + listToRender.map(n => `<option value="${n}">${n}</option>`).join('');
+            }
+
+            const selRpDept = document.getElementById('rp_select_dept');
+            if (selRpDept && res.departments) {
+                selRpDept.innerHTML = '<option value="ALL">-- Tất cả Phòng Ban --</option>' + res.departments.map(d => `<option value="${d}">${d}</option>`).join('');
+            }
+        }
+
+        const stSel = document.getElementById('filterStatus');
+        if(res.statuses && stSel) { stSel.innerHTML = '<option value="">-- Trạng thái --</option>' + res.statuses.map(s => `<option value="${s}">${s}</option>`).join(''); }
+
+        const sysSel = document.getElementById('edit_eduSystem'); if(res.systems && sysSel) sysSel.innerHTML = '<option value="">-- Chọn Hệ --</option>' + res.systems.map(s => `<option value="${s}">${s}</option>`).join('');
+        const yearSel = document.getElementById('edit_schoolYear'); if(res.years && yearSel) yearSel.innerHTML = '<option value="">-- Chọn Khóa --</option>' + res.years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+        LIST_SCHOLARSHIPS = res.scholarships || [];
+        const hbSel = document.getElementById('scholarshipSelect');
+        const hbTab = document.getElementById('hb_table_body');
+        const editHbSel = document.getElementById('edit_scholarship');
+        const editHbSel2 = document.getElementById('edit_scholarship2');
+        if(LIST_SCHOLARSHIPS.length > 0) {
+            if(hbSel) hbSel.innerHTML = '<option value="">-- Không áp dụng học bổng --</option>';
+            if(editHbSel) editHbSel.innerHTML = '<option value="">-- Không có học bổng --</option>';
+            if(hbTab) hbTab.innerHTML = '';
+            let currentSys = "";
+            let htmlHB = '<option value="">-- Không có học bổng --</option>';
+
+            LIST_SCHOLARSHIPS.forEach(s => {
+                if (s.system && s.system !== currentSys) {
+                    if (currentSys !== "") htmlHB += '</optgroup>';
+                    htmlHB += `<optgroup label="${s.system}">`;
+                    currentSys = s.system;
+                }
+                htmlHB += `<option value="${s.name}">${s.name} (${parseInt(String(s.value).replace(/\D/g,'')||0).toLocaleString()}đ)</option>`;
+                if(hbTab) {
+                    const row = `<tr><td class="fw-bold text-primary">${s.system || ""}</td><td>${s.name}</td><td class="fw-bold text-danger">${s.value}</td><td><small>${s.condition}</small></td></tr>`;
+                    hbTab.insertAdjacentHTML('beforeend', row);
+                }
+            });
+            if (currentSys !== "") htmlHB += '</optgroup>';
+            if(hbSel) hbSel.innerHTML = htmlHB;
+            if(editHbSel) editHbSel.innerHTML = htmlHB;
+            if(editHbSel2) editHbSel2.innerHTML = htmlHB;
+        }
+
+        google.script.run.withSuccessHandler(url => { const link = document.getElementById('linkAccount'); if(link) link.href = url + "?p=account"; }).getScriptUrl();
+        checkAllDataLoaded();
+    }).getMetaData();
+}
+
+// =========================================================
+// 2. HÀM FILTER TABLE (Lọc dữ liệu ngoài Dashboard chính)
+// =========================================================
+function filterTable() {
+    const rawName = document.getElementById('searchInput').value;
+    const rawId = document.getElementById('searchId').value;
+    const sStatus = document.getElementById('filterStatus').value; 
+    const sFee = document.getElementById('filterFee') ? document.getElementById('filterFee').value : ""; 
+    
+    const sName = toNormal(rawName);
+    const sId = toNormal(rawId);
+    const sStatusNorm = toNormal(sStatus);
+    
+    let selectedTVVsNorm = [];
+    // Cả Admin và Teamlead đều dùng được bộ lọc Dropdown
+    if (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'teamlead') {
+        selectedTVVsNorm = getSelectedTVVs('listFilterTVV');
+    }
+
+    currentFilteredDataMain = ALL_STUDENTS.filter(r => {
+        const name = toNormal(r[2]);
+        const phone = String(r[5] || "");
+        const cccd = String(r[16] || "");
+        const id = toNormal(r[1]);
+        const rowStatusNorm = toNormal(r[39]);
+        const rowTVVNorm = toNormal(r[18]);
+
+        const matchName = name.includes(sName) || phone.includes(sName) || cccd.includes(sName);
+        const matchId = id.includes(sId);
+        const matchStatus = (sStatusNorm === "") || (rowStatusNorm === sStatusNorm);
+        
+        // Lọc theo TVV
+        const matchTVV = (CURRENT_USER.role !== 'admin' && CURRENT_USER.role !== 'teamlead') || (selectedTVVsNorm.length === 0) || selectedTVVsNorm.includes(rowTVVNorm);
+
+        let matchFee = true;
+        if (sFee !== "") {
+            let money = parseInt(String(r[37]).replace(/\D/g, '')) || 0;
+            let is9Plus = String(r[10]).toUpperCase().includes("9+");
+            let cocThreshold = is9Plus ? 2000000 : 1000000;
+            let isFullNE = String(r[65]).trim() === "ĐÃ FULL NE";
+            let isCoc = money >= cocThreshold || String(r[39]) === "CỌC THÀNH CÔNG";
+            let isLpxt = money >= 150000 && !isCoc;
+
+            if (sFee === "CHUA_NOP") matchFee = (money === 0);
+            else if (sFee === "LPXT") matchFee = isLpxt;
+            else if (sFee === "COC") matchFee = isCoc;
+            else if (sFee === "FULL_NE") matchFee = isFullNE;
+        }
+
+        return matchName && matchId && matchStatus && matchTVV && matchFee;
+    });
+
+    currentPage = 1;
+
+    const summaryDiv = document.getElementById('filterSummary');
+    let currentTvvView = "";
+    
+    if (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'teamlead') {
+        if (selectedTVVsNorm.length > 0) {
+            summaryDiv.style.display = 'block'; 
+            summaryDiv.innerText = `Đang hiển thị ${currentFilteredDataMain.length} hồ sơ của ${selectedTVVsNorm.length} nhân sự đã chọn.`;
+            currentTvvView = "ADMIN_VIEW"; 
+        } else { 
+            summaryDiv.style.display = 'none'; 
+            currentTvvView = "ADMIN_VIEW"; 
+        }
+    } else {
+        currentTvvView = CURRENT_USER.name; 
+    }
+    
+    updateTvvStats(currentFilteredDataMain, currentTvvView);
+    renderTablePage();
+}
+
+
+function renderTabTongQuan(data) {
+    let total = data.length;
+    // Khai báo 3 rổ chứa Độc quyền (Không đếm trùng)
+    let moi = 0, dang = 0, done = 0; 
+    let statusCount = { 'MỚI': 0, 'ĐANG HOÀN THIỆN': 0, 'CỌC THÀNH CÔNG': 0, 'KIỂM TRA LẠI': 0 };
+    let doituongStats = {}; 
+
+    data.forEach(r => {
+        let money = parseInt(String(r[37]||"0").replace(/\D/g,""));
+        let st = String(r[39] || "MỚI").trim();
+        let dt = String(r[10] || "Chưa xác định").trim(); // Đã đổi lấy Hệ Đào Tạo
+        let isFullNE = String(r[65]).trim() === "ĐÃ FULL NE";
+
+        // Logic phân loại (1 người chỉ rơi vào 1 rổ)
+        let isDone = String(r[42]).toUpperCase().includes("HOÀN THIỆN") || st === "CỌC THÀNH CÔNG" || isFullNE;
+        
+        if (isDone) {
+            done++; // Rổ 1: Đã xong
+        } else if (money > 0 || st === "ĐANG HOÀN THIỆN") {
+            dang++; // Rổ 2: Có đóng tiền hoặc báo đang hoàn thiện nhưng chưa đủ
+        } else {
+            moi++;  // Rổ 3: Còn lại là mới tinh, chưa đóng đồng nào
+        }
+        
+        statusCount[st] = (statusCount[st] || 0) + 1;
+
+        if(!doituongStats[dt]) doituongStats[dt] = { count: 0, money: 0 };
+        doituongStats[dt].count++;
+        doituongStats[dt].money += money;
+    });
+
+    // Cập nhật số lên 5 ô mới
+    document.getElementById('r_tq_hs').innerText = total;
+    if(document.getElementById('r_tq_moi')) document.getElementById('r_tq_moi').innerText = moi;
+    document.getElementById('r_tq_coc').innerText = dang;
+    document.getElementById('r_tq_done').innerText = done;
+    
+    let totalMoney = data.reduce((sum, r) => sum + (parseInt(String(r[37]).replace(/\D/g,""))||0), 0);
+    document.getElementById('r_tq_dt').innerText = totalMoney.toLocaleString();
+
+    drawChart('chartTqStatus', 'doughnut', Object.keys(statusCount), Object.values(statusCount), ['#36A2EB', '#FFCE56', '#4BC0C0', '#FF6384']);
+
+    document.getElementById('tb_tq_doituong').innerHTML = Object.keys(doituongStats).sort((a,b) => doituongStats[b].money - doituongStats[a].money).map(k => `
+        <tr>
+            <td class="text-start fw-bold">${k}</td>
+            <td class="text-center">${doituongStats[k].count}</td>
+            <td class="text-end fw-bold text-success">${doituongStats[k].money.toLocaleString()} đ</td>
+        </tr>
+    `).join('');
+}
+
+function renderTabTvv(baseData, tvvFilterNorm, deptFilter) {
+    const thead = document.getElementById('th_tvv');
+    const tbody = document.getElementById('tb_tvv');
+
+    if (tvvFilterNorm === "all") {
+        let tvvMap = {};
+        baseData.forEach(r => {
+            let t = String(r[18] || "Khác").trim();
+            let dept = GLOBAL_TVV_MAP[t] || "Chưa phân phòng";
+            let money = parseInt(String(r[37]||"0").replace(/\D/g,""));
+            let isDone = String(r[42]).toUpperCase().includes("HOÀN THIỆN") || String(r[39]).toUpperCase() === "CỌC THÀNH CÔNG";
+            
+            if(!tvvMap[t]) tvvMap[t] = { dept: dept, total: 0, moneyCount: 0, doneCount: 0, money: 0 };
+            tvvMap[t].total++;
+            if(money > 0) tvvMap[t].moneyCount++;
+            if(isDone) tvvMap[t].doneCount++;
+            tvvMap[t].money += money;
+        });
+
+        document.getElementById('r_tv_hs').innerText = baseData.length;
+        document.getElementById('r_tv_dt').innerText = Object.values(tvvMap).reduce((s, x) => s + x.money, 0).toLocaleString();
+        
+        let titleSuffix = deptFilter === "ALL" ? "TẤT CẢ PHÒNG BAN" : `PHÒNG ${deptFilter.toUpperCase()}`;
+        document.getElementById('tvv_title_1').innerText = `BẢNG XẾP HẠNG TƯ VẤN VIÊN - ${titleSuffix}`;
+
+        thead.innerHTML = `<tr><th>Tư vấn viên</th><th>Phòng Ban</th><th class="text-center">Tổng HS</th><th class="text-center">Có Nộp Tiền</th><th class="text-center">Hoàn Thiện</th><th class="text-end">Doanh thu</th></tr>`;
+        tbody.innerHTML = Object.keys(tvvMap).sort((a,b) => tvvMap[b].money - tvvMap[a].money).map(k => `
+            <tr>
+                <td class="fw-bold text-primary">${k}</td>
+                <td class="small fw-bold text-muted">${tvvMap[k].dept}</td>
+                <td class="text-center fw-bold">${tvvMap[k].total}</td>
+                <td class="text-center text-success fw-bold">${tvvMap[k].moneyCount}</td>
+                <td class="text-center text-warning fw-bold">${tvvMap[k].doneCount}</td>
+                <td class="text-end fw-800 text-danger">${tvvMap[k].money.toLocaleString()} đ</td>
+            </tr>
+        `).join('');
+
+    } else {
+        let tvvData = baseData.filter(r => toNormal(r[18]) === tvvFilterNorm);
+        
+        document.getElementById('r_tv_hs').innerText = tvvData.length;
+        document.getElementById('r_tv_dt').innerText = tvvData.reduce((s, r) => s + (parseInt(String(r[37]).replace(/\D/g,""))||0), 0).toLocaleString();
+        
+        const displayName = document.getElementById('rp_select_tvv').options[document.getElementById('rp_select_tvv').selectedIndex].text;
+        document.getElementById('tvv_title_1').innerText = `DANH SÁCH CHI TIẾT HS CỦA: ${displayName.toUpperCase()}`;
+
+        thead.innerHTML = `<tr><th>Mã SV</th><th>Họ Tên</th><th>Ngày tạo</th><th>Nguồn</th><th>Trạng thái</th><th class="text-end">Đã Nộp</th></tr>`;
+        tbody.innerHTML = tvvData.map(r => `
+            <tr>
+                <td class="text-muted fw-bold">${r[1]}</td>
+                <td class="fw-bold text-primary">${r[2]}<br><small class="text-muted">${r[5]}</small></td>
+                <td class="small">${String(r[17]).split(' ')[0]}</td>
+                <td class="small fw-bold">${r[56]}</td>
+                <td><span class="status-badge ${getBadgeClass(r[39])}">${r[39]}</span></td>
+                <td class="text-end fw-800 text-danger">${parseInt(String(r[37]||"0").replace(/\D/g,"")).toLocaleString()} đ</td>
+            </tr>
+        `).join('');
+    }
+}
+
+function renderTabMkt(data) {
+    let sourceMap = {};
+    let dateMap = {}; 
+    let monthMap = {};
+    
+    let detailMap = {};
+    let totalCD = 0;
+    let total9Plus = 0;
+    let totalDuHoc = 0; 
+
+    const allowedSources = ["FACEBOOK", "TIKTOK", "MARKETING", "MOU", "GOOGLE", "WEBSITE", "ZALO", "HOTLINE", "EMAIL", "SCHOOL", "CBNV"];
+
+    data.forEach(r => {
+        let src = String(r[56] || "Chưa rõ").trim();
+        let srcUpper = src.toUpperCase();
+        let money = parseInt(String(r[37]||"0").replace(/\D/g,""));
+        
+        if (money === 0) return;
+        let isAllowed = allowedSources.some(allowed => srcUpper.includes(allowed));
+        if (!isAllowed) return;
+
+        let he = String(r[10] || "").toUpperCase();
+        let is9Plus = he.includes("9+");
+        let isDuHoc = he.includes("DU HỌC") || he.includes("NGẮN HẠN");
+        let cocThreshold = is9Plus ? 2000000 : 1000000;
+        
+        let isDone = (money >= cocThreshold) || String(r[39]).toUpperCase() === "CỌC THÀNH CÔNG" || String(r[65]).trim() === "ĐÃ FULL NE";
+
+        if(!sourceMap[src]) sourceMap[src] = { total: 0, done: 0, money: 0 };
+        sourceMap[src].total++; 
+        if(isDone) sourceMap[src].done++;
+        sourceMap[src].money += money;
+
+        let payDate = "";
+        const mIdx = [30, 31, 44, 46, 48];
+        const dIdx = [60, 61, 62, 63, 64];
+        for(let i=0; i<5; i++) {
+            let amt = parseInt(String(r[mIdx[i]]).replace(/\D/g, '')) || 0;
+            if (amt > 0 && r[dIdx[i]]) {
+                payDate = String(r[dIdx[i]]).replace(/'/g,'').trim();
+                break;
+            }
+        }
+        if(!payDate) payDate = String(r[17]).split(' ')[0]; 
+
+        if(payDate) {
+            if(!dateMap[payDate]) dateMap[payDate] = 0;
+            dateMap[payDate]++;
+            
+            let p = payDate.split('/');
+            if(p.length === 3) {
+                let mKey = `${p[1]}/${p[2]}`; 
+                if(!monthMap[mKey]) monthMap[mKey] = 0;
+                monthMap[mKey]++;
+            }
+        }
+        
+        let major = String(r[12] || "Chưa xác định").trim();
+        
+        let status = "LPXT";
+        if (isDone) status = "CỌC";
+        if (String(r[65]).trim() === "ĐÃ FULL NE") status = "FULL NE";
+        
+        let key = `${payDate}|${src}|${major}|${status}`;
+        
+        if(!detailMap[key]) {
+            detailMap[key] = { date: payDate, source: src, major: major, status: status, cd: 0, ninePlus: 0, duhoc: 0 };
+        }
+        
+        if (is9Plus) {
+            detailMap[key].ninePlus++;
+            total9Plus++;
+        } else if (isDuHoc) {
+            detailMap[key].duhoc++;
+            totalDuHoc++;
+        } else {
+            detailMap[key].cd++;
+            totalCD++;
+        }
+    });
+
+    let totalMkt = Object.keys(sourceMap).reduce((sum, k) => sum + sourceMap[k].total, 0);
+    let pieLabels = Object.keys(sourceMap).map(k => {
+        let pct = totalMkt > 0 ? ((sourceMap[k].total / totalMkt) * 100).toFixed(1) : 0;
+        return `${k} (${pct}%)`;
+    });
+    
+    drawChart('chartMktSource', 'pie', pieLabels, Object.keys(sourceMap).map(k => sourceMap[k].total), ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#764ba2']);
+
+    let sortedDates = Object.keys(dateMap).sort((a,b) => parseDateForReport(a) - parseDateForReport(b));
+    let last10Dates = sortedDates.slice(-10);
+    let lineDataDaily = last10Dates.map(d => dateMap[d]);
+    let labelsDaily = last10Dates.map(d => d.substring(0, 5)); 
+    drawChart('chartMktLineDaily', 'line', labelsDaily, lineDataDaily, ['#764ba2']);
+
+    let sortedMonths = Object.keys(monthMap).sort((a, b) => {
+        let [m1, y1] = a.split('/');
+        let [m2, y2] = b.split('/');
+        return new Date(y1, m1-1).getTime() - new Date(y2, m2-1).getTime();
+    });
+    let lineDataMonthly = sortedMonths.map(m => monthMap[m]);
+    let labelsMonthly = sortedMonths.map(m => {
+        let p = m.split('/');
+        return `T${parseInt(p[0])}/${p[1].slice(2)}`;
+    });
+    drawChart('chartMktLineMonthly', 'line', labelsMonthly, lineDataMonthly, ['#28a745']);
+
+    let detailHtml = '';
+    Object.values(detailMap).sort((a,b) => parseDateForReport(b.date) - parseDateForReport(a.date)).forEach(item => {
+        let stBadge = item.status === 'FULL NE' ? 'bg-dark text-warning' : (item.status === 'CỌC' ? 'bg-success' : 'bg-info text-dark');
+        detailHtml += `<tr>
+            <td>${item.date}</td>
+            <td class="fw-bold text-primary">${item.source}</td>
+            <td class="small fw-bold">${item.major}</td>
+            <td><span class="badge ${stBadge}"><i class="fa-solid fa-tag me-1"></i>${item.status}</span></td>
+            <td class="fw-800 text-primary">${item.cd > 0 ? item.cd : '-'}</td>
+            <td class="fw-800 text-success">${item.ninePlus > 0 ? item.ninePlus : '-'}</td>
+            <td class="fw-800 text-warning">${item.duhoc > 0 ? item.duhoc : '-'}</td>
+        </tr>`;
+    });
+    document.getElementById('tb_mkt_detail').innerHTML = detailHtml || '<tr><td colspan="7" class="text-muted p-3">Chưa có phát sinh giao dịch trong khoảng thời gian này</td></tr>';
+    document.getElementById('tb_mkt_detail_foot').innerHTML = `<tr><td colspan="4" class="text-end text-danger fs-6">TỔNG CỘNG:</td><td class="text-danger fs-5">${totalCD}</td><td class="text-danger fs-5">${total9Plus}</td><td class="text-danger fs-5">${totalDuHoc}</td></tr>`;
+
+    document.getElementById('tb_mkt_source').innerHTML = Object.keys(sourceMap).sort((a,b) => sourceMap[b].total - sourceMap[a].total).map(k => {
+        let rate = sourceMap[k].total > 0 ? ((sourceMap[k].done / sourceMap[k].total) * 100).toFixed(1) : 0;
+        return `<tr>
+            <td class="text-start fw-bold text-primary">${k}</td>
+            <td class="fw-bold">${sourceMap[k].total}</td>
+            <td class="text-success fw-bold">${sourceMap[k].done}</td>
+            <td><div class="progress" style="height: 15px;"><div class="progress-bar bg-warning text-dark fw-bold" style="width: ${rate}%">${rate}%</div></div></td>
+            <td class="text-end fw-800 text-danger">${sourceMap[k].money.toLocaleString()} đ</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderTabNganh(data) {
+    let nganhMap = {};
+    let sumTotal = 0, sumHoatDong = 0, sumLpxt = 0, sumCoc = 0, sumFull = 0, sumChua = 0;
+
+    data.forEach(r => {
+        let major = String(r[12] || "Chưa xác định").trim();
+        let money = parseInt(String(r[37]).replace(/\D/g, '')) || 0;
+        let is9Plus = String(r[10]).toUpperCase().includes("9+");
+        let cocThreshold = is9Plus ? 2000000 : 1000000;
+        let status = String(r[39]).trim();
+        let isFullNE = String(r[65]).trim() === "ĐÃ FULL NE";
+        
+        let isCoc = money >= cocThreshold || status === "CỌC THÀNH CÔNG";
+        let isLpxt = money >= 150000 && !isCoc;
+
+        if(!nganhMap[major]) {
+            nganhMap[major] = { total: 0, hoatDong: 0, lpxt: 0, coc: 0, full: 0, chua: 0 };
+        }
+        
+        nganhMap[major].total++;
+        sumTotal++;
+
+        if (isFullNE) {
+            nganhMap[major].full++;
+            sumFull++;
+            nganhMap[major].hoatDong++;
+            sumHoatDong++;
+        } else if (isCoc) {
+            nganhMap[major].coc++;
+            sumCoc++;
+            nganhMap[major].hoatDong++;
+            sumHoatDong++;
+        } else if (isLpxt) {
+            nganhMap[major].lpxt++;
+            sumLpxt++;
+            nganhMap[major].hoatDong++;
+            sumHoatDong++;
+        } else {
+            nganhMap[major].chua++;
+            sumChua++;
+        }
+    });
+
+    let html = '';
+    Object.keys(nganhMap).sort((a,b) => nganhMap[b].total - nganhMap[a].total).forEach(k => {
+        let item = nganhMap[k];
+        html += `<tr>
+            <td class="text-start fw-bold text-primary">${k}</td>
+            <td class="fw-bold">${item.total}</td>
+            <td class="text-success fw-bold" style="background-color: #e8f5e9;">${item.hoatDong}</td>
+            <td class="text-info fw-bold">${item.lpxt}</td>
+            <td class="text-success fw-bold">${item.coc}</td>
+            <td class="text-warning fw-bold">${item.full}</td>
+            <td class="text-danger fw-bold">${item.chua}</td>
+        </tr>`;
+    });
+
+    document.getElementById('tb_nganh_body').innerHTML = html || '<tr><td colspan="7" class="text-muted p-3">Chưa có dữ liệu</td></tr>';
+    document.getElementById('tb_nganh_foot').innerHTML = `<tr>
+        <td class="text-end text-danger fs-6">TỔNG CỘNG:</td>
+        <td class="text-danger fs-5">${sumTotal}</td>
+        <td class="text-success fs-5" style="background-color: #e8f5e9;">${sumHoatDong}</td>
+        <td class="text-info fs-5">${sumLpxt}</td>
+        <td class="text-success fs-5">${sumCoc}</td>
+        <td class="text-warning fs-5">${sumFull}</td>
+        <td class="text-danger fs-5">${sumChua}</td>
+    </tr>`;
+}
+
+function drawChart(canvasId, type, labels, dataArr, colors) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    if(charts[canvasId]) charts[canvasId].destroy(); 
+
+    let dataset = { data: dataArr, borderWidth: 1 };
+    if (type === 'line') {
+        dataset.borderColor = colors[0]; 
+        dataset.backgroundColor = colors[0] + '40'; 
+        dataset.fill = true; 
+        dataset.tension = 0.3; 
+        dataset.label = canvasId.includes('Daily') ? "Data Từng Ngày" : "Data Từng Tháng";
+    } else {
+        dataset.backgroundColor = colors;
+    }
+
+    const config = {
+        type: type,
+        data: { labels: labels, datasets: [dataset] },
+        options: { 
+            responsive: true, maintainAspectRatio: false, 
+            plugins: { legend: { display: type !== 'line', position: 'right' } },
+            scales: type === 'line' ? { y: { beginAtZero: true } } : {}
+        }
+    };
+    charts[canvasId] = new Chart(ctx, config);
+}
+
+function exportExcelReport() {
+    const tvvFilterNorm = toNormal(document.getElementById('rp_select_tvv').value);
+    let dataToExport = cachedFilteredData;
+    
+    if (currentReportTab === 'tvv' && tvvFilterNorm !== "all") {
+        dataToExport = cachedFilteredData.filter(r => toNormal(r[18]) === tvvFilterNorm);
+    }
+    
+    if(!dataToExport || dataToExport.length === 0) return Swal.fire('Lỗi', 'Không có dữ liệu để xuất!', 'warning');
+    
+    let csv = "\uFEFF"; 
+    csv += "Mã SV,Họ Tên,SĐT,Giới tính,Ngày sinh,Ngành,Phòng Ban,TVV Hướng dẫn,Nguồn,Ngày tạo,Trạng thái,Tổng tiền thu được\n";
+    
+    dataToExport.forEach(r => {
+        let tName = String(r[18] || "").trim();
+        let tDept = GLOBAL_TVV_MAP[tName] || "Chưa phân phòng";
+        let row = [ r[1], r[2], r[5], r[3], r[4], r[12], tDept, r[18], r[56], r[17], r[39], parseInt(String(r[37]||"0").replace(/\D/g,"")) ];
+        csv += row.map(v => `"${String(v||"").replace(/"/g, '""')}"`).join(',') + "\n";
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `BaoCao_VietMy_${new Date().getTime()}.csv`;
+    link.click();
+}
+
+function exportPDFReport() {
+    Swal.fire({
+        title: 'Đang tạo PDF...',
+        text: 'Hệ thống đang đóng dấu Logo và xử lý dữ liệu. Vui lòng chờ!',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+    
+    // Ẩn thanh filter để bản in đẹp hơn
+    const filterBar = document.getElementById('rp_filter_bar');
+    if(filterBar) filterBar.style.display = 'none';
+
+    const element = document.getElementById('pdf-export-area');
+
+    // --- 1. TỰ ĐỘNG NHẬN DIỆN TÊN BÁO CÁO THEO TAB ---
+    let reportTitle = "BÁO CÁO TUYỂN SINH";
+    if (currentReportTab === 'tongquan') reportTitle = "BÁO CÁO TỔNG QUAN HỒ SƠ";
+    else if (currentReportTab === 'tvv') reportTitle = "BÁO CÁO KẾT QUẢ TƯ VẤN VIÊN";
+    else if (currentReportTab === 'mkt') reportTitle = "BÁO CÁO HIỆU QUẢ MARKETING";
+    else if (currentReportTab === 'nganh') reportTitle = "BÁO CÁO TỔNG HỢP THEO NGÀNH HỌC";
+
+    // --- 2. LƯU LẠI CSS GỐC VÀ ÉP KÉO GIÃN CÁC BẢNG BỊ CUỘN ---
+    const theadTvv = document.getElementById('th_tvv');
+    const theadNganh = document.getElementById('th_nganh');
+    if(theadTvv) theadTvv.classList.remove('sticky-top'); // Tắt ghim tiêu đề để in không lỗi
+    if(theadNganh) theadNganh.classList.remove('sticky-top');
+
+    const scrollableElements = element.querySelectorAll('.table-responsive');
+    const originalStyles = [];
+    
+    scrollableElements.forEach(el => {
+        originalStyles.push({
+            element: el,
+            maxHeight: el.style.maxHeight,
+            overflowY: el.style.overflowY
+        });
+        el.style.maxHeight = 'none'; // Ép bảng bung hết cỡ
+        el.style.overflowY = 'visible';
+    });
+
+    // --- 3. ĐÓNG DẤU LOGO VÀ TIÊU ĐỀ VÀO BẢN IN ---
+    const headerHTML = `
+        <div id="temp-pdf-header" style="width: 100%; text-align: center; position: relative; margin-bottom: 25px; padding-top: 15px; padding-bottom: 10px; background: white;">
+            <img src="https://raw.githubusercontent.com/duongcanhquan/image/main/logo%20vietmy.webp" style="height: 55px; position: absolute; left: 10px; top: 10px;" crossorigin="anonymous">
+            <h2 style="font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; color: #764ba2; margin: 0; padding-top: 10px; text-transform: uppercase;">${reportTitle}</h2>
+            <p style="margin-top: 5px; font-style: italic; font-size: 13px; color: #555;">Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}</p>
+        </div>
+    `;
+    element.insertAdjacentHTML('afterbegin', headerHTML);
+
+    // --- 4. CẤU HÌNH XUẤT PDF KHỔ A4 NGANG ---
+    const opt = {
+        margin:       [10, 5, 10, 5], 
+        filename:     `BaoCao_${currentReportTab}_${new Date().getTime()}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 }, 
+        html2canvas:  { 
+            scale: 2, 
+            useCORS: true, // Cho phép load Logo
+            logging: false,
+            scrollY: 0
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' },
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } 
+    };
+
+    // Chờ 0.8s để trình duyệt giãn bảng và Load Logo xong mới chụp
+    setTimeout(() => {
+        html2pdf().set(opt).from(element).save().then(() => {
+            
+            // --- 5. DỌN DẸP SẠCH SẼ SAU KHI CHỤP XONG ---
+            const tempHeader = document.getElementById('temp-pdf-header');
+            if(tempHeader) tempHeader.remove(); // Xóa Logo
+
+            // Trả lại giao diện như cũ
+            if(filterBar) filterBar.style.display = 'flex';
+            if(theadTvv) theadTvv.classList.add('sticky-top');
+            if(theadNganh) theadNganh.classList.add('sticky-top');
+            
+            originalStyles.forEach(item => {
+                item.element.style.maxHeight = item.maxHeight;
+                item.element.style.overflowY = item.overflowY;
+            });
+
+            Swal.fire({icon: 'success', title: 'Tải xuống hoàn tất!', timer: 2000, showConfirmButton: false});
+        }).catch(err => {
+            console.error(err);
+            const tempHeader = document.getElementById('temp-pdf-header');
+            if(tempHeader) tempHeader.remove();
+            if(filterBar) filterBar.style.display = 'flex';
+            originalStyles.forEach(item => {
+                item.element.style.maxHeight = item.maxHeight;
+                item.element.style.overflowY = item.overflowY;
+            });
+            Swal.fire('Lỗi', 'Không thể tạo file PDF', 'error');
+        });
+    }, 800);
+}
+
+function callN8N(docType) {
+    const studentId = document.getElementById('edit_studentId').value; if (!studentId) return Swal.fire("Lỗi", "Không xác định được sinh viên", "error");
+    const selectedHbName = document.getElementById('scholarshipSelect').value; let selectedHbObj = null;
+    if (selectedHbName) selectedHbObj = LIST_SCHOLARSHIPS.find(s => s.name === selectedHbName);
+    Swal.fire({ title: 'Đang xử lý...', text: 'Đang gửi lệnh in...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+    google.script.run.withSuccessHandler(res => {
+        if (res.status === 'success') {
+            Swal.fire({ icon: 'success', title: 'Thành công!', text: 'Đã gửi lệnh in.', showConfirmButton: false, timer: 1500 });
+            if (res.folderUrl) {
+                const alertBox = document.getElementById('folder_alert'); const linkDisplay = document.getElementById('folder_link_display');
+                alertBox.style.display = 'flex'; alertBox.classList.remove('d-none-im'); linkDisplay.href = res.folderUrl;
+                const svIndex = ALL_STUDENTS.findIndex(x => String(x[1]) === String(studentId)); if(svIndex !== -1) ALL_STUDENTS[svIndex][36] = res.folderUrl;
+            }
+        } else { Swal.fire('Lỗi', res.message, 'error'); }
+    }).withFailureHandler(err => { Swal.fire('Lỗi kết nối', err.message, 'error'); }).triggerInvitation({ studentId: studentId, docType: docType, scholarship: selectedHbObj });
+}
+
+const toBase64 = f => new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res({base64: r.result.split(',')[1], type: f.type, name: f.name}); r.onerror = e => rej(e); });
+
+async function submitForm() {
+    // CHỐNG BẤM ĐÚP: Chặn ngay dòng đầu tiên
+    if (isSavingProfile) return; 
+    isSavingProfile = true; 
+
+    checkDuplicate();
+    if (document.getElementById('btnSave').disabled) {
+        isSavingProfile = false; // Mở khóa nếu bị trùng
+        return;
+    }
+
+    if(!sGet('edit_fullName') || !sGet('edit_dob') || !sGet('edit_cccd') || !sGet('edit_phone') || !sGet('edit_eduSystem') || !sGet('edit_major') || !sGet('edit_source')) { 
+        isSavingProfile = false; // Mở khóa nếu thiếu thông tin
+        return Swal.fire("Thiếu thông tin", "Vui lòng nhập: Tên, Ngày sinh, CCCD, SĐT, Hệ, Ngành và CHỌN NGUỒN DỮ LIỆU", "warning"); 
+    }
+
+    // --- LÀM SẠCH DỮ LIỆU (GỌT DẤU NHÁY) TRƯỚC KHI KIỂM TRA ---
+    let phoneRaw = sGet('edit_phone').replace(/'/g, '').trim();
+    let phoneValid = /^(0\d{9}|\+\d{9,15})$/.test(phoneRaw);
+    if (!phoneValid) {
+        isSavingProfile = false; // Mở khóa
+        return Swal.fire("Lỗi SĐT", "SĐT VN: 10 số (đầu 0). SĐT Quốc tế: Thêm dấu + (VD: +82...)", "error");
+    }
+
+    let strID = sGet('edit_cccd').replace(/'/g, '').trim();
+    let idValid = (strID === "CHƯA CÓ") || (/^\d+$/.test(strID) && (strID.length === 9 || strID.length === 12)) || (/^[A-Z0-9]{7,15}$/.test(strID) && !/^\d+$/.test(strID));
+    if (strID && !idValid) {
+        isSavingProfile = false; // Mở khóa
+        return Swal.fire("Lỗi CCCD/Passport", "CCCD phải là 9/12 số. Passport phải có chữ và số (7-15 ký tự).", "error");
+    }
+    
+    // Gọt luôn các SĐT phụ để phòng hờ
+    let fatherPhoneRaw = sGet('edit_fatherPhone').replace(/'/g, '').trim();
+    let motherPhoneRaw = sGet('edit_motherPhone').replace(/'/g, '').trim();
+    let guardianPhoneRaw = sGet('edit_guardianPhone').replace(/'/g, '').trim();
+    // ---------------------------------------------------------
+
+    toggleLoader(true); 
+    
+    const btn = document.getElementById('btnSave'); 
+    btn.disabled = true; 
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+    
+    try {
+        const getFile = (id) => { const el=document.getElementById(id); return (el && el.files.length > 0) ? el.files[0] : null; };
+        const fInput = { d1:getFile('file_deposit'), d2:getFile('file_second'), d3:getFile('file_third'), d4:getFile('file_fourth'), d5:getFile('file_fifth') };
+        const id = document.getElementById('edit_studentId').value;
+        const sv = id ? ALL_STUDENTS.find(x => String(x[1]) === String(id)) : {};
+        const getM = (id) => { const el=document.getElementById(id); return el?el.value.replace(/,/g, ''):''; };
+        const cleanName = sGet('edit_fullName').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '_').toUpperCase();
+        const cccdShort = (strID === "CHƯA CÓ") ? "NONE" : (strID.slice(-4) || '0000');
+        
+        const payload = {
+            studentId: id, 
+            // ĐÃ SỬA: Cho phép cả Admin và Teamlead thay đổi TVV. Nếu tạo mới thì lấy tên người đang dùng.
+            counselorName: (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'teamlead') ? (sGet('edit_counselorName') || sv[18] || CURRENT_USER.name) : (sv[18] || CURRENT_USER.name), 
+            folderName: `${cleanName}_${cccdShort}`,
+            fields: {
+                fullName: sGet('edit_fullName'), gender: sGet('edit_gender'), dob: sGet('edit_dob'), 
+                cccd: strID, 
+                phone: phoneRaw, 
+                email: sGet('edit_email'), address: sGet('edit_address'), currentAddress: sGet('edit_currentAddress'),
+                pob: sGet('edit_pob'), ethnicity: sGet('edit_ethnicity'), eduSystem: sGet('edit_eduSystem'), major: sGet('edit_major'),
+                schoolYear: sGet('edit_schoolYear'), campus: sGet('edit_campus'), school: sGet('edit_school'), schoolProvince: sGet('edit_schoolProvince'),
+                area: sGet('edit_area'), situation: sGet('edit_situation'), score: sGet('edit_score'),
+                fatherName: sGet('edit_fatherName'), 
+                fatherPhone: fatherPhoneRaw, 
+                motherName: sGet('edit_motherName'), 
+                motherPhone: motherPhoneRaw, 
+                guardian: sGet('edit_guardian'), 
+                guardianPhone: guardianPhoneRaw, 
+                m1: getM('edit_deposit'), m2: getM('edit_secondAmount'), m3: getM('edit_thirdAmount'), m4: getM('edit_fourthAmount'), m5: getM('edit_fifthAmount'),
+                status: sGet('edit_status'), note: sGet('edit_note'), 
+                
+                source: sGet('edit_source'),
+                source2: sGet('edit_source2'),
+                scholarship: sGet('edit_scholarship'),
+                scholarship2: sGet('edit_scholarship2'),
+                
+                d1: getDateInput('edit_date1'), d2: getDateInput('edit_date2'), d3: getDateInput('edit_date3'), d4: getDateInput('edit_date4'), d5: getDateInput('edit_date5'),
+                reqFullNe: document.getElementById('edit_req_full_ne') ? document.getElementById('edit_req_full_ne').checked : false
+            },
+            files: { d1: fInput.d1?await toBase64(fInput.d1):null, d2: fInput.d2?await toBase64(fInput.d2):null, d3: fInput.d3?await toBase64(fInput.d3):null, d4: fInput.d4?await toBase64(fInput.d4):null, d5: fInput.d5?await toBase64(fInput.d5):null },
+            old: { d1: sv[34], d2: sv[35], d3: sv[45], d4: sv[47], d5: sv[49] }
+        };
+        
+        google.script.run.withSuccessHandler(res => {
+            isSavingProfile = false; // Mở khóa
+            toggleLoader(false);
+            if(res.status==="success") {
+                Swal.fire({ icon: 'success', title: 'Đã lưu thành công!', showConfirmButton: false, timer: 1500, position: 'top-end', toast: true });
+                
+                // GIẢI QUYẾT RÁC FILE: Dọn sạch ô input File để chống gửi N8N lần 2
+                ['file_deposit','file_second','file_third','file_fourth','file_fifth'].forEach(fId => {
+                    const el = document.getElementById(fId);
+                    if(el) el.value = ""; 
+                });
+
+                if (res.mode === "create" && res.id) {
+                    sVal('edit_studentId', res.id);
+                    sHtml('display_studentId', res.id);
+                    sHtml('modalTitle', "CẬP NHẬT HỒ SƠ");
+                }
+                refreshDataAndRender(); 
+            } else Swal.fire("Lỗi", res.message, "error");
+            btn.disabled = false; btn.innerHTML = 'LƯU HỒ SƠ';
+        }).withFailureHandler(err => { 
+            isSavingProfile = false; // Mở khóa
+            toggleLoader(false);
+            Swal.fire("Lỗi Mạng", err.message, "error"); 
+            btn.disabled = false; btn.innerHTML = 'LƯU HỒ SƠ'; 
+        }).saveOrUpdateStudent(payload);
+    } catch(e) { 
+        isSavingProfile = false; // Mở khóa
+        toggleLoader(false);
+        console.error(e); btn.disabled=false; btn.innerHTML = 'LƯU HỒ SƠ'; Swal.fire("Lỗi", e.message, "error"); 
+    }
+}
+
+// HÀM XỬ LÝ KHÓA/MỞ Ô CCCD KHI TICK
+function handleNoCCCD(checkbox) {
+    const cccdInp = document.getElementById('edit_cccd');
+    if (checkbox.checked) {
+        cccdInp.value = "CHƯA CÓ";
+        cccdInp.readOnly = true;
+        cccdInp.style.backgroundColor = "#e9ecef";
+    } else {
+        cccdInp.value = "";
+        cccdInp.readOnly = false;
+        cccdInp.style.backgroundColor = "#ffffff";
+    }
+    checkDuplicate(); // Check lại để tắt cảnh báo đỏ (nếu có)
+}
+
+// Hàm giúp hiển thị "Đã chọn 3 TVV" hoặc tên người được chọn lên Nút
+function updateDropdownText(containerId, buttonId, defaultText) {
+    const checkedBoxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`);
+    const btn = document.getElementById(buttonId);
+    if(checkedBoxes.length === 0) btn.innerText = defaultText;
+    else if(checkedBoxes.length === 1) btn.innerText = checkedBoxes[0].value;
+    else btn.innerText = `Đã chọn ${checkedBoxes.length} TVV`;
+}
+
+// Hàm lấy danh sách mảng TVV đã chọn
+function getSelectedTVVs(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`)).map(cb => toNormal(cb.value));
+}
+
+// =========================================================
+// HÀM XUẤT EXCEL DANH SÁCH ĐANG LỌC TẠI MÀN HÌNH CHÍNH
+// =========================================================
+function exportMainTableToExcel() {
+    if (!currentFilteredDataMain || currentFilteredDataMain.length === 0) {
+        return Swal.fire('Thông báo', 'Không có dữ liệu nào để xuất!', 'warning');
+    }
+
+    // Tạo BOM để Excel nhận diện đúng Tiếng Việt có dấu (UTF-8)
+    let csv = "\uFEFF"; 
+    
+    // Tiêu đề các cột
+    csv += "Mã SV,Họ Tên,Giới tính,Ngày sinh,SĐT,CCCD,Hệ Đào Tạo,Ngành Học,Trường THPT,Tỉnh/Thành,Tư vấn viên,Nguồn 1,Nguồn 2,Trạng thái,Tiến độ thu,Tổng tiền đã nộp,Ngày tạo\n";
+
+    // Duyệt qua danh sách đang hiển thị trên bảng
+    currentFilteredDataMain.forEach(r => {
+        let row = [
+            r[1],  // Mã SV
+            r[2],  // Tên
+            r[3],  // Giới tính
+            r[4],  // Ngày sinh
+            r[5],  // SĐT
+            r[16], // CCCD
+            r[10], // Hệ
+            r[12], // Ngành
+            r[26], // Trường
+            r[27], // Tỉnh
+            r[18], // TVV
+            r[56], // Nguồn 1
+            r[68], // Nguồn 2
+            r[39], // Trạng thái
+            r[42], // Tình trạng/Tiến độ
+            parseInt(String(r[37]||"0").replace(/\D/g,"")), // Tiền đã nộp
+            r[17]  // Ngày tạo
+        ];
+        
+        // Bọc trong dấu ngoặc kép để tránh lỗi nếu dữ liệu chứa dấu phẩy
+        csv += row.map(v => `"${String(v||"").replace(/"/g, '""')}"`).join(',') + "\n";
+    });
+
+    // Tạo file và kích hoạt tải xuống
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `DanhSachHocSinh_${new Date().getTime()}.csv`;
+    link.click();
+}
+
+// =========================================================
+// HÀM ĐỒNG BỘ TỔNG LÊN FIREBASE (DÀNH CHO ADMIN)
+// =========================================================
+// =========================================================
+// HÀM ĐỒNG BỘ TỔNG LÊN FIREBASE (CÓ MẬT KHẨU)
+// =========================================================
+function syncToFirebase() {
+    Swal.fire({
+        title: 'Xác thực Quyền Admin',
+        text: "Nhập mật khẩu quản trị để ghi đè dữ liệu từ Sheet lên Firebase:",
+        input: 'password',
+        inputPlaceholder: 'Nhập mật khẩu...',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="fa-solid fa-cloud-arrow-up me-1"></i> Đồng bộ ngay',
+        cancelButtonText: 'Hủy'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const pass = result.value;
+            // KIỂM TRA MẬT KHẨU
+            if (pass === "canhquan@1221") {
+                toggleLoader(true); // Bật hiệu ứng chờ
+                google.script.run.withSuccessHandler(res => {
+                    toggleLoader(false);
+                    if (res && res.includes("THÀNH CÔNG")) {
+                        Swal.fire('Hoàn tất!', res, 'success');
+                        refreshDataAndRender(); // Load lại bảng
+                    } else {
+                        Swal.fire('Có lỗi xảy ra', res, 'error');
+                    }
+                }).withFailureHandler(err => {
+                    toggleLoader(false);
+                    Swal.fire('Lỗi kết nối', err.message, 'error');
+                }).DONG_BO_DATA_LEN_FIREBASE();
+            } else {
+                Swal.fire('Từ chối', 'Sai mật khẩu! Bạn không có quyền thực hiện thao tác này.', 'error');
+            }
+        }
+    });
+}
+
+// =========================================================
+// 1. HÀM TẠO VÀ TẢI VỀ FILE EXCEL MẪU
+// =========================================================
+function downloadExcelTemplate() {
+    const headers = [
+        "Họ và tên (*)", "Ngày sinh (*) (dd/mm/yyyy)", "Giới tính (Nam / Nữ)", 
+        "SĐT (*)", "CCCD/Passport (*) (Hoặc ghi CHƯA CÓ)", "Email", 
+        "Địa chỉ thường trú", "Hệ Đào Tạo (*)", "Ngành học (*)", 
+        "Tỉnh/Thành THPT", "Nguồn dữ liệu (*)"
+    ];
+    const sampleRow = [
+        "Nguyễn Văn Mẫu", "15/05/2005", "Nam", "0987654321", "001205123456", 
+        "nguyenvanmau@email.com", "Hà Đông, Hà Nội", "Cao đẳng chính quy", 
+        "Công nghệ thông tin", "Hà Nội", "Facebook Ads"
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+    ws['!cols'] = headers.map(h => ({wch: Math.max(h.length, 15)}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data_Mau");
+    XLSX.writeFile(wb, "Template_Nhap_Lieu_VietMy.xlsx");
+}
+
+// =========================================================
+// 2. HÀM ĐỌC FILE EXCEL & ĐẨY LÊN MÁY CHỦ
+// =========================================================
+function handleExcelUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    toggleLoader(true);
+    const reader = new FileReader();
+    
+    reader.onload = function(evt) {
+        try {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+            
+            if(rawData.length <= 1) {
+                toggleLoader(false);
+                document.getElementById('fileExcel').value = "";
+                return Swal.fire('Lỗi', 'File Excel trống hoặc chỉ có tiêu đề!', 'error');
+            }
+            
+            let validData = [];
+            let errorCount = 0;
+            
+            const formatExcelDate = (d) => {
+                if(!d) return "";
+                if(!isNaN(d) && typeof d === 'number') {
+                    let date = new Date(Math.round((d - 25569) * 86400 * 1000));
+                    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+                }
+                return String(d).trim();
+            };
+            
+            for(let i = 1; i < rawData.length; i++) {
+                let row = rawData[i];
+                if (!row || row.length === 0) continue;
+                
+                let hoTen = row[0] ? String(row[0]).trim() : '';
+                let ngaySinh = row[1] ? formatExcelDate(row[1]) : ''; 
+                let gioiTinh = row[2] ? String(row[2]).trim() : '';
+                let sdt = row[3] ? String(row[3]).trim() : '';
+                let cccd = row[4] ? String(row[4]).trim() : '';
+                let email = row[5] ? String(row[5]).trim() : '';
+                let diaChi = row[6] ? String(row[6]).trim() : '';
+                let heDaoTao = row[7] ? String(row[7]).trim() : '';
+                let nganhHoc = row[8] ? String(row[8]).trim() : '';
+                let tinhTHPT = row[9] ? String(row[9]).trim() : '';
+                let nguon = row[10] ? String(row[10]).trim() : '';
+                
+                if(!hoTen || !ngaySinh || !sdt || !cccd || !heDaoTao || !nganhHoc || !nguon) {
+                    errorCount++;
+                    continue;
+                }
+                validData.push({hoTen, ngaySinh, gioiTinh, sdt, cccd, email, diaChi, heDaoTao, nganhHoc, tinhTHPT, nguon});
+            }
+            
+            toggleLoader(false);
+            document.getElementById('fileExcel').value = ""; 
+            
+            if(validData.length === 0) {
+                 Swal.fire('Lỗi', `Không tìm thấy dòng hợp lệ nào! Đã bỏ qua ${errorCount} dòng thiếu thông tin bắt buộc.`, 'error');
+            } else {
+                 Swal.fire({
+                     title: `Tìm thấy ${validData.length} hồ sơ hợp lệ!`,
+                     text: errorCount > 0 ? `(Bỏ qua ${errorCount} dòng thiếu thông tin). Xác nhận đẩy dữ liệu lên hệ thống?` : `Xác nhận tải lên ${validData.length} hồ sơ?`,
+                     icon: 'question',
+                     showCancelButton: true,
+                     confirmButtonColor: '#198754',
+                     confirmButtonText: 'Bắt đầu Tải lên'
+                 }).then(res => {
+                     if(res.isConfirmed) {
+                         toggleLoader(true);
+                         google.script.run.withSuccessHandler(serverRes => {
+                             toggleLoader(false);
+                             if(serverRes.status === 'success') {
+                                 Swal.fire('Hoàn tất!', serverRes.message, 'success');
+                                 refreshDataAndRender();
+                             } else {
+                                 Swal.fire('Lỗi', serverRes.message, 'error');
+                             }
+                         }).processBulkImport(validData, CURRENT_USER.name);
+                     }
+                 });
+            }
+        } catch(err) {
+            toggleLoader(false);
+            document.getElementById('fileExcel').value = "";
+            Swal.fire('Lỗi', 'Định dạng file không đúng: ' + err.message, 'error');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// HÀM ĐỌC NGÀY THÁNG CHỐNG LỖI (Đọc được mọi định dạng từ Google Sheet)
+function parseAnyDateToTimestamp(val) {
+    if (!val) return 0;
+    if (val instanceof Date) return val.getTime();
+    
+    let s = String(val).replace(/'/g, '').trim().split(' ')[0];
+    if (s.includes('-')) {
+        let parts = s.split('-');
+        if (parts[0].length === 4) return new Date(parts[0], parts[1]-1, parts[2]).getTime();
+    }
+    if (s.includes('/')) {
+        let parts = s.split('/');
+        if (parts.length === 3) return new Date(parts[2], parts[1]-1, parts[0]).getTime();
+    }
+    return 0;
+}
+
+// =========================================================
+// BỘ LỌC ĐỘC QUYỀN (1 NGUỒN CHÂN LÝ DUY NHẤT CHO TOÀN BỘ 5 BÁO CÁO)
+// =========================================================
+function evaluateStudentStatus(r) {
+    const sys = String(r[10] || "").trim().toUpperCase();
+    const money = parseInt(String(r[37] || "0").replace(/\D/g, "")) || 0;
+    const st = String(r[39] || "MỚI").trim().toUpperCase();
+    const isFullNE = String(r[65]).trim() === "ĐÃ FULL NE";
+    const is9Plus = sys.includes("9+");
+
+    let isCoc = false;
+    let isLpxt = false;
+
+    if (isFullNE) {
+        // Đã full thì các cờ khác false
+    } else if (is9Plus) {
+        // Hệ 9+ không có Lệ Phí, cứ 2tr là Cọc
+        if (money >= 2000000 || st === "CỌC THÀNH CÔNG" || st === "ĐÃ HOÀN THIỆN") isCoc = true;
+    } else {
+        // Hệ CĐ & Khác
+        if (money >= 1000000 || st === "CỌC THÀNH CÔNG" || st === "ĐÃ HOÀN THIỆN") isCoc = true;
+        else if (money >= 150000) isLpxt = true;
+    }
+
+    const isDang = !isFullNE && !isCoc && !isLpxt && (money > 0 || st === "ĐANG HOÀN THIỆN");
+    
+    return { isFullNE, isCoc, isLpxt, isDang, money };
+}
+
+// =========================================================
+// BỘ DỊCH NGÀY THÁNG CHỐNG LỖI (Đọc được cả "9/4", "09-04",...)
+// =========================================================
+function parseDateForReport(d) {
+    if (!d) return 0;
+    if (!isNaN(d) && typeof d === 'number' && d > 1000000) return d; // Nếu là timestamp
+    
+    let s = String(d).replace(/'/g, '').trim().split(' ')[0]; 
+    if (!s) return 0;
+
+    // Dạng YYYY-MM-DD
+    if (s.includes('-')) {
+        let p = s.split('-');
+        if (p[0].length === 4) return new Date(p[0], parseInt(p[1])-1, p[2]).setHours(0,0,0,0);
+    }
+    // Dạng DD/MM/YYYY hoặc D/M
+    if (s.includes('/')) {
+        let p = s.split('/');
+        if (p.length >= 2) {
+            let day = parseInt(p[0]);
+            let month = parseInt(p[1]) - 1;
+            let year = p.length === 3 ? parseInt(p[2]) : new Date().getFullYear();
+            if (year < 100) year += 2000; // Đổi 26 thành 2026
+            return new Date(year, month, day).setHours(0,0,0,0);
+        }
+    }
+    return 0; 
+}
+// =========================================================
+// 3. HÀM RUN REPORT ENGINE (ĐÃ FIX LỖI MẤT DOANH THU)
+// =========================================================
+function runReportEngine() {
+    const sDate = document.getElementById('rp_startDate').value; 
+    const eDate = document.getElementById('rp_endDate').value;
+    const deptFilter = document.getElementById('rp_select_dept') ? document.getElementById('rp_select_dept').value : "ALL";
+    const selectedRpTVVsNorm = getSelectedTVVs('listRpTVV');
+
+    let startTs = sDate ? new Date(sDate).setHours(0,0,0,0) : 0;
+    let endTs = eDate ? new Date(eDate).setHours(23,59,59,999) : Infinity;
+
+    let filteredData = [];
+    
+    ALL_STUDENTS.forEach(originalRow => {
+        let r = [...originalRow]; // Clone dữ liệu để không làm hỏng data gốc
+        
+        let tvvName = String(r[18] || "").trim();
+        let tvvNameNorm = toNormal(tvvName);
+        let deptName = GLOBAL_TVV_MAP[tvvName] || "Chưa phân phòng";
+        
+        let passDept = (deptFilter === "ALL") || (deptName === deptFilter);
+        if (selectedRpTVVsNorm.length > 0) passDept = passDept && selectedRpTVVsNorm.includes(tvvNameNorm);
+        if (!passDept) return; // Không thuộc TVV/Phòng ban đang lọc thì bỏ qua
+
+        // 1. Kiểm tra Ngày tạo hồ sơ
+        let createTs = parseDateForReport(r[17]); 
+        let isCreatedInPeriod = createTs >= startTs && createTs <= endTs;
+        
+        // 2. Tính toán lại dòng tiền thu được TRONG KHOẢNG THỜI GIAN LỌC
+        const mIdx = [30, 31, 44, 46, 48]; 
+        const sIdx = [50, 51, 52, 53, 54]; 
+        const dIdx = [60, 61, 62, 63, 64];
+        
+        let hasMoneyInPeriod = false;
+        let moneyInPeriod = 0;
+        
+        for(let i=0; i<5; i++) {
+            let status = String(r[sIdx[i]]).trim().toUpperCase();
+            let amt = parseInt(String(r[mIdx[i]]).replace(/\D/g, '')) || 0;
+            let pTs = parseDateForReport(r[dIdx[i]]);
+            
+            // CHỈ TÍNH TIỀN NẾU: Đã duyệt + Có tiền + Ngày nộp nằm trong khoảng lọc
+            if (status === "ĐỒNG Ý" && amt > 0 && pTs >= startTs && pTs <= endTs) {
+                hasMoneyInPeriod = true;
+                moneyInPeriod += amt;
+            } else {
+                // Nếu không nằm trong kỳ lọc, xóa dòng tiền này khỏi thẻ Clone để Báo cáo không tính nhầm
+                r[mIdx[i]] = "";
+                r[sIdx[i]] = "";
+            }
+        }
+        
+        // 3. Kiểm tra Ngày Full NE (Cột 67)
+        let fullNeTs = parseDateForReport(r[66]); 
+        let isFullNEInPeriod = (String(r[65]).trim() === "ĐÃ FULL NE") && fullNeTs >= startTs && fullNeTs <= endTs;
+        if (!isFullNEInPeriod) {
+            r[65] = ""; // Nếu không Full NE trong kỳ này, xóa bỏ trạng thái để Báo cáo không đếm
+        }
+        
+        // 4. LUẬT VÀNG: Hồ sơ lọt vào báo cáo nếu: Tạo trong kỳ OR Nộp tiền trong kỳ OR Full NE trong kỳ
+        if (!isCreatedInPeriod && !hasMoneyInPeriod && !isFullNEInPeriod) return;
+        
+        // 5. Cập nhật lại Tổng Tiền (r[37]) và Trạng Thái (r[39]) MỚI NHẤT cho kỳ báo cáo này
+        r[37] = moneyInPeriod;
+
+        const sys = String(r[10] || "").trim().toUpperCase();
+        const is9Plus = sys.includes("9+");
+        const threshold = is9Plus ? 2000000 : 1000000;
+        
+        if (isFullNEInPeriod) r[39] = "ĐÃ HOÀN THIỆN";
+        else if (moneyInPeriod >= threshold) r[39] = "CỌC THÀNH CÔNG";
+        else if (moneyInPeriod > 0) r[39] = "ĐANG HOÀN THIỆN";
+        else r[39] = "MỚI";
+
+        filteredData.push(r);
+    });
+
+    cachedFilteredData = filteredData; 
+    let tvvRenderMode = (selectedRpTVVsNorm.length === 1) ? selectedRpTVVsNorm[0] : "all";
+
+    if (currentReportTab === 'tongquan') renderTabTongQuan(filteredData);
+    else if (currentReportTab === 'tvv') renderTabTvv(filteredData, tvvRenderMode, deptFilter);
+    else if (currentReportTab === 'mkt') renderTabMkt(filteredData);
+    else if (currentReportTab === 'nganh') renderTabNganh(filteredData);
+    else if (currentReportTab === 'tuyensinh') generateAdmReport();
+}
+
+// =========================================================
+// BÁO CÁO TAB TUYỂN SINH (ĐÃ FIX SẬP HÀM)
+// =========================================================
+function generateAdmReport() {
+    const activeSystems = Array.from(document.querySelectorAll('.chk-adm-sys:checked')).map(cb => cb.value.toUpperCase());
+    const activeSources = Array.from(document.querySelectorAll('.chk-adm-src:checked')).map(cb => cb.value.toUpperCase());
+
+    let transList = []; 
+    let statsBySource = {};
+
+    cachedFilteredData.forEach(r => { 
+        const studentSys = String(r[10] || "").trim(); 
+        const studentSrc = String(r[56] || "").trim() || "Chưa phân loại";
+        
+        if (activeSystems.length > 0 && !activeSystems.includes(studentSys.toUpperCase())) return;
+        if (activeSources.length > 0 && !activeSources.includes(studentSrc.toUpperCase())) return;
+
+        let totalMoneyInPeriod = parseInt(String(r[37]).replace(/\D/g, '')) || 0;
+
+        const payBatches = [
+            { name: "Lần 1", money: r[30], status: r[50], date: r[60] }, 
+            { name: "Lần 2", money: r[31], status: r[51], date: r[61] }, 
+            { name: "Lần 3", money: r[44], status: r[52], date: r[62] }, 
+            { name: "Lần 4", money: r[46], status: r[53], date: r[63] }, 
+            { name: "Lần 5", money: r[48], status: r[54], date: r[64] }
+        ];
+
+        payBatches.forEach((p) => {
+            let amt = parseInt(String(p.money).replace(/\D/g, '')) || 0;
+            // Vì dữ liệu đã được lọc sạch ở runReportEngine, ta chỉ cần nhặt ra
+            if (String(p.status).trim().toUpperCase() === "ĐỒNG Ý" && amt > 0) {
+                transList.push({ 
+                    date: String(p.date).replace(/'/g, '').trim().split(' ')[0], 
+                    name: String(r[2] || ""), 
+                    phone: String(r[5] || ""), 
+                    sys: studentSys, src: studentSrc, type: p.name, amt: amt, 
+                    ts: parseDateForReport(p.date) 
+                });
+            }
+        });
+
+        if (!statsBySource[studentSrc]) statsBySource[studentSrc] = { total: 0, fee: 0, dep: 0, ne: 0, rev: 0 };
+        
+        statsBySource[studentSrc].total += 1;
+        statsBySource[studentSrc].rev += totalMoneyInPeriod; 
+
+        const st = String(r[39]).trim().toUpperCase();
+        const isFullNE = String(r[65]).trim() === "ĐÃ FULL NE";
+        if (isFullNE) statsBySource[studentSrc].ne += 1;
+        else if (st === "CỌC THÀNH CÔNG" || st === "ĐÃ HOÀN THIỆN") statsBySource[studentSrc].dep += 1;
+        else if (totalMoneyInPeriod > 0) statsBySource[studentSrc].fee += 1;
+    });
+
+    let sumT = 0, sumF = 0, sumD = 0, sumN = 0, sumR = 0;
+    let htmlConv = Object.keys(statsBySource).sort((a,b) => statsBySource[b].rev - statsBySource[a].rev).map(src => {
+        let s = statsBySource[src]; 
+        sumT += s.total; sumF += s.fee; sumD += s.dep; sumN += s.ne; sumR += s.rev;
+        return `<tr>
+            <td class="text-start fw-bold text-primary">${src}</td>
+            <td>${s.total}</td>
+            <td class="text-success fw-bold">${s.fee}</td>
+            <td class="text-warning fw-bold">${s.dep}</td>
+            <td class="text-danger fw-bold">${s.ne}</td>
+            <td class="text-end fw-bold">${s.rev.toLocaleString()}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('admConvBody').innerHTML = htmlConv || '<tr><td colspan="6" class="text-center text-muted py-3">Không có giao dịch nào thỏa mãn bộ lọc</td></tr>';
+    document.getElementById('admConvFoot').innerHTML = `<tr class="table-danger text-danger"><td class="text-start fw-900">TỔNG CỘNG</td><td class="fw-bold">${sumT}</td><td class="fw-bold">${sumF}</td><td class="fw-bold">${sumD}</td><td class="fw-bold">${sumN}</td><td class="text-end fw-900 fs-6">${sumR.toLocaleString()} đ</td></tr>`;
+
+    transList.sort((a, b) => b.ts - a.ts);
+    let htmlTrans = transList.map(t => `<tr>
+        <td class="py-2">${t.date}</td>
+        <td class="text-start fw-bold py-2">${t.name}</td>
+        <td class="py-2">${t.phone}</td>
+        <td class="py-2">${t.sys}</td>
+        <td class="py-2">${t.src}</td>
+        <td class="py-2"><span class="badge bg-info text-dark">${t.type}</span></td>
+        <td class="text-end fw-bold text-success py-2">${t.amt.toLocaleString()} đ</td>
+    </tr>`).join('');
+
+    document.getElementById('admTransBody').innerHTML = htmlTrans || '<tr><td colspan="7" class="text-center text-muted py-3">Không có dữ liệu giao dịch trong kỳ này</td></tr>';
+}
+
+// ---------------------------------------------------------
+// ĐỒNG NHẤT BÁO CÁO CÁC TAB KHÁC
+// ---------------------------------------------------------
+function renderTabTongQuan(data) {
+    let total = data.length;
+    let countMoi = 0, countDang = 0, countDone = 0; 
+    let statusCount = { 'MỚI': 0, 'ĐANG HOÀN THIỆN': 0, 'CỌC THÀNH CÔNG': 0, 'KIỂM TRA LẠI': 0 };
+    let doituongStats = {}; 
+
+    data.forEach(r => {
+        let eval = evaluateStudentStatus(r);
+        let st = String(r[39] || "MỚI").trim();
+        let dt = String(r[10] || "Chưa xác định").trim(); 
+
+        if (eval.isFullNE || eval.isCoc) countDone++;
+        else if (eval.isLpxt || eval.isDang) countDang++;
+        else countMoi++;
+        
+        statusCount[st] = (statusCount[st] || 0) + 1;
+
+        if(!doituongStats[dt]) doituongStats[dt] = { count: 0, money: 0 };
+        doituongStats[dt].count++;
+        doituongStats[dt].money += eval.money;
+    });
+
+    document.getElementById('r_tq_hs').innerText = total;
+    if(document.getElementById('r_tq_moi')) document.getElementById('r_tq_moi').innerText = countMoi;
+    document.getElementById('r_tq_coc').innerText = countDang;
+    document.getElementById('r_tq_done').innerText = countDone;
+    
+    let totalMoney = data.reduce((sum, r) => sum + (parseInt(String(r[37]).replace(/\D/g,""))||0), 0);
+    document.getElementById('r_tq_dt').innerText = totalMoney.toLocaleString();
+
+    drawChart('chartTqStatus', 'doughnut', Object.keys(statusCount), Object.values(statusCount), ['#36A2EB', '#FFCE56', '#4BC0C0', '#FF6384']);
+
+    document.getElementById('tb_tq_doituong').innerHTML = Object.keys(doituongStats).sort((a,b) => doituongStats[b].money - doituongStats[a].money).map(k => `
+        <tr>
+            <td class="text-start fw-bold">${k}</td>
+            <td class="text-center">${doituongStats[k].count}</td>
+            <td class="text-end fw-bold text-success">${doituongStats[k].money.toLocaleString()} đ</td>
+        </tr>
+    `).join('');
+}
+
+function renderTabTvv(baseData, tvvFilterNorm, deptFilter) {
+    const thead = document.getElementById('th_tvv');
+    const tbody = document.getElementById('tb_tvv');
+
+    if (tvvFilterNorm === "all") {
+        let tvvMap = {};
+        baseData.forEach(r => {
+            let t = String(r[18] || "Khác").trim();
+            let dept = GLOBAL_TVV_MAP[t] || "Chưa phân phòng";
+            let eval = evaluateStudentStatus(r);
+            
+            if(!tvvMap[t]) tvvMap[t] = { dept: dept, total: 0, moneyCount: 0, doneCount: 0, money: 0 };
+            tvvMap[t].total++;
+            if(eval.money > 0) tvvMap[t].moneyCount++;
+            if(eval.isCoc || eval.isFullNE) tvvMap[t].doneCount++;
+            tvvMap[t].money += eval.money;
+        });
+
+        document.getElementById('r_tv_hs').innerText = baseData.length;
+        document.getElementById('r_tv_dt').innerText = Object.values(tvvMap).reduce((s, x) => s + x.money, 0).toLocaleString();
+        
+        let titleSuffix = deptFilter === "ALL" ? "TẤT CẢ PHÒNG BAN" : `PHÒNG ${deptFilter.toUpperCase()}`;
+        document.getElementById('tvv_title_1').innerText = `BẢNG XẾP HẠNG TƯ VẤN VIÊN - ${titleSuffix}`;
+
+        thead.innerHTML = `<tr><th>Tư vấn viên</th><th>Phòng Ban</th><th class="text-center">Tổng HS</th><th class="text-center">Có Nộp Tiền</th><th class="text-center">Hoàn Thiện</th><th class="text-end">Doanh thu</th></tr>`;
+        tbody.innerHTML = Object.keys(tvvMap).sort((a,b) => tvvMap[b].money - tvvMap[a].money).map(k => `
+            <tr>
+                <td class="fw-bold text-primary">${k}</td>
+                <td class="small fw-bold text-muted">${tvvMap[k].dept}</td>
+                <td class="text-center fw-bold">${tvvMap[k].total}</td>
+                <td class="text-center text-success fw-bold">${tvvMap[k].moneyCount}</td>
+                <td class="text-center text-warning fw-bold">${tvvMap[k].doneCount}</td>
+                <td class="text-end fw-800 text-danger">${tvvMap[k].money.toLocaleString()} đ</td>
+            </tr>
+        `).join('');
+
+    } else {
+        let tvvData = baseData.filter(r => toNormal(r[18]) === tvvFilterNorm);
+        document.getElementById('r_tv_hs').innerText = tvvData.length;
+        document.getElementById('r_tv_dt').innerText = tvvData.reduce((s, r) => s + (parseInt(String(r[37]).replace(/\D/g,""))||0), 0).toLocaleString();
+        
+        const displayName = document.getElementById('rp_select_tvv').options[document.getElementById('rp_select_tvv').selectedIndex].text;
+        document.getElementById('tvv_title_1').innerText = `DANH SÁCH CHI TIẾT HS CỦA: ${displayName.toUpperCase()}`;
+
+        thead.innerHTML = `<tr><th>Mã SV</th><th>Họ Tên</th><th>Ngày tạo</th><th>Nguồn</th><th>Trạng thái</th><th class="text-end">Đã Nộp</th></tr>`;
+        tbody.innerHTML = tvvData.map(r => `
+            <tr>
+                <td class="text-muted fw-bold">${r[1]}</td>
+                <td class="fw-bold text-primary">${r[2]}<br><small class="text-muted">${r[5]}</small></td>
+                <td class="small">${String(r[17]).split(' ')[0]}</td>
+                <td class="small fw-bold">${r[56]}</td>
+                <td><span class="status-badge ${getBadgeClass(r[39])}">${r[39]}</span></td>
+                <td class="text-end fw-800 text-danger">${parseInt(String(r[37]||"0").replace(/\D/g,"")).toLocaleString()} đ</td>
+            </tr>
+        `).join('');
+    }
+}
+
+function renderTabMkt(data) {
+    let sourceMap = {}; let dateMap = {}; let monthMap = {}; let detailMap = {};
+    let totalCD = 0; let total9Plus = 0; let totalDuHoc = 0; 
+    const allowedSources = ["FACEBOOK", "TIKTOK", "MARKETING", "MOU", "GOOGLE", "WEBSITE", "ZALO", "HOTLINE", "EMAIL", "SCHOOL", "CBNV"];
+
+    data.forEach(r => {
+        let src = String(r[56] || "Chưa rõ").trim();
+        let eval = evaluateStudentStatus(r);
+        
+        if (eval.money === 0) return;
+        if (!allowedSources.some(allowed => src.toUpperCase().includes(allowed))) return;
+
+        let he = String(r[10] || "").toUpperCase();
+        let is9Plus = he.includes("9+");
+        let isDuHoc = he.includes("DU HỌC") || he.includes("NGẮN HẠN");
+
+        if(!sourceMap[src]) sourceMap[src] = { total: 0, done: 0, money: 0 };
+        sourceMap[src].total++; 
+        if(eval.isCoc || eval.isFullNE) sourceMap[src].done++;
+        sourceMap[src].money += eval.money;
+
+        let payDate = "";
+        const mIdx = [30, 31, 44, 46, 48]; const dIdx = [60, 61, 62, 63, 64];
+        for(let i=0; i<5; i++) {
+            let amt = parseInt(String(r[mIdx[i]]).replace(/\D/g, '')) || 0;
+            if (amt > 0 && r[dIdx[i]]) {
+                payDate = String(r[dIdx[i]]).replace(/'/g,'').trim(); break;
+            }
+        }
+        if(!payDate) payDate = String(r[17]).split(' ')[0]; 
+
+        if(payDate) {
+            if(!dateMap[payDate]) dateMap[payDate] = 0;
+            dateMap[payDate]++;
+            let p = payDate.split('/');
+            if(p.length === 3) {
+                let mKey = `${p[1]}/${p[2]}`; 
+                if(!monthMap[mKey]) monthMap[mKey] = 0;
+                monthMap[mKey]++;
+            }
+        }
+        
+        let major = String(r[12] || "Chưa xác định").trim();
+        let statusDisplay = eval.isFullNE ? "FULL NE" : (eval.isCoc ? "CỌC" : "LPXT");
+        let key = `${payDate}|${src}|${major}|${statusDisplay}`;
+        
+        if(!detailMap[key]) detailMap[key] = { date: payDate, source: src, major: major, status: statusDisplay, cd: 0, ninePlus: 0, duhoc: 0 };
+        if (is9Plus) { detailMap[key].ninePlus++; total9Plus++; } 
+        else if (isDuHoc) { detailMap[key].duhoc++; totalDuHoc++; } 
+        else { detailMap[key].cd++; totalCD++; }
+    });
+
+    let totalMkt = Object.keys(sourceMap).reduce((sum, k) => sum + sourceMap[k].total, 0);
+    let pieLabels = Object.keys(sourceMap).map(k => `${k} (${totalMkt > 0 ? ((sourceMap[k].total / totalMkt) * 100).toFixed(1) : 0}%)`);
+    drawChart('chartMktSource', 'pie', pieLabels, Object.keys(sourceMap).map(k => sourceMap[k].total), ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#764ba2']);
+
+    let sortedDates = Object.keys(dateMap).sort((a,b) => parseDateForReport(a) - parseDateForReport(b));
+    let last10Dates = sortedDates.slice(-10);
+    drawChart('chartMktLineDaily', 'line', last10Dates.map(d => d.substring(0, 5)), last10Dates.map(d => dateMap[d]), ['#764ba2']);
+
+    let sortedMonths = Object.keys(monthMap).sort((a, b) => {
+        let [m1, y1] = a.split('/'); let [m2, y2] = b.split('/');
+        return new Date(y1, m1-1).getTime() - new Date(y2, m2-1).getTime();
+    });
+    drawChart('chartMktLineMonthly', 'line', sortedMonths.map(m => `T${parseInt(m.split('/')[0])}/${m.split('/')[1].slice(2)}`), sortedMonths.map(m => monthMap[m]), ['#28a745']);
+
+    let detailHtml = '';
+    Object.values(detailMap).sort((a,b) => parseDateForReport(b.date) - parseDateForReport(a.date)).forEach(item => {
+        let stBadge = item.status === 'FULL NE' ? 'bg-dark text-warning' : (item.status === 'CỌC' ? 'bg-success' : 'bg-info text-dark');
+        detailHtml += `<tr>
+            <td>${item.date}</td><td class="fw-bold text-primary">${item.source}</td><td class="small fw-bold">${item.major}</td>
+            <td><span class="badge ${stBadge}"><i class="fa-solid fa-tag me-1"></i>${item.status}</span></td>
+            <td class="fw-800 text-primary">${item.cd > 0 ? item.cd : '-'}</td>
+            <td class="fw-800 text-success">${item.ninePlus > 0 ? item.ninePlus : '-'}</td>
+            <td class="fw-800 text-warning">${item.duhoc > 0 ? item.duhoc : '-'}</td>
+        </tr>`;
+    });
+    document.getElementById('tb_mkt_detail').innerHTML = detailHtml || '<tr><td colspan="7" class="text-muted p-3">Chưa có phát sinh giao dịch trong khoảng thời gian này</td></tr>';
+    document.getElementById('tb_mkt_detail_foot').innerHTML = `<tr><td colspan="4" class="text-end text-danger fs-6">TỔNG CỘNG:</td><td class="text-danger fs-5">${totalCD}</td><td class="text-danger fs-5">${total9Plus}</td><td class="text-danger fs-5">${totalDuHoc}</td></tr>`;
+
+    document.getElementById('tb_mkt_source').innerHTML = Object.keys(sourceMap).sort((a,b) => sourceMap[b].total - sourceMap[a].total).map(k => {
+        let rate = sourceMap[k].total > 0 ? ((sourceMap[k].done / sourceMap[k].total) * 100).toFixed(1) : 0;
+        return `<tr>
+            <td class="text-start fw-bold text-primary">${k}</td><td class="fw-bold">${sourceMap[k].total}</td><td class="text-success fw-bold">${sourceMap[k].done}</td>
+            <td><div class="progress" style="height: 15px;"><div class="progress-bar bg-warning text-dark fw-bold" style="width: ${rate}%">${rate}%</div></div></td>
+            <td class="text-end fw-800 text-danger">${sourceMap[k].money.toLocaleString()} đ</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderTabNganh(data) {
+    let nganhMap = {};
+    let sumTotal = 0, sumHoatDong = 0, sumLpxt = 0, sumCoc = 0, sumFull = 0, sumChua = 0;
+
+    data.forEach(r => {
+        let major = String(r[12] || "Chưa xác định").trim();
+        let eval = evaluateStudentStatus(r);
+
+        if(!nganhMap[major]) nganhMap[major] = { total: 0, hoatDong: 0, lpxt: 0, coc: 0, full: 0, chua: 0 };
+        
+        nganhMap[major].total++; sumTotal++;
+
+        if (eval.isFullNE) { nganhMap[major].full++; nganhMap[major].hoatDong++; sumFull++; sumHoatDong++; } 
+        else if (eval.isCoc) { nganhMap[major].coc++; nganhMap[major].hoatDong++; sumCoc++; sumHoatDong++; } 
+        else if (eval.isLpxt) { nganhMap[major].lpxt++; nganhMap[major].hoatDong++; sumLpxt++; sumHoatDong++; } 
+        else { nganhMap[major].chua++; sumChua++; }
+    });
+
+    document.getElementById('tb_nganh_body').innerHTML = Object.keys(nganhMap).sort((a,b) => nganhMap[b].total - nganhMap[a].total).map(k => {
+        let item = nganhMap[k];
+        return `<tr>
+            <td class="text-start fw-bold text-primary">${k}</td><td class="fw-bold">${item.total}</td>
+            <td class="text-success fw-bold" style="background-color: #e8f5e9;">${item.hoatDong}</td>
+            <td class="text-info fw-bold">${item.lpxt}</td><td class="text-success fw-bold">${item.coc}</td>
+            <td class="text-warning fw-bold">${item.full}</td><td class="text-danger fw-bold">${item.chua}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="7" class="text-muted p-3">Chưa có dữ liệu</td></tr>';
+
+    document.getElementById('tb_nganh_foot').innerHTML = `<tr>
+        <td class="text-end text-danger fs-6">TỔNG CỘNG:</td><td class="text-danger fs-5">${sumTotal}</td>
+        <td class="text-success fs-5" style="background-color: #e8f5e9;">${sumHoatDong}</td>
+        <td class="text-info fs-5">${sumLpxt}</td><td class="text-success fs-5">${sumCoc}</td>
+        <td class="text-warning fs-5">${sumFull}</td><td class="text-danger fs-5">${sumChua}</td>
+    </tr>`;
+}
+
+// =========================================================
+// QUẢN TRỊ NHÂN SỰ & ADMIN TOOLS (SẠCH SẼ - KHÔNG LỖI CÚ PHÁP)
+// =========================================================
+let userMgmtModalJS;
+let ALL_USERS = {};
+
+function openUserMgmt() {
+    userMgmtModalJS = new bootstrap.Modal(document.getElementById('userMgmtModal'));
+    loadUserTable();
+    userMgmtModalJS.show();
+}
+
+function loadUserTable() {
+    google.script.run.withSuccessHandler(users => {
+        ALL_USERS = users || {};
+        const tbody = document.getElementById('userTableBody');
+        tbody.innerHTML = Object.values(ALL_USERS).map(u => `
+            <tr>
+                <td class="fw-bold text-primary">${u.name} <br><small class="text-muted">${u.displayName}</small></td>
+                <td>${u.email}</td>
+                <td><code class="fw-bold">${u.password}</code></td>
+                <td><span class="badge ${u.role==='admin'?'bg-danger':(u.role==='teamlead'?'bg-success':'bg-secondary')}">${u.role.toUpperCase()}</span></td>
+                <td>${u.manager || '---'}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-info text-white" onclick="prepareEditUser('${u.email}')"><i class="fa-solid fa-user-pen"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteUser('${u.email}')"><i class="fa-solid fa-user-xmark"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    }).readFromFirebase("users");
+}
+
+function deleteUser(email) {
+    Swal.fire({
+        title: 'Xác nhận xóa?',
+        text: "User " + email + " sẽ bị gỡ khỏi hệ thống!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Đồng ý xóa'
+    }).then(result => {
+        if(result.isConfirmed) {
+            toggleLoader(true);
+            google.script.run.withSuccessHandler(() => {
+                toggleLoader(false);
+                loadUserTable();
+            }).adminManageUser('delete', {email: email});
+        }
+    });
+}
+
+let userEditModalJS;
+
+function prepareAddUser() {
+    if (userMgmtModalJS) userMgmtModalJS.hide();
+    
+    if(!userEditModalJS) userEditModalJS = new bootstrap.Modal(document.getElementById('userEditModal'));
+    document.getElementById('userEditTitle').innerText = "THÊM NHÂN SỰ MỚI";
+    document.getElementById('ue_action').value = "create";
+    document.getElementById('ue_oldEmail').value = "";
+    
+    document.getElementById('ue_name').value = "";
+    document.getElementById('ue_email').value = "";
+    document.getElementById('ue_pass').value = "";
+    document.getElementById('ue_role').value = "tvv";
+
+    buildManagerDropdown("");
+    userEditModalJS.show();
+}
+
+function prepareEditUser(email) {
+    if (userMgmtModalJS) userMgmtModalJS.hide();
+
+    if(!userEditModalJS) userEditModalJS = new bootstrap.Modal(document.getElementById('userEditModal'));
+    const emKey = email.replace(/\./g, ',');
+    const u = ALL_USERS[emKey];
+    if(!u) return;
+
+    document.getElementById('userEditTitle').innerText = "CẬP NHẬT NHÂN SỰ";
+    document.getElementById('ue_action').value = "update";
+    document.getElementById('ue_oldEmail').value = u.email;
+    
+    document.getElementById('ue_name').value = u.name;
+    document.getElementById('ue_email').value = u.email;
+    document.getElementById('ue_pass').value = u.password;
+    document.getElementById('ue_role').value = u.role;
+
+    buildManagerDropdown(u.manager);
+    userEditModalJS.show();
+}
+
+function buildManagerDropdown(selectedManager) {
+    const mangSelect = document.getElementById('ue_mang');
+    let html = '<option value="">-- Không có (Nếu là Lead/Admin) --</option>';
+    Object.values(ALL_USERS).forEach(x => {
+        if (x.role === 'teamlead' || x.role === 'admin') {
+            html += `<option value="${x.name}" ${selectedManager === x.name ? 'selected' : ''}>${x.name}</option>`;
+        }
+    });
+    mangSelect.innerHTML = html;
+}
+
+function closeUserEdit() {
+    if(userEditModalJS) userEditModalJS.hide();
+    if(userMgmtModalJS) userMgmtModalJS.show();
+}
+
+function saveUserAction() {
+    const action = document.getElementById('ue_action').value;
+    const f = {
+        name: document.getElementById('ue_name').value.trim(),
+        email: document.getElementById('ue_email').value.trim(),
+        oldEmail: document.getElementById('ue_oldEmail').value.trim(),
+        password: document.getElementById('ue_pass').value.trim(),
+        role: document.getElementById('ue_role').value,
+        manager: document.getElementById('ue_mang').value,
+        displayName: document.getElementById('ue_name').value.trim().toUpperCase(),
+        dept: "Phòng Tuyển Sinh",
+        code: ""
+    };
+
+    if(!f.email || !f.password || !f.name) {
+        return Swal.fire("Thiếu thông tin", "Vui lòng nhập đủ Họ Tên, Email và Mật khẩu!", "warning");
+    }
+
+    userEditModalJS.hide();
+    toggleLoader(true);
+    
+    google.script.run.withSuccessHandler(() => {
+        toggleLoader(false);
+        Swal.fire("Thành công", "Đã lưu nhân sự vào hệ thống!", "success");
+        loadUserTable();
+        if(userMgmtModalJS) userMgmtModalJS.show();
+    }).withFailureHandler(err => {
+        toggleLoader(false);
+        Swal.fire("Lỗi", err.message, "error");
+        if(userMgmtModalJS) userMgmtModalJS.show();
+    }).adminManageUser(action, f);
+}
+
+let adminToolsModalJS;
+
+async function openAdminTools() {
+    const { value: password } = await Swal.fire({
+        title: 'Xác thực Admin',
+        input: 'password',
+        inputLabel: 'Nhập mật khẩu quản trị cấp cao',
+        inputPlaceholder: 'Mật khẩu...',
+        showCancelButton: true
+    });
+
+    if (password === 'canhquan@1221') {
+        if(!adminToolsModalJS) adminToolsModalJS = new bootstrap.Modal(document.getElementById('adminToolsModal'));
+        adminToolsModalJS.show();
+    } else if (password) {
+        Swal.fire('Từ chối', 'Sai mật khẩu truy cập!', 'error');
+    }
+}
+
+function runAdminAction(functionName) {
+    Swal.fire({
+        title: 'Xác nhận thao tác?',
+        text: "Hệ thống sẽ tiến hành xử lý dữ liệu ngay bây giờ.",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Bắt đầu ngay'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            toggleLoader(true);
+            if(adminToolsModalJS) adminToolsModalJS.hide();
+            
+            google.script.run.withSuccessHandler(res => {
+                toggleLoader(false);
+                Swal.fire('Thành công', res || "Thao tác hoàn tất!", 'success');
+                refreshDataAndRender();
+            }).withFailureHandler(err => {
+                toggleLoader(false);
+                Swal.fire('Lỗi', err.message, 'error');
+            })[functionName](); 
+        }
+    });
+}
+</script>
+
+<div class="modal fade" id="userMgmtModal">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content glass-card border-0 p-0">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h4 class="fw-800 text-gradient m-0"><i class="fa-solid fa-users-viewfinder me-2"></i>QUẢN TRỊ NHÂN SỰ</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <button class="btn btn-primary fw-bold rounded-pill" onclick="prepareAddUser()">
+                        <i class="fa-solid fa-user-plus me-1"></i> Thêm thành viên mới
+                    </button>
+                </div>
+                <div class="table-responsive" style="max-height: 500px;">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr class="small text-uppercase">
+                                <th>Họ Tên</th>
+                                <th>Email</th>
+                                <th>Mật khẩu</th>
+                                <th>Quyền hạn</th>
+                                <th>Quản lý (Teamlead)</th>
+                                <th class="text-center">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="adminToolsModal" tabindex="-1">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content glass-card border-0 p-0">
+            <div class="modal-header border-bottom-0">
+                <h5 class="fw-800 text-danger m-0"><i class="fa-solid fa-database me-2"></i>QUẢN TRỊ HỆ THỐNG CẤP CAO</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning small fw-bold">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i> Cảnh báo: Các thao tác này sẽ ghi đè dữ liệu trên diện rộng. Vui lòng kiểm tra kỹ trước khi bấm.
+                </div>
+                
+                <div class="d-grid gap-3">
+                    <div class="p-3 border rounded bg-light">
+                        <div class="fw-bold text-primary mb-2">1. CHIỀU XUÔI: SHEET -> FIREBASE</div>
+                        <button onclick="runAdminAction('DONG_BO_DATA_LEN_FIREBASE')" class="btn btn-primary w-100 fw-bold">
+                            <i class="fa-solid fa-cloud-arrow-up me-2"></i> Đồng bộ Hồ sơ lên Firebase
+                        </button>
+                        <div class="small text-muted mt-1 italic">* Dùng khi anh vừa sửa hàng loạt trên Google Sheet.</div>
+                    </div>
+
+                    <div class="p-3 border rounded bg-light">
+                        <div class="fw-bold text-success mb-2">2. CHIỀU NGƯỢC: FIREBASE -> SHEET</div>
+                        <button onclick="runAdminAction('BACKUP_STUDENTS_TO_SHEET')" class="btn btn-success w-100 fw-bold mb-2">
+                            <i class="fa-solid fa-file-export me-2"></i> Backup Hồ sơ về Sheet
+                        </button>
+                        <button onclick="runAdminAction('BACKUP_USERS_TO_SHEET')" class="btn btn-dark w-100 fw-bold">
+                            <i class="fa-solid fa-users-gear me-2"></i> Backup Nhân sự về Sheet
+                        </button>
+                        <div class="small text-muted mt-1 italic">* Dùng để lưu trữ bản cứng hoặc phục hồi Sheet khi bị xóa nhầm.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="userEditModal" data-bs-backdrop="static" style="z-index: 105000;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-800 text-primary" id="userEditTitle">THÊM NHÂN SỰ MỚI</h5>
+                <button type="button" class="btn-close" onclick="closeUserEdit()"></button>
+            </div>
+            <div class="modal-body px-4">
+                <input type="hidden" id="ue_action">
+                <input type="hidden" id="ue_oldEmail">
+                
+                <div class="mb-3">
+                   <label class="form-label small fw-bold text-muted mb-1">Họ Tên hiển thị <span class="text-danger">*</span></label>
+                   <input id="ue_name" class="form-control border-primary fw-bold text-dark" placeholder="VD: Cô Lê Linh">
+                </div>
+                
+                <div class="mb-3">
+                   <label class="form-label small fw-bold text-muted mb-1">Email đăng nhập <span class="text-danger">*</span></label>
+                   <input id="ue_email" class="form-control text-primary fw-bold" placeholder="name@domain.com">
+                </div>
+                
+                <div class="mb-3">
+                   <label class="form-label small fw-bold text-muted mb-1">Mật khẩu <span class="text-danger">*</span></label>
+                   <input id="ue_pass" type="text" class="form-control fw-bold" placeholder="Mật khẩu">
+                </div>
+                
+                <div class="mb-3">
+                   <label class="form-label small fw-bold text-muted mb-1">Quyền hạn hệ thống</label>
+                   <select id="ue_role" class="form-select fw-bold bg-light">
+                        <option value="tvv">Tư vấn viên</option>
+                        <option value="teamlead">Teamlead (Trưởng nhóm)</option>
+                        <option value="admin">Admin (Quản trị)</option>
+                        <option value="marketing">Marketing (Chỉ xem Báo cáo)</option>
+                   </select>
+                </div>
+                
+                <div class="mb-2">
+                   <label class="form-label small fw-bold text-muted mb-1">Thuộc quản lý (Teamlead)</label>
+                   <select id="ue_mang" class="form-select">
+                   </select>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0">
+                <button type="button" class="btn btn-secondary fw-bold px-4 rounded-pill" onclick="closeUserEdit()">Hủy</button>
+                <button type="button" class="btn btn-primary fw-bold px-4 rounded-pill shadow-sm" onclick="saveUserAction()">
+                    <i class="fa-solid fa-floppy-disk me-1"></i> Lưu lại
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
