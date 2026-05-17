@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
 import type { LeadSourceRecord, ScholarshipCategoryId, ScholarshipRecord } from '../types'
@@ -8,9 +8,22 @@ import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
 const INPUT_CLS =
   'w-full max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500'
 
-function Field({ label, span = 1, children }: { label: string; span?: 1 | 2; children: ReactNode }) {
+export type LeadProfileFormTabId = 'contact' | 'family' | 'scholarship' | 'geo' | 'study' | 'notes'
+
+const PROFILE_TABS: { id: LeadProfileFormTabId; label: string; short: string }[] = [
+  { id: 'contact', label: 'Liên hệ & nguồn', short: 'Liên hệ' },
+  { id: 'family', label: 'Gia đình', short: 'Gia đình' },
+  { id: 'scholarship', label: 'Học bổng', short: 'Học bổng' },
+  { id: 'geo', label: 'Địa lý & trường', short: 'Địa lý' },
+  { id: 'study', label: 'Học tập', short: 'Học tập' },
+  { id: 'notes', label: 'Ghi chú', short: 'Ghi chú' },
+]
+
+function Field({ label, span = 1, children }: { label: string; span?: 1 | 2 | 3; children: ReactNode }) {
+  const spanCls =
+    span === 3 ? 'lg:col-span-3' : span === 2 ? 'sm:col-span-2 lg:col-span-2' : ''
   return (
-    <label className={['block min-w-0', span === 2 ? 'sm:col-span-2' : ''].filter(Boolean).join(' ')}>
+    <label className={['block min-w-0', spanCls].filter(Boolean).join(' ')}>
       <span className="text-sm font-semibold text-slate-800">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
@@ -37,6 +50,69 @@ function CollapsibleBlock({
       </summary>
       <div className="border-t border-slate-100 px-3 pb-3 pt-2">{children}</div>
     </details>
+  )
+}
+
+function ProfileTabBar({
+  active,
+  onChange,
+  compact,
+}: {
+  active: LeadProfileFormTabId
+  onChange: (id: LeadProfileFormTabId) => void
+  compact?: boolean
+}) {
+  return (
+    <nav
+      className="flex shrink-0 gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200/90 bg-slate-50/90 p-1 [scrollbar-width:thin]"
+      role="tablist"
+      aria-label="Nhóm thông tin hồ sơ"
+    >
+      {PROFILE_TABS.map((t) => {
+        const selected = active === t.id
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(t.id)}
+            className={[
+              'shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition sm:text-sm',
+              selected
+                ? 'border-emerald-600/40 bg-emerald-600 text-white shadow-sm'
+                : 'border-transparent bg-white text-slate-700 hover:border-slate-200',
+            ].join(' ')}
+          >
+            {compact ? t.short : t.label}
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
+function FormSection({
+  tabMode,
+  visible,
+  defaultOpen,
+  title,
+  children,
+}: {
+  tabMode: boolean
+  visible: boolean
+  defaultOpen?: boolean
+  title: string
+  children: ReactNode
+}) {
+  if (tabMode) {
+    if (!visible) return null
+    return <div className="min-w-0">{children}</div>
+  }
+  return (
+    <CollapsibleBlock defaultOpen={defaultOpen} title={title}>
+      {children}
+    </CollapsibleBlock>
   )
 }
 
@@ -109,19 +185,35 @@ export function LeadProfileCoreForm({
   disabled,
   leadSources = [],
   scholarships = [],
+  layout = 'accordion',
+  defaultTab = 'contact',
+  wideGrid = false,
 }: {
   draft: LeadCoreDraft
   onChange: (next: LeadCoreDraft) => void
   disabled: boolean
   leadSources?: readonly LeadSourceRecord[]
   scholarships?: readonly ScholarshipRecord[]
+  layout?: 'accordion' | 'tabs'
+  defaultTab?: LeadProfileFormTabId
+  wideGrid?: boolean
 }) {
+  const [activeTab, setActiveTab] = useState<LeadProfileFormTabId>(defaultTab)
   const patch = <K extends keyof LeadCoreDraft>(k: K, v: LeadCoreDraft[K]) => onChange({ ...draft, [k]: v })
-  const grid = 'grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2'
+  const tabMode = layout === 'tabs'
+  const grid = wideGrid
+    ? 'grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3'
+    : 'grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2'
+  const noteSpan = wideGrid ? 3 : 2
 
-  return (
-    <div className="space-y-2 text-sm text-slate-800">
-      <CollapsibleBlock defaultOpen title="Liên hệ & nguồn">
+  const body = (
+    <>
+      <FormSection
+        tabMode={tabMode}
+        visible={!tabMode || activeTab === 'contact'}
+        defaultOpen
+        title="Liên hệ & nguồn"
+      >
         <div className={grid}>
           <Field label="Họ tên">
             <input className={INPUT_CLS} value={draft.fullName} disabled={disabled} onChange={(e) => patch('fullName', e.target.value)} />
@@ -179,13 +271,13 @@ export function LeadProfileCoreForm({
           </Field>
           <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
           <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
-          <Field label="Nguồn tiếp nhận (ghi chú)" span={2}>
+          <Field label="Nguồn tiếp nhận (ghi chú)" span={noteSpan}>
             <input className={INPUT_CLS} value={draft.source} disabled={disabled} onChange={(e) => patch('source', e.target.value)} />
           </Field>
         </div>
-      </CollapsibleBlock>
+      </FormSection>
 
-      <CollapsibleBlock title="Gia đình & giám hộ">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'family'} title="Gia đình & giám hộ">
         <div className={grid}>
           <Field label="Họ tên Bố">
             <input className={INPUT_CLS} value={draft.fatherName} disabled={disabled} onChange={(e) => patch('fatherName', e.target.value)} />
@@ -199,13 +291,13 @@ export function LeadProfileCoreForm({
           <Field label="SĐT Mẹ">
             <input className={INPUT_CLS} inputMode="tel" value={draft.motherPhone} disabled={disabled} onChange={(e) => patch('motherPhone', e.target.value)} />
           </Field>
-          <Field label="Người giám hộ" span={2}>
+          <Field label="Người giám hộ" span={noteSpan}>
             <input className={INPUT_CLS} value={draft.guardian} disabled={disabled} onChange={(e) => patch('guardian', e.target.value)} />
           </Field>
         </div>
-      </CollapsibleBlock>
+      </FormSection>
 
-      <CollapsibleBlock title="Học bổng">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'scholarship'} title="Học bổng">
         <div className={grid}>
           <ScholarshipSelect
             label="Học bổng 1"
@@ -222,9 +314,9 @@ export function LeadProfileCoreForm({
             onChange={(v) => patch('scholarship2Id', v)}
           />
         </div>
-      </CollapsibleBlock>
+      </FormSection>
 
-      <CollapsibleBlock title="Địa lý & trường lớp">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Địa lý & trường lớp">
         <div className={grid}>
           <Field label="Tỉnh / TP">
             <input className={INPUT_CLS} value={draft.province} disabled={disabled} onChange={(e) => patch('province', e.target.value)} />
@@ -232,7 +324,7 @@ export function LeadProfileCoreForm({
           <Field label="Quận / huyện">
             <input className={INPUT_CLS} value={draft.hanoiArea} disabled={disabled} onChange={(e) => patch('hanoiArea', e.target.value)} />
           </Field>
-          <Field label="Địa chỉ" span={2}>
+          <Field label="Địa chỉ" span={noteSpan}>
             <input className={INPUT_CLS} value={draft.address} disabled={disabled} onChange={(e) => patch('address', e.target.value)} />
           </Field>
           <Field label="Trường THPT">
@@ -242,9 +334,9 @@ export function LeadProfileCoreForm({
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
           </Field>
         </div>
-      </CollapsibleBlock>
+      </FormSection>
 
-      <CollapsibleBlock title="Học tập & định hướng">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Học tập & định hướng">
         <div className={grid}>
           <Field label="Hệ đào tạo">
             <input className={INPUT_CLS} value={draft.educationLevel} disabled={disabled} onChange={(e) => patch('educationLevel', e.target.value)} />
@@ -265,42 +357,58 @@ export function LeadProfileCoreForm({
             <input className={INPUT_CLS} value={draft.financialStatus} disabled={disabled} onChange={(e) => patch('financialStatus', e.target.value)} />
           </Field>
         </div>
-      </CollapsibleBlock>
+      </FormSection>
 
-      <CollapsibleBlock title="Mô tả & ghi chú">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'notes'} title="Mô tả & ghi chú">
         <div className="space-y-2.5">
           <div className={grid}>
-            <Field label="Mong muốn" span={2}>
+            <Field label="Mong muốn" span={noteSpan}>
               <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.aspirations} disabled={disabled} onChange={(e) => patch('aspirations', e.target.value)} />
             </Field>
           </div>
           <details className="rounded-lg border border-slate-200/80 bg-slate-50/60">
             <summary className="cursor-pointer px-2.5 py-2 text-sm font-semibold text-slate-700">Ghi chú bổ sung</summary>
             <div className={`${grid} p-2.5 pt-0`}>
-              <Field label="Ghi chú 1" span={2}>
+              <Field label="Ghi chú 1" span={noteSpan}>
                 <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.profileNote1} disabled={disabled} onChange={(e) => patch('profileNote1', e.target.value)} />
               </Field>
-              <Field label="Ghi chú 2" span={2}>
+              <Field label="Ghi chú 2" span={noteSpan}>
                 <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.profileNote2} disabled={disabled} onChange={(e) => patch('profileNote2', e.target.value)} />
               </Field>
-              <Field label="Lưu ý khác" span={2}>
+              <Field label="Lưu ý khác" span={noteSpan}>
                 <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.otherAttentionNotes} disabled={disabled} onChange={(e) => patch('otherAttentionNotes', e.target.value)} />
               </Field>
             </div>
           </details>
-          <Field label="Mô tả tổng hợp" span={2}>
+          <Field label="Mô tả tổng hợp" span={noteSpan}>
             <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.description} disabled={disabled} onChange={(e) => patch('description', e.target.value)} />
           </Field>
           <div className={grid}>
-            <Field label="Sở thích" span={2}>
+            <Field label="Sở thích" span={noteSpan}>
               <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.hobbies} disabled={disabled} onChange={(e) => patch('hobbies', e.target.value)} />
             </Field>
-            <Field label="Ghi chú đi thực tế" span={2}>
+            <Field label="Ghi chú đi thực tế" span={noteSpan}>
               <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.fieldTripNotes} disabled={disabled} onChange={(e) => patch('fieldTripNotes', e.target.value)} />
             </Field>
           </div>
         </div>
-      </CollapsibleBlock>
-    </div>
+      </FormSection>
+    </>
   )
+
+  if (tabMode) {
+    return (
+      <div className="flex min-h-0 flex-col gap-3 text-sm text-slate-800">
+        <ProfileTabBar active={activeTab} onChange={setActiveTab} compact={!wideGrid} />
+        <div
+          role="tabpanel"
+          className="min-h-[14rem] flex-1 overflow-y-auto overscroll-y-contain rounded-xl border border-slate-200/90 bg-white p-3 sm:p-4 [scrollbar-width:thin]"
+        >
+          {body}
+        </div>
+      </div>
+    )
+  }
+
+  return <div className="space-y-2 text-sm text-slate-800">{body}</div>
 }

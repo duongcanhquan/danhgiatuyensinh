@@ -138,9 +138,6 @@ const EVALUATION_TAGS = [
 const ML_WIN_COLUMN_HINT =
   'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
 
-const LEAD_DETAIL_PROFILE_HELP =
-  'Chỉnh sửa trực tiếp trên lead — lưu chung nút «Lưu cập nhật» bên dưới. Điểm chấm HOT/WARM/COLD (profile) và % điểm thông tin (độ đầy hồ sơ) được tính lại sau lưu khi có cấu hình.'
-
 function isElevatedForAdminFilters(role: string | undefined): boolean {
   return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
 }
@@ -3028,6 +3025,68 @@ function LeadDetailPanel({
     [pickListUsers, counselorUsers],
   )
 
+  const saveCoreProfile = async () => {
+    if (!db || !profile) {
+      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      return
+    }
+    if (!showCounselorProgressForm) {
+      setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này (cần Admin hoặc TVV được gán + quyền ghi hồ sơ).')
+      return
+    }
+    const corePatch = buildLeadCoreFirestorePatch(lead, coreDraft)
+    if (Object.keys(corePatch).length === 0) {
+      setMsg('Không có thay đổi thông tin hồ sơ.')
+      return
+    }
+    setSaving(true)
+    setMsg(null)
+    try {
+      const coreAsPartial = corePatch as unknown as Partial<Lead>
+      const mergedForScore: Partial<Lead> = { ...coreAsPartial }
+      const scoreFields = persistedLeadScoringFields(
+        lead,
+        mergedForScore,
+        activeScoringProfile,
+        scoringMasterBuckets,
+        schoolTvvSignalDefs,
+      )
+      const touch = leadTouchPatch()
+      const performer = profile.displayName?.trim() || profile.email || profile.id
+      const leadFirestorePatch: Record<string, unknown> = { ...touch, ...scoreFields, ...corePatch }
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadFirestorePatch)
+      await commitAuditLog(db, {
+        leadId: lead.id,
+        actionType: 'SYSTEM_UPDATE',
+        description: `Cập nhật thông tin hồ sơ (${Object.keys(corePatch).length} trường): ${Object.keys(corePatch)
+          .slice(0, 12)
+          .join(', ')}${Object.keys(corePatch).length > 12 ? '…' : ''}`,
+        performedBy: profile.id,
+        performedByName: performer,
+      })
+      const nextLead: Lead = {
+        ...lead,
+        ...coreAsPartial,
+        ...scoreFields,
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      }
+      setCoreDraft(leadToCoreDraft(nextLead))
+      onUpdated({
+        ...coreAsPartial,
+        ...scoreFields,
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      })
+      setMsg('Đã lưu thông tin hồ sơ.')
+    } catch (e) {
+      console.error(e)
+      setMsg('Không lưu được thông tin hồ sơ. Kiểm tra Firestore Rules.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const saveUnified = async () => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
@@ -3468,49 +3527,48 @@ function LeadDetailPanel({
                         : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                     ].join(' ')}
                   >
-                    Thông tin hồ sơ
+                    Hồ sơ ứng viên
                   </button>
                 </nav>
                 <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                   {detailLeftTab === 'profile' ? (
-                    <aside className="space-y-2 text-sm leading-snug text-slate-800">
-                      <section className="rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
-                        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-2">
-                          <div className="min-w-0">
-                            <div className="flex items-start gap-1">
-                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Thông tin hồ sơ</h3>
-                              <button
-                                type="button"
-                                className="mt-0.5 shrink-0 rounded-full border border-slate-200 bg-white p-0.5 text-slate-600 shadow-sm hover:bg-slate-50"
-                                title={LEAD_DETAIL_PROFILE_HELP}
-                                aria-label="Giải thích khối thông tin hồ sơ"
-                              >
-                                <CircleHelp className="h-3 w-3" aria-hidden strokeWidth={2} />
-                              </button>
-                            </div>
-                            <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                              Sau khi chỉnh, chuyển sang tab <strong>Thao tác TVV</strong> để lưu funnel / ghi chú (nút «Lưu cập
-                              nhật») nếu cần đồng bộ cùng lúc với thông tin hồ sơ.
-                            </p>
-                          </div>
+                    <aside className="flex min-h-0 flex-1 flex-col space-y-2 text-sm leading-snug text-slate-800">
+                      <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
                           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                             <span className="tabular-nums">
                               Điểm: {String(scoringPreview?.calculatedScore ?? lead.calculatedScore)}
                             </span>
                             <TagBadge tag={scoringPreview?.priorityTag ?? lead.priorityTag} />
                           </div>
+                          {showCounselorProgressForm ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {coreDirty ? (
+                                <span className="text-[10px] font-semibold text-amber-800">Chưa lưu thay đổi</span>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={saving || !coreDirty}
+                                onClick={() => void saveCoreProfile()}
+                                className="rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                {saving ? 'Đang lưu…' : 'Lưu thông tin hồ sơ'}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="mt-2 max-h-[min(72dvh,44rem)] min-h-[12rem] overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-width:thin] lg:max-h-[min(78dvh,48rem)]">
+                        <div className="mt-2 flex min-h-0 flex-1 flex-col">
                           <LeadProfileCoreForm
                             draft={coreDraft}
                             onChange={setCoreDraft}
                             disabled={!showCounselorProgressForm}
                             leadSources={leadSources}
                             scholarships={scholarships}
+                            layout="tabs"
                           />
                         </div>
                         {!showCounselorProgressForm ? (
-                          <p className="mt-2 text-[10px] text-amber-800">
+                          <p className="mt-2 shrink-0 text-[10px] text-amber-800">
                             Chỉ xem — không có quyền sửa thông tin hồ sơ (Admin hoặc TVV được gán).
                           </p>
                         ) : null}
