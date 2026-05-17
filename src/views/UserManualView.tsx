@@ -17,8 +17,8 @@ type SectionId =
   | 'tu-van-kich-ban'
   | 'kho-tri-thuc'
   | 'khoa-ai-tac-vu'
-  | 'phong-thu-ai'
   | 'quan-ly-nhan-su'
+  | 'phan-quyen'
   | 'ho-tro'
 
 type Section = {
@@ -44,14 +44,19 @@ const SECTION_ORDER: SectionId[] = [
   'tu-van-kich-ban',
   'kho-tri-thuc',
   'khoa-ai-tac-vu',
-  'phong-thu-ai',
   'quan-ly-nhan-su',
+  'phan-quyen',
   'ho-tro',
 ]
 
-function parseSection(raw: string | null): SectionId | null {
+const LEGACY_SECTION_ALIASES: Record<string, SectionId> = {
+  'phong-thu-ai': 'khoa-ai-tac-vu',
+}
+
+function parseSection(raw: string | null, validIds: readonly SectionId[]): SectionId | null {
   if (!raw) return null
-  return SECTION_ORDER.includes(raw as SectionId) ? (raw as SectionId) : null
+  const mapped = LEGACY_SECTION_ALIASES[raw] ?? raw
+  return validIds.includes(mapped as SectionId) ? (mapped as SectionId) : null
 }
 
 function sectionsData(): Section[] {
@@ -112,17 +117,16 @@ function sectionsData(): Section[] {
           </p>
           <ul className={ul}>
             <li>
-              <strong>Tư vấn viên:</strong> làm việc với hồ sơ được giao, pipeline, ghi chú và cuộc gọi.
+              <strong>Tư vấn viên (TVV):</strong> quản lý và cập nhật hồ sơ được giao; tự tạo profile chấm điểm cho nhóm
+              mình; không vào cấu hình toàn trường.
             </li>
             <li>
-              <strong>Trưởng ngành / Trưởng khoa:</strong> thường xem trong phạm vi được giao và các báo cáo nếu được
-              mở quyền.
+              <strong>Trưởng nhóm:</strong> xem và chỉnh hồ sơ trong nhóm; đổi TVV phụ trách; soạn playbook (Thông tin TV);
+              xem báo cáo nhóm nếu được mở — không chỉnh Tri thức / khóa LLM.
             </li>
             <li>
-              <strong>Quản trị / lãnh đạo:</strong> toàn bộ cấu hình, nhập liệu, nhân sự, dữ liệu danh mục.
-            </li>
-            <li>
-              <strong>Siêu quản trị:</strong> cấu hình nhạy cảm (ví dụ lưu khóa AI); chi tiết do quản trị quy định.
+              <strong>Quản trị / Siêu quản trị:</strong> toàn bộ Cài đặt, nhập liệu, nhân sự, ma trận phân quyền; Siêu quản
+              trị thêm cấu hình nhạy cảm (khóa API AI).
             </li>
           </ul>
           <p className={note}>
@@ -288,8 +292,9 @@ function sectionsData(): Section[] {
       body: (
         <div className="space-y-1">
           <p className={p}>
-            <strong>Cài đặt</strong> tập trung cấu hình nền cho toàn hệ thống: danh mục dùng chung, cách chấm điểm ưu
-            tiên, kịch bản tư vấn, kho tài liệu cho AI, khóa và tác vụ AI, phòng thử AI, và quản lý nhân sự.
+            <strong>Cài đặt</strong> tập trung cấu hình nền: danh mục, chấm điểm, <strong>Thông tin TV</strong> (playbook),
+            <strong>Tri thức</strong> (tài liệu cho AI), <strong>LLM &amp; Tư vấn AI</strong>, quản lý nhân sự và ma trận phân
+            quyền (Admin).
           </p>
           <p className={p}>
             Người dùng chỉ xem / sửa hồ sơ thường <strong>không cần</strong> vào đây trừ khi được giao nhiệm vụ cấu hình.
@@ -388,13 +393,31 @@ function sectionsData(): Section[] {
       body: (
         <div className="space-y-1">
           <p className={p}>
-            Tab <strong>Quản lý nhân sự</strong> trong Cài đặt dùng để tạo / sửa / vô hiệu hóa tài khoản, gán vai trò,
-            và bật các quyền liên quan tới AI trên hồ sơ khi cần.
+            Tab <strong>Quản lý nhân sự</strong> (Admin): tạo / sửa tài khoản với vai trò <strong>TVV</strong>,{' '}
+            <strong>Trưởng nhóm</strong> hoặc <strong>Quản trị</strong>. Khi tạo Trưởng nhóm, chọn danh sách TVV thuộc
+            nhóm.
           </p>
           <ul className={ul}>
-            <li>Đổi mật khẩu người dùng: thường qua email đặt lại do Firebase gửi (theo nút trên form sửa).</li>
-            <li>Xóa hoàn toàn tài khoản đăng nhập: thường do quản trị trên bảng điều khiển Firebase hoặc quy trình nội bộ.</li>
+            <li>Bật <strong>Cho phép dùng AI trên hồ sơ</strong> cho TVV / Trưởng nhóm cần chạy phân tích AI.</li>
+            <li>Đổi mật khẩu: email đặt lại do Firebase (nút trên form sửa).</li>
           </ul>
+        </div>
+      ),
+    },
+    {
+      id: 'phan-quyen',
+      title: 'Ma trận phân quyền',
+      blurb: 'Ba tầng: TVV / Trưởng nhóm / Quản trị',
+      body: (
+        <div className="space-y-1">
+          <p className={p}>
+            Tab <strong>Phân quyền</strong> (chỉ Admin): xem ma trận quyền theo vai trò. TVV — hồ sơ và tương tác của mình;
+            Trưởng nhóm — phạm vi nhóm + playbook; Quản trị — toàn hệ thống.
+          </p>
+          <p className={note}>
+            Nút <strong>Hướng dẫn</strong> trên từng tab Cài đặt giải thích tab đang mở — khác với trang Hướng dẫn trên menu
+            chính.
+          </p>
         </div>
       ),
     },
@@ -431,8 +454,12 @@ export function UserManualView() {
   const [searchParams, setSearchParams] = useSearchParams()
   const sections = useMemo(() => sectionsData(), [])
   const byId = useMemo(() => Object.fromEntries(sections.map((s) => [s.id, s])) as Record<SectionId, Section>, [sections])
+  const navOrder = useMemo(
+    () => SECTION_ORDER.filter((id) => byId[id] != null),
+    [byId],
+  )
 
-  const urlSection = parseSection(searchParams.get('section'))
+  const urlSection = parseSection(searchParams.get('section'), navOrder)
   const activeId: SectionId = urlSection ?? 'gioi-thieu'
 
   const setSection = useCallback(
@@ -442,7 +469,7 @@ export function UserManualView() {
     [setSearchParams],
   )
 
-  const active = byId[activeId]
+  const active = byId[activeId] ?? byId['gioi-thieu']!
   const articleRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -486,16 +513,16 @@ export function UserManualView() {
             value={activeId}
             onChange={(e) => setSection(e.target.value as SectionId)}
           >
-            {SECTION_ORDER.map((id) => (
+            {navOrder.map((id) => (
               <option key={id} value={id}>
-                {byId[id].title}
+                {byId[id]!.title}
               </option>
             ))}
           </select>
 
           <nav className="hidden max-h-[calc(100dvh-14rem)] space-y-0.5 overflow-y-auto overscroll-contain pr-1 md:block">
-            {SECTION_ORDER.map((id) => {
-              const s = byId[id]
+            {navOrder.map((id) => {
+              const s = byId[id]!
               const sel = id === activeId
               return (
                 <button

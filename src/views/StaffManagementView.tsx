@@ -4,7 +4,15 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { USER_ROLE_LABELS, type UserRole, type VietMyUserProfile } from '../types'
 import { isSuperAdminRole } from '../auth/roleUtils'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
-import { counselorIdsInManagerScope, isUserInManagerTeamScope } from '../utils/teamScope'
+import { isTeamLeadRole } from '../auth/roleUtils'
+import {
+  counselorIdsInManagerScope,
+  isUserInManagerTeamScope,
+  patchesForCounselorTeamAssignment,
+  primaryTeamLeadForCounselor,
+  teamLeadUsesExplicitRoster,
+  teamLeadsForCounselor,
+} from '../utils/teamScope'
 
 /** Ba tầng trong form (Siêu QT thêm super_admin). */
 const ROLES_BASE: UserRole[] = ['counselor', 'team_lead', 'admin']
@@ -41,6 +49,8 @@ export function StaffManagementView({
   const [editActive, setEditActive] = useState(true)
   const [editAllowLlm, setEditAllowLlm] = useState(false)
   const [editTeamIds, setEditTeamIds] = useState<string[]>([])
+  /** Trưởng nhóm phụ trách (khi sửa TVV — admin). */
+  const [editTeamLeadId, setEditTeamLeadId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [resetPwdBusy, setResetPwdBusy] = useState(false)
   const [editMsg, setEditMsg] = useState<string | null>(null)
@@ -53,6 +63,28 @@ export function StaffManagementView({
     }
     return counselors
   }, [counselors, teamScopeOnly, profile, users])
+
+  const teamLeads = useMemo(
+    () => users.filter((u) => isTeamLeadRole(u.role) && u.isActive !== false),
+    [users],
+  )
+
+  const teamLeadMembers = useMemo(() => {
+    const map = new Map<string, VietMyUserProfile[]>()
+    for (const lead of teamLeads) {
+      const ids = new Set(counselorIdsInManagerScope(lead, users))
+      map.set(
+        lead.id,
+        counselors.filter((c) => ids.has(c.id)),
+      )
+    }
+    return map
+  }, [teamLeads, users, counselors])
+
+  const unassignedCounselors = useMemo(() => {
+    if (teamScopeOnly) return []
+    return counselors.filter((c) => teamLeadsForCounselor(c.id, users).length === 0)
+  }, [counselors, users, teamScopeOnly])
 
   const sortedUsers = useMemo(() => {
     let list = users
@@ -99,7 +131,7 @@ export function StaffManagementView({
         password,
         displayName,
         role,
-        ...(role === 'team_lead' && createTeamIds.length ? { managedCounselorIds: createTeamIds } : {}),
+        ...(role === 'team_lead' ? { managedCounselorIds: createTeamIds } : {}),
       })
       setMsg(`Đã tạo tài khoản cho ${email}`)
       setEmail('')
@@ -150,6 +182,8 @@ export function StaffManagementView({
     setEditActive(u.isActive !== false)
     setEditAllowLlm(u.allowLlmAndAiTasks === true)
     setEditTeamIds(u.managedCounselorIds ?? [])
+    const primaryLead = primaryTeamLeadForCounselor(u.id, users)
+    setEditTeamLeadId(primaryLead?.id ?? '')
     setEditMsg(null)
     setEditErr(null)
   }
@@ -171,6 +205,22 @@ export function StaffManagementView({
           ? { managedCounselorIds: editTeamIds }
           : {}),
       })
+      if (
+        canStaffAll &&
+        (editRole === 'counselor' || (editing.role === 'counselor' && editRole !== 'team_lead'))
+      ) {
+        const patches = patchesForCounselorTeamAssignment(
+          editing.id,
+          editTeamLeadId || null,
+          users,
+        )
+        for (const patch of patches) {
+          await updateStaffProfile({
+            userId: patch.userId,
+            managedCounselorIds: patch.managedCounselorIds,
+          })
+        }
+      }
       setEditMsg('Đã lưu thay đổi.')
       setEditing(null)
     } catch (e: unknown) {
@@ -237,6 +287,88 @@ export function StaffManagementView({
 
       {teamBanner}
 
+      {canStaffAll && !teamScopeOnly ? (
+        <section className="app-glass-panel rounded-2xl p-6 shadow-lg">
+          <h2 className="app-section-heading">Phân nhóm TVV ↔ Trưởng nhóm</h2>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            Một trưởng nhóm quản lý <strong>nhiều</strong> tư vấn viên. Phạm vi hồ sơ, đổi TVV và profile chấm điểm nhóm
+            theo đúng danh sách bạn chọn ở đây.
+          </p>
+          {teamLeads.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              Chưa có tài khoản <strong>Trưởng nhóm</strong>. Tạo user với vai trò Trưởng nhóm, rồi chọn TVV trong form hoặc
+              nút «Chỉnh nhóm» bên dưới.
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-3">
+              {teamLeads.map((lead) => {
+                const members = teamLeadMembers.get(lead.id) ?? []
+                const explicit = teamLeadUsesExplicitRoster(lead)
+                return (
+                  <li
+                    key={lead.id}
+                    className="rounded-xl border border-violet-200/70 bg-violet-50/30 px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900">{lead.displayName || lead.email}</p>
+                        <p className="text-xs text-slate-500">{lead.email}</p>
+                        {!explicit ? (
+                          <p className="mt-1 text-xs text-amber-800">
+                            Đang dùng fallback khoa/phòng (legacy) — nên chọn TVV rõ trong «Chỉnh nhóm».
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(lead)}
+                        className="shrink-0 rounded-lg border border-violet-400 bg-white px-3 py-1.5 text-xs font-semibold text-violet-950 hover:bg-violet-50"
+                      >
+                        Chỉnh nhóm ({members.length} TVV)
+                      </button>
+                    </div>
+                    {members.length > 0 ? (
+                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                        {members.map((m) => (
+                          <li
+                            key={m.id}
+                            className="rounded-lg border border-slate-200/80 bg-white px-2 py-0.5 text-xs font-medium text-slate-800"
+                          >
+                            {m.displayName || m.email}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-600">Chưa gán TVV — bấm «Chỉnh nhóm» để tick danh sách.</p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {unassignedCounselors.length > 0 ? (
+            <div className="mt-4 rounded-xl border border-amber-300/80 bg-amber-50/90 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-950">
+                TVV chưa thuộc nhóm nào ({unassignedCounselors.length})
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {unassignedCounselors.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(c)}
+                      className="rounded-lg border border-amber-400/80 bg-white px-2 py-0.5 text-xs font-medium text-amber-950 hover:bg-amber-100/80"
+                    >
+                      {c.displayName || c.email} — gán nhóm
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {directoryError ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
           Không đọc được danh sách users: {directoryError}. Kiểm tra Firestore Rules cho collection{' '}
@@ -294,7 +426,14 @@ export function StaffManagementView({
               ))}
             </select>
           </label>
-          {role === 'team_lead' && canStaffAll ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create') : null}
+          {role === 'team_lead' && canStaffAll
+            ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create')
+            : null}
+          {role === 'team_lead' && canStaffAll && createTeamIds.length === 0 ? (
+            <p className="mt-2 text-xs text-amber-800">
+              Nên chọn ít nhất một TVV — có thể chỉnh lại sau ở mục «Phân nhóm» phía trên.
+            </p>
+          ) : null}
           {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
           {msg ? <p className="mt-3 text-sm text-emerald-700">{msg}</p> : null}
           <button
@@ -318,6 +457,11 @@ export function StaffManagementView({
               const canStaffEdit = !targetSuper || viewerSuper
               const llmOk = targetSuper || u.allowLlmAndAiTasks === true
               const teamCount = u.managedCounselorIds?.length ?? 0
+              const members = u.role === 'team_lead' ? (teamLeadMembers.get(u.id) ?? []) : []
+              const primaryLead =
+                u.role === 'counselor' ? primaryTeamLeadForCounselor(u.id, users) : null
+              const unassignedCounselor =
+                u.role === 'counselor' && teamLeadsForCounselor(u.id, users).length === 0
               return (
                 <li
                   key={u.id}
@@ -332,8 +476,22 @@ export function StaffManagementView({
                       <p className="truncate text-xs text-slate-500">{u.email}</p>
                       <p className="mt-0.5 text-xs font-medium text-violet-700">
                         {USER_ROLE_LABELS[u.role]}
-                        {u.role === 'team_lead' && teamCount > 0 ? (
-                          <span className="ml-2 font-normal text-slate-600">· {teamCount} TVV</span>
+                        {u.role === 'team_lead' ? (
+                          <span className="ml-2 font-normal text-slate-600">
+                            · {members.length > 0
+                              ? members.map((m) => m.displayName || m.email).join(', ')
+                              : teamCount > 0
+                                ? `${teamCount} TVV`
+                                : 'Chưa gán TVV'}
+                          </span>
+                        ) : null}
+                        {primaryLead ? (
+                          <span className="ml-2 block font-normal text-slate-600">
+                            Trưởng nhóm: {primaryLead.displayName || primaryLead.email}
+                          </span>
+                        ) : null}
+                        {unassignedCounselor ? (
+                          <span className="ml-2 block font-normal text-amber-800">Chưa gán trưởng nhóm</span>
                         ) : null}
                         {inactive ? (
                           <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">Đã vô hiệu</span>
@@ -440,6 +598,26 @@ export function StaffManagementView({
               {editRole === 'team_lead' && canStaffAll
                 ? teamMemberPicker(editTeamIds, setEditTeamIds, 'edit')
                 : null}
+              {editRole === 'counselor' && canStaffAll ? (
+                <label className="block text-sm font-medium text-slate-700">
+                  Trưởng nhóm phụ trách
+                  <select
+                    value={editTeamLeadId}
+                    onChange={(e) => setEditTeamLeadId(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <option value="">— Chưa gán / gỡ khỏi nhóm —</option>
+                    {teamLeads.map((lead) => (
+                      <option key={lead.id} value={lead.id}>
+                        {lead.displayName || lead.email}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Một TVV chỉ nên thuộc một trưởng nhóm. Lưu sẽ cập nhật danh sách TVV của trưởng nhóm tương ứng.
+                  </span>
+                </label>
+              ) : null}
               <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 px-3 py-2.5">
                 <p className="text-xs font-medium text-violet-950">Mật khẩu</p>
                 <p className="mt-0.5 text-xs leading-snug text-violet-900/90">

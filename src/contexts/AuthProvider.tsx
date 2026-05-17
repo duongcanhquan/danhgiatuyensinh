@@ -249,8 +249,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         updatedAt: now,
         ...teamMeta,
-        ...(normalizedRole === 'team_lead' && input.managedCounselorIds?.length
-          ? { managedCounselorIds: input.managedCounselorIds.filter(Boolean).slice(0, 60) }
+        ...(normalizedRole === 'team_lead'
+          ? {
+              managedCounselorIds: (input.managedCounselorIds ?? []).filter(Boolean).slice(0, 60),
+            }
           : {}),
       })
     },

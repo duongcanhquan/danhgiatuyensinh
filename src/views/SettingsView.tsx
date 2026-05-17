@@ -526,6 +526,15 @@ export function SettingsView() {
     )
   }, [db, tabParam, editSnippetParam, urlTab, tabDefs, activeTab, setSearchParams, scoringSubLegacy])
 
+  const settingsRoleHint =
+    canPlaybooks || canAiEngine
+      ? null
+      : canScoringProfilesTeam
+        ? ' — quản lý: chỉnh bộ chấm điểm và nhân sự trong nhóm; không chỉnh Playbook / Tri thức.'
+        : canScoringProfilesOwn
+          ? ' — chỉ tab «Chấm điểm hồ sơ» (profile do bạn tạo); không chỉnh Playbook hay Tri thức.'
+          : ' — chỉ các mục cấu hình được phép hiển thị bên dưới.'
+
   const setTab = (id: SettingsTabId) => {
     if (!tabDefs.some((t) => t.id === id && t.enabled)) return
     setSearchParams(
@@ -559,16 +568,10 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && settingsAccess && profile ? (
+      {db && settingsAccess && profile && settingsRoleHint ? (
         <p className={`rounded-lg border border-slate-200/90 bg-slate-50/95 px-3 py-2 text-sm leading-relaxed text-slate-700 ${settingsCopy}`}>
           <strong className="text-slate-900">{USER_ROLE_LABELS[profile.role]}</strong>
-          {canPlaybooks || canAiEngine
-            ? ' — quản trị: cấu hình Playbook, Tri thức, LLM, danh mục, chấm điểm toàn trường.'
-            : canScoringProfilesTeam
-              ? ' — quản lý: chỉnh bộ chấm điểm và nhân sự trong nhóm; không chỉnh Playbook / Tri thức.'
-              : canScoringProfilesOwn
-                ? ' — chỉ tab «Chấm điểm hồ sơ» (profile do bạn tạo); không chỉnh Playbook hay Tri thức.'
-                : ' — chỉ các mục cấu hình được phép hiển thị bên dưới.'}
+          {settingsRoleHint}
         </p>
       ) : null}
 
