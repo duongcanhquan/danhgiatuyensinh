@@ -1,4 +1,5 @@
 import type { KnowledgeDocument, Lead } from '../types'
+import { leadSearchableText } from './playbookMatch'
 
 const KNOWLEDGE_TYPE_ORDER: Record<string, number> = {
   GENERAL: 0,
@@ -9,25 +10,9 @@ const KNOWLEDGE_TYPE_ORDER: Record<string, number> = {
   PROCESS: 5,
 }
 
+/** Cùng tập trường với playbook keyword — RAG và UI tri thức đồng bộ. */
 function leadSearchBlob(lead: Lead): string {
-  const parts = [
-    lead.fullName,
-    lead.majorInterest,
-    lead.province,
-    lead.educationLevel,
-    lead.financialStatus,
-    lead.academicPerformance,
-    lead.aspirations,
-    lead.fieldTripNotes,
-    lead.profileNote1,
-    lead.profileNote2,
-    lead.otherAttentionNotes,
-    lead.description,
-  ]
-  return parts
-    .filter((x): x is string => Boolean(x?.trim()))
-    .join(' ')
-    .toLowerCase()
+  return leadSearchableText(lead).toLowerCase()
 }
 
 function docRelevanceScore(leadBlob: string, d: KnowledgeDocument): number {
@@ -98,6 +83,31 @@ export function buildInstitutionalRagBlock(docs: KnowledgeDocument[], maxChars =
 /**
  * RAG theo ngữ cảnh hồ sơ: ưu tiên tài liệu liên quan ngành/tỉnh/từ khóa trong lead.
  */
+/** Điểm hiển thị trên tab Tri thức (ưu tiên tư vấn chung + token khớp hồ sơ). */
+export function knowledgeDocDisplayScore(lead: Lead, doc: KnowledgeDocument): number {
+  const blob = leadSearchBlob(lead)
+  let score = docRelevanceScore(blob, doc)
+  if (doc.type === 'GENERAL') score += 50
+  if (doc.type === 'FAQ') score += 20
+  const text = `${doc.title} ${doc.content}`.toLowerCase()
+  if (blob) {
+    for (const token of blob.split(/\s+/).filter((t) => t.length >= 3)) {
+      if (text.includes(token)) score += 8
+    }
+  }
+  return score
+}
+
+/** Tài liệu có liên quan hồ sơ (token / loại tư vấn chung). */
+export function isKnowledgeDocRelevantToLead(lead: Lead, doc: KnowledgeDocument): boolean {
+  if (doc.type === 'GENERAL' || doc.type === 'FAQ') return true
+  return docRelevanceScore(leadSearchBlob(lead), doc) > 0
+}
+
+export function countLeadRelevantKnowledge(lead: Lead, docs: KnowledgeDocument[]): number {
+  return docs.filter((d) => isKnowledgeDocRelevantToLead(lead, d)).length
+}
+
 export function buildLeadContextualRagBlock(
   lead: Lead,
   docs: KnowledgeDocument[],

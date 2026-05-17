@@ -29,6 +29,7 @@ import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { USER_ROLE_LABELS } from '../types'
 import { evaluateLead, resolveTagBands } from '../utils/scoring'
 import {
   masterDataEntriesForFirestore,
@@ -48,6 +49,8 @@ import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
 import { PlaybookTriggerEditor, playbookToMatchConfig, type PlaybookMatchConfig } from '../components/PlaybookTriggerEditor'
 import { StaffManagementView } from '../views/StaffManagementView'
+import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
+import { canViewPermissionMatrix } from '../auth/permissions'
 
 type SettingsTabId =
   | 'master'
@@ -58,6 +61,7 @@ type SettingsTabId =
   | 'knowledge'
   | 'llm'
   | 'staff'
+  | 'permissions'
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -92,7 +96,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
             điều kiện <strong>IN_LIST</strong> trên trường trùng id catalog (vd. <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">province</code>,{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">financialStatus</code>) sẽ{' '}
             <strong>đối chiếu lead với danh sách mục ở đây</strong> — profile không “sao chép” cả catalog, mà chọn những
-            nhãn nào được cộng điểm trong canvas tab <strong>Profile đánh giá</strong>.
+            nhãn nào được cộng điểm trong canvas tab <strong>Chấm điểm hồ sơ</strong>.
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
             Chọn loại ở cột trái, thêm hoặc chỉnh mục bên phải; thư viện mẫu quy tắc (kéo thả) nằm ở tab <strong>Quy tắc mẫu</strong>.
@@ -109,18 +113,18 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'scoring':
       return (
         <>
-          <p className="font-semibold text-slate-900">Chấm điểm — điểm thông tin</p>
+          <p className="font-semibold text-slate-900">Điểm thông tin</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Cấu hình <strong>độ đầy dữ liệu</strong> trên hồ sơ (%, trọng số trường, kẹp min–max) lưu tại{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>. Khác{' '}
-            <strong>Profile đánh giá</strong> (điểm tích lũy HOT/WARM/COLD theo quy tắc).
+            <strong>Chấm điểm hồ sơ</strong> (điểm tích lũy HOT/WARM/COLD theo quy tắc).
           </p>
         </>
       )
     case 'scoring_profiles':
       return (
         <>
-          <p className="font-semibold text-slate-900">Profile đánh giá</p>
+          <p className="font-semibold text-slate-900">Chấm điểm hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Một hoặc nhiều <strong>profile</strong>: khối quy tắc kéo thả, điều kiện khớp trường lead, điểm có thể{' '}
             <strong>âm hoặc dương</strong>, ngưỡng HOT/WARM. Dùng tab <strong>Quy tắc mẫu</strong> để soạn mẫu tái sử dụng.
@@ -157,8 +161,8 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
           <p className="mt-2 text-slate-700">
             <strong>Ứng dụng:</strong> chỉ đi kèm luồng <strong>phân tích AI trên hồ sơ</strong>. Không tự hiện trong Playbook
-            hay Script Hub. Khác tab <strong>Profile đánh giá</strong> /{' '}
-            <strong>Chấm điểm</strong> (điểm theo dữ liệu hồ sơ, không phải văn bản RAG).
+            hay Script Hub. Khác tab <strong>Chấm điểm hồ sơ</strong> /{' '}
+            <strong>Điểm thông tin</strong> (điểm theo dữ liệu hồ sơ, không phải văn bản RAG).
           </p>
           <p className={`mt-2 ${settingsCopyMuted}`}>
             Trong khối dưới: tab <strong>Thiết lập</strong> (nạp mẫu, thêm/sửa) và tab <strong>Dữ liệu</strong> (danh sách, tìm
@@ -178,6 +182,17 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           <p className={`mt-2 ${settingsCopyMuted}`}>
             Tab con: <strong>Hướng dẫn</strong>, <strong>API</strong>, <strong>Lọc trước khi gọi AI</strong>,{' '}
             <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Nên nạp ít nhất một tác vụ mẫu «Tư vấn tuyển sinh».
+          </p>
+        </>
+      )
+    case 'permissions':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Ma trận phân quyền</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Ba tầng: Tư vấn viên → Trưởng nhóm → Quản trị. Trưởng nhóm được mẫu tư vấn (Thông tin TV), profile nhóm, đổi TVV
+            trong nhóm. Siêu quản trị có thể bổ sung <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">extraPermissions</code>{' '}
+            trên document user (Firestore Rules phải khớp).
           </p>
         </>
       )
@@ -211,7 +226,8 @@ function parseSettingsTab(raw: string | null): SettingsTabId | null {
     raw === 'consulting' ||
     raw === 'knowledge' ||
     raw === 'llm' ||
-    raw === 'staff'
+    raw === 'staff' ||
+    raw === 'permissions'
   )
     return raw
   if (raw === 'ai_lab') return 'llm'
@@ -221,7 +237,7 @@ function parseSettingsTab(raw: string | null): SettingsTabId | null {
 export function SettingsView() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
-  const { can, status: authStatus, firebaseUser, profile } = useAuth()
+  const { can, permissions, status: authStatus, firebaseUser, profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const { profiles } = useScoringProfiles()
   const { catalogs, byKind, loading: mdLoading, error: mdError } = useMasterData()
@@ -287,13 +303,17 @@ export function SettingsView() {
       const data = JSON.parse(demoJson) as Record<string, unknown>
       const profile = profiles[0]
       if (!profile) {
-        setDemoResult('Chưa có bộ chấm điểm — tạo profile trong tab Profile đánh giá.')
+        setDemoResult('Chưa có bộ chấm điểm — tạo profile trong tab Chấm điểm hồ sơ.')
         return
       }
-      const { calculatedScore, priorityTag } = evaluateLead(data, profile, masterBuckets)
+      const profileWithRules =
+        profiles.find((p) => (p.ruleBlocks ?? []).some((b) => (b.rows?.length ?? 0) > 0)) ??
+        profiles.find((p) => (p.rules?.length ?? 0) > 0) ??
+        profile
+      const { calculatedScore, priorityTag } = evaluateLead(data, profileWithRules, masterBuckets)
       const { hot, warm } = resolveTagBands(profile.thresholds)
       setDemoResult(
-        `Bộ chấm điểm «${profile.profileName}» — Điểm: ${calculatedScore} (tích lũy) — Nhãn: ${priorityTag} (theo profile: HOT≥${hot}, WARM ${warm}–${hot - 1}, COLD 0–${warm - 1}, LOSS &lt;0)`,
+        `Bộ chấm điểm «${profileWithRules.profileName}» — Điểm: ${calculatedScore} (tích lũy) — Nhãn: ${priorityTag} (theo profile: HOT≥${hot}, WARM ${warm}–${hot - 1}, COLD 0–${warm - 1}, LOSS &lt;0)`,
       )
     } catch {
       setDemoResult('JSON không hợp lệ.')
@@ -302,9 +322,23 @@ export function SettingsView() {
 
   const canMaster = can('config:master_data')
   const canScoringRules = can('config:scoring_rules')
+  const canScoringProfilesOwn = can('config:scoring_profiles_own')
+  const canScoringProfilesTeam = can('config:scoring_profiles_team')
   const canPlaybooks = can('config:playbooks')
   const canAiEngine = can('config:ai_engine')
   const canStaff = can('config:users')
+  const canStaffTeam = can('config:users:team')
+  const canPermMatrix = canViewPermissionMatrix(permissions)
+  const settingsAccess =
+    canMaster ||
+    canScoringRules ||
+    canScoringProfilesOwn ||
+    canScoringProfilesTeam ||
+    canPlaybooks ||
+    canAiEngine ||
+    canStaff ||
+    canStaffTeam ||
+    canPermMatrix
 
   const activeMasterCatalog = useMemo(() => {
     const validId =
@@ -385,20 +419,35 @@ export function SettingsView() {
   }
 
   const tabDefs = useMemo(() => {
-    const base: { id: SettingsTabId; label: string; enabled: boolean }[] = [
-      { id: 'master', label: 'Danh mục', enabled: Boolean(db) },
-      { id: 'rule_templates', label: 'Quy tắc mẫu', enabled: Boolean(db) },
-      { id: 'scoring', label: 'Chấm điểm', enabled: Boolean(db) },
-      { id: 'scoring_profiles', label: 'Profile đánh giá', enabled: Boolean(db) },
-      { id: 'consulting', label: 'Thông tin TV', enabled: Boolean(db) },
-    ]
+    const base: { id: SettingsTabId; label: string; enabled: boolean }[] = []
+    if (db && canMaster) base.push({ id: 'master', label: 'Danh mục', enabled: true })
+    if (db && canScoringRules) base.push({ id: 'rule_templates', label: 'Quy tắc mẫu', enabled: true })
+    if (db && canScoringRules) base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
+    if (db && (canScoringRules || canScoringProfilesOwn || canScoringProfilesTeam)) {
+      base.push({ id: 'scoring_profiles', label: 'Chấm điểm hồ sơ', enabled: true })
+    }
+    if (db && canPlaybooks) base.push({ id: 'consulting', label: 'Thông tin TV', enabled: true })
     if (db && canAiEngine) {
       base.push({ id: 'knowledge', label: 'Tri thức tuyển sinh', enabled: true })
       base.push({ id: 'llm', label: 'LLM & Tư vấn AI', enabled: true })
     }
-    if (db && canStaff) base.push({ id: 'staff', label: 'Quản lý nhân sự', enabled: true })
+    if (db && (canStaff || canStaffTeam)) {
+      base.push({ id: 'staff', label: canStaff ? 'Quản lý nhân sự' : 'Nhóm tư vấn', enabled: true })
+    }
+    if (canPermMatrix) base.push({ id: 'permissions', label: 'Phân quyền', enabled: true })
     return base
-  }, [db, canAiEngine, canStaff])
+  }, [
+    db,
+    canMaster,
+    canScoringRules,
+    canScoringProfilesOwn,
+    canScoringProfilesTeam,
+    canPlaybooks,
+    canAiEngine,
+    canStaff,
+    canStaffTeam,
+    canPermMatrix,
+  ])
 
   const tabParam = searchParams.get('tab')
   const scoringSubLegacy = searchParams.get('scoringSub')
@@ -499,7 +548,31 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db ? (
+      {db && authStatus === 'authenticated' && !settingsAccess ? (
+        <div className={`rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-950 ${settingsCopy}`}>
+          <p className="font-semibold">Không có quyền cấu hình hệ thống</p>
+          <p className="mt-1.5 text-sm leading-relaxed">
+            Vai trò <strong>{profile ? USER_ROLE_LABELS[profile.role] : 'hiện tại'}</strong> chỉ làm việc trên Hồ sơ và
+            dashboard — không mở Playbook, Tri thức, Danh mục hay LLM. Nếu bạn là tư vấn viên và cần bộ chấm điểm riêng,
+            liên hệ quản trị để được cấp quyền hoặc dùng tài khoản đã được phân quyền.
+          </p>
+        </div>
+      ) : null}
+
+      {db && settingsAccess && profile ? (
+        <p className={`rounded-lg border border-slate-200/90 bg-slate-50/95 px-3 py-2 text-sm leading-relaxed text-slate-700 ${settingsCopy}`}>
+          <strong className="text-slate-900">{USER_ROLE_LABELS[profile.role]}</strong>
+          {canPlaybooks || canAiEngine
+            ? ' — quản trị: cấu hình Playbook, Tri thức, LLM, danh mục, chấm điểm toàn trường.'
+            : canScoringProfilesTeam
+              ? ' — quản lý: chỉnh bộ chấm điểm và nhân sự trong nhóm; không chỉnh Playbook / Tri thức.'
+              : canScoringProfilesOwn
+                ? ' — chỉ tab «Chấm điểm hồ sơ» (profile do bạn tạo); không chỉnh Playbook hay Tri thức.'
+                : ' — chỉ các mục cấu hình được phép hiển thị bên dưới.'}
+        </p>
+      ) : null}
+
+      {db && settingsAccess ? (
         <div className="min-w-0 max-w-full rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-md md:p-3">
           <div className="scroll-touch flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain pb-1 md:gap-1.5 md:pb-0">
             <nav
@@ -803,10 +876,10 @@ export function SettingsView() {
       {db && activeTab === 'scoring' ? (
         <div role="tabpanel" aria-labelledby="tab-scoring" className="min-w-0 max-w-full space-y-3">
           <h2 id="tab-scoring" className={settingsHeading}>
-            Chấm điểm — điểm thông tin
+            Điểm thông tin
           </h2>
           <p className={`text-slate-600 ${settingsCopyMuted}`}>
-            Cấu hình % đầy hồ sơ theo trường (khác nhãn HOT/WARM từ profile — xem tab <strong>Profile đánh giá</strong>).
+            Cấu hình % đầy hồ sơ theo trường (khác nhãn HOT/WARM từ profile — xem tab <strong>Chấm điểm hồ sơ</strong>).
           </p>
           <InfoCompletenessRulesPanel canEdit={canScoringRules} />
         </div>
@@ -815,11 +888,11 @@ export function SettingsView() {
       {db && activeTab === 'scoring_profiles' ? (
         <div role="tabpanel" aria-labelledby="tab-scoring-profiles" className="min-w-0 max-w-full space-y-3">
           <h2 id="tab-scoring-profiles" className={settingsHeading}>
-            Profile đánh giá (HOT / WARM / COLD)
+            Chấm điểm hồ sơ (HOT / WARM / COLD)
           </h2>
           <p className={`text-slate-600 ${settingsCopyMuted}`}>
             Bộ quy tắc tích lũy điểm trên dữ liệu hồ sơ — có thể cộng hoặc <strong>trừ</strong> điểm theo từng điều kiện. Tab{' '}
-            <strong>Chấm điểm</strong> bên cạnh dùng cho <strong>điểm thông tin</strong> (% đầy form).
+            <strong>Điểm thông tin</strong> bên cạnh dùng cho % đầy form (không phải điểm HOT/WARM).
           </p>
           <ProfileManagerTab db={db} />
           <section className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4">
@@ -849,7 +922,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'consulting' ? (
+      {db && activeTab === 'consulting' && canPlaybooks ? (
         <div
           role="tabpanel"
           aria-labelledby="tab-consulting"
@@ -922,7 +995,7 @@ export function SettingsView() {
                 : 'mt-2 md:mt-3'
             }
           >
-            <KnowledgeBaseTab db={db} compactChrome={knowledgeWorkspaceOpen} />
+            <KnowledgeBaseTab db={db} compactChrome={knowledgeWorkspaceOpen} canEdit={canAiEngine} />
           </div>
         </div>
       ) : null}
@@ -961,12 +1034,21 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'staff' && canStaff ? (
+      {db && activeTab === 'staff' && (canStaff || canStaffTeam) ? (
         <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-3">
           <h2 id="tab-staff" className="sr-only">
-            Quản lý nhân sự
+            {canStaff ? 'Quản lý nhân sự' : 'Nhóm tư vấn'}
           </h2>
-          <StaffManagementView embedded />
+          <StaffManagementView embedded teamScopeOnly={!canStaff && canStaffTeam} />
+        </div>
+      ) : null}
+
+      {activeTab === 'permissions' && canPermMatrix ? (
+        <div role="tabpanel" aria-labelledby="tab-permissions" className="space-y-3">
+          <h2 id="tab-permissions" className={settingsHeading}>
+            Ma trận phân quyền
+          </h2>
+          <PermissionMatrixPanel />
         </div>
       ) : null}
 

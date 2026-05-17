@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore'
 import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
-import { isAdminLikeRole } from '../auth/roleUtils'
+import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { useMasterData } from './useMasterData'
@@ -300,6 +300,29 @@ export function serverFiltersForTagDistribution(
   return Object.keys(slim).length ? slim : undefined
 }
 
+/** Bỏ một trường lọc (vd. `source`) khi quét danh mục giá trị trong cùng phạm vi RBAC. */
+export function serverFiltersOmitField(
+  f: LeadListServerFilters | undefined,
+  omit: keyof LeadListServerFilters,
+): LeadListServerFilters | undefined {
+  if (!f) return undefined
+  const slim = Object.fromEntries(
+    Object.entries(f).filter(([key, val]) => key !== omit && val !== undefined),
+  ) as LeadListServerFilters
+  return Object.keys(slim).length ? slim : undefined
+}
+
+const SOURCE_CATALOG_BATCH = 800
+
+function collectDistinctSources(rows: Lead[]): string[] {
+  const s = new Set<string>()
+  for (const l of rows) {
+    const src = (l.source ?? '').trim()
+    if (src) s.add(src)
+  }
+  return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+}
+
 export type UseLeadsOptions = {
   serverFilters?: LeadListServerFilters
   searchText?: string
@@ -316,6 +339,10 @@ export type UseLeadsOptions = {
    * Chỉ bật nơi thật sự dùng `scopeTagCounts` (vd. Phân tích nâng cao). Mặc định false.
    */
   includeScopeTagCounts?: boolean
+  /**
+   * Quét tối đa {@link SOURCE_CATALOG_BATCH} hồ sơ (cùng RBAC, bỏ lọc `source`) để gợi ý giá trị Nguồn.
+   */
+  includeScopeSourceOptions?: boolean
 }
 
 function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryFilterConstraint | null {
@@ -325,17 +352,15 @@ function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryF
     return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
   }
 
-  if (profile.role === 'head_of_profession') {
+  if (isTeamLeadRole(profile.role)) {
     const team = (profile.managedCounselorIds ?? []).filter(Boolean)
-    if (!team.length) return where('assignedTo', '==', impossibleUid())
-    const chunk = team.slice(0, 30)
-    return or(where('assignedTo', 'in', chunk), where('assignedCounselorId', 'in', chunk))
-  }
-
-  if (profile.role === 'head_of_department') {
+    if (team.length) {
+      const chunk = team.slice(0, 30)
+      return or(where('assignedTo', 'in', chunk), where('assignedCounselorId', 'in', chunk))
+    }
     const chunk = hoDLabels.filter(Boolean).slice(0, 30)
-    if (!chunk.length) return where('educationLevel', '==', impossibleUid())
-    return where('educationLevel', 'in', chunk)
+    if (chunk.length) return where('educationLevel', 'in', chunk)
+    return where('assignedTo', '==', impossibleUid())
   }
 
   return null
@@ -443,16 +468,18 @@ function buildPriorityTagCountQuery(
 
 function applyRoleClientFilter(rows: Lead[], profile: VietMyUserProfile, hoDQueryLabels: string[]): Lead[] {
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
-  if (profile.role === 'head_of_department' && labelSet.size) {
-    return rows.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
-  }
-  if (profile.role === 'head_of_profession') {
+  if (isTeamLeadRole(profile.role)) {
     const team = new Set(profile.managedCounselorIds ?? [])
-    if (!team.size) return []
-    return rows.filter((l) => {
-      const u = l.assignedTo ?? l.assignedCounselorId
-      return Boolean(u && team.has(u))
-    })
+    if (team.size) {
+      return rows.filter((l) => {
+        const u = l.assignedTo ?? l.assignedCounselorId
+        return Boolean(u && team.has(u))
+      })
+    }
+    if (labelSet.size) {
+      return rows.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
+    }
+    return []
   }
   if (profile.role === 'counselor' && profile.id) {
     return rows.filter((l) => {
@@ -519,6 +546,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const fullScopeChunkSize = Math.min(500, Math.max(50, opts?.fullScopeChunkSize ?? FULL_SCOPE_CHUNK_SIZE))
   const maxFullScopeLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxFullScopeLeads ?? MAX_FULL_SCOPE_LEADS))
   const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
+  const includeScopeSourceOptions = Boolean(opts?.includeScopeSourceOptions)
 
   const hoDQueryLabels = useMemo(() => {
     const ids = profile?.managedMajorIds ?? []
@@ -564,6 +592,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const [scopeTagCounts, setScopeTagCounts] = useState<{ HOT: number; WARM: number; COLD: number; LOSS: number } | null>(
     null,
   )
+  const [scopeSourceOptions, setScopeSourceOptions] = useState<string[]>([])
   const [searchScanTruncated, setSearchScanTruncated] = useState(false)
   const [searchHitTotal, setSearchHitTotal] = useState<number | null>(null)
   const [scopeFetchTruncated, setScopeFetchTruncated] = useState(false)
@@ -602,6 +631,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         setTotalLeadCount(null)
         setTotalLeadCountError(null)
         setScopeTagCounts(null)
+        setScopeSourceOptions([])
         setSearchHitTotal(null)
         setScopeFetchTruncated(false)
         setError(
@@ -620,6 +650,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         setTotalLeadCount(null)
         setTotalLeadCountError(null)
         setScopeTagCounts(null)
+        setScopeSourceOptions([])
         setSearchHitTotal(null)
         setScopeFetchTruncated(false)
       })
@@ -684,10 +715,36 @@ export function useLeads(opts?: UseLeadsOptions) {
       }
     }
 
+    const fetchSourceCatalog = async () => {
+      try {
+        const distFilters = serverFiltersOmitField(serverFilters, 'source')
+        const qy = query(
+          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters),
+          orderBy('updatedAt', 'desc'),
+          limit(SOURCE_CATALOG_BATCH),
+        )
+        const snap = await getDocs(qy)
+        if (cancelled) return
+        const rows: Lead[] = []
+        snap.forEach((d) => {
+          const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+          if (row) rows.push(row)
+        })
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels)
+        setScopeSourceOptions(collectDistinctSources(filtered))
+      } catch (e) {
+        console.error(e)
+        if (!cancelled) setScopeSourceOptions([])
+      }
+    }
+
     const runAggregations = async (): Promise<number | null> => {
       const total = await fetchTotalOnly()
       if (cancelled || total == null) return null
-      if (includeScopeTagCounts) await fetchTagCountsOnly()
+      const side: Promise<void>[] = []
+      if (includeScopeTagCounts) side.push(fetchTagCountsOnly())
+      if (includeScopeSourceOptions) side.push(fetchSourceCatalog())
+      if (side.length) await Promise.all(side)
       return total
     }
 
@@ -856,6 +913,9 @@ export function useLeads(opts?: UseLeadsOptions) {
       } else if (!cancelled) {
         setScopeTagCounts(null)
       }
+      if (includeScopeSourceOptions && !cancelled) {
+        setScopeSourceOptions(collectDistinctSources(mapped))
+      }
     }
 
     void (async () => {
@@ -891,9 +951,11 @@ export function useLeads(opts?: UseLeadsOptions) {
             await Promise.all([fetchTotalOnly(), loadSearchBucketAndSlice(pageToLoad, fkChanged)])
             if (cancelled) return
             if (includeScopeTagCounts) void fetchTagCountsOnly()
+            if (includeScopeSourceOptions) void fetchSourceCatalog()
           } else {
             await loadSearchBucketAndSlice(pageToLoad, manualRefetch)
             if (manualRefetch && includeScopeTagCounts) void fetchTagCountsOnly()
+            if (manualRefetch && includeScopeSourceOptions) void fetchSourceCatalog()
           }
           setLoading(false)
           setLoadingPage(false)
@@ -914,6 +976,7 @@ export function useLeads(opts?: UseLeadsOptions) {
             await loadFirestorePage(safePage, total)
           }
           if (includeScopeTagCounts) void fetchTagCountsOnly()
+          if (includeScopeSourceOptions) void fetchSourceCatalog()
         } else {
           const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
           setTotalPages(tp)
@@ -954,6 +1017,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     hoDQueryLabels,
     pagedFirestoreDep,
     includeScopeTagCounts,
+    includeScopeSourceOptions,
     manualRefreshKey,
   ])
 
@@ -998,6 +1062,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     refreshTotalLeadCount,
     refetchLeads,
     scopeTagCounts,
+    scopeSourceOptions,
     searchScanTruncated,
     searchHitTotal,
     scopeFetchTruncated,

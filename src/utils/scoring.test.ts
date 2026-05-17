@@ -444,6 +444,32 @@ describe('evaluateLead', () => {
     expect(r.priorityTag).toBe('COLD')
   })
 
+  it('targetField region reads province on evaluation record (alias)', () => {
+    const profile: Pick<ScoringProfile, 'rules' | 'ruleBlocks' | 'thresholds'> = {
+      rules: [],
+      ruleBlocks: [
+        {
+          id: 'b-region',
+          category: 'demographics',
+          label: 'Vùng',
+          targetField: 'region',
+          maxWeight: 20,
+          rows: [
+            {
+              id: 'r1',
+              condition: 'CONTAINS',
+              value: 'ha noi',
+              allocationKind: 'absolute',
+              allocationValue: 12,
+            },
+          ],
+        },
+      ],
+      thresholds: { hotMinScore: 80, warmMinScore: 50 },
+    }
+    expect(evaluateLead({ province: 'TP. Hà Nội' }, profile).calculatedScore).toBe(12)
+  })
+
   it('IN_LIST matches province via master synonyms when buckets include regionEntries', () => {
     const profile = {
       rules: [] as ScoringRule[],

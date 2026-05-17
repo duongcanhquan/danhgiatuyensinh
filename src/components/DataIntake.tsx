@@ -238,7 +238,7 @@ export function DataIntake() {
 
         const importProfile = pickProfileForImport(profiles)
         if (!importProfile) {
-          setBanner('Chưa có Scoring Profile — tạo trong Cài đặt (tab Chấm điểm) trước khi nhập Excel.')
+          setBanner('Chưa có bộ chấm điểm — tạo trong Cài đặt (tab Chấm điểm hồ sơ) trước khi nhập Excel.')
           setBusy(false)
           return
         }

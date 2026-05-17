@@ -13,7 +13,11 @@ import type {
   RuleCategory,
 } from '../types'
 import { inferSignalRuleCategory, mergeSchoolAndProfileCustomSignals, scoringSignalsToEvaluationFlat } from './leadScoringSignals'
+import { evaluationRecordFieldValue } from './leadSemanticFieldValue'
 import { entryMatchesMasterValue, findMasterEntryForListItem } from './masterDataMatch'
+import { profileHasActiveRules } from './scoringProfileUtils'
+
+export { profileHasActiveRules }
 
 /** Ngưỡng mặc định khi profile không cấu hình hoặc giá trị không hợp lệ. */
 export const FIXED_TAG_THRESHOLDS = {
@@ -249,9 +253,7 @@ function augmentLeadDataForScoring(
 }
 
 function getFieldValue(leadData: Record<string, unknown>, targetField: string): string {
-  const v = leadData[targetField]
-  if (v === undefined || v === null) return ''
-  return String(v)
+  return evaluationRecordFieldValue(leadData, targetField)
 }
 
 /**

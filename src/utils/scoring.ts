@@ -12,6 +12,7 @@ export {
   leadToEvaluationRecord,
   legacyRulesToBlocks,
   persistedLeadScoringFields,
+  profileHasActiveRules,
   normalizeSchoolTypeKey,
   resolveTagBands,
   scoreOneBlock,

@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore'
+import { normalizeUserRole } from '../auth/roleUtils'
 import type { VietMyUserProfile } from '../types'
-import { FS_COLLECTIONS, USER_ROLES } from '../types'
+import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 
 function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile | null {
   try {
     const now = Timestamp.now()
-    const roleRaw = String(data.role ?? 'counselor')
-    const allowed = USER_ROLES as readonly string[]
-    const role = allowed.includes(roleRaw)
-      ? (roleRaw as VietMyUserProfile['role'])
-      : 'counselor'
+    const role = normalizeUserRole(String(data.role ?? 'counselor'))
     return {
       id,
       email: String(data.email ?? ''),

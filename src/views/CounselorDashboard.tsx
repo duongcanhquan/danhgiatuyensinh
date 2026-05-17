@@ -128,7 +128,7 @@ function effectiveAssigneeUid(l: Lead): string {
 }
 
 function isElevatedForBulk(role: string | undefined): boolean {
-  return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
+  return role === 'admin' || role === 'super_admin' || role === 'team_lead'
 }
 
 function CounselorLeadListRow({
@@ -552,7 +552,7 @@ export function CounselorDashboard() {
     }, 3200)
   }, [])
 
-  const canBoard = can('dashboard:counselor')
+  const canBoard = can('dashboard:counselor') || can('dashboard:team_lead')
   const canWrite = can('leads:write:self_assigned')
   const canInteract = can('interactions:create:self_assigned')
   const isElevatedLeadScope = isElevatedForBulk(profile?.role)

@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMasterData } from '../hooks/useMasterData'
+import { evaluateLead } from '../utils/scoring'
+import { PROFILE_SCORING_SAMPLE_LEAD, profileHasActiveRules } from '../utils/scoringProfileUtils'
+import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
+import { canManagerEditScoringProfile } from '../utils/teamScope'
 import { deleteDoc, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { ChevronRight, CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
@@ -93,6 +98,32 @@ function ProfileEditorPanel({
   /** Thu gọn khối tên / mặc định / HOT·WARM / mô tả — dễ tập trung vào canvas (đặc biệt toàn màn). */
   const [metaCollapsed, setMetaCollapsed] = useState(false)
   const isDefaultProfile = Boolean(profile.isDefaultForImport)
+  const {
+    regionLabels,
+    highSchoolLabels,
+    majorLabels,
+    academicPerformanceLabels,
+    byKind,
+    catalogs,
+  } = useMasterData()
+  const masterBuckets = useMemo(
+    () => ({
+      regionLabels,
+      highSchoolLabels,
+      majorLabels,
+      academicPerformanceLabels,
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
+    }),
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
+  )
+  const samplePreview = useMemo(
+    () => evaluateLead(PROFILE_SCORING_SAMPLE_LEAD, draft, masterBuckets),
+    [draft, masterBuckets],
+  )
+  const draftHasRules = profileHasActiveRules(draft)
 
   const saveProfile = useCallback(async () => {
     if (!canEditProfile) return
@@ -472,6 +503,25 @@ function ProfileEditorPanel({
         </div>
       </div>
 
+      <div className="shrink-0 rounded-lg border border-slate-200/90 bg-slate-50/90 px-2.5 py-2 text-xs text-slate-800">
+        {!draftHasRules ? (
+          <p className="font-medium text-amber-950">
+            Chưa có quy tắc cộng điểm — kéo mẫu từ thư viện vào canvas, nhập điểm ± từng dòng, rồi bấm{' '}
+            <strong>Lưu profile</strong>. Trên danh sách hồ sơ, chọn đúng bộ chấm điểm này để xem điểm tích lũy.
+          </p>
+        ) : (
+          <p>
+            <span className="font-semibold text-slate-900">Xem trước (hồ sơ mẫu):</span>{' '}
+            điểm <strong className="tabular-nums text-emerald-800">{samplePreview.calculatedScore}</strong> · nhãn{' '}
+            <strong>{samplePreview.priorityTag}</strong>
+            <span className="text-slate-600">
+              {' '}
+              — áp dụng ngay trên màn Hồ sơ sau khi lưu; điểm cột bảng = quy tắc khớp dữ liệu thật từng lead.
+            </span>
+          </p>
+        )}
+      </div>
+
       {canEditProfile ? (
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1.5">
           <button
@@ -517,7 +567,9 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
   const { ruleLibraryTemplates, error: templatesError } = useScoringRuleTemplates()
   const canManageAll = can('config:scoring_rules')
   const canManageOwn = can('config:scoring_profiles_own')
-  const canAccessProfiles = canManageAll || canManageOwn
+  const canManageTeam = can('config:scoring_profiles_team')
+  const canAccessProfiles = canManageAll || canManageOwn || canManageTeam
+  const { users: directoryUsers } = useCounselorDirectory()
   const sessionUid = profile?.id ?? null
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -552,12 +604,16 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
 
   const canEditSelected = Boolean(
     selectedProfile &&
-      (canManageAll || (canManageOwn && sessionUid && selectedProfile.createdBy === sessionUid)),
+      (canManageAll ||
+        (canManageOwn && sessionUid && selectedProfile.createdBy === sessionUid) ||
+        (canManageTeam &&
+          profile &&
+          canManagerEditScoringProfile(profile, selectedProfile.createdBy, directoryUsers))),
   )
 
   const createProfile = useCallback(async () => {
     if (!canAccessProfiles) return
-    if (!canManageAll && !sessionUid?.trim()) {
+    if (!canManageAll && !canManageTeam && !sessionUid?.trim()) {
       setSaveMsg('Chưa xác định được tài khoản — không thể tạo profile cá nhân.')
       return
     }
@@ -570,14 +626,18 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
         ...emptyProfileDraft(),
         createdAt: t,
         updatedAt: t,
-        ...(canManageAll ? {} : { createdBy: sessionUid!.trim() }),
+        ...(sessionUid?.trim()
+          ? { createdBy: sessionUid.trim() }
+          : canManageAll
+            ? {}
+            : {}),
       }
       await setDoc(doc(db, FS_COLLECTIONS.scoringProfiles, id), payload)
       setSelectedId(id)
     } finally {
       setBusy(false)
     }
-  }, [db, canAccessProfiles, canManageAll, sessionUid])
+  }, [db, canAccessProfiles, canManageAll, canManageTeam, sessionUid])
 
   return (
     <section
@@ -609,9 +669,11 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             Bạn chỉ được xem — chưa có quyền tạo hay chỉnh bộ chấm điểm. Liên hệ quản trị nếu cần quyền TVV (profile riêng) hoặc quản trị toàn phần.
           </p>
         ) : null}
-        {canAccessProfiles && canManageOwn && !canManageAll ? (
+        {canAccessProfiles && (canManageOwn || canManageTeam) && !canManageAll ? (
           <p className="mt-3 shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs leading-snug text-sky-950">
-            Profile <strong>toàn trường</strong> (không gắn chủ) hoặc của đồng nghiệp: chỉ xem và áp dụng khi chấm điểm — không lưu hay xóa. Bạn chỉnh được các profile <strong>do bạn tạo</strong> (nhãn «Của bạn» trong danh sách).
+            Profile toàn trường hoặc của đồng nghiệp ngoài nhóm: chỉ xem và chọn khi chấm điểm. Bạn sửa được profile{' '}
+            <strong>do bạn tạo</strong>
+            {canManageTeam ? ' hoặc do TVV trong nhóm bạn quản lý' : ''} (nhãn «Của bạn» / TVV nhóm).
           </p>
         ) : null}
         {error ? (

@@ -9,7 +9,9 @@ import {
 import { doc, getDoc, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { AuthState, Permission, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
-import { defaultPermissionsForRole, hasPermission } from '../auth/permissions'
+import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
+import { normalizeUserRole } from '../auth/roleUtils'
+import { isUserInManagerTeamScope } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
 import { ensureDefaultFirestoreData } from '../services/firestoreBootstrap'
@@ -39,7 +41,7 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
     id: uid,
     email: String(d.email ?? user.email ?? ''),
     displayName: String(d.displayName ?? user.displayName ?? ''),
-    role: (d.role as UserRole) ?? 'counselor',
+    role: normalizeUserRole(String(d.role ?? 'counselor')),
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
     managedMajorIds: d.managedMajorIds as string[] | undefined,
@@ -117,10 +119,12 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
   }
 
   const data = snap.data() as Record<string, unknown>
-  let role = (data.role as UserRole) ?? 'counselor'
+  let role = normalizeUserRole(String(data.role ?? 'counselor'))
   if (isSuper && role !== 'super_admin') {
     role = 'super_admin'
     await updateDoc(ref, { role: 'super_admin', updatedAt: now })
+  } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {
+    await updateDoc(ref, { role: 'team_lead', updatedAt: now })
   }
   return mapProfileFromDoc(user.uid, user, { ...data, role })
 }
@@ -180,10 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsub()
   }, [])
 
-  const permissions = useMemo(() => {
-    if (!profile) return [] as const
-    return defaultPermissionsForRole(profile.role)
-  }, [profile])
+  const permissions = useMemo(() => resolveEffectivePermissions(profile), [profile])
 
   const can = useCallback((p: Permission) => hasPermission(permissions, p), [permissions])
 
@@ -210,9 +211,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
       displayName: string
       role: UserRole
+      managedCounselorIds?: string[]
     }) => {
-      if (!hasPermission(permissions, 'config:users')) {
-        throw new Error('Chỉ quản trị mới được thêm nhân sự.')
+      const canAll = hasPermission(permissions, 'config:users')
+      const canTeam = hasPermission(permissions, 'config:users:team')
+      if (!canAll && !canTeam) {
+        throw new Error('Bạn không có quyền thêm nhân sự.')
+      }
+      if (canTeam && !canAll) {
+        if (input.role !== 'counselor') {
+          throw new Error('Quản lý nhóm chỉ được tạo tài khoản tư vấn viên.')
+        }
       }
       if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
         throw new Error('Chỉ Siêu quản trị mới được tạo tài khoản Siêu quản trị.')
@@ -224,16 +233,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cred = await createUserWithEmailAndPassword(secondary.auth, email, input.password)
       await secondary.signOutSecondary()
       const now = Timestamp.now()
+      const teamMeta =
+        canTeam && !canAll && profile
+          ? {
+              ...(profile.departmentId ? { departmentId: profile.departmentId } : {}),
+              ...(profile.professionUnitId ? { professionUnitId: profile.professionUnitId } : {}),
+            }
+          : {}
+      const normalizedRole = normalizeUserRole(input.role)
       await setDoc(doc(db, FS_COLLECTIONS.users, cred.user.uid), {
         email,
         displayName: input.displayName.trim() || email.split('@')[0],
-        role: input.role,
+        role: normalizedRole,
         isActive: true,
         createdAt: now,
         updatedAt: now,
+        ...teamMeta,
+        ...(normalizedRole === 'team_lead' && input.managedCounselorIds?.length
+          ? { managedCounselorIds: input.managedCounselorIds.filter(Boolean).slice(0, 60) }
+          : {}),
       })
     },
-    [permissions, profile?.role],
+    [permissions, profile],
   )
 
   const updateStaffProfile = useCallback(
@@ -243,9 +264,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role?: UserRole
       isActive?: boolean
       allowLlmAndAiTasks?: boolean
+      managedCounselorIds?: string[]
     }) => {
-      if (!hasPermission(permissions, 'config:users')) {
-        throw new Error('Chỉ quản trị mới được sửa nhân sự.')
+      const canAll = hasPermission(permissions, 'config:users')
+      const canTeam = hasPermission(permissions, 'config:users:team')
+      if (!canAll && !canTeam) {
+        throw new Error('Bạn không có quyền sửa nhân sự.')
       }
       const db = getFirestoreDb()
       if (!db) throw new Error('Firestore chưa cấu hình.')
@@ -257,6 +281,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!snap.exists()) throw new Error('Không tìm thấy users/{uid}.')
       const data = snap.data() as Record<string, unknown>
       const currentRole = (data.role as UserRole) ?? 'counselor'
+
+      if (canTeam && !canAll && profile) {
+        const targetProfile = mapProfileFromDoc(uid, firebaseUser!, data)
+        if (!isUserInManagerTeamScope(profile, targetProfile, [targetProfile])) {
+          throw new Error('Chỉ được sửa tư vấn viên trong nhóm bạn quản lý.')
+        }
+        if (input.role !== undefined && input.role !== 'counselor') {
+          throw new Error('Quản lý nhóm không đổi vai trò sang quản trị.')
+        }
+      }
 
       if (currentRole === 'super_admin' && profile?.role !== 'super_admin') {
         throw new Error('Chỉ Siêu quản trị mới chỉnh được tài khoản Siêu quản trị khác.')
@@ -284,9 +318,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const patch: Record<string, unknown> = { updatedAt: Timestamp.now() }
       if (input.displayName !== undefined) patch.displayName = input.displayName.trim()
-      if (input.role !== undefined) patch.role = input.role
+      if (input.role !== undefined) patch.role = normalizeUserRole(input.role)
       if (input.isActive !== undefined) patch.isActive = input.isActive
       if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
+      if (input.managedCounselorIds !== undefined) {
+        patch.managedCounselorIds = input.managedCounselorIds.filter(Boolean).slice(0, 60)
+      }
       await updateDoc(ref, patch)
     },
     [permissions, firebaseUser?.uid, profile?.role],

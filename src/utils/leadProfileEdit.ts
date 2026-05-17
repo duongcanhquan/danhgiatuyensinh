@@ -1,4 +1,4 @@
-import type { Lead } from '../types'
+import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from '../types'
 
 /** Trường chỉnh trên panel chi tiết — đồng bộ Firestore + chấm điểm qua `leadToEvaluationRecord`. */
 export type LeadCoreDraft = {
@@ -105,6 +105,14 @@ export function isCoreDraftDirty(before: Lead, draft: LeadCoreDraft): boolean {
   return Object.keys(buildLeadCoreFirestorePatch(before, draft)).length > 0
 }
 
+/** Trường CRM / nhãn chấm điểm trên panel — đồng bộ với playbook & tri thức khi chưa lưu. */
+export type LeadDetailMatchOverrides = {
+  priorityTag?: PriorityTag
+  calculatedScore?: number
+  status?: LeadCounselorStatus
+  pipelineStatus?: LeadPipelineStatus
+}
+
 /** Gộp bản nháp form vào lead — dùng preview chấm điểm trước khi lưu. */
 export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
   return {
@@ -133,5 +141,22 @@ export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
     profileNote1: norm(draft.profileNote1) || undefined,
     profileNote2: norm(draft.profileNote2) || undefined,
     otherAttentionNotes: norm(draft.otherAttentionNotes) || undefined,
+  }
+}
+
+/** Lead dùng khớp playbook / tri thức / kịch bản — gồm form hồ sơ + nhãn preview + CRM chưa lưu. */
+export function mergeLeadDetailPreview(
+  lead: Lead,
+  draft: LeadCoreDraft,
+  overrides?: LeadDetailMatchOverrides,
+): Lead {
+  const merged = mergeCoreDraftIntoLead(lead, draft)
+  if (!overrides) return merged
+  return {
+    ...merged,
+    ...(overrides.priorityTag !== undefined ? { priorityTag: overrides.priorityTag } : {}),
+    ...(overrides.calculatedScore !== undefined ? { calculatedScore: overrides.calculatedScore } : {}),
+    ...(overrides.status !== undefined ? { status: overrides.status } : {}),
+    ...(overrides.pipelineStatus !== undefined ? { pipelineStatus: overrides.pipelineStatus } : {}),
   }
 }

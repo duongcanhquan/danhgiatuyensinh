@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { canAccessSettingsPage } from '../auth/permissions'
 import type { Permission } from '../types'
 import { USER_ROLE_LABELS } from '../types'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
@@ -22,7 +23,8 @@ import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
 
 type NavDef = { to: string; label: string; icon: LucideIcon; perm?: Permission }
 
-function navAllowed(item: NavDef, can: (p: Permission) => boolean) {
+function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: readonly Permission[]) {
+  if (item.to === '/settings') return canAccessSettingsPage(permissions)
   return !item.perm || can(item.perm)
 }
 
@@ -36,7 +38,7 @@ const mainNav: NavDef[] = [
 ]
 
 export function Layout() {
-  const { profile, firebaseUser, can, signOut } = useAuth()
+  const { profile, firebaseUser, can, signOut, permissions } = useAuth()
   const location = useLocation()
   const showSignOut = Boolean(isFirebaseConfigured() && getFirebaseAuth() && firebaseUser)
 
@@ -60,7 +62,7 @@ export function Layout() {
     setMobileNavOpen(false)
   }, [location.pathname])
 
-  const navItems = mainNav.filter((item) => navAllowed(item, can))
+  const navItems = mainNav.filter((item) => navAllowed(item, can, permissions))
 
   const navLinkClass = (isActive: boolean, compact: boolean) =>
     [

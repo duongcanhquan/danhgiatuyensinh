@@ -20,16 +20,12 @@ export type DocumentId = string
 //    - May create Interactions & counselor notes for those leads only
 //    - May read ConsultingPlaybooks (global playbook library; matching is server/client logic)
 //
-// 2) Head of Profession / Trưởng ngành
-//    - Manages counselors (membership via `managedCounselorIds` OR `professionUnitId` graph — choose one model in Phase 2)
-//    - Reads Leads for counselors in scope; reads their Interactions for QA dashboards
-//    - Does NOT mutate global ScoringRules / MasterData unless also Admin (recommended: separate permission)
+// 2) Trưởng nhóm (`team_lead`)
+//    - Quản lý / cập nhật hồ sơ TVV trong nhóm (`managedCounselorIds`); đổi TVV; profile nhóm; mẫu tư vấn
+//    - Không: master data toàn trường, Tri thức/LLM engine, nhân sự admin
+//    - Legacy Firestore: `head_of_profession` / `head_of_department` → đọc như `team_lead`
 //
-// 3) Head of Department / Trưởng khoa
-//    - Scoped to `departmentId` + `managedMajorIds`
-//    - Reads Leads intersecting department majors; department-level analytics
-//
-// 4) Admin / Principal
+// 3) Admin / Principal
 //    - Full configuration: ScoringRules, MasterData, Playbook Builder, routing policies
 //
 // Enforcement: combine Firestore Security Rules + App checks; types here document intent.
@@ -38,8 +34,7 @@ export type DocumentId = string
 export const USER_ROLES = [
   'super_admin',
   'counselor',
-  'head_of_profession',
-  'head_of_department',
+  'team_lead',
   'admin',
 ] as const
 
@@ -49,8 +44,7 @@ export type UserRole = (typeof USER_ROLES)[number]
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   super_admin: 'Siêu quản trị',
   counselor: 'Tư vấn viên',
-  head_of_profession: 'Trưởng ngành',
-  head_of_department: 'Trưởng khoa',
+  team_lead: 'Trưởng nhóm',
   admin: 'Quản trị / Hiệu trưởng',
 }
 
@@ -63,13 +57,13 @@ export interface VietMyUserProfile {
   email: string
   displayName: string
   role: UserRole
-  /** Trưởng khoa: khoa quản lý */
+  /** Legacy / tùy chọn: khoa (fallback lọc TVV nếu chưa có `managedCounselorIds`). */
   departmentId?: DocumentId
-  /** Trưởng ngành: đơn vị nghiệp vụ / khối ngành */
+  /** Legacy / tùy chọn: đơn vị ngành. */
   professionUnitId?: DocumentId
-  /** Trưởng khoa: các ngành thuộc phạm vi */
+  /** Legacy: các ngành — fallback lọc hồ sơ theo `educationLevel` nếu chưa có TVV trong `managedCounselorIds`. */
   managedMajorIds?: DocumentId[]
-  /** Trưởng ngành: danh sách counselor do mình quản lý (denormalized snapshot) */
+  /** Trưởng nhóm: danh sách UID tư vấn viên trong nhóm (ưu tiên khi lọc hồ sơ). */
   managedCounselorIds?: UserId[]
   /** Counselor: chuyên môn ưu tiên để routing IT → IT counselor, v.v. */
   specialtyMajorIds?: DocumentId[]
@@ -82,6 +76,13 @@ export interface VietMyUserProfile {
    * Siêu quản trị không cần cờ này.
    */
   allowLlmAndAiTasks?: boolean
+  /**
+   * Bổ sung quyền ngoài ma trận vai trò (gán trên Firestore `users/{uid}` — thường do Siêu quản trị).
+   * Firestore Rules vẫn là nguồn chân lý; UI chỉ mở rộng tính năng khi Rules cho phép.
+   */
+  extraPermissions?: Permission[]
+  /** Thu hồi quyền so với ma trận vai trò (ưu tiên hơn `extraPermissions`). */
+  deniedPermissions?: Permission[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -99,28 +100,35 @@ export interface VietMyCustomClaims {
 
 export const PERMISSIONS = [
   'leads:read:self_assigned',
-  'leads:read:profession_scope',
-  'leads:read:department_scope',
+  'leads:read:team_scope',
   'leads:read:global',
   'leads:write:self_assigned',
+  /** Trưởng nhóm: sửa hồ sơ thuộc TVV trong phạm vi quản lý. */
+  'leads:write:team_scope',
   /** TVV: chuyển hồ sơ đang gán cho mình sang TVV khác (cần Firestore Rules cho phép ghi `assignedTo`). */
   'leads:reassign:peer',
+  /** Trưởng nhóm: đổi TVV cho hồ sơ trong nhóm. */
+  'leads:reassign:team',
   'interactions:create:self_assigned',
-  'interactions:read:profession_scope',
-  'interactions:read:department_scope',
+  /** Trưởng nhóm: ghi tương tác trên hồ sơ TVV trong nhóm. */
+  'interactions:create:team_scope',
+  'interactions:read:team_scope',
   'dashboard:counselor',
-  'dashboard:head_of_profession',
-  'dashboard:head_of_department',
+  'dashboard:team_lead',
   'config:scoring_rules',
   /**
    * TVV: tạo / sửa / xóa profile chấm điểm **do chính mình tạo** (`createdBy` = uid).
    * Profile toàn trường (không `createdBy` hoặc `createdBy` khác) chỉ xem — không ghi đè profile người khác.
    */
   'config:scoring_profiles_own',
+  /** Trưởng nhóm: tạo & sửa profile chấm điểm của TVV trong nhóm (`managedCounselorIds`). */
+  'config:scoring_profiles_team',
   'config:master_data',
   'config:playbooks',
   'config:routing_policies',
   'config:users',
+  /** Trưởng nhóm: quản lý TVV trong phạm vi (không tạo admin). */
+  'config:users:team',
   'data:intake',
   'ai:use',
   /** Chỉ Siêu quản trị: lưu khóa API LLM + AI Gatekeeper (localStorage trên trình duyệt). */

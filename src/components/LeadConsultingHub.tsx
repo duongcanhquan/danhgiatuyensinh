@@ -1,17 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Bot, GraduationCap, Library } from 'lucide-react'
-import type { ConsultingPlaybook, Lead } from '../types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BookOpen, Bot, GraduationCap, LayoutDashboard, Library } from 'lucide-react'
+import type { ConsultingPlaybook, Lead, PriorityTag } from '../types'
+import type { InfoScoreRuntime } from '../utils/infoScoreRules'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
-import { playbooksMatchingLead } from '../utils/playbookMatch'
+import { countLeadRelevantKnowledge } from '../utils/knowledgeRag'
+import { snippetMatchesLead } from '../utils/scriptEngine'
+import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
 import { LeadPlaybookPanel } from './LeadPlaybookPanel'
 import { LeadKnowledgePanel } from './LeadKnowledgePanel'
 import { ConsultingAssistantPanel } from './ConsultingAssistantPanel'
+import { LeadConsultingOverviewPanel } from './LeadConsultingOverviewPanel'
 
-export type ConsultingHubTab = 'playbook' | 'knowledge' | 'scripts' | 'general'
+export type ConsultingHubTab = 'overview' | 'playbook' | 'knowledge' | 'scripts' | 'general'
 
 const TAB_META: { id: ConsultingHubTab; label: string; icon: typeof BookOpen }[] = [
+  { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'playbook', label: 'Playbook', icon: BookOpen },
   { id: 'knowledge', label: 'Tri thức', icon: Library },
   { id: 'scripts', label: 'Kịch bản', icon: Bot },
@@ -22,25 +27,47 @@ export function LeadConsultingHub({
   lead,
   playbooks,
   showDraftHint,
-  initialTab = 'playbook',
+  initialTab = 'overview',
   canRunAssistant,
+  infoScoreRuntime,
+  priorityTag,
+  calculatedScore,
+  onGoToProfile,
+  onGoToAi,
 }: {
   lead: Lead
   playbooks: ConsultingPlaybook[]
   showDraftHint?: boolean
   initialTab?: ConsultingHubTab
   canRunAssistant?: boolean
+  infoScoreRuntime?: InfoScoreRuntime | null
+  priorityTag?: PriorityTag
+  calculatedScore?: number
+  onGoToProfile?: () => void
+  onGoToAi?: () => void
 }) {
   const [tab, setTab] = useState<ConsultingHubTab>(initialTab)
+  const [knowledgeFocusId, setKnowledgeFocusId] = useState<string | null>(null)
 
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab])
+
   const { documents } = useKnowledgeDocuments()
   const { categories } = useKnowledgeCategories()
   const { snippets, loading: scriptsLoading, error: scriptsError } = useScriptSnippets()
 
-  const playbookMatches = useMemo(() => playbooksMatchingLead(lead, playbooks), [lead, playbooks])
+  const insights = useMemo(
+    () =>
+      buildLeadConsultingInsights(lead, playbooks, documents, {
+        infoScoreRuntime,
+        priorityTag,
+        calculatedScore,
+      }),
+    [lead, playbooks, documents, infoScoreRuntime, priorityTag, calculatedScore],
+  )
+
+  const playbookMatches = insights.playbookMatches
   const generalPlaybooks = useMemo(
     () => playbookMatches.filter((m) => m.kind === 'all'),
     [playbookMatches],
@@ -54,15 +81,38 @@ export function LeadConsultingHub({
     [snippets],
   )
 
+  const knowledgeRelevantCount = useMemo(
+    () => countLeadRelevantKnowledge(lead, documents),
+    [lead, documents],
+  )
+  const matchedScripts = useMemo(
+    () => snippets.filter((s) => s.isActive !== false && snippetMatchesLead(lead, s)),
+    [snippets, lead],
+  )
+
   const tabCounts: Record<ConsultingHubTab, number> = useMemo(
     () => ({
+      overview: insights.infoGaps.length,
       playbook: playbookMatches.length,
-      knowledge: documents.length,
-      scripts: snippets.filter((s) => s.isActive !== false).length,
+      knowledge: knowledgeRelevantCount,
+      scripts: matchedScripts.length,
       general: generalPlaybooks.length + generalKnowledge.length + generalScripts.length,
     }),
-    [playbookMatches.length, documents.length, snippets, generalPlaybooks.length, generalKnowledge.length, generalScripts.length],
+    [
+      insights.infoGaps.length,
+      playbookMatches.length,
+      knowledgeRelevantCount,
+      matchedScripts.length,
+      generalPlaybooks.length,
+      generalKnowledge.length,
+      generalScripts.length,
+    ],
   )
+
+  const navigateTab = useCallback((next: ConsultingHubTab, opts?: { knowledgeDocId?: string }) => {
+    if (opts?.knowledgeDocId) setKnowledgeFocusId(opts.knowledgeDocId)
+    setTab(next)
+  }, [])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -89,6 +139,20 @@ export function LeadConsultingHub({
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
+        {tab === 'overview' ? (
+          <LeadConsultingOverviewPanel
+            lead={lead}
+            playbooks={playbooks}
+            knowledgeDocs={documents}
+            infoScoreRuntime={infoScoreRuntime}
+            priorityTag={priorityTag}
+            calculatedScore={calculatedScore}
+            showDraftHint={showDraftHint}
+            onNavigateTab={navigateTab}
+            onGoToProfile={onGoToProfile}
+            onGoToAi={onGoToAi}
+          />
+        ) : null}
         {tab === 'playbook' ? (
           <LeadPlaybookPanel lead={lead} playbooks={playbooks} showDraftHint={showDraftHint} />
         ) : null}
@@ -98,6 +162,8 @@ export function LeadConsultingHub({
             documents={documents}
             categories={categories}
             showDraftHint={showDraftHint}
+            initialSelectedId={knowledgeFocusId}
+            quickSearchTerms={insights.quickSearchTerms}
           />
         ) : null}
         {tab === 'scripts' && canRunAssistant ? (

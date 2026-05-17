@@ -15,6 +15,7 @@ export type AuthContextValue = AuthState & {
     password: string
     displayName: string
     role: UserRole
+    managedCounselorIds?: string[]
   }) => Promise<void>
   /**
    * Admin: cập nhật `users/{userId}` (tên, vai trò, hoạt động).
@@ -27,6 +28,7 @@ export type AuthContextValue = AuthState & {
     isActive?: boolean
     /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
     allowLlmAndAiTasks?: boolean
+    managedCounselorIds?: string[]
   }) => Promise<void>
   /**
    * Admin: gửi email «đặt lại mật khẩu» (Firebase Auth) tới địa chỉ đã đăng ký.

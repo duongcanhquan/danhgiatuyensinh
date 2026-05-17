@@ -1,4 +1,4 @@
-﻿import type { MouseEvent, ReactNode } from 'react'
+﻿import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
@@ -22,6 +22,7 @@ import type {
   PriorityTag,
   ProfileCustomScoringSignal,
   ScoringProfile,
+  ScriptSnippet,
   VietMyUserProfile,
 } from '../types'
 import {
@@ -38,7 +39,9 @@ import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
-import { isAdminLikeRole } from '../auth/roleUtils'
+import { canReassignTeamLeads, canWriteLead, hasGlobalLeadFilters } from '../auth/leadAccess'
+import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
+import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { TagBadge } from '../components/TagBadge'
 import { playbooksMatchingLead } from '../utils/playbookMatch'
@@ -47,6 +50,7 @@ import {
   evaluateLead,
   leadToEvaluationRecord,
   persistedLeadScoringFields,
+  profileHasActiveRules,
   type MasterDataBuckets,
 } from '../utils/scoring'
 import {
@@ -61,7 +65,7 @@ import {
   loadAiGatekeeperFromStorage,
   mergeGatekeeperConfig,
 } from '../utils/aiGatekeeper'
-import { buildLeadContextualRagBlock } from '../utils/knowledgeRag'
+import { buildLeadContextualRagBlock, countLeadRelevantKnowledge } from '../utils/knowledgeRag'
 import { buildPlaybookContextBlock } from '../utils/counselingAiDefaults'
 import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
@@ -76,6 +80,7 @@ import {
   isCoreDraftDirty,
   leadToCoreDraft,
   mergeCoreDraftIntoLead,
+  mergeLeadDetailPreview,
 } from '../utils/leadProfileEdit'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -134,10 +139,6 @@ const EVALUATION_TAGS = [
 const ML_WIN_COLUMN_HINT =
   'Äiá»ƒm thÃ´ng tin = Ä‘á»™ Ä‘áº§y dá»¯ liá»‡u tÄ©nh trÃªn há»“ sÆ¡ (Ä‘iá»ƒm ná»n + cÃ¡c tiÃªu chÃ­ báº­t vÃ  khá»›p; káº¹p minâ€“max theo CÃ i Ä‘áº·t â†’ Äiá»ƒm thÃ´ng tin). BÃ¡m theo 20 cá»™t Excel quy chuáº©n + tiÃªu chÃ­ má»Ÿ rá»™ng (educationLevel, description) náº¿u báº­t. CÃ³ thá»ƒ ghi Ä‘Ã¨ tá»«ng lead trÃªn Firestore (mlWinProbability + mlExplanation). Äáº·t chuá»™t lÃªn vÃ²ng % Ä‘á»ƒ xem báº£ng chi tiáº¿t.'
 
-function isElevatedForAdminFilters(role: string | undefined): boolean {
-  return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
-}
-
 type AdminDateField = 'created' | 'updated' | 'imported'
 
 function parseIsoDayStartMs(iso: string): number | null {
@@ -192,7 +193,7 @@ export function LeadManagement() {
     academicPerformanceLabels,
     catalogs,
   } = useMasterData()
-  const { profile, can, canRunLlmAnalysis } = useAuth()
+  const { profile, permissions, can, canRunLlmAnalysis } = useAuth()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
@@ -206,6 +207,7 @@ export function LeadManagement() {
     | 'phone'
     | 'educationLevel'
     | 'province'
+    | 'source'
     | 'score'
     | 'mlWin'
     | 'priorityTag'
@@ -213,7 +215,7 @@ export function LeadManagement() {
   >('none')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  const showAdminGlobalFilters = isElevatedForAdminFilters(profile?.role)
+  const showAdminGlobalFilters = hasGlobalLeadFilters(permissions)
   const [adminUploaderIds, setAdminUploaderIds] = useState<string[]>([])
   const [adminRegions, setAdminRegions] = useState<string[]>([])
   const [adminTags, setAdminTags] = useState<PriorityTag[]>([])
@@ -332,6 +334,7 @@ export function LeadManagement() {
     setPage,
     scopeFetchTruncated,
     scopeTagCounts,
+    scopeSourceOptions,
     applyLocalLeadPatch,
     refetchLeads,
   } = useLeads({
@@ -341,6 +344,7 @@ export function LeadManagement() {
     dataMode: tagClientEval ? 'fullScope' : 'paged',
     maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
+    includeScopeSourceOptions: true,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -366,6 +370,12 @@ export function LeadManagement() {
     scoreByLeadId,
     schoolTvvSignalDefs,
   } = useLeadScoring(leads)
+
+  const scoringProfileRulesWarning = useMemo(() => {
+    if (profilesLoading || !activeScoringProfile) return null
+    if (profileHasActiveRules(activeScoringProfile)) return null
+    return 'Bộ chấm điểm đang chọn chưa có quy tắc cộng điểm — vào Cài đặt → Chấm điểm hồ sơ, kéo mẫu vào canvas và Lưu profile.'
+  }, [profilesLoading, activeScoringProfile])
 
   const effectiveLeadTag = useCallback(
     (l: Lead) => (activeScoringProfile ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag) : l.priorityTag),
@@ -402,15 +412,22 @@ export function LeadManagement() {
 
   const reassignPickList = useMemo(() => {
     const base = counselorUsers
-    const elevated = isElevatedForAdminFilters(profile?.role)
-    if (!elevated) return base
-    const extras = directoryUsers.filter(
-      (u) => u.isActive && isAdminLikeRole(u.role) && !base.some((c) => c.id === u.id),
-    )
-    return [...base, ...extras].sort((a, b) =>
-      formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
-    )
-  }, [counselorUsers, directoryUsers, profile?.role])
+    if (hasGlobalLeadFilters(permissions)) {
+      const extras = directoryUsers.filter(
+        (u) => u.isActive && isAdminLikeRole(u.role) && !base.some((c) => c.id === u.id),
+      )
+      return [...base, ...extras].sort((a, b) =>
+        formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
+      )
+    }
+    if (profile && isTeamLeadRole(profile.role)) {
+      const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
+      return base
+        .filter((c) => team.has(c.id))
+        .sort((a, b) => formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'))
+    }
+    return base
+  }, [counselorUsers, directoryUsers, permissions, profile])
 
   const uploaderOptions = useMemo(() => {
     if (showAdminGlobalFilters) {
@@ -535,10 +552,13 @@ export function LeadManagement() {
     }
   }, [openLeadIdFromUrl, db, configured, setSearchParams])
 
-  const isElevatedLeadScope = isElevatedForAdminFilters(profile?.role)
+  const canTeamReassign = canReassignTeamLeads(permissions)
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
-  const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
-  const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
+  const showBulkReassign = canTeamReassign || canPeerReassignLeads
+  const reassignElevated = canTeamReassign
+  const canBulkWrite = Boolean(
+    can('leads:write:self_assigned') || can('leads:write:team_scope') || isAdminLikeRole(profile?.role),
+  )
 
   const selectedWarmCount = useMemo(
     () => leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM').length,
@@ -568,13 +588,14 @@ export function LeadManagement() {
   }, [showAdminGlobalFilters, majorLabels, leads])
 
   const sources = useMemo(() => {
-    const s = new Set<string>()
+    const s = new Set<string>(scopeSourceOptions)
     for (const l of leads) {
       const src = (l.source ?? '').trim()
       if (src) s.add(src)
     }
+    if (sourceFilter !== 'ALL') s.add(sourceFilter)
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
-  }, [leads])
+  }, [leads, scopeSourceOptions, sourceFilter])
 
   const filtered = useMemo(() => {
     const minScore =
@@ -633,6 +654,8 @@ export function LeadManagement() {
           return (a.educationLevel || '').localeCompare(b.educationLevel || '', 'vi') * dir
         case 'province':
           return (a.province || '').localeCompare(b.province || '', 'vi') * dir
+        case 'source':
+          return (a.source || '').localeCompare(b.source || '', 'vi') * dir
         case 'score':
           return (scoreOf(a) - scoreOf(b)) * dir
         case 'mlWin':
@@ -800,7 +823,7 @@ export function LeadManagement() {
     if (sourceFilter !== 'ALL') {
       out.push({
         id: 'source',
-        label: `Nguá»“n: ${sourceFilter.length > 18 ? `${sourceFilter.slice(0, 18)}â€¦` : sourceFilter}`,
+        label: `Nguồn: ${sourceFilter.length > 18 ? `${sourceFilter.slice(0, 18)}…` : sourceFilter}`,
         onClear: () => {
           setSourceFilter('ALL')
           setPage(1)
@@ -977,14 +1000,28 @@ export function LeadManagement() {
 
   const applyBulkReassign = useCallback(async () => {
     if (!db || !profile || !bulkReassignUid || !selectedIds.size) return
-    if (!isElevatedLeadScope && canPeerReassignLeads) {
+    if (!reassignElevated && canPeerReassignLeads) {
       for (const id of selectedIds) {
         const row = leads.find((x) => x.id === id)
         const owner = row?.assignedTo ?? row?.assignedCounselorId
         if (owner !== profile.id) {
           window.alert(
-            'Chá»‰ cÃ³ thá»ƒ Â«Giao viá»‡c hÃ ng loáº¡tÂ» cho cÃ¡c há»“ sÆ¡ Ä‘ang gÃ¡n cho báº¡n. Bá» chá»n há»“ sÆ¡ cá»§a Ä‘á»“ng nghiá»‡p hoáº·c liÃªn há»‡ Admin/TrÆ°á»Ÿng.',
+            'Chỉ có thể «Giao việc hàng loạt» cho các hồ sơ đang gán cho bạn. Bỏ chọn hồ sơ của đồng nghiệp hoặc liên hệ Trưởng nhóm / Quản trị.',
           )
+          return
+        }
+      }
+    }
+    if (reassignElevated && profile && isTeamLeadRole(profile.role)) {
+      const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
+      if (!team.has(bulkReassignUid)) {
+        window.alert('Chỉ được gán cho TVV trong nhóm bạn quản lý.')
+        return
+      }
+      for (const id of selectedIds) {
+        const row = leads.find((x) => x.id === id)
+        if (row && !canWriteLead(profile, row, can, directoryUsers)) {
+          window.alert('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.')
           return
         }
       }
@@ -1037,8 +1074,10 @@ export function LeadManagement() {
     selectedIds,
     leads,
     reassignPickList,
-    isElevatedLeadScope,
+    reassignElevated,
     canPeerReassignLeads,
+    directoryUsers,
+    can,
     activeScoringProfile,
     scoringMasterBuckets,
     schoolTvvSignalDefs,
@@ -1487,6 +1526,11 @@ export function LeadManagement() {
       ) : null}
 
       <section className="app-card-glass-strong space-y-2 p-2 shadow-md sm:p-3">
+        {scoringProfileRulesWarning ? (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs font-medium text-amber-950">
+            {scoringProfileRulesWarning}
+          </p>
+        ) : null}
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
           <details className="group min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white/50 px-2 py-1 shadow-sm open:bg-white/85 sm:px-2.5">
             <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs font-bold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
@@ -1717,15 +1761,18 @@ export function LeadManagement() {
           />
           <FilterSelect
             compact
-            label="Nguá»“n"
-            title="KÃªnh há»“ sÆ¡ Ä‘áº¿n (web, Zalo, giá»›i thiá»‡uâ€¦)."
+            label="Nguồn"
+            title="Kênh hồ sơ đến (web, Zalo, giới thiệu…). Lọc theo trường source trên Firestore."
             value={sourceFilter}
             onChange={(v) => {
               setSourceFilter(v)
               setPage(1)
               mergeListFilterUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
             }}
-            options={[{ v: 'ALL', t: 'Táº¥t cáº£' }, ...sources.map((s) => ({ v: s, t: s }))]}
+            options={[
+              { v: 'ALL', t: 'Tất cả' },
+              ...sources.map((s) => ({ v: s, t: s.length > 36 ? `${s.slice(0, 36)}…` : s })),
+            ]}
           />
           <FilterSelect
             compact
@@ -1971,8 +2018,19 @@ export function LeadManagement() {
                     onClick={() => toggleSort('province')}
                     className="flex items-center gap-1 text-left transition hover:text-amber-700"
                   >
-                    Tá»‰nh / TP
-                    {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span> : null}
+                    Tỉnh / TP
+                    {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
+                  </button>
+                </th>
+                <th className="max-w-[9rem] px-2 py-3 text-sm font-medium normal-case">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('source')}
+                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
+                    title="Nguồn / kênh hồ sơ"
+                  >
+                    Nguồn
+                    {sortKey === 'source' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
                 <th className="max-w-[13rem] px-2 py-3 text-sm font-medium normal-case" title="Ghi chÃº hoáº·c mÃ´ táº£ ngáº¯n trÃªn há»“ sÆ¡">
@@ -2057,7 +2115,7 @@ export function LeadManagement() {
               {loading
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="border-b border-slate-100">
-                      {Array.from({ length: 14 }).map((__, j) => (
+                      {Array.from({ length: 15 }).map((__, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 rounded-md bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 ai-skeleton-shimmer" />
                         </td>
@@ -2067,7 +2125,7 @@ export function LeadManagement() {
                 : null}
               {!loading && !sortedFiltered.length ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={15} className="px-4 py-12 text-center text-slate-500">
                     KhÃ´ng cÃ³ há»“ sÆ¡ khá»›p bá»™ lá»c.
                   </td>
                 </tr>
@@ -2119,7 +2177,13 @@ export function LeadManagement() {
                     {l.parentPhone || 'â€”'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.educationLevel || 'â€”'}</td>
-                  <td className="px-4 py-3 text-slate-600">{l.province || 'â€”'}</td>
+                  <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
+                  <td
+                    className="max-w-[9rem] truncate px-2 py-3 text-slate-600"
+                    title={(l.source ?? '').trim() || undefined}
+                  >
+                    {(l.source ?? '').trim() || '—'}
+                  </td>
                   <td
                     className="max-w-[13rem] truncate px-2 py-3 leading-snug text-slate-600"
                     title={descForTable.trim() ? descForTable : undefined}
@@ -2191,7 +2255,7 @@ export function LeadManagement() {
             <h3 className="app-section-heading">Giao viá»‡c hÃ ng loáº¡t</h3>
             <p className="mt-1 text-sm text-slate-600">
               GÃ¡n tÆ° váº¥n viÃªn má»›i cho {selectedIds.size} há»“ sÆ¡ Ä‘Ã£ chá»n.
-              {!isElevatedLeadScope && canPeerReassignLeads ? (
+              {!reassignElevated && canPeerReassignLeads ? (
                 <span className="mt-1 block font-medium text-amber-800">
                   Báº¡n chá»‰ cÃ³ thá»ƒ chuyá»ƒn cÃ¡c há»“ sÆ¡ Ä‘ang gÃ¡n cho chÃ­nh báº¡n sang Ä‘á»“ng nghiá»‡p (theo quyá»n TVV).
                 </span>
@@ -2572,19 +2636,12 @@ export function LeadManagement() {
               pickListUsers={reassignPickList}
               counselorsLoading={counselorsLoading}
               canReassignLead={showBulkReassign}
-              reassignElevated={isElevatedLeadScope}
+              reassignElevated={reassignElevated}
               scoringMasterBuckets={scoringMasterBuckets}
               schoolTvvSignalDefs={schoolTvvSignalDefs}
-              dynamicAssistantSlot={
-                <ConsultingAssistantPanel
-                  variant="embedded"
-                  showHeader={false}
-                  lead={selected}
-                  snippets={scriptSnippets}
-                  loading={scriptSnippetsLoading}
-                  error={scriptSnippetsErr}
-                />
-              }
+              scriptSnippets={scriptSnippets}
+              scriptSnippetsLoading={scriptSnippetsLoading}
+              scriptSnippetsError={scriptSnippetsErr}
               onClose={closeLeadDetailPanel}
               onUnsavedChange={(dirty) => {
                 leadDetailUnsavedRef.current = dirty
@@ -3056,7 +3113,9 @@ function LeadDetailPanel({
   onClose,
   onUnsavedChange,
   onUpdated,
-  dynamicAssistantSlot,
+  scriptSnippets,
+  scriptSnippetsLoading,
+  scriptSnippetsError,
 }: {
   lead: Lead
   activeScoringProfile: ScoringProfile | null
@@ -3078,15 +3137,13 @@ function LeadDetailPanel({
   /** BÃ¡o parent cÃ³ thay Ä‘á»•i chÆ°a lÆ°u (funnel / ghi chÃº / CRM trÃ¡i) Ä‘á»ƒ onClose há»i xÃ¡c nháº­n. */
   onUnsavedChange?: (dirty: boolean) => void
   onUpdated: (patch: Partial<Lead>) => void
-  /** Trá»£ lÃ½ ká»‹ch báº£n (nhÃºng trong layout fullscreen). */
-  dynamicAssistantSlot?: ReactNode
+  scriptSnippets: ScriptSnippet[]
+  scriptSnippetsLoading: boolean
+  scriptSnippetsError: string | null
 }) {
   const { profile, can, canRunLlmAnalysis } = useAuth()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
-  const canEditScoringSignals =
-    isAdminLikeRole(profile?.role) ||
-    (Boolean(can('leads:write:self_assigned')) &&
-      (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
+  const canEditScoringSignals = canWriteLead(profile, lead, can, pickListUsers)
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions, loading: intLoading } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
@@ -3095,17 +3152,8 @@ function LeadDetailPanel({
   const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
   const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
   const previewLeadForScore = useMemo(() => mergeCoreDraftIntoLead(lead, coreDraft), [lead, coreDraft])
-  const playbookMatches = useMemo(
-    () => playbooksMatchingLead(previewLeadForScore, playbooks),
-    [previewLeadForScore, playbooks],
-  )
-  const playbookMatchCount = playbookMatches.length
-  const consultingHubCount = playbookMatchCount + knowledgeDocs.length
 
-  const openConsultingHub = (tab: ConsultingHubTab) => {
-    setConsultingHubTab(tab)
-    setConsultingHubOpen(true)
-  }
+
   const displayScoring = useMemo(() => {
     if (activeScoringProfile && scoringMasterBuckets) {
       return evaluateLead(
@@ -3137,12 +3185,47 @@ function LeadDetailPanel({
   const crmForForm = crmDirty ?? lead.status
   const [statusDirty, setStatusDirty] = useState<LeadPipelineStatus | null>(null)
   const statusForForm = statusDirty ?? lead.pipelineStatus
+
+  const previewLeadForMatching = useMemo(
+    () =>
+      mergeLeadDetailPreview(lead, coreDraft, {
+        priorityTag: displayScoring.priorityTag,
+        calculatedScore: displayScoring.calculatedScore,
+        status: crmForForm,
+        pipelineStatus: statusForForm,
+      }),
+    [
+      lead,
+      coreDraft,
+      displayScoring.priorityTag,
+      displayScoring.calculatedScore,
+      crmForForm,
+      statusForForm,
+    ],
+  )
+
+  const playbookMatches = useMemo(
+    () => playbooksMatchingLead(previewLeadForMatching, playbooks),
+    [previewLeadForMatching, playbooks],
+  )
+  const playbookMatchCount = playbookMatches.length
+  const knowledgeRelevantCount = useMemo(
+    () => countLeadRelevantKnowledge(previewLeadForMatching, knowledgeDocs),
+    [previewLeadForMatching, knowledgeDocs],
+  )
+  const consultingHubCount = playbookMatchCount + knowledgeRelevantCount
+
+  const openConsultingHub = (tab: ConsultingHubTab) => {
+    setConsultingHubTab(tab)
+    setConsultingHubOpen(true)
+  }
+
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [consultingHubOpen, setConsultingHubOpen] = useState(false)
-  const [consultingHubTab, setConsultingHubTab] = useState<ConsultingHubTab>('playbook')
+  const [consultingHubTab, setConsultingHubTab] = useState<ConsultingHubTab>('overview')
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   useEffect(() => {
@@ -3199,10 +3282,7 @@ function LeadDetailPanel({
     [interactions],
   )
 
-  const showCounselorProgressForm =
-    isAdminLikeRole(profile?.role) ||
-    (Boolean(can('leads:write:self_assigned')) &&
-      (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id)
+  const showCounselorProgressForm = canWriteLead(profile, lead, can, pickListUsers)
 
   /** Khá»‘i phÃ¢n cÃ´ng bÃªn pháº£i áº©n khi TVV peer xem há»“ sÆ¡ khÃ´ng pháº£i cá»§a mÃ¬nh â€” khi Ä‘Ã³ khÃ´ng gá»¡ CRM bÃªn trÃ¡i. */
   const peerModeForCrmBlock = !reassignElevated && Boolean(can('leads:reassign:peer'))
@@ -3464,10 +3544,14 @@ function LeadDetailPanel({
     }
   }
 
-  const leadForAi = previewLeadForScore
+  const leadForAi = previewLeadForMatching
   const contextualRagForRun = useMemo(
     () => buildLeadContextualRagBlock(leadForAi, knowledgeDocs),
     [leadForAi, knowledgeDocs],
+  )
+  const localInstitutionalRag = useMemo(
+    () => buildLeadContextualRagBlock(previewLeadForMatching, knowledgeDocs),
+    [previewLeadForMatching, knowledgeDocs],
   )
   const playbookContextForRun = useMemo(
     () => buildPlaybookContextBlock(playbookMatches.map((m) => m.playbook)),
@@ -3514,7 +3598,8 @@ function LeadDetailPanel({
         extras.priorityTag = displayScoring.priorityTag
       }
       const parsed = await runAIAnalysis(leadForAi, selectedAITask, config, extras, {
-        institutionalRagBlock: contextualRagForRun.trim() || institutionalRagBlock.trim() || undefined,
+        institutionalRagBlock:
+          contextualRagForRun.trim() || localInstitutionalRag.trim() || institutionalRagBlock.trim() || undefined,
         playbookContextBlock: playbookContextForRun || undefined,
       })
       setAiPreview(parsed)
@@ -3658,7 +3743,7 @@ function LeadDetailPanel({
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1.5">
           <button
             type="button"
-            onClick={() => openConsultingHub('playbook')}
+            onClick={() => openConsultingHub('overview')}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600"
           >
             <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
@@ -3669,7 +3754,7 @@ function LeadDetailPanel({
               </span>
             ) : null}
           </button>
-          {dynamicAssistantSlot ? (
+          {!scriptSnippetsLoading ? (
             <>
               <button
                 type="button"
@@ -4036,7 +4121,7 @@ function LeadDetailPanel({
           <button
             type="button"
             className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="ÄÃ³ng cá»­a sá»• playbook"
+            aria-label="Đóng cửa sổ tư vấn & tri thức"
             onClick={() => setConsultingHubOpen(false)}
           />
           <div
@@ -4052,12 +4137,12 @@ function LeadDetailPanel({
                 </span>
                 <div className="min-w-0">
                   <h2 id="lead-playbook-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
-                    Playbook tÆ° váº¥n
+                    Tư vấn & Tri thức
                   </h2>
                   <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">
                     {playbookMatchCount > 0
-                      ? `${playbookMatchCount} playbook khá»›p â€” Ä‘á»c vÃ  há»c táº­p ká»‹ch báº£n tÆ° váº¥n.`
-                      : 'Gá»£i Ã½ chiáº¿n lÆ°á»£c theo há»“ sÆ¡ â€” cáº¥u hÃ¬nh Ä‘iá»u kiá»‡n / tá»« khÃ³a trong CÃ i Ä‘áº·t â†’ TÆ° váº¥n.'}
+                      ? `${playbookMatchCount} playbook khớp — xem điểm yếu, kịch bản và tra cứu tri thức.`
+                      : 'Tổng quan điểm yếu hồ sơ — cấu hình playbook/tri thức trong Cài đặt → Thông tin TV.'}
                   </p>
                 </div>
               </div>
@@ -4067,16 +4152,27 @@ function LeadDetailPanel({
                 className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 <X className="h-4 w-4" aria-hidden />
-                ÄÃ³ng
+                Đóng
               </button>
             </div>
             <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
               <LeadConsultingHub
-                lead={previewLeadForScore}
+                lead={previewLeadForMatching}
                 playbooks={playbooks}
                 showDraftHint={coreDirty}
                 initialTab={consultingHubTab}
-                canRunAssistant={Boolean(dynamicAssistantSlot)}
+                canRunAssistant={!scriptSnippetsLoading}
+                infoScoreRuntime={infoScoreRuntime}
+                priorityTag={displayScoring.priorityTag}
+                calculatedScore={displayScoring.calculatedScore}
+                onGoToProfile={() => {
+                  setConsultingHubOpen(false)
+                  setDetailLeftTab('profile')
+                }}
+                onGoToAi={() => {
+                  setConsultingHubOpen(false)
+                  setLlmPopupOpen(true)
+                }}
               />
             </div>
           </div>
@@ -4202,7 +4298,7 @@ function LeadDetailPanel({
         </>
       ) : null}
 
-      {dynamicAssistantSlot && assistantPopupOpen ? (
+      {!scriptSnippetsLoading && assistantPopupOpen ? (
         <>
           <button
             type="button"
@@ -4251,7 +4347,14 @@ function LeadDetailPanel({
               </button>
             </div>
             <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              {dynamicAssistantSlot}
+              <ConsultingAssistantPanel
+                variant="embedded"
+                showHeader={false}
+                lead={previewLeadForMatching}
+                snippets={scriptSnippets}
+                loading={scriptSnippetsLoading}
+                error={scriptSnippetsError}
+              />
             </div>
           </div>
         </>

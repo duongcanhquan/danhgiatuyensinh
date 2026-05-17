@@ -4,21 +4,33 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { USER_ROLE_LABELS, type UserRole, type VietMyUserProfile } from '../types'
 import { isSuperAdminRole } from '../auth/roleUtils'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { counselorIdsInManagerScope, isUserInManagerTeamScope } from '../utils/teamScope'
 
-const ROLES_BASE: UserRole[] = ['counselor', 'head_of_profession', 'head_of_department', 'admin']
+/** Ba tầng trong form (Siêu QT thêm super_admin). */
+const ROLES_BASE: UserRole[] = ['counselor', 'team_lead', 'admin']
 
-export function StaffManagementView({ embedded = false }: { embedded?: boolean }) {
+export function StaffManagementView({
+  embedded = false,
+  teamScopeOnly = false,
+}: {
+  embedded?: boolean
+  teamScopeOnly?: boolean
+}) {
   const { can, createStaffAccount, updateStaffProfile, sendStaffPasswordResetEmail, profile, firebaseUser } = useAuth()
+  const canStaffAll = can('config:users')
+  const canStaffTeam = can('config:users:team')
   const assignableRoles = useMemo((): UserRole[] => {
+    if (teamScopeOnly) return ['counselor']
     if (profile?.role === 'super_admin') return [...ROLES_BASE, 'super_admin']
     return [...ROLES_BASE]
-  }, [profile?.role])
-  const { users, loading, error: directoryError } = useCounselorDirectory()
+  }, [profile?.role, teamScopeOnly])
+  const { users, loading, error: directoryError, counselors } = useCounselorDirectory()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [role, setRole] = useState<UserRole>('counselor')
+  const [createTeamIds, setCreateTeamIds] = useState<string[]>([])
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -28,27 +40,52 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
   const [editRole, setEditRole] = useState<UserRole>('counselor')
   const [editActive, setEditActive] = useState(true)
   const [editAllowLlm, setEditAllowLlm] = useState(false)
+  const [editTeamIds, setEditTeamIds] = useState<string[]>([])
   const [editBusy, setEditBusy] = useState(false)
   const [resetPwdBusy, setResetPwdBusy] = useState(false)
   const [editMsg, setEditMsg] = useState<string | null>(null)
   const [editErr, setEditErr] = useState<string | null>(null)
 
+  const counselorPickList = useMemo(() => {
+    if (teamScopeOnly && profile) {
+      const team = new Set(counselorIdsInManagerScope(profile, users))
+      return counselors.filter((c) => team.has(c.id))
+    }
+    return counselors
+  }, [counselors, teamScopeOnly, profile, users])
+
   const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => {
+    let list = users
+    if (teamScopeOnly && profile) {
+      const teamIds = new Set(counselorIdsInManagerScope(profile, users))
+      list = users.filter((u) => teamIds.has(u.id))
+    }
+    return [...list].sort((a, b) => {
       const la = (a.displayName || a.email).toLocaleLowerCase('vi')
       const lb = (b.displayName || b.email).toLocaleLowerCase('vi')
       return la.localeCompare(lb, 'vi')
     })
-  }, [users])
+  }, [users, teamScopeOnly, profile])
 
   const selfUid = firebaseUser?.uid ?? profile?.id ?? null
 
-  if (!can('config:users')) {
+  if (!canStaffAll && !canStaffTeam) {
     return (
       <div className="rounded-2xl border border-amber-300/60 bg-amber-50/90 p-6 text-sm text-amber-900">
-        Chỉ quản trị (admin) mới quản lý nhân sự và tạo tài khoản đăng nhập.
+        Bạn không có quyền quản lý nhân sự.
       </div>
     )
+  }
+
+  const teamBanner = teamScopeOnly ? (
+    <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
+      <strong>Trưởng nhóm:</strong> chỉ quản lý TVV trong nhóm; không tạo tài khoản Quản trị / Trưởng nhóm khác.
+    </p>
+  ) : null
+
+  const toggleTeamId = (ids: string[], uid: string, on: boolean) => {
+    if (on) return [...new Set([...ids, uid])]
+    return ids.filter((x) => x !== uid)
   }
 
   const submit = async (e: FormEvent) => {
@@ -57,12 +94,19 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
     setErr(null)
     setBusy(true)
     try {
-      await createStaffAccount({ email, password, displayName, role })
+      await createStaffAccount({
+        email,
+        password,
+        displayName,
+        role,
+        ...(role === 'team_lead' && createTeamIds.length ? { managedCounselorIds: createTeamIds } : {}),
+      })
       setMsg(`Đã tạo tài khoản cho ${email}`)
       setEmail('')
       setPassword('')
       setDisplayName('')
       setRole('counselor')
+      setCreateTeamIds([])
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Không tạo được tài khoản')
     } finally {
@@ -92,12 +136,20 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
     })()
   }
 
+  const canManageUser = (u: VietMyUserProfile) => {
+    if (canStaffAll) return true
+    if (!profile || !teamScopeOnly) return false
+    return isUserInManagerTeamScope(profile, u, users)
+  }
+
   const openEdit = (u: VietMyUserProfile) => {
+    if (!canManageUser(u)) return
     setEditing(u)
     setEditDisplayName(u.displayName || '')
     setEditRole(u.role)
     setEditActive(u.isActive !== false)
     setEditAllowLlm(u.allowLlmAndAiTasks === true)
+    setEditTeamIds(u.managedCounselorIds ?? [])
     setEditMsg(null)
     setEditErr(null)
   }
@@ -115,6 +167,9 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
         displayName: editDisplayName,
         ...(!isSuperAdminRole(editing.role) ? { allowLlmAndAiTasks: editAllowLlm } : {}),
         ...(!isSelf ? { role: editRole, isActive: editActive } : {}),
+        ...(editRole === 'team_lead' || editing.role === 'team_lead'
+          ? { managedCounselorIds: editTeamIds }
+          : {}),
       })
       setEditMsg('Đã lưu thay đổi.')
       setEditing(null)
@@ -137,20 +192,55 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
     }
   }
 
+  const teamMemberPicker = (
+    selected: string[],
+    onChange: (ids: string[]) => void,
+    idPrefix: string,
+  ) => (
+    <fieldset className="mt-3 rounded-xl border border-violet-200/80 bg-violet-50/40 px-3 py-3">
+      <legend className="px-1 text-sm font-medium text-violet-950">TVV trong nhóm</legend>
+      <p className="mb-2 text-xs text-violet-900/90">
+        Chọn tư vấn viên mà trưởng nhóm này quản lý (phạm vi hồ sơ & đổi TVV).
+      </p>
+      {counselorPickList.length === 0 ? (
+        <p className="text-xs text-slate-600">Chưa có TVV trong danh bạ.</p>
+      ) : (
+        <ul className="max-h-40 space-y-1.5 overflow-y-auto text-sm">
+          {counselorPickList.map((c) => (
+            <li key={c.id}>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-white/70">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 accent-violet-600"
+                  checked={selected.includes(c.id)}
+                  onChange={(e) => onChange(toggleTeamId(selected, c.id, e.target.checked))}
+                  id={`${idPrefix}-${c.id}`}
+                />
+                <span className="text-slate-800">{c.displayName || c.email}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </fieldset>
+  )
+
   return (
     <div className="space-y-8">
       {embedded ? null : (
         <header>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Quản lý nhân sự
+            {teamScopeOnly ? 'Nhóm tư vấn' : 'Quản lý nhân sự'}
           </VietMyAccentHeading>
         </header>
       )}
 
+      {teamBanner}
+
       {directoryError ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
           Không đọc được danh sách users: {directoryError}. Kiểm tra Firestore Rules cho collection{' '}
-          <code className="text-xs">users</code> và đúng database (vd. <code className="text-xs">warmlist</code>).
+          <code className="text-xs">users</code>.
         </p>
       ) : null}
 
@@ -190,7 +280,11 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
             Vai trò
             <select
               value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
+              onChange={(e) => {
+                const r = e.target.value as UserRole
+                setRole(r)
+                if (r !== 'team_lead') setCreateTeamIds([])
+              }}
               className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
             >
               {assignableRoles.map((r) => (
@@ -200,6 +294,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
               ))}
             </select>
           </label>
+          {role === 'team_lead' && canStaffAll ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create') : null}
           {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
           {msg ? <p className="mt-3 text-sm text-emerald-700">{msg}</p> : null}
           <button
@@ -222,6 +317,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
               const viewerSuper = profile?.role === 'super_admin'
               const canStaffEdit = !targetSuper || viewerSuper
               const llmOk = targetSuper || u.allowLlmAndAiTasks === true
+              const teamCount = u.managedCounselorIds?.length ?? 0
               return (
                 <li
                   key={u.id}
@@ -236,6 +332,9 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                       <p className="truncate text-xs text-slate-500">{u.email}</p>
                       <p className="mt-0.5 text-xs font-medium text-violet-700">
                         {USER_ROLE_LABELS[u.role]}
+                        {u.role === 'team_lead' && teamCount > 0 ? (
+                          <span className="ml-2 font-normal text-slate-600">· {teamCount} TVV</span>
+                        ) : null}
                         {inactive ? (
                           <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">Đã vô hiệu</span>
                         ) : null}
@@ -248,7 +347,7 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1">
-                      {canStaffEdit ? (
+                      {canStaffEdit && canManageUser(u) ? (
                         <>
                           <button
                             type="button"
@@ -320,7 +419,11 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                 Vai trò
                 <select
                   value={editRole}
-                  onChange={(e) => setEditRole(e.target.value as UserRole)}
+                  onChange={(e) => {
+                    const r = e.target.value as UserRole
+                    setEditRole(r)
+                    if (r !== 'team_lead') setEditTeamIds([])
+                  }}
                   disabled={selfUid === editing.id}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-60"
                 >
@@ -334,10 +437,13 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                   <span className="mt-1 block text-xs text-amber-800">Không đổi vai trò trên chính bạn từ đây.</span>
                 ) : null}
               </label>
+              {editRole === 'team_lead' && canStaffAll
+                ? teamMemberPicker(editTeamIds, setEditTeamIds, 'edit')
+                : null}
               <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 px-3 py-2.5">
                 <p className="text-xs font-medium text-violet-950">Mật khẩu</p>
                 <p className="mt-0.5 text-xs leading-snug text-violet-900/90">
-                  Gửi link đặt lại tới email trên (Firebase). Người dùng mở email và đặt mật khẩu mới.
+                  Gửi link đặt lại tới email trên (Firebase).
                 </p>
                 <button
                   type="button"
@@ -356,13 +462,10 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                   disabled={selfUid === editing.id}
                 />
                 Tài khoản đang hoạt động
-                {selfUid === editing.id ? (
-                  <span className="text-xs text-amber-800">(luôn bật với chính bạn)</span>
-                ) : null}
               </label>
               {isSuperAdminRole(editing.role) ? (
                 <p className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-950">
-                  <strong>Siêu quản trị</strong> luôn được dùng AI trên CRM (không cần bật ô dưới đây).
+                  <strong>Siêu quản trị</strong> luôn được dùng AI trên CRM.
                 </p>
               ) : (
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-violet-200/80 bg-violet-50/50 px-3 py-2.5 text-sm text-slate-800">
@@ -374,11 +477,6 @@ export function StaffManagementView({ embedded = false }: { embedded?: boolean }
                   />
                   <span>
                     <span className="font-semibold text-violet-950">Cho phép dùng AI trên hồ sơ</span>
-                    <span className="mt-0.5 block text-xs font-normal leading-snug text-slate-600">
-                      Khi bật, người này được mở <strong>Phân tích AI</strong> trong chi tiết hồ sơ, chạy{' '}
-                      <strong>phân tích hàng loạt</strong> trên màn Hồ sơ và nút <strong>Tư vấn AI</strong> trong
-                      Cài đặt. Vẫn cần trình duyệt đã <strong>lưu khóa API</strong> (thường do Siêu quản trị lưu trước).
-                    </span>
                   </span>
                 </label>
               )}

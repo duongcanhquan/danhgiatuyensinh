@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { ConfigQuickStartPanel } from './ConfigQuickStartPanel'
 import { addDoc, collection, deleteDoc, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { KnowledgeDocumentType } from '../types'
 import { FS_COLLECTIONS } from '../types'
@@ -32,14 +33,23 @@ const tabBtn =
 export function KnowledgeBaseTab({
   db,
   compactChrome,
+  canEdit = true,
 }: {
   db: Firestore
   /** Bố cục gọn trong workspace toàn màn */
   compactChrome?: boolean
+  /** Quản trị (`config:ai_engine`) — TVV không có quyền này. */
+  canEdit?: boolean
 }) {
   const { documents, loading, error } = useKnowledgeDocuments()
   const { categories, addCategory, removeCategory } = useKnowledgeCategories()
-  const [mainTab, setMainTab] = useState<MainTab>('data')
+  const [mainTab, setMainTab] = useState<MainTab>(() => (documents.length === 0 && canEdit ? 'setup' : 'data'))
+
+  useEffect(() => {
+    if (canEdit && !loading && documents.length === 0 && mainTab === 'data') {
+      setMainTab('setup')
+    }
+  }, [canEdit, loading, documents.length, mainTab])
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
 
   const [title, setTitle] = useState('')
@@ -191,6 +201,10 @@ export function KnowledgeBaseTab({
         compactChrome ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)]',
       ].join(' ')}
     >
+      <p className="shrink-0 border-b border-amber-200/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950 sm:px-4 sm:text-sm">
+        <strong>Tra cứu nhanh:</strong> Tài liệu được xếp theo liên quan hồ sơ trên tab Tri thức (hồ sơ lead). Thêm từ khóa
+        ngành/tỉnh trong tiêu đề hoặc nội dung để TVV tìm dễ hơn.
+      </p>
       <div
         className={['shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2', compactChrome ? 'py-1' : 'py-2'].join(' ')}
         role="tablist"
@@ -252,8 +266,27 @@ export function KnowledgeBaseTab({
         role="tabpanel"
       >
         {mainTab === 'setup' ? (
+          <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            {canEdit ? (
+              <ConfigQuickStartPanel
+                tone="amber"
+                title="Thiết lập Kho tri thức (quản trị)"
+                intro="Tài liệu cho Phân tích AI. Chỉ quản trị chỉnh — TVV tra cứu trên hồ sơ."
+                itemCount={documents.length}
+                steps={[
+                  { label: 'Nạp mẫu', detail: 'Nạp JSON mẫu có sẵn.' },
+                  { label: 'Bổ sung', detail: 'Form hoặc upload.' },
+                  { label: 'Kiểm tra', detail: 'Phân tích AI trên hồ sơ.' },
+                ]}
+              />
+            ) : (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                Bạn không có quyền chỉnh kho tri thức — liên hệ quản trị.
+              </p>
+            )}
           <div className={['grid min-h-0 lg:grid-cols-2 lg:items-start', compactChrome ? 'gap-3' : 'gap-4'].join(' ')}>
             <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            {canEdit ? (
             <div className={['rounded-xl border border-emerald-200/80 bg-emerald-50/60', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
               <p className={`${panelTitle} text-emerald-950`}>Nạp từ bộ mẫu có sẵn (build)</p>
               <p className={`mt-1.5 ${panelSub} text-emerald-950/90`}>
@@ -294,7 +327,9 @@ export function KnowledgeBaseTab({
                 {seedBusy ? 'Đang nạp…' : 'Nạp mẫu từ JSON (public/seed)'}
               </button>
             </div>
+            ) : null}
 
+            {canEdit ? (
             <div className={['rounded-xl border border-sky-200/80 bg-sky-50/50', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
               <p className={`${panelTitle} text-sky-950`}>File mẫu &amp; tải lên từ máy</p>
               <p className={`mt-1.5 ${panelSub} text-sky-950/90`}>
@@ -332,8 +367,10 @@ export function KnowledgeBaseTab({
                 </button>
               </div>
             </div>
+            ) : null}
             </div>
 
+            {canEdit ? (
             <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
             <KnowledgeCategoryManager
               categories={categories}
@@ -408,6 +445,8 @@ export function KnowledgeBaseTab({
             </section>
 
             </div>
+            ) : null}
+          </div>
           </div>
         ) : null}
 

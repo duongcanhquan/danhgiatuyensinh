@@ -10,10 +10,9 @@ describe('parseKnowledgeDocumentsJson', () => {
     expect(rows[0]!.id).toBe('a')
   })
 
-  it('rejects invalid type', () => {
-    expect(() =>
-      parseKnowledgeDocumentsJson([{ id: 'a', title: 'T', type: 'WRONG', content: 'C' }]),
-    ).toThrow()
+  it('uppercases custom type id', () => {
+    const rows = parseKnowledgeDocumentsJson([{ id: 'a', title: 'T', type: 'wrong', content: 'C' }])
+    expect(rows[0]!.type).toBe('WRONG')
   })
 })
 

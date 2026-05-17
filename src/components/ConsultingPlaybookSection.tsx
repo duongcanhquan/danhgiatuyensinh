@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { ConfigQuickStartPanel } from './ConfigQuickStartPanel'
 import { FirebaseError } from 'firebase/app'
 import { addDoc, collection, deleteDoc, doc, Timestamp } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
@@ -178,7 +179,13 @@ export function ConsultingPlaybookSection({
   consultingWorkspaceOpen: boolean
   compactChrome?: boolean
 }) {
-  const [mainTab, setMainTab] = useState<MainTab>('data')
+  const [mainTab, setMainTab] = useState<MainTab>(() => (playbooks.length === 0 && canPlaybooks ? 'setup' : 'data'))
+
+  useEffect(() => {
+    if (canPlaybooks && !loading && playbooks.length === 0 && mainTab === 'data') {
+      setMainTab('setup')
+    }
+  }, [canPlaybooks, loading, playbooks.length, mainTab])
   const [selectedPbId, setSelectedPbId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
@@ -286,6 +293,10 @@ export function ConsultingPlaybookSection({
         consultingWorkspaceOpen || compactChrome ? 'max-h-none min-h-0 flex-1' : 'max-h-[min(78vh,720px)] min-h-[280px]',
       ].join(' ')}
     >
+      <p className="shrink-0 border-b border-amber-200/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950 sm:px-4 sm:text-sm">
+        <strong>Gợi ý cho TVV:</strong> Playbook khớp theo tỉnh, ngành, nhãn HOT/WARM trên hồ sơ — TVV xem tab{' '}
+        <strong>Tổng quan</strong> trong «Tư vấn & Tri thức» để thấy điểm yếu và gợi ý phù hợp.
+      </p>
       <div
         className={[
           'shrink-0 border-b border-slate-200/70 bg-slate-50/80 px-2',
@@ -350,6 +361,20 @@ export function ConsultingPlaybookSection({
         role="tabpanel"
       >
         {mainTab === 'setup' ? (
+          <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
+            {canPlaybooks ? (
+              <ConfigQuickStartPanel
+                tone="sky"
+                title="Thiết lập Playbook nhanh (quản trị)"
+                intro="Playbook hiện khi TVV mở hồ sơ. Chỉ quản trị cấu hình — tư vấn viên chỉ đọc gợi ý trên từng hồ sơ."
+                itemCount={playbooks.length}
+                steps={[
+                  { label: 'Nạp mẫu', detail: '«Nạp 50 playbook mẫu» — kịch bản vùng/ngành có sẵn.' },
+                  { label: 'Tùy chỉnh', detail: 'JSON mẫu hoặc «Thêm nhanh» bên dưới.' },
+                  { label: 'Kiểm tra', detail: 'Tab Dữ liệu → mở hồ sơ thử.' },
+                ]}
+              />
+            ) : null}
           <div className={['grid min-h-0 lg:grid-cols-2 lg:items-start', compactChrome ? 'gap-3' : 'gap-4'].join(' ')}>
             <div className={compactChrome ? 'space-y-3' : 'space-y-4'}>
             <div className={['rounded-xl border border-emerald-200/80 bg-emerald-50/60', compactChrome ? 'p-3' : 'p-4'].join(' ')}>
@@ -453,6 +478,7 @@ export function ConsultingPlaybookSection({
               </>
             )}
             </div>
+          </div>
           </div>
         ) : null}
 
