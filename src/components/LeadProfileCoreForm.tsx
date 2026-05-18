@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
-import type { LeadSourceRecord, ScholarshipCategoryId, ScholarshipRecord } from '../types'
+import type { LeadSourceRecord, OmicallCallTarget, ScholarshipCategoryId, ScholarshipRecord } from '../types'
+import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
 import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
 
@@ -189,6 +190,45 @@ function ScholarshipSelect({
   )
 }
 
+function PhoneFieldWithCall({
+  label,
+  value,
+  disabled,
+  onChange,
+  callContext,
+  target,
+}: {
+  label: string
+  value: string
+  disabled: boolean
+  onChange: (v: string) => void
+  callContext?: { leadId: string; leadName: string }
+  target: OmicallCallTarget
+}) {
+  return (
+    <Field label={label}>
+      <div className="flex min-w-0 items-start gap-1.5">
+        <input
+          className={`${INPUT_CLS} min-w-0 flex-1`}
+          inputMode="tel"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {callContext ? (
+          <OmicallCallButton
+            leadId={callContext.leadId}
+            leadName={callContext.leadName}
+            phone={value}
+            target={target}
+            disabled={disabled}
+          />
+        ) : null}
+      </div>
+    </Field>
+  )
+}
+
 export function LeadProfileCoreForm({
   draft,
   onChange,
@@ -200,6 +240,7 @@ export function LeadProfileCoreForm({
   wideGrid = false,
   financePanel,
   invitePanel,
+  callContext,
 }: {
   draft: LeadCoreDraft
   onChange: (next: LeadCoreDraft) => void
@@ -211,6 +252,8 @@ export function LeadProfileCoreForm({
   wideGrid?: boolean
   financePanel?: ReactNode
   invitePanel?: ReactNode
+  /** Khi có — hiện nút gọi OMICall cạnh các ô SĐT */
+  callContext?: { leadId: string; leadName: string }
 }) {
   const [activeTab, setActiveTab] = useState<LeadProfileFormTabId>(defaultTab)
   const patch = <K extends keyof LeadCoreDraft>(k: K, v: LeadCoreDraft[K]) => onChange({ ...draft, [k]: v })
@@ -277,12 +320,22 @@ export function LeadProfileCoreForm({
               onChange={(e) => patch('studentEmail', e.target.value)}
             />
           </Field>
-          <Field label="Điện thoại SV">
-            <input className={INPUT_CLS} inputMode="tel" value={draft.phone} disabled={disabled} onChange={(e) => patch('phone', e.target.value)} />
-          </Field>
-          <Field label="ĐT người liên hệ">
-            <input className={INPUT_CLS} inputMode="tel" value={draft.parentPhone} disabled={disabled} onChange={(e) => patch('parentPhone', e.target.value)} />
-          </Field>
+          <PhoneFieldWithCall
+            label="Điện thoại SV"
+            value={draft.phone}
+            disabled={disabled}
+            onChange={(v) => patch('phone', v)}
+            callContext={callContext}
+            target="student"
+          />
+          <PhoneFieldWithCall
+            label="ĐT người liên hệ"
+            value={draft.parentPhone}
+            disabled={disabled}
+            onChange={(v) => patch('parentPhone', v)}
+            callContext={callContext}
+            target="parent"
+          />
           <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
           <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
           <Field label="Nguồn tiếp nhận (ghi chú)" span={noteSpan}>
@@ -296,15 +349,25 @@ export function LeadProfileCoreForm({
           <Field label="Họ tên Bố">
             <input className={INPUT_CLS} value={draft.fatherName} disabled={disabled} onChange={(e) => patch('fatherName', e.target.value)} />
           </Field>
-          <Field label="SĐT Bố">
-            <input className={INPUT_CLS} inputMode="tel" value={draft.fatherPhone} disabled={disabled} onChange={(e) => patch('fatherPhone', e.target.value)} />
-          </Field>
+          <PhoneFieldWithCall
+            label="SĐT Bố"
+            value={draft.fatherPhone}
+            disabled={disabled}
+            onChange={(v) => patch('fatherPhone', v)}
+            callContext={callContext}
+            target="father"
+          />
           <Field label="Họ tên Mẹ">
             <input className={INPUT_CLS} value={draft.motherName} disabled={disabled} onChange={(e) => patch('motherName', e.target.value)} />
           </Field>
-          <Field label="SĐT Mẹ">
-            <input className={INPUT_CLS} inputMode="tel" value={draft.motherPhone} disabled={disabled} onChange={(e) => patch('motherPhone', e.target.value)} />
-          </Field>
+          <PhoneFieldWithCall
+            label="SĐT Mẹ"
+            value={draft.motherPhone}
+            disabled={disabled}
+            onChange={(v) => patch('motherPhone', v)}
+            callContext={callContext}
+            target="mother"
+          />
           <Field label="Người giám hộ" span={noteSpan}>
             <input className={INPUT_CLS} value={draft.guardian} disabled={disabled} onChange={(e) => patch('guardian', e.target.value)} />
           </Field>

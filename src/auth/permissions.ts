@@ -34,7 +34,7 @@ export function defaultPermissionsForRole(role: UserRole | string): readonly Per
     case 'super_admin':
       return ALL
     case 'admin':
-      return [...ALL_EXCEPT_LLM_API, 'finance:accountant', 'finance:reports']
+      return [...ALL_EXCEPT_LLM_API, 'finance:accountant', 'finance:reports', 'config:omicall']
     case 'counselor':
       return [
         'leads:read:self_assigned',
@@ -87,6 +87,7 @@ const SETTINGS_PAGE_PERMISSIONS = [
   'config:scoring_profiles_team',
   'config:playbooks',
   'config:ai_engine',
+  'config:omicall',
   'config:users',
   'config:users:team',
 ] as const satisfies readonly Permission[]

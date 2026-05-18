@@ -27,6 +27,7 @@ export function StaffManagementView({
   const { can, createStaffAccount, updateStaffProfile, sendStaffPasswordResetEmail, profile, firebaseUser } = useAuth()
   const canStaffAll = can('config:users')
   const canStaffTeam = can('config:users:team')
+  const canOmicallConfig = can('config:omicall')
   const assignableRoles = useMemo((): UserRole[] => {
     if (teamScopeOnly) return ['counselor']
     if (profile?.role === 'super_admin') return [...ROLES_BASE, 'super_admin']
@@ -48,6 +49,8 @@ export function StaffManagementView({
   const [editRole, setEditRole] = useState<UserRole>('counselor')
   const [editActive, setEditActive] = useState(true)
   const [editAllowLlm, setEditAllowLlm] = useState(false)
+  const [editOmicallUser, setEditOmicallUser] = useState('')
+  const [editOmicallPassword, setEditOmicallPassword] = useState('')
   const [editTeamIds, setEditTeamIds] = useState<string[]>([])
   /** Trưởng nhóm phụ trách (khi sửa TVV — admin). */
   const [editTeamLeadId, setEditTeamLeadId] = useState('')
@@ -181,6 +184,8 @@ export function StaffManagementView({
     setEditRole(u.role)
     setEditActive(u.isActive !== false)
     setEditAllowLlm(u.allowLlmAndAiTasks === true)
+    setEditOmicallUser(u.omicallSipUser ?? '')
+    setEditOmicallPassword(u.omicallSipPassword ?? '')
     setEditTeamIds(u.managedCounselorIds ?? [])
     const primaryLead = primaryTeamLeadForCounselor(u.id, users)
     setEditTeamLeadId(primaryLead?.id ?? '')
@@ -200,6 +205,9 @@ export function StaffManagementView({
         userId: editing.id,
         displayName: editDisplayName,
         ...(!isSuperAdminRole(editing.role) ? { allowLlmAndAiTasks: editAllowLlm } : {}),
+        ...(canOmicallConfig
+          ? { omicallSipUser: editOmicallUser, omicallSipPassword: editOmicallPassword }
+          : {}),
         ...(!isSelf ? { role: editRole, isActive: editActive } : {}),
         ...(editRole === 'team_lead' || editing.role === 'team_lead'
           ? { managedCounselorIds: editTeamIds }
@@ -658,6 +666,34 @@ export function StaffManagementView({
                   </span>
                 </label>
               )}
+              {canOmicallConfig ? (
+                <div className="rounded-lg border border-sky-200/80 bg-sky-50/50 px-3 py-2.5 space-y-2">
+                  <p className="text-xs font-semibold text-sky-950">OMICall — số nội bộ (tuỳ chọn)</p>
+                  <label className="block text-sm font-medium text-slate-700">
+                    Số nội bộ
+                    <input
+                      value={editOmicallUser}
+                      onChange={(e) => setEditOmicallUser(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="vd. 100"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    Mật khẩu SIP
+                    <input
+                      type="password"
+                      value={editOmicallPassword}
+                      onChange={(e) => setEditOmicallPassword(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      autoComplete="new-password"
+                    />
+                  </label>
+                  <p className="text-xs text-slate-600">
+                    Để trống cả hai nếu TVV dùng số mặc định trong Cài đặt → Gọi điện (OMICall).
+                  </p>
+                </div>
+              ) : null}
               {editErr ? <p className="text-sm text-rose-600">{editErr}</p> : null}
               {editMsg ? <p className="text-sm text-emerald-700">{editMsg}</p> : null}
               <div className="flex flex-wrap gap-2 pt-2">

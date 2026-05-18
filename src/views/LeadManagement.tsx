@@ -3669,6 +3669,10 @@ function LeadDetailPanel({
                             leadSources={leadSources}
                             scholarships={scholarships}
                             layout="tabs"
+                            callContext={{
+                              leadId: lead.id,
+                              leadName: lead.fullName || lead.customerId || 'Hồ sơ',
+                            }}
                             financePanel={
                               <LeadProfileFinanceSection
                                 draft={financeDraft}

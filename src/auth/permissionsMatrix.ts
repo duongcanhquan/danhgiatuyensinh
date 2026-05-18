@@ -27,6 +27,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'ai:use': 'Dùng AI tư vấn / phân tích trên hồ sơ',
   'config:llm_api': 'Cấu hình khóa API LLM (trình duyệt)',
   'config:ai_engine': 'Tri thức & LLM trên Firestore',
+  'config:omicall': 'Tổng đài OMICall (gọi từ web & cấu hình)',
   'analytics:advanced': 'Phân tích nâng cao',
   'finance:accountant': 'Cổng kế toán — duyệt thu & Full NE',
   'finance:reports': 'Báo cáo thu ngày/tháng → n8n',

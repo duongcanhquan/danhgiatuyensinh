@@ -76,6 +76,10 @@ export interface VietMyUserProfile {
    * Siêu quản trị không cần cờ này.
    */
   allowLlmAndAiTasks?: boolean
+  /** Số nội bộ OMICall (SIP) — ưu tiên hơn cấu hình mặc định toàn trường. */
+  omicallSipUser?: string
+  /** Mật khẩu SIP số nội bộ — chỉ quản trị sửa trên Firestore / form nhân sự. */
+  omicallSipPassword?: string
   /**
    * Bổ sung quyền ngoài ma trận vai trò (gán trên Firestore `users/{uid}` — thường do Siêu quản trị).
    * Firestore Rules vẫn là nguồn chân lý; UI chỉ mở rộng tính năng khi Rules cho phép.
@@ -135,6 +139,8 @@ export const PERMISSIONS = [
   'config:llm_api',
   /** Cấu hình tác vụ AI trên Firestore (`ai_tasks`) — Admin / Siêu quản trị. */
   'config:ai_engine',
+  /** Cấu hình OMICall (tổng đài gọi từ web) — Admin / Siêu quản trị. */
+  'config:omicall',
   'analytics:advanced',
   /** Cổng kế toán — duyệt thu/chi, Full NE, gửi n8n kế toán. */
   'finance:accountant',
@@ -1086,6 +1092,39 @@ export const SCORING_AUX_TVV_SIGNALS_DOC_ID = 'tvvSignalDefinitions' as const
 
 /** Doc cố định: `scoringAux/infoScoreConfig` — quy tắc điểm thông tin (% đầy hồ sơ) toàn trường. */
 export const SCORING_AUX_INFO_SCORE_DOC_ID = 'infoScoreConfig' as const
+
+/** Doc cố định: `scoringAux/omicallIntegration` — tổng đài OMICall (Web SDK). */
+export const SCORING_AUX_OMICALL_DOC_ID = 'omicallIntegration' as const
+
+/** Đích gọi — gắn vào `userData` cuộc gọi & log tương tác. */
+export type OmicallCallTarget = 'student' | 'parent' | 'father' | 'mother'
+
+/** Payload JSON trong `makeCall` → `userData` (OMICall). */
+export interface OmicallCallUserData {
+  leadId: string
+  target: OmicallCallTarget
+  phone: string
+}
+
+/** Lưu Firestore — `scoringAux/omicallIntegration` */
+export type OmicallIntegrationConfig = {
+  schemaVersion: 1
+  /** Bật nút gọi & đăng ký SDK */
+  enabled: boolean
+  /** CDN Web SDK, vd. 3.0.41 */
+  sdkVersion: string
+  /** Domain tổng đài (sipRealm) */
+  sipRealm: string
+  /** Số nội bộ dùng chung khi TVV chưa có số riêng */
+  defaultSipUser?: string
+  defaultSipPassword?: string
+  /** Khóa API REST (tuỳ chọn — đồng bộ log server sau) */
+  apiKey?: string
+  /** Ẩn bàn phím quay số mặc định của SDK */
+  hideDialPad?: boolean
+  /** Tự ghi `interactions` khi cuộc gọi kết thúc */
+  autoLogCalls?: boolean
+}
 
 /** Các trường hồ sơ dùng trong công thức điểm thông tin — đồng bộ 20 cột Excel + 2 trường mở rộng (legacy). */
 export const INFO_SCORE_FIELD_IDS = [

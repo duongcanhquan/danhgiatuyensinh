@@ -49,6 +49,7 @@ import { StaffManagementView } from '../views/StaffManagementView'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
+import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 
 type SettingsTabId =
   | 'master'
@@ -59,6 +60,7 @@ type SettingsTabId =
   | 'consulting'
   | 'knowledge'
   | 'llm'
+  | 'omicall'
   | 'staff'
   | 'permissions'
 
@@ -179,6 +181,16 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
           </p>
         </>
       )
+    case 'omicall':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Gọi điện — OMICall</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Cấu hình tổng đài web: domain, số nội bộ mặc định, phiên bản SDK. TVV gọi từ hồ sơ; log cuộc gọi vào{' '}
+            <strong>lịch sử tương tác</strong> khi kết thúc (nếu bật).
+          </p>
+        </>
+      )
     case 'llm':
       return (
         <>
@@ -236,6 +248,7 @@ function parseSettingsTab(raw: string | null): SettingsTabId | null {
     raw === 'consulting' ||
     raw === 'knowledge' ||
     raw === 'llm' ||
+    raw === 'omicall' ||
     raw === 'staff' ||
     raw === 'permissions'
   )
@@ -335,6 +348,7 @@ export function SettingsView() {
   const canScoringProfilesTeam = can('config:scoring_profiles_team')
   const canPlaybooks = can('config:playbooks')
   const canAiEngine = can('config:ai_engine')
+  const canOmicall = can('config:omicall')
   const canStaff = can('config:users')
   const canStaffTeam = can('config:users:team')
   const canPermMatrix = canViewPermissionMatrix(permissions)
@@ -345,6 +359,7 @@ export function SettingsView() {
     canScoringProfilesTeam ||
     canPlaybooks ||
     canAiEngine ||
+    canOmicall ||
     canStaff ||
     canStaffTeam ||
     canPermMatrix
@@ -443,6 +458,9 @@ export function SettingsView() {
       base.push({ id: 'knowledge', label: 'Tri thức T.Sinh', enabled: true })
       base.push({ id: 'llm', label: 'LLM & Tư vấn AI', enabled: true })
     }
+    if (db && canOmicall) {
+      base.push({ id: 'omicall', label: 'Gọi điện (OMICall)', enabled: true })
+    }
     if (db && (canStaff || canStaffTeam)) {
       base.push({
         id: 'staff',
@@ -460,6 +478,7 @@ export function SettingsView() {
     canScoringProfilesTeam,
     canPlaybooks,
     canAiEngine,
+    canOmicall,
     canStaff,
     canStaffTeam,
     canPermMatrix,
@@ -1076,6 +1095,15 @@ export function SettingsView() {
           >
             <AISettingsTab db={db} />
           </div>
+        </div>
+      ) : null}
+
+      {db && activeTab === 'omicall' && canOmicall ? (
+        <div role="tabpanel" aria-labelledby="tab-omicall" className="space-y-3">
+          <h2 id="tab-omicall" className="sr-only">
+            Gọi điện OMICall
+          </h2>
+          <OmicallSettingsTab />
         </div>
       ) : null}
 

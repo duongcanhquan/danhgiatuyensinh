@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AuthProvider } from './contexts/AuthProvider'
+import { OmicallProvider } from './contexts/OmicallProvider'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { DataIntake } from './components/DataIntake'
@@ -20,6 +21,7 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <AuthProvider>
+        <OmicallProvider>
         <BrowserRouter basename={basename}>
           <Routes>
             <Route path="/login" element={<LoginView />} />
@@ -40,6 +42,7 @@ export default function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </OmicallProvider>
       </AuthProvider>
     </AppErrorBoundary>
   )

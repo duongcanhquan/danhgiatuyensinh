@@ -50,6 +50,10 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
     maxConcurrentLeads: d.maxConcurrentLeads as number | undefined,
     isActive: d.isActive !== false,
     allowLlmAndAiTasks: d.allowLlmAndAiTasks === true ? true : undefined,
+    omicallSipUser: d.omicallSipUser ? String(d.omicallSipUser) : undefined,
+    omicallSipPassword: d.omicallSipPassword ? String(d.omicallSipPassword) : undefined,
+    extraPermissions: d.extraPermissions as VietMyUserProfile['extraPermissions'],
+    deniedPermissions: d.deniedPermissions as VietMyUserProfile['deniedPermissions'],
     createdAt: (d.createdAt as Timestamp) ?? now,
     updatedAt: (d.updatedAt as Timestamp) ?? now,
   }
@@ -267,6 +271,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isActive?: boolean
       allowLlmAndAiTasks?: boolean
       managedCounselorIds?: string[]
+      omicallSipUser?: string
+      omicallSipPassword?: string
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
       const canTeam = hasPermission(permissions, 'config:users:team')
@@ -325,6 +331,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
       if (input.managedCounselorIds !== undefined) {
         patch.managedCounselorIds = input.managedCounselorIds.filter(Boolean).slice(0, 60)
+      }
+      if (input.omicallSipUser !== undefined) {
+        const v = input.omicallSipUser.trim()
+        patch.omicallSipUser = v || null
+      }
+      if (input.omicallSipPassword !== undefined) {
+        const v = input.omicallSipPassword.trim()
+        patch.omicallSipPassword = v || null
       }
       await updateDoc(ref, patch)
     },

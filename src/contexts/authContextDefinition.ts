@@ -29,6 +29,8 @@ export type AuthContextValue = AuthState & {
     /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
     allowLlmAndAiTasks?: boolean
     managedCounselorIds?: string[]
+    omicallSipUser?: string
+    omicallSipPassword?: string
   }) => Promise<void>
   /**
    * Admin: gửi email «đặt lại mật khẩu» (Firebase Auth) tới địa chỉ đã đăng ký.
