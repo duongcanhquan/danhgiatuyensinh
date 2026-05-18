@@ -18,6 +18,8 @@ export function getDefaultOmicallConfig(): OmicallIntegrationConfig {
     ...(envApiKey ? { apiKey: envApiKey } : {}),
     hideDialPad: true,
     autoLogCalls: true,
+    dialFormat: 'local',
+    callMode: 'browser',
   }
 }
 
@@ -40,6 +42,9 @@ export function parseOmicallConfigDoc(raw: Record<string, unknown> | null | unde
     apiKey,
     hideDialPad: raw.hideDialPad !== false,
     autoLogCalls: raw.autoLogCalls !== false,
+    dialFormat: raw.dialFormat === 'local' ? 'local' : 'intl84',
+    defaultOutboundNumber: String(raw.defaultOutboundNumber ?? '').trim() || undefined,
+    callMode: raw.callMode === 'deskPhone' ? 'deskPhone' : 'browser',
   }
 }
 
@@ -65,14 +70,31 @@ export function resolveOmicallSipCredentials(
   return { sipRealm, sipUser, sipPassword }
 }
 
-/** Chuẩn hoá SĐT VN cho quay số (chỉ chữ số; 84… → 0…). */
-export function normalizePhoneForDial(raw: string): string | null {
+/** Chuẩn hoá SĐT VN — mặc định `intl84` (849…) vì nhiều tổng đài SIP VN yêu cầu. */
+export function normalizePhoneForDial(
+  raw: string,
+  format: 'intl84' | 'local' = 'intl84',
+): string | null {
   let d = raw.replace(/\D/g, '')
   if (d.length < 9) return null
-  if (d.startsWith('84') && d.length >= 11) d = `0${d.slice(2)}`
-  if (d.startsWith('0') && d.length >= 10) return d
-  if (d.length === 9) return `0${d}`
-  return d.length >= 10 ? d : null
+  if (d.startsWith('0')) d = `84${d.slice(1)}`
+  else if (!d.startsWith('84') && d.length === 9) d = `84${d}`
+  if (d.length < 11 || !d.startsWith('84')) return null
+  if (format === 'local') return `0${d.slice(2)}`
+  return d
+}
+
+/** Xin quyền micro trước khi gọi — tránh UI «đang gọi» nhưng không có media. */
+export async function ensureMicrophoneForCall(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia) return
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    stream.getTracks().forEach((t) => t.stop())
+  } catch {
+    throw new Error(
+      'Trình duyệt chưa cho phép micro — bật quyền micro cho trang web rồi thử gọi lại.',
+    )
+  }
 }
 
 export const OMICALL_TARGET_LABELS: Record<

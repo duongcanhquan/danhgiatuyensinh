@@ -36,6 +36,7 @@ export function OmicallSettingsTab() {
     saveConfig,
     resetConfig,
     reconnect,
+    lastCallHint,
   } = useOmicall()
 
   const [draft, setDraft] = useState<OmicallIntegrationConfig>(config)
@@ -100,6 +101,7 @@ export function OmicallSettingsTab() {
           </span>
         </div>
         {lastError ? <p className="mt-2 text-xs text-red-700">{lastError}</p> : null}
+        {lastCallHint ? <p className="mt-2 text-xs text-slate-700">{lastCallHint}</p> : null}
         <button
           type="button"
           onClick={reconnect}
@@ -169,6 +171,41 @@ export function OmicallSettingsTab() {
             />
           </label>
           <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-slate-700">Cách gọi</span>
+            <select
+              className={INPUT}
+              value={draft.callMode === 'deskPhone' ? 'deskPhone' : 'browser'}
+              onChange={(e) => patch({ callMode: e.target.value === 'deskPhone' ? 'deskPhone' : 'browser' })}
+            >
+              <option value="browser">Trình duyệt (micro — makeCall)</option>
+              <option value="deskPhone">Máy bàn / IP phone (click-to-call — remoteCall)</option>
+            </select>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Nếu bàn phím OMICall gọi được mà nút trên hồ sơ treo «đang gọi», thử chọn <strong>Máy bàn</strong>.
+            </span>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Định dạng quay số</span>
+            <select
+              className={INPUT}
+              value={draft.dialFormat === 'local' ? 'local' : 'intl84'}
+              onChange={(e) => patch({ dialFormat: e.target.value === 'local' ? 'local' : 'intl84' })}
+            >
+              <option value="local">Trong nước 0… (giống bàn phím OMICall)</option>
+              <option value="intl84">Quốc tế 84…</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Đầu số gọi ra (hotline)</span>
+            <input
+              className={INPUT}
+              value={draft.defaultOutboundNumber ?? ''}
+              onChange={(e) => patch({ defaultOutboundNumber: e.target.value })}
+              placeholder="Tuỳ chọn — nếu extension có nhiều đầu số"
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-sm sm:col-span-2">
             <span className="mb-1 block font-medium text-slate-700">API key REST (tuỳ chọn, giai đoạn sau)</span>
             <input
               type="password"
@@ -226,6 +263,18 @@ export function OmicallSettingsTab() {
       )}
 
       {msg ? <p className="text-sm font-medium text-slate-800">{msg}</p> : null}
+
+      <section className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-4 text-sm text-slate-700">
+        <p className="font-semibold text-amber-950">Gọi hiện cửa sổ nhưng không ra máy?</p>
+        <ul className="mt-2 list-inside list-disc space-y-1 leading-relaxed">
+          <li>Trạng thái phải là <strong>Sẵn sàng gọi</strong> (SIP đã kết nối), không chỉ «đang đăng ký».</li>
+          <li>Cho phép <strong>micro</strong> trên trình duyệt khi được hỏi.</li>
+          <li>Thử <strong>Cách gọi → Máy bàn / IP phone</strong> nếu bàn phím OMICall gọi được mà nút hồ sơ treo.</li>
+          <li>Thử đổi <strong>Định dạng quay số</strong> (0… ↔ 84…) rồi gọi lại.</li>
+          <li>Trên OMICall: extension phải có <strong>đầu số gọi ra</strong> — điền vào ô hotline ở trên nếu cần.</li>
+          <li>Gọi thử từ bàn phím OMICall (tắt «Ẩn bàn phím») cùng số — nếu vẫn lỗi thì do tổng đài/SIP, không phải app.</li>
+        </ul>
+      </section>
 
       <section className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">
         <p className="flex items-center gap-2 font-medium text-slate-800">

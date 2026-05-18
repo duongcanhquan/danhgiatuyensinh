@@ -31,14 +31,25 @@ export type OmicallSdkGlobal = {
   }) => Promise<{ status: boolean; message?: string; error?: string }>
   unregister: () => void
   makeCall: (remoteNumber: string, options?: Record<string, unknown> | null) => void
+  /** Click-to-call — máy bàn / IP phone đổ chuông, không dùng micro trình duyệt. */
+  remoteCall?: (remoteNumber: string, sipNumber?: string) => void
   on: (event: string, cb: (data: unknown) => void) => void
   off: (event: string, cb: (data: unknown) => void) => void
+}
+
+export type OmicallUiGlobal = {
+  toggleDial?: () => void
 }
 
 declare global {
   interface Window {
     OMICallSDK?: OmicallSdkGlobal
+    OMICallUI?: OmicallUiGlobal
   }
+}
+
+export function getOmicallUi(): OmicallUiGlobal | null {
+  return window.OMICallUI ?? null
 }
 
 let loadPromise: Promise<OmicallSdkGlobal> | null = null

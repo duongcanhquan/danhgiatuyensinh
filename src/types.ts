@@ -1124,6 +1124,18 @@ export type OmicallIntegrationConfig = {
   hideDialPad?: boolean
   /** Tự ghi `interactions` khi cuộc gọi kết thúc */
   autoLogCalls?: boolean
+  /**
+   * Định dạng quay số gửi OMICall: `intl84` = 84912345678 (hay dùng trên tổng đài VN),
+   * `local` = 0912345678.
+   */
+  dialFormat?: 'intl84' | 'local'
+  /** Đầu số gọi ra (hotline) — nếu extension có nhiều đầu số, điền số OMICall cấp. */
+  defaultOutboundNumber?: string
+  /**
+   * `browser` — nghe qua micro trình duyệt (`makeCall`).
+   * `deskPhone` — click-to-call ra máy bàn / IP phone (`remoteCall`), giống nhiều cấu hình tổng đài.
+   */
+  callMode?: 'browser' | 'deskPhone'
 }
 
 /** Các trường hồ sơ dùng trong công thức điểm thông tin — đồng bộ 20 cột Excel + 2 trường mở rộng (legacy). */

@@ -16,6 +16,7 @@ import { useAuth } from '../hooks/useAuth'
 import {
   getDefaultOmicallConfig,
   mergeOmicallConfig,
+  ensureMicrophoneForCall,
   normalizePhoneForDial,
   parseOmicallConfigDoc,
   resolveOmicallSipCredentials,
@@ -37,6 +38,8 @@ type OmicallContextValue = {
   connectionStatus: OmicallConnectionStatus
   connectionLabel: string
   lastError: string | null
+  /** Lỗi / trạng thái cuộc gọi gần nhất (từ SDK). */
+  lastCallHint: string | null
   canCall: boolean
   saveConfig: (next: OmicallIntegrationConfig) => Promise<void>
   resetConfig: () => Promise<void>
@@ -69,6 +72,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<OmicallConnectionStatus>('off')
   const [connectionLabel, setConnectionLabel] = useState('Chưa bật tổng đài')
   const [lastError, setLastError] = useState<string | null>(null)
+  const [lastCallHint, setLastCallHint] = useState<string | null>(null)
+  const [sipReady, setSipReady] = useState(false)
   const [bootToken, setBootToken] = useState(0)
   const sdkRef = useRef<OmicallSdkGlobal | null>(null)
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
@@ -129,35 +134,67 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const onRegister = useCallback((raw: unknown) => {
     const data = raw as OmicallRegisterData
     if (data.status === 'connected') {
+      setSipReady(true)
       setConnectionStatus('connected')
-      setConnectionLabel(data.name || 'Đã kết nối tổng đài')
+      setConnectionLabel(data.name || 'Sẵn sàng gọi')
       setLastError(null)
     } else if (data.status === 'connecting') {
+      setSipReady(false)
       setConnectionStatus('registering')
-      setConnectionLabel(data.name || 'Đang kết nối…')
+      setConnectionLabel(data.name || 'Đang kết nối tổng đài…')
     } else {
+      setSipReady(false)
       setConnectionStatus('error')
       setConnectionLabel(data.name || 'Mất kết nối tổng đài')
+      setLastError('SIP ngắt — bấm «Kết nối lại» trên Cài đặt → Gọi điện.')
+    }
+  }, [])
+
+  const onCallEvent = useCallback((raw: unknown) => {
+    const call = raw as OmicallCallData
+    if (!call?.uid) return
+    if (call.state === 'connecting') {
+      setLastCallHint('Đang kết nối cuộc gọi…')
+    } else if (call.state === 'ringing') {
+      setLastCallHint('Đang đổ chuông phía khách…')
+    } else if (call.state === 'accepted') {
+      setLastCallHint('Đã bắt máy — nói qua micro trình duyệt / tai nghe.')
+    } else if (call.state === 'ended') {
+      if (call.rejectCode) {
+        setLastCallHint(`Cuộc gọi kết thúc (mã lỗi tổng đài: ${call.rejectCode}). Kiểm tra đầu số gọi ra trên OMICall.`)
+      } else if ((call.callingDuration?.value ?? 0) === 0 && (call.ringingDuration?.value ?? 0) === 0) {
+        setLastCallHint(
+          'Cuộc gọi kết thúc ngay — thử đổi «Định dạng quay số» (84… / 0…), bật micro, hoặc gán đầu số gọi ra trên OMICall.',
+        )
+      } else {
+        setLastCallHint(null)
+      }
     }
   }, [])
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !profile || !config.enabled) {
       setConnectionStatus('off')
+      setSipReady(false)
       setConnectionLabel(config.enabled ? 'Chưa đăng nhập hoặc thiếu số nội bộ' : 'Tổng đài chưa bật')
       sdkRef.current?.unregister()
       sdkRef.current = null
       return
     }
     if (!sipCreds) {
+      setSipReady(false)
       setConnectionStatus('error')
       setConnectionLabel('Thiếu domain tổng đài hoặc số nội bộ / mật khẩu SIP')
       return
     }
 
     let cancelled = false
-    const endedHandler = (d: unknown) => void onEnded(d)
+    const endedHandler = (d: unknown) => {
+      onCallEvent(d)
+      void onEnded(d)
+    }
     const registerHandler = (d: unknown) => onRegister(d)
+    const callTraceHandler = (d: unknown) => onCallEvent(d)
 
     ;(async () => {
       setConnectionStatus('loading')
@@ -173,7 +210,9 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
             toggleDial: config.hideDialPad !== false ? 'hide' : 'show',
             dialPosition: 'right',
           },
-          searchRecentCall: true,
+          /** Tắt — tránh treo «đang gọi» khi tra lịch sử OMICall (vài giây). */
+          searchRecentCall: false,
+          searchRemoteContact: async () => null,
         })
         if (cancelled) return
         if (!ok) {
@@ -182,12 +221,16 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           setLastError('init() trả về false')
           return
         }
+        setSipReady(false)
         setConnectionStatus('registering')
         setConnectionLabel('Đang đăng ký số nội bộ…')
-        sdk.off('ended', endedHandler)
-        sdk.off('register', registerHandler)
+        const events = ['ended', 'register', 'connecting', 'ringing', 'accepted'] as const
+        for (const ev of events) sdk.off(ev, ev === 'ended' ? endedHandler : ev === 'register' ? registerHandler : callTraceHandler)
         sdk.on('ended', endedHandler)
         sdk.on('register', registerHandler)
+        sdk.on('connecting', callTraceHandler)
+        sdk.on('ringing', callTraceHandler)
+        sdk.on('accepted', callTraceHandler)
         const reg = await sdk.register({
           sipRealm: sipCreds.sipRealm,
           sipUser: sipCreds.sipUser,
@@ -195,13 +238,13 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         })
         if (cancelled) return
         if (!reg.status) {
+          setSipReady(false)
           setConnectionStatus('error')
           setConnectionLabel(reg.message || 'Đăng ký tổng đài thất bại')
           setLastError(reg.error || reg.message || 'register failed')
           return
         }
-        setConnectionStatus('connected')
-        setConnectionLabel('Sẵn sàng gọi')
+        setConnectionLabel('Đang chờ tổng đài xác nhận… (cần trạng thái «Sẵn sàng gọi»)')
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
@@ -216,7 +259,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const sdk = sdkRef.current
       sdk?.off('ended', endedHandler)
       sdk?.off('register', registerHandler)
+      sdk?.off('connecting', callTraceHandler)
+      sdk?.off('ringing', callTraceHandler)
+      sdk?.off('accepted', callTraceHandler)
       sdk?.unregister()
+      setSipReady(false)
     }
   }, [
     authStatus,
@@ -232,30 +279,52 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     bootToken,
     onEnded,
     onRegister,
+    onCallEvent,
   ])
 
-  const canCall = config.enabled && connectionStatus === 'connected' && Boolean(sipCreds)
+  const canCall = config.enabled && sipReady && Boolean(sipCreds)
 
   const makeLeadCall = useCallback(
     async (input: { leadId: string; leadName: string; phone: string; target: OmicallCallTarget }) => {
       if (!canCall) {
-        throw new Error('Tổng đài chưa sẵn sàng — kiểm tra Cài đặt → Gọi điện (OMICall) và số nội bộ của bạn.')
+        throw new Error(
+          connectionStatus === 'registering' || connectionStatus === 'loading'
+            ? 'Tổng đài chưa sẵn sàng — đợi trạng thái «Sẵn sàng gọi» trên Cài đặt → Gọi điện.'
+            : 'Tổng đài chưa kết nối — kiểm tra số nội bộ / mật khẩu SIP và bấm «Kết nối lại».',
+        )
       }
-      const normalized = normalizePhoneForDial(input.phone)
-      if (!normalized) throw new Error('Số điện thoại không hợp lệ.')
+      const dialFormat = config.dialFormat === 'local' ? 'local' : 'intl84'
+      const normalized = normalizePhoneForDial(input.phone, dialFormat)
+      if (!normalized) {
+        throw new Error('Số điện thoại không hợp lệ (cần 9–11 chữ số, có thể bắt đầu 0 hoặc 84).')
+      }
       const sdk = sdkRef.current
       if (!sdk) throw new Error('OMICall SDK chưa sẵn sàng.')
+      setLastCallHint(null)
       const userData: OmicallCallUserData = {
         leadId: input.leadId,
         target: input.target,
         phone: normalized,
       }
-      sdk.makeCall(normalized, {
-        remoteContact: { name: input.leadName.trim() || 'Hồ sơ' },
-        userData: JSON.stringify(userData),
-      })
+      const outbound = config.defaultOutboundNumber?.trim()
+      const userDataStr = JSON.stringify(userData)
+      const useDeskPhone = config.callMode === 'deskPhone'
+
+      if (useDeskPhone) {
+        if (typeof sdk.remoteCall !== 'function') {
+          throw new Error('SDK không hỗ trợ gọi máy bàn — đổi «Cách gọi» sang Trình duyệt trong Cài đặt → OMICall.')
+        }
+        sdk.remoteCall(normalized, outbound || undefined)
+        setLastCallHint(`Đang gọi ${normalized} — máy bàn / IP phone sẽ đổ chuông.`)
+        return
+      }
+
+      await ensureMicrophoneForCall()
+      /** Chỉ userData — tránh tra cứu contact làm treo connecting. */
+      sdk.makeCall(normalized, { userData: userDataStr })
+      setLastCallHint(`Đang gọi ${normalized} qua trình duyệt…`)
     },
-    [canCall],
+    [canCall, config.dialFormat, config.defaultOutboundNumber, config.callMode, connectionStatus],
   )
 
   const saveConfig = useCallback(async (next: OmicallIntegrationConfig) => {
@@ -271,8 +340,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       sipRealm: realm,
       hideDialPad: next.hideDialPad !== false,
       autoLogCalls: next.autoLogCalls !== false,
+      dialFormat: next.dialFormat === 'local' ? 'local' : 'intl84',
+      callMode: next.callMode === 'deskPhone' ? 'deskPhone' : 'browser',
       updatedAt: Timestamp.now(),
     }
+    const outbound = next.defaultOutboundNumber?.trim()
+    if (outbound) payload.defaultOutboundNumber = outbound
     const du = next.defaultSipUser?.trim()
     const dp = next.defaultSipPassword?.trim()
     const ak = next.apiKey?.trim()
@@ -303,6 +376,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       connectionStatus,
       connectionLabel,
       lastError,
+      lastCallHint,
       canCall,
       saveConfig,
       resetConfig,
@@ -316,6 +390,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       connectionStatus,
       connectionLabel,
       lastError,
+      lastCallHint,
       canCall,
       saveConfig,
       resetConfig,

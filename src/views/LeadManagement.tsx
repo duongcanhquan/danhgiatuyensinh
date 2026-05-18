@@ -3714,34 +3714,9 @@ function LeadDetailPanel({
                         <div className="space-y-2">
                           {showCounselorProgressForm || canSaveInteraction ? (
                             <div className="space-y-1.5 border-b border-slate-200/70 pb-2">
-                              {hasUnsavedProgress ? (
-                                <div
-                                  role="status"
-                                  className="rounded-lg border border-amber-300/90 bg-amber-50/95 px-2.5 py-2 text-xs font-semibold leading-snug text-amber-950 shadow-sm"
-                                >
-                                  Có thay đổi chưa lưu — bấm «Lưu cập nhật» (thông tin hồ sơ, tình trạng TVV, funnel và/hoặc
-                                  ghi chú tương tác). Đóng panel sẽ hỏi xác nhận; đóng tab trình duyệt cũng có thể được hỏi
-                                  trước khi rời trang.
-                                </div>
-                              ) : null}
                               <div className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 p-2 shadow-md ring-1 ring-amber-200/70 sm:p-2.5">
                                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
                                   Tiến độ tư vấn &amp; ghi chú
-                                </p>
-                                <p className="mt-1 text-xs leading-snug text-slate-600">
-                                  {crmEditOnRight ? (
-                                    <>
-                                      <strong>Tình trạng TVV</strong> chỉnh ở tab «Phân công &amp; tình trạng» (nút «Lưu phân
-                                      công»). Tại đây: funnel tuyển sinh, nhãn đánh giá, ghi chú tương tác — bấm{' '}
-                                      <strong>Lưu cập nhật</strong>
-                                      {canSaveInteraction ? '; có ghi chú thì ghi thêm vào lịch sử kèm snapshot.' : '.'}
-                                    </>
-                                  ) : (
-                                    <>
-                                      Một lần lưu: đồng bộ <strong>tình trạng TVV</strong>, funnel (theo quyền) và — nếu có
-                                      ghi chú — thêm dòng lịch sử kèm tình trạng &amp; nhãn tại thời điểm đó.
-                                    </>
-                                  )}
                                 </p>
                                 <div
                                   className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}

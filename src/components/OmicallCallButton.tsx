@@ -27,7 +27,7 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
     ? 'Chưa có số hợp lệ'
     : !omicall.canCall
       ? omicall.connectionLabel
-      : 'Gọi qua OMICall'
+      : 'Gọi qua OMICall (cần micro trình duyệt)'
 
   const onClick = async () => {
     if (!canUse) return
@@ -57,7 +57,10 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
       >
         <Phone className="h-4 w-4" aria-hidden />
       </button>
-      {err ? <span className="mt-0.5 max-w-[8rem] text-[10px] leading-tight text-red-700">{err}</span> : null}
+      {err ? <span className="mt-0.5 max-w-[10rem] text-[10px] leading-tight text-red-700">{err}</span> : null}
+      {!err && omicall.lastCallHint ? (
+        <span className="mt-0.5 max-w-[10rem] text-[10px] leading-tight text-slate-600">{omicall.lastCallHint}</span>
+      ) : null}
     </span>
   )
 }
