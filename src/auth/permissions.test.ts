@@ -17,22 +17,33 @@ describe('normalizeUserRole', () => {
 })
 
 describe('defaultPermissionsForRole', () => {
-  it('grants super_admin every permission in PERMISSIONS', async () => {
+  it('grants super_admin every non-finance permission in PERMISSIONS', async () => {
     const { PERMISSIONS } = await import('../types')
     const perms = defaultPermissionsForRole('super_admin')
     for (const p of PERMISSIONS as readonly Permission[]) {
+      if (p === 'finance:accountant' || p === 'finance:reports') continue
+      expect(perms).toContain(p)
+    }
+    expect(hasPermission(perms, 'finance:accountant')).toBe(false)
+  })
+
+  it('grants admin all permissions except LLM API and finance', async () => {
+    const { PERMISSIONS } = await import('../types')
+    const perms = defaultPermissionsForRole('admin')
+    expect(hasPermission(perms, 'config:llm_api')).toBe(false)
+    expect(hasPermission(perms, 'finance:accountant')).toBe(false)
+    for (const p of PERMISSIONS as readonly Permission[]) {
+      if (p === 'config:llm_api' || p === 'finance:accountant' || p === 'finance:reports') continue
       expect(perms).toContain(p)
     }
   })
 
-  it('grants admin all permissions except config:llm_api', async () => {
-    const { PERMISSIONS } = await import('../types')
-    const perms = defaultPermissionsForRole('admin')
-    expect(hasPermission(perms, 'config:llm_api')).toBe(false)
-    for (const p of PERMISSIONS as readonly Permission[]) {
-      if (p === 'config:llm_api') continue
-      expect(perms).toContain(p)
-    }
+  it('accountant only gets finance permissions', () => {
+    const perms = defaultPermissionsForRole('accountant')
+    expect(hasPermission(perms, 'finance:accountant')).toBe(true)
+    expect(hasPermission(perms, 'finance:reports')).toBe(true)
+    expect(hasPermission(perms, 'leads:read:global')).toBe(false)
+    expect(canAccessSettingsPage(perms)).toBe(false)
   })
 
   it('counselor: own leads and scoring profile only', () => {

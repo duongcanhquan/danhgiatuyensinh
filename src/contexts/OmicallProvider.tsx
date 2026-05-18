@@ -359,13 +359,17 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       updatedAt: Timestamp.now(),
     }
     const outbound = next.defaultOutboundNumber?.trim()
-    if (outbound) payload.defaultOutboundNumber = outbound
+    payload.defaultOutboundNumber = outbound || null
     const du = next.defaultSipUser?.trim()
     const dp = next.defaultSipPassword?.trim()
     const ak = next.apiKey?.trim()
-    if (du) payload.defaultSipUser = du
-    if (dp) payload.defaultSipPassword = dp
-    if (ak) payload.apiKey = ak
+    const base = next.apiBaseUrl?.trim()
+    const webhookSecret = next.webhookSecret?.trim()
+    payload.defaultSipUser = du || null
+    payload.defaultSipPassword = dp || null
+    payload.apiKey = ak || null
+    payload.apiBaseUrl = base || null
+    payload.webhookSecret = webhookSecret || null
     await setDoc(ref, payload, { merge: true })
     setBootToken((t) => t + 1)
   }, [])

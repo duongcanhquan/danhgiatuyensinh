@@ -8,6 +8,8 @@ export function getDefaultOmicallConfig(): OmicallIntegrationConfig {
   const envUser = String(import.meta.env.VITE_OMICALL_SIP_USER ?? '').trim()
   const envPass = String(import.meta.env.VITE_OMICALL_SIP_PASSWORD ?? '').trim()
   const envApiKey = String(import.meta.env.VITE_OMICALL_API_KEY ?? '').trim()
+  const envApiBaseUrl = String(import.meta.env.VITE_OMICALL_API_BASE_URL ?? '').trim()
+  const envWebhookSecret = String(import.meta.env.VITE_OMICALL_WEBHOOK_SECRET ?? '').trim()
   return {
     schemaVersion: 1,
     enabled: false,
@@ -16,6 +18,8 @@ export function getDefaultOmicallConfig(): OmicallIntegrationConfig {
     ...(envUser ? { defaultSipUser: envUser } : {}),
     ...(envPass ? { defaultSipPassword: envPass } : {}),
     ...(envApiKey ? { apiKey: envApiKey } : {}),
+    ...(envApiBaseUrl ? { apiBaseUrl: envApiBaseUrl } : {}),
+    ...(envWebhookSecret ? { webhookSecret: envWebhookSecret } : {}),
     hideDialPad: true,
     autoLogCalls: true,
     dialFormat: 'intl84',
@@ -32,6 +36,8 @@ export function parseOmicallConfigDoc(raw: Record<string, unknown> | null | unde
   const defaultSipUser = String(raw.defaultSipUser ?? '').trim() || undefined
   const defaultSipPassword = String(raw.defaultSipPassword ?? '').trim() || undefined
   const apiKey = String(raw.apiKey ?? '').trim() || undefined
+  const apiBaseUrl = String(raw.apiBaseUrl ?? '').trim() || undefined
+  const webhookSecret = String(raw.webhookSecret ?? '').trim() || undefined
   return {
     schemaVersion: 1,
     enabled,
@@ -40,6 +46,8 @@ export function parseOmicallConfigDoc(raw: Record<string, unknown> | null | unde
     defaultSipUser,
     defaultSipPassword,
     apiKey,
+    apiBaseUrl,
+    webhookSecret,
     hideDialPad: raw.hideDialPad !== false,
     autoLogCalls: raw.autoLogCalls !== false,
     dialFormat: raw.dialFormat === 'local' ? 'local' : 'intl84',

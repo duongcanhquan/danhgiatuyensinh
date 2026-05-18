@@ -60,6 +60,7 @@ function mapKpi(id: string, data: Record<string, unknown>): CounselorDailyKpi {
 
 export type CounselorKpiSummary = {
   counselorUid: string
+  teamLeadUid?: string | null
   totalCalls: number
   outboundCalls: number
   inboundCalls: number
@@ -86,6 +87,7 @@ export type CounselorKpiSummary = {
 function emptySummary(counselorUid: string): CounselorKpiSummary {
   return {
     counselorUid,
+    teamLeadUid: undefined,
     totalCalls: 0,
     outboundCalls: 0,
     inboundCalls: 0,
@@ -166,6 +168,7 @@ export function useCounselorKpi(range: KpiRangePreset) {
     for (const r of rows) {
       const uid = r.counselorUid || r.id
       const s = m.get(uid) ?? emptySummary(uid)
+      if (r.teamLeadUid) s.teamLeadUid = r.teamLeadUid
       s.totalCalls += r.totalCalls
       s.outboundCalls += r.outboundCalls
       s.inboundCalls += r.inboundCalls

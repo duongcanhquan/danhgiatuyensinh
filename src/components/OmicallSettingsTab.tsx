@@ -206,13 +206,37 @@ export function OmicallSettingsTab() {
             />
           </label>
           <label className="block text-sm sm:col-span-2">
-            <span className="mb-1 block font-medium text-slate-700">API key REST (tuỳ chọn, giai đoạn sau)</span>
+            <span className="mb-1 block font-medium text-slate-700">API base URL đồng bộ lịch sử</span>
+            <input
+              className={INPUT}
+              value={draft.apiBaseUrl ?? ''}
+              onChange={(e) => patch({ apiBaseUrl: e.target.value })}
+              placeholder="vd. https://public-v1.omicall.com"
+              autoComplete="off"
+            />
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Dùng cho Cloud Functions lấy lịch sử cuộc gọi, ghi âm và tổng hợp KPI.
+            </span>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700">API key REST đồng bộ</span>
             <input
               type="password"
               className={INPUT}
               value={draft.apiKey ?? ''}
               onChange={(e) => patch({ apiKey: e.target.value })}
-              placeholder="Không bắt buộc cho gọi từ web"
+              placeholder="Dùng để đồng bộ lịch sử OMICall"
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Webhook secret</span>
+            <input
+              type="password"
+              className={INPUT}
+              value={draft.webhookSecret ?? ''}
+              onChange={(e) => patch({ webhookSecret: e.target.value })}
+              placeholder="Mã tự đặt, nhập cùng trên URL webhook"
               autoComplete="off"
             />
           </label>
@@ -274,6 +298,20 @@ export function OmicallSettingsTab() {
           <li>Trên OMICall: extension phải có <strong>đầu số gọi ra</strong> — điền vào ô hotline ở trên nếu cần.</li>
           <li>Gọi thử từ bàn phím OMICall (tắt «Ẩn bàn phím») cùng số — nếu vẫn lỗi thì do tổng đài/SIP, không phải app.</li>
         </ul>
+      </section>
+
+      <section className="rounded-xl border border-sky-200/80 bg-sky-50/60 p-4 text-sm text-slate-700">
+        <p className="font-semibold text-sky-950">Đồng bộ lịch sử cuộc gọi & KPI</p>
+        <p className="mt-2 leading-relaxed">
+          Sau khi deploy Functions, vào OMICall thêm webhook tới function <strong>omicallCallWebhook</strong>. Nếu có
+          nhập <strong>Webhook secret</strong>, thêm tham số <code>?secret=...</code> vào URL webhook hoặc gửi header{' '}
+          <code>x-vietmy-omicall-secret</code>. Lịch sử cuộc gọi sẽ được đồng bộ định kỳ để KPI có thời lượng, trạng
+          thái và ghi âm.
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+          Gợi ý bảo mật: hệ thống vẫn ưu tiên Firebase Secret nếu đã cấu hình trên server; các ô ở đây giúp bạn nhập và
+          test nhanh từ giao diện quản trị.
+        </p>
       </section>
 
       <section className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">

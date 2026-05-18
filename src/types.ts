@@ -36,6 +36,7 @@ export const USER_ROLES = [
   'counselor',
   'team_lead',
   'admin',
+  'accountant',
 ] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
@@ -46,6 +47,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   counselor: 'Tư vấn viên',
   team_lead: 'Trưởng nhóm',
   admin: 'Quản trị / Hiệu trưởng',
+  accountant: 'Kế toán',
 }
 
 /**
@@ -1197,6 +1199,10 @@ export type OmicallIntegrationConfig = {
   defaultSipPassword?: string
   /** Khóa API REST (tuỳ chọn — đồng bộ log server sau) */
   apiKey?: string
+  /** Base URL OMICall REST API cho Cloud Functions (vd. https://public-v1.omicall.com). */
+  apiBaseUrl?: string
+  /** Mã bí mật kèm webhook URL để xác thực request từ OMICall. */
+  webhookSecret?: string
   /** Ẩn bàn phím quay số mặc định của SDK */
   hideDialPad?: boolean
   /** Tự ghi `interactions` khi cuộc gọi kết thúc */

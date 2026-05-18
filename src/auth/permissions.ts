@@ -5,7 +5,11 @@ import { normalizeUserRole } from './roleUtils'
 const ALL = PERMISSIONS as unknown as readonly Permission[]
 
 /** Admin thường: mọi quyền trừ cấu hình khóa API LLM (chỉ Siêu quản trị). */
-const ALL_EXCEPT_LLM_API = ALL.filter((p) => p !== 'config:llm_api')
+const FINANCE_PERMISSIONS: readonly Permission[] = ['finance:accountant', 'finance:reports']
+const ALL_EXCEPT_LLM_API_AND_FINANCE = ALL.filter(
+  (p) => p !== 'config:llm_api' && !FINANCE_PERMISSIONS.includes(p),
+)
+const ALL_EXCEPT_FINANCE = ALL.filter((p) => !FINANCE_PERMISSIONS.includes(p))
 
 /** Quyền tầng Trưởng nhóm (`team_lead`). */
 const TEAM_LEAD_PERMISSIONS: readonly Permission[] = [
@@ -32,9 +36,11 @@ export function defaultPermissionsForRole(role: UserRole | string): readonly Per
   const r = normalizeUserRole(role)
   switch (r) {
     case 'super_admin':
-      return ALL
+      return ALL_EXCEPT_FINANCE
     case 'admin':
-      return [...ALL_EXCEPT_LLM_API, 'finance:accountant', 'finance:reports', 'config:omicall']
+      return [...ALL_EXCEPT_LLM_API_AND_FINANCE, 'config:omicall']
+    case 'accountant':
+      return FINANCE_PERMISSIONS
     case 'counselor':
       return [
         'leads:read:self_assigned',

@@ -12,20 +12,23 @@ import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { defineSecret } from 'firebase-functions/params'
 
-initializeApp()
+const app = initializeApp()
 setGlobalOptions({ region: 'asia-southeast1', maxInstances: 10 })
 
 const OMICALL_API_KEY = defineSecret('OMICALL_API_KEY')
 const OMICALL_API_BASE_URL = defineSecret('OMICALL_API_BASE_URL')
 const OMICALL_WEBHOOK_SECRET = defineSecret('OMICALL_WEBHOOK_SECRET')
 
-const db = getFirestore()
+/** App dùng Firestore database `warmlist`; Functions phải ghi cùng database để UI đọc thấy KPI. */
+const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || 'warmlist'
+const db = getFirestore(app, FIRESTORE_DATABASE_ID)
 
 const COLLECTIONS = {
   users: 'users',
   leads: 'leads',
   interactions: 'interactions',
   auditLogs: 'auditLogs',
+  scoringAux: 'scoringAux',
   omicallCalls: 'omicallCalls',
   kpiDaily: 'kpiDaily',
   kpiActivityEvents: 'kpiActivityEvents',
@@ -73,6 +76,17 @@ type LeadMatch = {
 }
 
 const PAYMENT_KEYS = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4'] as const
+const OMICALL_CONFIG_DOC_ID = 'omicallIntegration'
+
+async function loadOmicallServerConfig() {
+  const snap = await db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID).get()
+  const data = snap.exists ? snap.data() ?? {} : {}
+  return {
+    apiKey: str(data.apiKey),
+    apiBaseUrl: str(data.apiBaseUrl),
+    webhookSecret: str(data.webhookSecret),
+  }
+}
 
 function envSecret(secret: ReturnType<typeof defineSecret>, fallbackName: string): string {
   return secret.value() || process.env[fallbackName] || ''
@@ -502,7 +516,8 @@ export const omicallCallWebhook = onRequest(
       res.status(405).send('Method not allowed')
       return
     }
-    const configuredSecret = envSecret(OMICALL_WEBHOOK_SECRET, 'OMICALL_WEBHOOK_SECRET')
+    const serverConfig = await loadOmicallServerConfig()
+    const configuredSecret = envSecret(OMICALL_WEBHOOK_SECRET, 'OMICALL_WEBHOOK_SECRET') || serverConfig.webhookSecret
     if (configuredSecret) {
       const token = str(req.get('x-vietmy-omicall-secret') || req.query.secret)
       if (token !== configuredSecret) {
@@ -564,8 +579,9 @@ function rowsFromHistoryResponse(data: Record<string, unknown>): Record<string, 
 export const syncOmicallCallHistory = onSchedule(
   { schedule: 'every 15 minutes', secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
   async (): Promise<void> => {
-    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY')
-    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL')
+    const serverConfig = await loadOmicallServerConfig()
+    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
+    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
     const runRef = db.collection(COLLECTIONS.omicallSyncRuns).doc()
     const startedAt = Timestamp.now()
     if (!apiKey || !baseUrl) {

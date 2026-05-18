@@ -41,6 +41,7 @@ export const PERMISSION_TIERS: {
   { id: 'counselor', label: 'Tư vấn viên', roles: ['counselor'] },
   { id: 'team_lead', label: 'Trưởng nhóm', roles: ['team_lead'] },
   { id: 'admin', label: 'Quản trị', roles: ['admin', 'super_admin'] },
+  { id: 'accountant', label: 'Kế toán', roles: ['accountant'] },
 ]
 
 export function tierHasPermission(tierId: string, p: Permission): boolean {

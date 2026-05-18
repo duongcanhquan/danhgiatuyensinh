@@ -14,8 +14,8 @@ import {
   teamLeadsForCounselor,
 } from '../utils/teamScope'
 
-/** Ba tầng trong form (Siêu QT thêm super_admin). */
-const ROLES_BASE: UserRole[] = ['counselor', 'team_lead', 'admin']
+/** Vai trò quản trị được tạo trong app; kế toán là cổng riêng, không nằm trong quyền admin. */
+const ROLES_BASE: UserRole[] = ['counselor', 'team_lead', 'admin', 'accountant']
 
 export function StaffManagementView({
   embedded = false,

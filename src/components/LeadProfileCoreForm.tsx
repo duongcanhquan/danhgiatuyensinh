@@ -22,12 +22,12 @@ export type LeadProfileFormTabId =
 const PROFILE_TABS: { id: LeadProfileFormTabId; label: string; short: string }[] = [
   { id: 'contact', label: 'Liên hệ & nguồn', short: 'Liên hệ' },
   { id: 'family', label: 'Gia đình', short: 'Gia đình' },
-  { id: 'scholarship', label: 'Học bổng', short: 'HB' },
-  { id: 'finance', label: 'Tài chính', short: 'Tài chính' },
-  { id: 'invite', label: 'Giấy mời', short: 'Giấy mời' },
-  { id: 'geo', label: 'Địa lý & trường', short: 'Địa lý' },
+  { id: 'scholarship', label: 'Học Bổng', short: 'Học Bổng' },
+  { id: 'geo', label: 'Trường học', short: 'Trường học' },
   { id: 'study', label: 'Học tập', short: 'Học tập' },
   { id: 'notes', label: 'Ghi chú', short: 'Ghi chú' },
+  { id: 'finance', label: 'Tài chính', short: 'Tài chính' },
+  { id: 'invite', label: 'Giấy mời', short: 'Giấy mời' },
 ]
 
 function Field({ label, span = 1, children }: { label: string; span?: 1 | 2 | 3; children: ReactNode }) {
@@ -374,7 +374,7 @@ export function LeadProfileCoreForm({
         </div>
       </FormSection>
 
-      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'scholarship'} title="Học bổng">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'scholarship'} title="Học Bổng">
         <div className={grid}>
           <ScholarshipSelect
             label="Học bổng 1"
@@ -393,7 +393,7 @@ export function LeadProfileCoreForm({
         </div>
       </FormSection>
 
-      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Địa lý & trường lớp">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Trường học">
         <div className={grid}>
           <Field label="Tỉnh / TP">
             <input className={INPUT_CLS} value={draft.province} disabled={disabled} onChange={(e) => patch('province', e.target.value)} />
