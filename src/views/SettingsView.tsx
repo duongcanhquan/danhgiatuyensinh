@@ -7,7 +7,7 @@ import {
   Timestamp,
   writeBatch,
 } from 'firebase/firestore'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import type {
   MasterCatalogDefinition,
   MasterCatalogValueKind,
@@ -38,6 +38,7 @@ import {
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
 import { InfoCompletenessRulesPanel } from '../components/InfoCompletenessRulesPanel'
+import { KpiEvaluationRulesPanel } from '../components/KpiEvaluationRulesPanel'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { RuleTemplateLibraryPanel } from '../components/RuleTemplateLibraryPanel'
 import { TvvSignalDefinitionsPanel } from '../components/TvvSignalDefinitionsPanel'
@@ -63,6 +64,7 @@ type SettingsTabId =
   | 'omicall'
   | 'staff'
   | 'permissions'
+  | 'kpi'
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -130,6 +132,28 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>. Khác{' '}
             <strong>Cài đặt Profile</strong> (điểm tích lũy HOT/WARM/COLD theo quy tắc).
           </p>
+        </>
+      )
+    case 'kpi':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">KPI Sale</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Chỉnh <strong>gọi hợp lệ (HL)</strong>, <strong>cảnh báo</strong> trên màn Điều hành, <strong>điểm tháng</strong>{' '}
+            và <strong>hạng Vàng/Bạc/Đồng</strong>. Lưu tại{' '}
+            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/kpiEvaluationConfig</code> — Cloud
+            Functions đọc khi đồng bộ OMICall (~15 phút). Xem thêm mục <strong>KPI Sale</strong> trong{' '}
+            <Link to="/huong-dan?section=kpi-sale" className="font-semibold text-sky-800 underline">
+              Hướng dẫn sử dụng
+            </Link>
+            .
+          </p>
+          <ul className={`mt-2 list-inside list-disc space-y-1 ${settingsCopyMuted}`}>
+            <li>HL: giây tối thiểu + cửa sổ không trùng lead (giờ).</li>
+            <li>Cảnh báo: spam / chưa cọc / bắt máy — ngưỡng và nhãn.</li>
+            <li>Điểm tháng: trần từng nhóm + hệ số; có xem trước trước khi Lưu.</li>
+            <li>Kế toán: chuỗi duyệt cọc/học phí và Full NE (khớp chính xác).</li>
+          </ul>
         </>
       )
     case 'scoring_profiles':
@@ -250,7 +274,8 @@ function parseSettingsTab(raw: string | null): SettingsTabId | null {
     raw === 'llm' ||
     raw === 'omicall' ||
     raw === 'staff' ||
-    raw === 'permissions'
+    raw === 'permissions' ||
+    raw === 'kpi'
   )
     return raw
   if (raw === 'ai_lab') return 'llm'
@@ -447,7 +472,10 @@ export function SettingsView() {
     if (db && (canScoringRules || canScoringProfilesOwn || canScoringProfilesTeam)) {
       base.push({ id: 'scoring_profiles', label: 'Cài đặt Profile', enabled: true })
     }
-    if (db && canScoringRules) base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
+    if (db && canScoringRules) {
+      base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
+      base.push({ id: 'kpi', label: 'KPI Sale', enabled: true })
+    }
     if (db && canMaster) {
       base.push({ id: 'master', label: 'Cài đặt danh mục', enabled: true })
       base.push({ id: 'lead_profile', label: 'Cài đặt hồ sơ', enabled: true })
@@ -917,6 +945,12 @@ export function SettingsView() {
       {db && activeTab === 'scoring' ? (
         <div role="tabpanel" aria-label="Điểm thông tin" className="min-w-0 max-w-full">
           <InfoCompletenessRulesPanel canEdit={canScoringRules} />
+        </div>
+      ) : null}
+
+      {db && activeTab === 'kpi' ? (
+        <div role="tabpanel" aria-label="KPI Sale" className="min-w-0 max-w-full">
+          <KpiEvaluationRulesPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 

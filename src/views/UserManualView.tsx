@@ -12,6 +12,7 @@ type SectionId =
   | 'ho-so-hang-loat-ai'
   | 'nhap-excel'
   | 'phan-tich-nang-cao'
+  | 'kpi-sale'
   | 'cai-dat-tong-quan'
   | 'danh-muc-cham-diem'
   | 'tu-van-kich-ban'
@@ -39,6 +40,7 @@ const SECTION_ORDER: SectionId[] = [
   'ho-so-hang-loat-ai',
   'nhap-excel',
   'phan-tich-nang-cao',
+  'kpi-sale',
   'cai-dat-tong-quan',
   'danh-muc-cham-diem',
   'tu-van-kich-ban',
@@ -101,6 +103,10 @@ function sectionsData(): Section[] {
           <ul className={ul}>
             <li>Không đăng nhập được: kiểm tra mạng, đúng email/mật khẩu; nếu vẫn lỗi, liên hệ quản trị.</li>
             <li>Thiếu mục trên menu: do quyền tài khoản — báo quản trị để được mở đúng vai trò.</li>
+            <li>
+              TVV thường thấy <strong>Hồ sơ</strong> và <strong>Ngày của tôi</strong>; trưởng nhóm thêm{' '}
+              <strong>Điều hành</strong> — các màn KPI kỳ mở qua thanh KPI Sale.
+            </li>
           </ul>
         </div>
       ),
@@ -117,12 +123,12 @@ function sectionsData(): Section[] {
           </p>
           <ul className={ul}>
             <li>
-              <strong>Tư vấn viên (TVV):</strong> quản lý và cập nhật hồ sơ được giao; tự tạo profile chấm điểm cho nhóm
-              mình; không vào cấu hình toàn trường.
+              <strong>Tư vấn viên (TVV):</strong> quản lý hồ sơ được giao; xem <strong>Ngày của tôi</strong> (KPI cá nhân)
+              khi được cấp; tự tạo profile chấm điểm cho nhóm mình; không vào cấu hình toàn trường.
             </li>
             <li>
               <strong>Trưởng nhóm:</strong> xem và chỉnh hồ sơ trong nhóm; đổi TVV phụ trách; soạn playbook (Thông tin TV);
-              xem báo cáo nhóm nếu được mở — không chỉnh Tri thức / khóa LLM.
+              xem <strong>Điều hành KPI</strong> và báo cáo nhóm nếu được mở — không chỉnh Tri thức / khóa LLM.
             </li>
             <li>
               <strong>Quản trị / Siêu quản trị:</strong> toàn bộ Cài đặt, nhập liệu, nhân sự, ma trận phân quyền; Siêu quản
@@ -209,6 +215,11 @@ function sectionsData(): Section[] {
           <ul className={ul}>
             <li>Mọi thay đổi quan trọng: đợi thông báo thành công (toast) rồi hãy đóng trang nếu vừa lưu xong.</li>
             <li>Panel tư vấn (nếu có): hiển thị gợi ý kịch bản do nhà trường soạn — khác với nút phân tích AI.</li>
+            <li>
+              Tab <strong>Dòng thời gian</strong>: cuộc gọi OMICall (có/không HL), ghi chú CRM, nhật ký thao tác — đối chiếu
+              KPI.
+            </li>
+            <li>Gọi điện: dùng nút <strong>OMICall</strong> trên hồ sơ để KPI gắn đúng lead.</li>
           </ul>
         </div>
       ),
@@ -286,15 +297,72 @@ function sectionsData(): Section[] {
       ),
     },
     {
+      id: 'kpi-sale',
+      title: 'KPI Sale & hiệu suất TVV',
+      blurb: 'Ngày của tôi, Điều hành, KPI kỳ, Bảng điểm',
+      body: (
+        <div className="space-y-1">
+          <p className={p}>
+            Phần <strong>KPI Sale</strong> đo hiệu suất từ <strong>cuộc gọi OMICall</strong>, thao tác CRM, chuyển nhãn
+            WARM/HOT và tiền <strong>đã kế toán duyệt</strong>. Khác cột % độ đầy hồ sơ và khác profile HOT/WARM.
+          </p>
+          <p className={p}>
+            <strong>Các màn</strong> (thanh KPI Sale trên đầu trang):
+          </p>
+          <ul className={ul}>
+            <li>
+              <Link to="/my-day" className="font-semibold text-sky-800 underline">
+                Ngày của tôi
+              </Link>{' '}
+              — TVV: KPI hôm nay.
+            </li>
+            <li>
+              <Link to="/command" className="font-semibold text-sky-800 underline">
+                Điều hành
+              </Link>{' '}
+              — Quản lý: bảng TVV/ngày + cảnh báo.
+            </li>
+            <li>
+              <Link to="/kpi" className="font-semibold text-sky-800 underline">
+                KPI kỳ
+              </Link>{' '}
+              — 7 hoặc 30 ngày.
+            </li>
+            <li>
+              <Link to="/scorecard" className="font-semibold text-sky-800 underline">
+                Bảng điểm tháng
+              </Link>{' '}
+              — Điểm + hạng thưởng.
+            </li>
+          </ul>
+          <p className={p}>
+            <strong>Gọi hợp lệ (HL):</strong> đủ giây, gắn hồ sơ, không trùng lead —{' '}
+            <em>gọi từ nút OMICall trên hồ sơ</em>. <strong>WARM+/HOT+:</strong> lần đổi nhãn trong kỳ. Tab{' '}
+            <strong>Dòng thời gian</strong> trên chi tiết hồ sơ gộp gọi + CRM + audit.
+          </p>
+          <p className={p}>
+            Chỉnh ngưỡng:{' '}
+            <Link to="/settings?tab=kpi" className="font-semibold text-sky-800 underline">
+              Cài đặt → KPI Sale
+            </Link>
+            . Đồng bộ server ~15 phút sau khi lưu.
+          </p>
+          <p className={note}>
+            Vừa gọi mà chưa thấy HL: đợi đồng bộ; kiểm tra gọi từ hồ sơ và đủ thời lượng.
+          </p>
+        </div>
+      ),
+    },
+    {
       id: 'cai-dat-tong-quan',
       title: 'Cài đặt — tổng quan',
       blurb: 'Ai vào, các tab là gì',
       body: (
         <div className="space-y-1">
           <p className={p}>
-            <strong>Cài đặt</strong> tập trung cấu hình nền: danh mục, chấm điểm, <strong>Thông tin TV</strong> (playbook),
-            <strong>Tri thức</strong> (tài liệu cho AI), <strong>LLM &amp; Tư vấn AI</strong>, quản lý nhân sự và ma trận phân
-            quyền (Admin).
+            <strong>Cài đặt</strong> tập trung cấu hình nền: danh mục, chấm điểm, <strong>KPI Sale</strong>,{' '}
+            <strong>Thông tin TV</strong> (playbook), <strong>Tri thức</strong> (tài liệu cho AI),{' '}
+            <strong>LLM &amp; Tư vấn AI</strong>, quản lý nhân sự và ma trận phân quyền (Admin).
           </p>
           <p className={p}>
             Người dùng chỉ xem / sửa hồ sơ thường <strong>không cần</strong> vào đây trừ khi được giao nhiệm vụ cấu hình.

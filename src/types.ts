@@ -1060,7 +1060,53 @@ export const FS_COLLECTIONS = {
   kpiDaily: 'kpiDaily',
   /** Log các lần đồng bộ OMICall từ Cloud Functions. */
   omicallSyncRuns: 'omicallSyncRuns',
+  /** Sự kiện chuyển đổi CRM (tag/status) — aggregate vào kpiDaily. */
+  leadEvents: 'leadEvents',
+  /** KPI tổng hợp tháng: `kpiMonthly/{YYYY-MM}/counselors/{uid}`. */
+  kpiMonthly: 'kpiMonthly',
 } as const
+
+export type LeadEventType = 'TAG_CHANGED' | 'STATUS_CHANGED' | 'PIPELINE_CHANGED'
+
+export interface LeadEvent {
+  id: string
+  leadId: DocumentId
+  counselorUid: UserId
+  teamLeadUid?: UserId | null
+  type: LeadEventType
+  from?: string
+  to?: string
+  at: Timestamp
+  kpiAppliedAt?: Timestamp
+}
+
+export type KpiBonusTier = 'gold' | 'silver' | 'bronze' | 'none'
+
+export interface CounselorMonthlyKpi {
+  id: string
+  month: string
+  counselorUid: UserId
+  teamLeadUid?: UserId | null
+  rankInScope?: number
+  bonusTier?: KpiBonusTier
+  totalCalls: number
+  validCalls: number
+  connectedCalls: number
+  talkSeconds: number
+  validTalkSeconds: number
+  uniqueLeadsCalled: number
+  crmActions: number
+  depositPaidCount: number
+  tuitionPaidCount: number
+  approvedRevenueVnd: number
+  fullNeCount: number
+  warmNew: number
+  hotNew: number
+  newToInterested: number
+  toDeposit: number
+  toEnrolled: number
+  updatedAt?: Timestamp
+}
 
 export type FinanceReportKind = 'daily' | 'monthly'
 
@@ -1117,6 +1163,51 @@ export const SCORING_AUX_INFO_SCORE_DOC_ID = 'infoScoreConfig' as const
 /** Doc cố định: `scoringAux/omicallIntegration` — tổng đài OMICall (Web SDK). */
 export const SCORING_AUX_OMICALL_DOC_ID = 'omicallIntegration' as const
 
+/** Doc cố định: `scoringAux/kpiEvaluationConfig` — quy tắc KPI Sale (gọi HL, cảnh báo, điểm tháng, hạng thưởng). */
+export const SCORING_AUX_KPI_EVAL_DOC_ID = 'kpiEvaluationConfig' as const
+
+/** Cấu hình đánh giá KPI Sale — lưu Firestore, đồng bộ Cloud Functions + UI. */
+export type KpiEvaluationConfigPersisted = {
+  schemaVersion: 1
+  validCall: {
+    /** Thời lượng tối thiểu (giây) — bill_sec hoặc answer_sec */
+    minBillSeconds: number
+    /** Không tính 2 HL cùng TVV + cùng lead trong khoảng này (giờ) */
+    dedupWindowHours: number
+  }
+  warnings: {
+    spam: { minTotalCalls: number; minValidRatio: number; label: string }
+    noDeposit: { minTotalCalls: number; label: string }
+    lowConnect: { maxConnectRatio: number; label: string }
+  }
+  monthlyScore: {
+    capCalls: number
+    capConversion: number
+    capDeposit: number
+    capRevenue: number
+    capInterested: number
+    targetValidCalls: number
+    pointsPerWarmHot: number
+    pointsPerDeposit: number
+    revenueDenominatorVnd: number
+    pointsPerInterested: number
+  }
+  bonusTiers: {
+    /** Phần trăm xếp hạng tích lũy tối đa để vào hạng (0–1) */
+    goldMaxPercentile: number
+    silverMaxPercentile: number
+    bronzeMaxPercentile: number
+    labelGold: string
+    labelSilver: string
+    labelBronze: string
+    labelNone: string
+  }
+  finance: {
+    approvalStatus: string
+    fullNeStatus: string
+  }
+}
+
 /** Đích gọi — gắn vào `userData` cuộc gọi & log tương tác. */
 export type OmicallCallTarget = 'student' | 'parent' | 'father' | 'mother'
 
@@ -1153,6 +1244,9 @@ export interface OmicallCallRecord {
   syncedAt?: Timestamp
   interactionId?: string
   kpiAppliedAt?: Timestamp
+  /** Giai đoạn 2: ≥45s + có leadId + không trùng 4h */
+  isValidCall?: boolean
+  invalidReason?: string
   aiAnalysisId?: string
   aiAnalysisSyncedAt?: Timestamp
   aiAnalysisStatusCode?: number | null
@@ -1207,6 +1301,15 @@ export interface CounselorDailyKpi {
   tuitionRevenueVnd?: number
   approvedRevenueVnd?: number
   fullNeCount?: number
+  /** Cuộc gọi hợp lệ (chống gian lận) */
+  validCalls?: number
+  validTalkSeconds?: number
+  uniqueLeadsCalled?: number
+  warmNew?: number
+  hotNew?: number
+  newToInterested?: number
+  toDeposit?: number
+  toEnrolled?: number
   updatedAt?: Timestamp
 }
 

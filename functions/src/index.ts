@@ -11,6 +11,13 @@ import { setGlobalOptions } from 'firebase-functions/v2'
 import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { defineSecret } from 'firebase-functions/params'
+import { loadKpiEvalConfig } from './kpiEvaluationConfig.js'
+import {
+  applyValidCallKpi,
+  evaluateValidCall,
+  processRecentLeadEvents,
+  rollupKpiMonthly,
+} from './kpiEngine.js'
 
 const app = initializeApp()
 setGlobalOptions({ region: 'asia-southeast1', maxInstances: 10 })
@@ -283,17 +290,21 @@ function interactionNote(call: NormalizedOmicallCall): string {
 }
 
 async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'webhook' | 'history_sync') {
+  const kpiCfg = await loadKpiEvalConfig(db)
   const match = await resolveCounselorAndLead(db, call)
   const callRef = db.collection(COLLECTIONS.omicallCalls).doc(call.transactionId)
   const now = Timestamp.now()
   const existing = await callRef.get()
   const existingData = existing.data()
   const isFinal = isFinalCallState(call, source)
+  const validity = evaluateValidCall(call, match, kpiCfg)
   const payload = {
     ...call,
     leadId: match.leadId ?? null,
     counselorUid: match.counselorUid ?? null,
     teamLeadUid: match.teamLeadUid ?? null,
+    isValidCall: validity.isValid,
+    invalidReason: validity.invalidReason ?? null,
     isFinal,
     syncSource: source,
     syncedAt: now,
@@ -333,12 +344,17 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   }
 
   if (!existingData?.kpiAppliedAt) {
-    await updateDailyKpi(call, match)
+    await updateDailyKpi(call, match, validity.isValid, kpiCfg)
     await callRef.set({ kpiAppliedAt: now }, { merge: true })
   }
 }
 
-async function updateDailyKpi(call: NormalizedOmicallCall, match: LeadMatch) {
+async function updateDailyKpi(
+  call: NormalizedOmicallCall,
+  match: LeadMatch,
+  isValidCall: boolean,
+  kpiCfg: Awaited<ReturnType<typeof loadKpiEvalConfig>>,
+) {
   const day = dayKeyFromTs(call.endedAt ?? call.startedAt ?? call.createdAt)
   const increments = {
     totalCalls: FieldValue.increment(1),
@@ -367,6 +383,9 @@ async function updateDailyKpi(call: NormalizedOmicallCall, match: LeadMatch) {
     )
   }
   await batch.commit()
+  if (isValidCall) {
+    await applyValidCallKpi(db, COLLECTIONS.kpiDaily, { day, call, match, isValid: true, cfg: kpiCfg })
+  }
 }
 
 async function updateDailyCrmKpiFromAuditLogs() {
@@ -439,7 +458,9 @@ function financeIncrements(slot: string, amount: number) {
   }
 }
 
-async function updateDailyFinanceKpiFromLeads() {
+async function updateDailyFinanceKpiFromLeads(kpiCfg: Awaited<ReturnType<typeof loadKpiEvalConfig>>) {
+  const approvalOk = kpiCfg.finance.approvalStatus.toUpperCase()
+  const fullNeOk = kpiCfg.finance.fullNeStatus
   const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60_000)
   const [leadSnap, usersSnap] = await Promise.all([
     db.collection(COLLECTIONS.leads).where('updatedAt', '>=', since).get(),
@@ -467,7 +488,7 @@ async function updateDailyFinanceKpiFromLeads() {
       const line = asObject(payments[slot])
       const amount = num(line.amountVnd)
       const approval = str(line.approvalStatus).toUpperCase()
-      if (!amount || approval !== 'ĐỒNG Ý') continue
+      if (!amount || approval !== approvalOk) continue
       const collectedAt = str(line.collectedAt)
       const eventTs = parseDateStringToTs(collectedAt) ?? (lead.updatedAt as Timestamp | undefined) ?? Timestamp.now()
       const day = dayKeyFromTs(eventTs)
@@ -501,7 +522,7 @@ async function updateDailyFinanceKpiFromLeads() {
       })
     }
 
-    if (str(finance.fullNeStatus) === 'ĐÃ FULL NE') {
+    if (str(finance.fullNeStatus) === fullNeOk) {
       const eventRef = db.collection(COLLECTIONS.kpiFinanceEvents).doc(`${leadDoc.id}_full_ne`)
       const day = dayKeyFromTs((lead.updatedAt as Timestamp | undefined) ?? Timestamp.now())
       await db.runTransaction(async (tx) => {
@@ -814,8 +835,12 @@ export const syncOmicallCallHistory = onSchedule(
       } catch (e) {
         analysisError = e instanceof Error ? e.message : String(e)
       }
+      const kpiCfg = await loadKpiEvalConfig(db)
       await updateDailyCrmKpiFromAuditLogs()
-      await updateDailyFinanceKpiFromLeads()
+      await updateDailyFinanceKpiFromLeads(kpiCfg)
+      await processRecentLeadEvents(db, COLLECTIONS.kpiDaily)
+      const monthKey = new Date().toISOString().slice(0, 7)
+      await rollupKpiMonthly(db, COLLECTIONS.kpiDaily, monthKey, kpiCfg)
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {

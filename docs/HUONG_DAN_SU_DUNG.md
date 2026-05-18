@@ -80,21 +80,40 @@ Thường dành cho **quản trị / phòng tuyển sinh** có quyền nhập li
 
 - Báo cáo / biểu đồ sâu hơn so với bảng điều khiển (nếu tài khoản được mở quyền **Phân tích nâng cao**).
 
-### 3.5. Phòng thử AI
+### 3.5. KPI Sale (hiệu suất TVV & cuộc gọi)
+
+Dành cho TVV và quản lý theo dõi **gọi điện, chuyển đổi nhãn, cọc và doanh thu đã duyệt**. Chi tiết đầy đủ: **[HUONG-DAN-KPI-SALE.md](./HUONG-DAN-KPI-SALE.md)**.
+
+| Màn hình | Đường dẫn | Ai dùng |
+|----------|-----------|---------|
+| **Ngày của tôi** | `/my-day` | TVV — KPI cá nhân hôm nay |
+| **Điều hành** | `/command` | Trưởng nhóm / quản trị — bảng TVV theo ngày + cảnh báo |
+| **KPI kỳ** | `/kpi` | TVV / quản lý — 7 hoặc 30 ngày |
+| **Bảng điểm tháng** | `/scorecard` | Quản lý — điểm tháng + hạng thưởng |
+
+**Gọi hợp lệ (HL):** ≥ thời lượng cấu hình (mặc định 45 giây), gắn mã hồ sơ, không trùng lead trong vài giờ — **phải gọi từ nút OMICall trên hồ sơ**.
+
+**Cấu hình linh hoạt:** **Cài đặt → KPI Sale** (`/settings?tab=kpi`) — ngưỡng HL, cảnh báo spam/chưa cọc, công thức điểm tháng, hạng Vàng/Bạc/Đồng, chuỗi duyệt kế toán. Cần quyền cấu hình chấm điểm.
+
+**Khác** điểm % trên bảng hồ sơ (độ đầy dữ liệu) và profile HOT/WARM (ưu tiên lead).
+
+Trên **chi tiết hồ sơ**, tab **Dòng thời gian** gộp cuộc gọi OMICall + CRM + audit để đối chiếu KPI.
+
+### 3.6. Phòng thử AI
 
 - Nằm trong **Cài đặt** (tab **Phòng thử AI**), dùng để **chat thử** với AI sau khi đã lưu khóa API — không ghi lên hồ sơ.
 - Chỉ tài khoản được **phép dùng AI** mới vào được (quản lý bật trong Quản lý nhân sự; Siêu quản trị luôn được).
 
-### 3.6. Quản lý nhân sự (`/staff`)
+### 3.7. Quản lý nhân sự (`/staff`)
 
 - Quản lý tài khoản người dùng, vai trò (chỉ **quản trị** hoặc tài khoản được cấp quyền tương đương).
 
-### 3.7. Cấu hình dữ liệu (`/settings`)
+### 3.8. Cấu hình dữ liệu (`/settings`)
 
 Thường do **quản trị** sử dụng:
 
 - **Danh mục dữ liệu** (vùng, ngành, nguồn, …) dùng chung cho form và nhập liệu.
-- **Chấm điểm** — trong tab này có hai phần: **Điểm thông tin** (cấu hình % đầy dữ liệu tĩnh trên hồ sơ: điểm nền + các dòng tiêu chí bật và khớp, rồi kẹp min–max %) và **Profile chấm điểm** (HOT/WARM, thử JSON); hai thước đo độc lập. Mặc định bật bộ tiêu chí «lõi» (danh tính, liên hệ, địa lý, trường/hệ…); các tiêu chí như nguồn lead, ngành quan tâm, học lực, lớp, mô tả dài… **mặc định tắt** — có thể bật và chỉnh điểm trong bảng quy tắc; cột «Cách đánh giá» trong app mô tả điều kiện khớp cố định cho từng `id`. Ngoài ra còn **kịch bản tư vấn**, **kho tri thức**, **cấu hình AI / LLM** — tùy tab hiển thị.
+- **Chấm điểm** — trong tab này có hai phần: **Điểm thông tin** (cấu hình % đầy dữ liệu tĩnh trên hồ sơ: điểm nền + các dòng tiêu chí bật và khớp, rồi kẹp min–max %) và **Profile chấm điểm** (HOT/WARM, thử JSON); hai thước đo độc lập. Mặc định bật bộ tiêu chí «lõi» (danh tính, liên hệ, địa lý, trường/hệ…); các tiêu chí như nguồn lead, ngành quan tâm, học lực, lớp, mô tả dài… **mặc định tắt** — có thể bật và chỉnh điểm trong bảng quy tắc; cột «Cách đánh giá» trong app mô tả điều kiện khớp cố định cho từng `id`. Ngoài ra còn tab **KPI Sale** (gọi HL, cảnh báo điều hành, điểm tháng — xem [HUONG-DAN-KPI-SALE.md](./HUONG-DAN-KPI-SALE.md)), **kịch bản tư vấn**, **kho tri thức**, **cấu hình AI / LLM** — tùy tab hiển thị.
 
 Người dùng thông thường **không cần** vào đây trừ khi được giao nhiệm vụ cấu hình.
 

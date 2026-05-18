@@ -3,13 +3,13 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
+  CalendarDays,
   BookOpen,
   Database,
   LayoutDashboard,
   LineChart,
   LogOut,
   Menu,
-  PhoneCall,
   Settings2,
   User,
   Users,
@@ -22,6 +22,7 @@ import type { Permission } from '../types'
 import { USER_ROLE_LABELS } from '../types'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
+import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 
 type NavDef = { to: string; label: string; icon: LucideIcon; perm?: Permission }
 
@@ -33,7 +34,8 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: 
 const mainNav: NavDef[] = [
   { to: '/', label: 'Tổng kết', icon: LayoutDashboard },
   { to: '/leads', label: 'Hồ sơ', icon: Users },
-  { to: '/kpi', label: 'KPI tư vấn', icon: PhoneCall },
+  { to: '/my-day', label: 'Ngày của tôi', icon: CalendarDays, perm: 'dashboard:counselor' },
+  { to: '/command', label: 'Điều hành', icon: BarChart3, perm: 'analytics:advanced' },
   { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, perm: 'analytics:advanced' },
   { to: '/import', label: 'Nhập liệu', icon: Database, perm: 'data:intake' },
   { to: '/accountant', label: 'Kế toán', icon: Wallet, perm: 'finance:accountant' },
@@ -251,7 +253,9 @@ export function Layout() {
           <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col px-0 py-0">
             <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-sm font-normal leading-relaxed text-slate-800 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
               <InfoScoreRulesProvider>
-                <Outlet />
+                <KpiEvaluationRulesProvider>
+                  <Outlet />
+                </KpiEvaluationRulesProvider>
               </InfoScoreRulesProvider>
             </div>
           </main>

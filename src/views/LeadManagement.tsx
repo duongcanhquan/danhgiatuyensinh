@@ -80,6 +80,7 @@ import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
 import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
+import { LeadActivityTimeline } from '../components/LeadActivityTimeline'
 import { LeadProfileFinanceSection } from '../components/LeadProfileFinanceSection'
 import { LeadProfileInviteSection } from '../components/LeadProfileInviteSection'
 import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft } from '../utils/leadProfileEdit'
@@ -89,6 +90,12 @@ import { triggerInvitationN8n } from '../utils/n8nIntegration'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { commitAuditLog } from '../services/auditLog'
+import {
+  diffCounselorStatus,
+  diffPipelineStatus,
+  diffPriorityTag,
+  recordLeadEvent,
+} from '../services/leadEvents'
 import { leadTouchPatch } from '../utils/leadTouch'
 import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/leadIdentity'
 import {
@@ -112,28 +119,6 @@ const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
   ENROLLED: 'Đã ghi danh',
   LOST: 'Không còn tiềm năng',
   ARCHIVED: 'Lưu trữ',
-}
-
-function interactionChannelVi(ch: string): string {
-  const m: Record<string, string> = {
-    NOTE: 'Ghi chú',
-    CALL: 'Gọi',
-    SMS: 'SMS',
-    EMAIL: 'Email',
-    ZALO: 'Zalo',
-    IN_PERSON: 'Trực tiếp',
-    SYSTEM: 'Hệ thống',
-  }
-  return m[ch] ?? ch
-}
-
-function formatCallSeconds(seconds: number | undefined): string {
-  const s = Math.max(0, Math.floor(Number(seconds ?? 0)))
-  if (!s) return '0 giây'
-  const m = Math.floor(s / 60)
-  const r = s % 60
-  if (!m) return `${r} giây`
-  return `${m} phút ${r.toString().padStart(2, '0')} giây`
 }
 
 const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
@@ -2834,7 +2819,7 @@ function LeadDetailPanel({
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const canEditScoringSignals = canWriteLead(profile, lead, can, pickListUsers)
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
-  const { interactions, loading: intLoading } = useInteractions(lead.id)
+  const { interactions } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const { categories: knowledgeCategories } = useKnowledgeCategories()
@@ -3166,6 +3151,18 @@ function LeadDetailPanel({
         performedBy: profile.id,
         performedByName: performer,
       })
+      const nextPriority =
+        (scoreFields.priorityTag as PriorityTag | undefined) ?? lead.priorityTag
+      const tagDiffCore = diffPriorityTag(lead.priorityTag, nextPriority)
+      if (tagDiffCore) {
+        await recordLeadEvent(db, {
+          leadId: lead.id,
+          counselorUid: profile.id,
+          type: 'TAG_CHANGED',
+          from: tagDiffCore.from,
+          to: tagDiffCore.to,
+        })
+      }
       const nextLead: Lead = {
         ...lead,
         ...coreAsPartial,
@@ -3290,11 +3287,46 @@ function LeadDetailPanel({
         })
       }
 
+      const nextPriority: PriorityTag =
+        (scoreFields.priorityTag as PriorityTag | undefined) ??
+        scoringPreview?.priorityTag ??
+        lead.priorityTag
+      const tagDiff = diffPriorityTag(lead.priorityTag, nextPriority)
+      if (tagDiff) {
+        await recordLeadEvent(db, {
+          leadId: lead.id,
+          counselorUid: profile.id,
+          type: 'TAG_CHANGED',
+          from: tagDiff.from,
+          to: tagDiff.to,
+        })
+      }
+      if (crmChanged) {
+        const st = diffCounselorStatus(lead.status, nextCrm)
+        if (st) {
+          await recordLeadEvent(db, {
+            leadId: lead.id,
+            counselorUid: profile.id,
+            type: 'STATUS_CHANGED',
+            from: st.from,
+            to: st.to,
+          })
+        }
+      }
+      if (nextPipeFinal !== lead.pipelineStatus) {
+        const pl = diffPipelineStatus(lead.pipelineStatus, nextPipeFinal)
+        if (pl) {
+          await recordLeadEvent(db, {
+            leadId: lead.id,
+            counselorUid: profile.id,
+            type: 'PIPELINE_CHANGED',
+            from: pl.from,
+            to: pl.to,
+          })
+        }
+      }
+
       if (noteTrim) {
-        const nextPriority: PriorityTag =
-          (scoreFields.priorityTag as PriorityTag | undefined) ??
-          scoringPreview?.priorityTag ??
-          lead.priorityTag
         const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
         await addDoc(sub, {
           leadId: lead.id,
@@ -3433,86 +3465,7 @@ function LeadDetailPanel({
   }
 
   const interactionsHistorySection = (
-    <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm">
-      <h3 className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-600">
-        Lịch sử ghi chú &amp; đánh giá
-      </h3>
-      {intLoading ? <p className="mt-0.5 shrink-0 text-xs text-slate-500">Đang tải…</p> : null}
-      <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
-        {interactions.map((it) => (
-          <li
-            key={it.id}
-            className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-200/60 pb-1">
-              <p className="font-semibold text-slate-900">
-                {interactionChannelVi(it.channel)}
-                {it.evaluationTag ? (
-                  <span className="font-normal text-slate-600"> · {it.evaluationTag}</span>
-                ) : null}
-              </p>
-              <p className="text-[11px] text-slate-500">
-                {labelUid(it.authorUid)} · {it.timestamp?.toDate?.().toLocaleString?.('vi-VN') ?? ''}
-              </p>
-            </div>
-            {(it.snapshotCrmStatus || it.snapshotPipelineStatus || it.snapshotPriorityTag) && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {it.snapshotCrmStatus ? (
-                  <span
-                    className="inline-flex max-w-full items-center rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-950"
-                    title="Tình trạng CRM tại lúc lưu"
-                  >
-                    TVV: {LEAD_COUNSELOR_STATUS_LABELS[it.snapshotCrmStatus]}
-                  </span>
-                ) : null}
-                {it.snapshotPipelineStatus ? (
-                  <span
-                    className="inline-flex max-w-full items-center rounded border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-950"
-                    title="Funnel tại lúc lưu"
-                  >
-                    Funnel: {PIPELINE_LABEL[it.snapshotPipelineStatus]}
-                  </span>
-                ) : null}
-                {it.snapshotPriorityTag ? (
-                  <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-800">
-                    Nhãn: <TagBadge tag={it.snapshotPriorityTag} />
-                  </span>
-                ) : null}
-              </div>
-            )}
-            {it.counselorNote ? (
-              <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
-            ) : null}
-            {it.callOutcome ? (
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-600">
-                <span>Kết quả: {it.callOutcome}</span>
-                {it.durationSeconds !== undefined ? <span>· Nói chuyện: {formatCallSeconds(it.durationSeconds)}</span> : null}
-                {it.hotline ? <span>· Đầu số: {it.hotline}</span> : null}
-                {it.sipUser ? <span>· Máy lẻ: {it.sipUser}</span> : null}
-                {it.recordingUrl ? (
-                  <a
-                    href={it.recordingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-sky-800 hover:bg-sky-100"
-                  >
-                    Nghe ghi âm
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
-            {it.aiSentiment ? (
-              <p className="mt-1 text-[11px] leading-snug text-violet-800">
-                AI: {it.aiSentiment.label} ({it.aiSentiment.score}) — {it.aiSentiment.summary}
-              </p>
-            ) : null}
-          </li>
-        ))}
-        {!intLoading && !interactions.length ? (
-          <li className="text-xs text-slate-500">Chưa có tương tác.</li>
-        ) : null}
-      </ul>
-    </section>
+    <LeadActivityTimeline leadId={lead.id} labelUid={labelUid} />
   )
 
   return (
@@ -3934,7 +3887,7 @@ function LeadDetailPanel({
                             : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                         ].join(' ')}
                       >
-                        Lịch sử &amp; ghi chú
+                        Dòng thời gian
                       </button>
                     </nav>
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

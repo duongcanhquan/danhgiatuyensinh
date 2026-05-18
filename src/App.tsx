@@ -13,6 +13,9 @@ import { UserManualView } from './views/UserManualView'
 import { AnalyticsAdvancedView } from './views/AnalyticsAdvancedView'
 import { AccountantView } from './views/AccountantView'
 import { CounselorKpiView } from './views/CounselorKpiView'
+import { CommandCenterView } from './views/CommandCenterView'
+import { MyDayView } from './views/MyDayView'
+import { ScorecardView } from './views/ScorecardView'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -34,6 +37,9 @@ export default function App() {
                 <Route path="import" element={<DataIntake />} />
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
                 <Route path="kpi" element={<CounselorKpiView />} />
+                <Route path="command" element={<CommandCenterView />} />
+                <Route path="my-day" element={<MyDayView />} />
+                <Route path="scorecard" element={<ScorecardView />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
                 <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
                 <Route path="accountant" element={<AccountantView />} />

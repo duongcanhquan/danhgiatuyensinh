@@ -1,8 +1,14 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Activity, PhoneCall, Timer, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
-import { type CounselorKpiSummary, type KpiRangePreset, useCounselorKpi } from '../hooks/useCounselorKpi'
+import { type KpiRangePreset, useCounselorKpi } from '../hooks/useCounselorKpi'
+import { sumKpiSummaries } from '../utils/kpiMap'
+import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
+import { validCallRuleHint } from '../utils/kpiEvaluationRules'
+import { KpiCounselorTable } from '../components/KpiCounselorTable'
+import { SaleHubNav } from '../components/SaleHubNav'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 function fmtNum(n: number): string {
@@ -46,40 +52,9 @@ function StatCard({
   )
 }
 
-function CounselorRow({
-  row,
-  maxCalls,
-  labels,
-}: {
-  row: CounselorKpiSummary
-  maxCalls: number
-  labels: Map<string, string>
-}) {
-  const bar = maxCalls > 0 ? Math.max(4, Math.round((row.totalCalls / maxCalls) * 100)) : 0
-  return (
-    <tr className="border-b border-slate-200/70 last:border-0">
-      <td className="min-w-[12rem] px-3 py-2 text-sm font-semibold text-slate-900">
-        {kpiDisplayName(row.counselorUid, labels)}
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-sky-500" style={{ width: `${bar}%` }} />
-        </div>
-      </td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.totalCalls)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.connectedCalls)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{pct(row.connectedCalls, row.totalCalls)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtMinutes(row.talkSeconds)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.recordings)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.crmActions)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.depositPaidCount)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.tuitionPaidCount)}</td>
-      <td className="px-3 py-2 text-right text-sm font-semibold text-emerald-800">{fmtVnd(row.approvedRevenueVnd)}</td>
-      <td className="px-3 py-2 text-right text-sm text-slate-800">{fmtNum(row.activeDays)}</td>
-    </tr>
-  )
-}
-
 export function CounselorKpiView() {
   const { profile, can } = useAuth()
+  const { runtime } = useKpiEvaluationRules()
   const [range, setRange] = useState<KpiRangePreset>('7d')
   const [selectedTeamLeadUid, setSelectedTeamLeadUid] = useState('all')
   const [selectedCounselorUid, setSelectedCounselorUid] = useState('all')
@@ -92,7 +67,6 @@ export function CounselorKpiView() {
     return m
   }, [users])
 
-  const maxCalls = summaries[0]?.totalCalls ?? 0
   const teamLeads = useMemo(() => users.filter((u) => u.role === 'team_lead' && u.isActive), [users])
   const visibleSummaries = useMemo(() => {
     return summaries.filter((s) => {
@@ -101,41 +75,19 @@ export function CounselorKpiView() {
       return true
     })
   }, [selectedCounselorUid, selectedTeamLeadUid, summaries])
-  const visibleTotals = useMemo(
+  const visibleTotals = useMemo(() => sumKpiSummaries(visibleSummaries), [visibleSummaries])
+  const tableRows = useMemo(
     () =>
-      visibleSummaries.reduce(
-        (acc, r) => {
-          acc.totalCalls += r.totalCalls
-          acc.connectedCalls += r.connectedCalls
-          acc.missedCalls += r.missedCalls
-          acc.talkSeconds += r.talkSeconds
-          acc.recordings += r.recordings
-          acc.crmActions += r.crmActions
-          acc.depositPaidCount += r.depositPaidCount
-          acc.tuitionPaidCount += r.tuitionPaidCount
-          acc.paidCount += r.paidCount
-          acc.approvedRevenueVnd += r.approvedRevenueVnd
-          acc.fullNeCount += r.fullNeCount
-          return acc
-        },
-        {
-          totalCalls: 0,
-          connectedCalls: 0,
-          missedCalls: 0,
-          talkSeconds: 0,
-          recordings: 0,
-          crmActions: 0,
-          depositPaidCount: 0,
-          tuitionPaidCount: 0,
-          paidCount: 0,
-          approvedRevenueVnd: 0,
-          fullNeCount: 0,
-        },
-      ),
-    [visibleSummaries],
+      visibleSummaries.map((row) => ({
+        row,
+        name: kpiDisplayName(row.counselorUid, labels),
+      })),
+    [labels, visibleSummaries],
   )
-  const maxVisibleCalls = visibleSummaries[0]?.totalCalls ?? maxCalls
   const connectedRate = pct(visibleTotals.connectedCalls, visibleTotals.totalCalls)
+  const showCommandHint =
+    range === 'today' &&
+    (can('analytics:advanced') || can('dashboard:team_lead') || can('leads:read:global'))
   const scopeLabel = can('leads:read:global')
     ? 'Toàn trường'
     : can('leads:read:team_scope')
@@ -143,7 +95,8 @@ export function CounselorKpiView() {
       : profile?.displayName || 'Cá nhân'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <SaleHubNav />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
@@ -151,7 +104,15 @@ export function CounselorKpiView() {
           </VietMyAccentHeading>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
             Tổng hợp từ OMICall webhook/API và thao tác trên CRM. Dữ liệu cuộc gọi đầy đủ sẽ xuất hiện sau khi Cloud
-            Functions đồng bộ `omicallCalls` và `kpiDaily`.
+            Functions đồng bộ `omicallCalls` và `kpiDaily`. {validCallRuleHint(runtime)}.
+            {can('config:scoring_rules') ? (
+              <>
+                {' '}
+                <Link to="/settings?tab=kpi" className="font-semibold text-sky-800 underline">
+                  Cài đặt KPI
+                </Link>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -162,6 +123,7 @@ export function CounselorKpiView() {
               onChange={(e) => setRange(e.target.value as KpiRangePreset)}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
             >
+              <option value="today">Hôm nay</option>
               <option value="7d">7 ngày gần nhất</option>
               <option value="30d">30 ngày gần nhất</option>
             </select>
@@ -206,10 +168,29 @@ export function CounselorKpiView() {
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-5">
+      {showCommandHint ? (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          Xem hôm nay theo từng TVV và cảnh báo spam tại{' '}
+          <Link to="/command" className="font-semibold underline">
+            Điều hành Sale
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard label="Phạm vi" value={scopeLabel} hint={`${dates[0]} → ${dates[dates.length - 1]}`} />
-        <StatCard label="Tổng cuộc gọi" value={fmtNum(visibleTotals.totalCalls)} hint="Gọi vào + gọi ra" />
-        <StatCard label="Tỷ lệ bắt máy" value={connectedRate} hint={`${fmtNum(visibleTotals.connectedCalls)} cuộc kết nối`} />
+        <StatCard
+          label="Gọi hợp lệ"
+          value={fmtNum(visibleTotals.validCalls)}
+          hint={`${fmtNum(visibleTotals.totalCalls)} tổng`}
+        />
+        <StatCard
+          label="WARM+ / HOT+"
+          value={`${fmtNum(visibleTotals.warmNew)} / ${fmtNum(visibleTotals.hotNew)}`}
+          hint="Chuyển đổi nhãn trong kỳ"
+        />
+        <StatCard label="Tỷ lệ bắt máy" value={connectedRate} hint={`${fmtNum(visibleTotals.connectedCalls)} / ${fmtNum(visibleTotals.totalCalls)} cuộc`} />
         <StatCard label="Thời lượng nói chuyện" value={fmtMinutes(visibleTotals.talkSeconds)} hint={`${fmtNum(visibleTotals.recordings)} ghi âm`} />
         <StatCard label="Thao tác CRM" value={fmtNum(visibleTotals.crmActions)} hint="Ghi chú, đổi trạng thái, phân công, AI" />
       </div>
@@ -233,37 +214,12 @@ export function CounselorKpiView() {
           </div>
           <p className="text-xs text-slate-500">{loading ? 'Đang tải…' : `${visibleSummaries.length}/${summaries.length} TVV có dữ liệu`}</p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-left">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3 py-2">TVV</th>
-                <th className="px-3 py-2 text-right">Tổng gọi</th>
-                <th className="px-3 py-2 text-right">Bắt máy</th>
-                <th className="px-3 py-2 text-right">Tỷ lệ</th>
-                <th className="px-3 py-2 text-right">Phút nói</th>
-                <th className="px-3 py-2 text-right">Ghi âm</th>
-                <th className="px-3 py-2 text-right">Thao tác</th>
-                <th className="px-3 py-2 text-right">Cọc</th>
-                <th className="px-3 py-2 text-right">Học phí</th>
-                <th className="px-3 py-2 text-right">Doanh thu</th>
-                <th className="px-3 py-2 text-right">Ngày hoạt động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white/70">
-              {visibleSummaries.map((row) => (
-                <CounselorRow key={row.counselorUid} row={row} maxCalls={maxVisibleCalls} labels={labels} />
-              ))}
-              {!loading && visibleSummaries.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-500">
-                    Chưa có KPI cuộc gọi trong khoảng này. Kiểm tra Cloud Functions và webhook/API OMICall.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <KpiCounselorTable
+          rows={tableRows}
+          mode="period"
+          loading={loading}
+          emptyMessage="Chưa có KPI cuộc gọi trong khoảng này. Kiểm tra Cloud Functions và webhook/API OMICall."
+        />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
