@@ -1,4 +1,4 @@
-﻿import type { MouseEvent, ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
