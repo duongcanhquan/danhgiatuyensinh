@@ -4,7 +4,7 @@ service cloud.firestore {
 
     // --- Bảng kê collection id (đồng bộ `FS_COLLECTIONS` trong src/types.ts) ---
     // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux, masterData,
-    // consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks,
+    // consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
     // leads/{id}/interactions, leads/{id}/aiInsightTasks
     // (scoringRuleSets, routingPolicies: id dự phòng — app chưa ghi đọc.)
     //

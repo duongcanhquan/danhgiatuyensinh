@@ -23,7 +23,7 @@ export async function persistLeadFinance(opts: {
   for (const key of ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4'] as LeadPaymentSlotKey[]) {
     const file = draft.payments[key].pendingFile
     if (file) {
-      uploads[key] = await uploadLeadReceiptFile(lead.id, key, file)
+      uploads[key] = await uploadLeadReceiptFile(lead, key, file)
     }
   }
 
@@ -31,22 +31,28 @@ export async function persistLeadFinance(opts: {
   const plan = buildFinanceSavePlan(lead, mergedDraft)
   const touch = leadTouchPatch()
 
+  const financeWithEnrollment = {
+    ...plan.firestoreFinance,
+    enrollmentStatus: plan.firestoreFinance.enrollmentStatus ?? lead.finance?.enrollmentStatus ?? 'MỚI',
+  }
+
   await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
     ...touch,
-    finance: plan.firestoreFinance,
+    finance: financeWithEnrollment,
   })
 
   if (plan.triggerN8n) {
+    const moneyChanged = Object.keys(uploads).length > 0 || plan.resetApprovalSlots.length > 0
     await triggerProfileFinanceN8n({
-      lead: { ...lead, finance: plan.firestoreFinance },
-      finance: plan.firestoreFinance,
-      isMoneyChanged: true,
+      lead: { ...lead, finance: financeWithEnrollment },
+      finance: financeWithEnrollment,
+      isMoneyChanged: moneyChanged,
       counselorName,
     })
   }
 
   return {
-    finance: plan.firestoreFinance,
+    finance: financeWithEnrollment,
     updatedAt: touch.updatedAt,
     lastTouchedAt: touch.lastTouchedAt,
   }

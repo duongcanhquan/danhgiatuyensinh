@@ -1,0 +1,67 @@
+{
+  "name": "[TS] Upload chứng từ Drive (nhánh giaymoits)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "giaymoits",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-800, 200],
+      "name": "Webhook giaymoits"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.action || $json.action }}",
+              "rightValue": "upload_receipt",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-560, 200],
+      "name": "Là upload_receipt?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\nconst rootId = body.rootFolderId || '1wXoWyfUVC8hva-7MEKJaaoV6p67BEhyG';\nconst folderName = body.folderName || 'HoSo';\nconst file = body.file;\nif (!file?.base64) throw new Error('Thiếu file.base64');\n\n// Cần credential Google Drive OAuth2 trên node Drive tiếp theo\nreturn [{\n  json: {\n    rootFolderId: rootId,\n    folderName,\n    fileName: file.name,\n    mimeType: file.type || 'application/octet-stream',\n    base64: file.base64\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-320, 120],
+      "name": "Chuẩn bị upload"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { fileUrl: $json.fileUrl } }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [120, 120],
+      "name": "Trả link Drive"
+    }
+  ],
+  "connections": {
+    "Webhook giaymoits": { "main": [[{ "node": "Là upload_receipt?", "type": "main", "index": 0 }]] },
+    "Là upload_receipt?": {
+      "main": [
+        [{ "node": "Chuẩn bị upload", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Chuẩn bị upload": { "main": [[{ "node": "Trả link Drive", "type": "main", "index": 0 }]] }
+  },
+  "meta": {
+    "description": "Gắn IF trước workflow Tạo giấy nhập học: action=upload_receipt → tạo folder con + file, trả { fileUrl }. action=create_document → luồng cũ."
+  }
+}

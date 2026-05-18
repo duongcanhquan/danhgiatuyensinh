@@ -34,7 +34,7 @@ export function defaultPermissionsForRole(role: UserRole | string): readonly Per
     case 'super_admin':
       return ALL
     case 'admin':
-      return ALL_EXCEPT_LLM_API
+      return [...ALL_EXCEPT_LLM_API, 'finance:accountant', 'finance:reports']
     case 'counselor':
       return [
         'leads:read:self_assigned',

@@ -84,6 +84,7 @@ function parseFinanceFromFirestore(data: DocumentData): LeadFinanceRecord | unde
     reqFullNe: o.reqFullNe === true,
     fullNeStatus: String(o.fullNeStatus ?? '').trim() || undefined,
     n8nStatus: String(o.n8nStatus ?? '').trim() || undefined,
+    enrollmentStatus: String(o.enrollmentStatus ?? '').trim() || undefined,
   }
 }
 

@@ -1,0 +1,806 @@
+{
+  "name": "[TUYỂN SINH] BÁO CÁO NGÀY/THÁNG VIỆT MỸ",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// =========================================================\n// 1. CẤU HÌNH BIẾN\n// =========================================================\nconst COL_NAME      = \"fullName\";\nconst COL_ID        = \"id\";\nconst COL_PHONE     = \"phone\";\nconst COL_EDU_SYS   = \"system\";\nconst COL_MAJOR     = \"major\";\nconst COL_ADVISOR   = \"counselor\";\nconst COL_N8N_TAG   = \"n8n_status\";\nconst COL_TOTAL     = \"total_money\";      \nconst COL_SCHOLARSHIP = \"scholarship\";    \nconst COL_NOTE      = \"note\";             \nconst COL_SOURCE    = \"source\";           \n\nconst PAYMENT_DOTS = [\n    { id: '1', amount: 'deposit_money', status: 'valid1', proof: 'deposit_link', label: 'Tiền Cọc' },\n    { id: '2', amount: 'l1_money',      status: 'valid2', proof: 'l1_link',      label: 'Đợt 1' },\n    { id: '3', amount: 'bs3',           status: 'valid3', proof: 'bill3',        label: 'Bổ sung 3' },\n    { id: '4', amount: 'bs4',           status: 'valid4', proof: 'bill4',        label: 'Bổ sung 4' },\n    { id: '5', amount: 'bs5',           status: 'valid5', proof: 'bill5',        label: 'Bổ sung 5' }\n];\n\nfunction formatVN(val) {\n    if (!val) return \"0 VNĐ\";\n    let n = parseInt(String(val).replace(/\\D/g, '')) || 0;\n    return n.toLocaleString('vi-VN') + \"đ\";\n}\n\nfunction parseNumber(val) {\n    if (!val) return 0;\n    return parseInt(String(val).replace(/\\D/g, '')) || 0;\n}\n\nconst rawInput = $input.item.json;\nconst payload = rawInput.body || rawInput;\nconst dataSub = payload.full_data || payload.data || {};\n\nfunction getVal(key) { return payload[key] || dataSub[key] || \"\"; }\n\nconst rowIndex = getVal(\"row_index\") || getVal(\"row_number\");\nconst sentStatusStr = getVal(COL_N8N_TAG).toString();\nlet currentTags = sentStatusStr.split(',').map(s => s.trim()).filter(s => s !== \"\");\n\nconst totalMoneyRaw = parseNumber(getVal(COL_TOTAL));\nconst totalMoneyFmt = formatVN(totalMoneyRaw);\n\n// =========================================================\n// 2. MÀU SẮC CHO CÁC MỐC QUAN TRỌNG (MILESTONES)\n// =========================================================\nconst eduSysStr = getVal(COL_EDU_SYS).toString().toUpperCase();\nconst is9Plus = eduSysStr.includes(\"9+\");\nlet milestoneHtml = \"\";\n\nif (is9Plus && totalMoneyRaw >= 2000000) {\n    milestoneHtml = \"🏆 <font color=\\\"#0984E3\\\"><b>ĐÃ HOÀN THIỆN CỌC (HỆ 9+)</b></font>\";\n} else if (!is9Plus && totalMoneyRaw >= 1000000) {\n    milestoneHtml = \"🏆 <font color=\\\"#0984E3\\\"><b>ĐÃ HOÀN THIỆN CỌC</b></font>\";\n} else if (totalMoneyRaw >= 150000) {\n    milestoneHtml = \"🏅 <font color=\\\"#8E44AD\\\"><b>ĐÃ HOÀN THIỆN LPXT (Chưa đủ Cọc)</b></font>\";\n} else {\n    milestoneHtml = \"⏳ <font color=\\\"#7F8C8D\\\"><b>Tiến độ: Chưa đủ mốc LPXT/Cọc</b></font>\";\n}\n\nconst results = [];\nlet hasUpdate = false;\n\nPAYMENT_DOTS.forEach((dot) => {\n    const value = getVal(dot.amount).toString().trim();\n    const rawStatus = getVal(dot.status).toString();\n    const accountingValue = rawStatus.trim().toUpperCase();\n    const proofUrl = getVal(dot.proof);\n\n    if (value !== \"\" && value !== \"0\") {\n        const name  = getVal(COL_NAME) || \"N/A\";\n        const idSV  = getVal(COL_ID) || \"N/A\";\n        const moneyFormatted = formatVN(value);\n        const adv   = getVal(COL_ADVISOR) || \"N/A\";\n        const eduSys  = getVal(COL_EDU_SYS) || \"---\";\n        const major   = getVal(COL_MAJOR) || \"---\";\n        const scholar = getVal(COL_SCHOLARSHIP) || \"Không\";\n        \n        const noteText = getVal(COL_NOTE).toString().trim();\n        // Nhấn mạnh Ghi chú bằng màu Đỏ sậm\n        const noteHtml = noteText ? `<br>📝 <b>Lưu ý:</b> <font color=\"#C0392B\"><i>${noteText}</i></font>` : \"\";\n        let sourceText = getVal(COL_SOURCE).toString().trim() || \"Chưa rõ nguồn\";\n        const sourceHtml = `<br>🎯 <b>Nguồn:</b> <font color=\"#8E44AD\">${sourceText}</font>`;\n\n        const confirmKey = `confirm${dot.id}`;\n        const okKey      = `ok${dot.id}`;\n        const noKey      = `no${dot.id}`;\n\n        let cardPayload = null;\n        let newTag = \"\";\n\n        const ICON_CHECK = \"https://img.icons8.com/color/48/checked--v1.png\";\n        const ICON_WARN  = \"https://img.icons8.com/color/48/error--v1.png\";\n        const ICON_BELL  = \"https://img.icons8.com/color/48/bell.png\";\n\n        // =========================================================\n        // 3. TẠO NỘI DUNG CARD VỚI THANH MÀU NHẤN NHÁ (ACCENT BARS)\n        // =========================================================\n\n        if (accountingValue.includes(\"ĐỒNG Ý\") || accountingValue.includes(\"OK\")) {\n            // ✅ KẾ TOÁN XÁC NHẬN -> MÀU XANH LÁ\n            if (!currentTags.includes(okKey)) {\n                newTag = okKey;\n                // Tạo dải ruy băng Xanh lá ở đỉnh thẻ\n                let content = `<font color=\"#27AE60\">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</font><br>` +\n                              `🎉 <font color=\"#27AE60\"><b>GIAO DỊCH ĐÃ ĐƯỢC DUYỆT THÀNH CÔNG</b></font><br><br>` +\n                              `👤 <b>Sinh viên:</b> <font color=\"#2980B9\"><b>${name}</b></font> <font color=\"#7F8C8D\">(${idSV})</font><br>` +\n                              `💵 <b>Số tiền duyệt:</b> <font color=\"#27AE60\"><b>${moneyFormatted}</b></font>` +\n                              `${noteHtml}<br>` +\n                              `<font color=\"#BDC3C7\">━━━━━━━━━━━━━</font><br>` +\n                              `💰 <b><font color=\"#16A085\">TỔNG ĐÃ NỘP:</font></b> <font color=\"#16A085\"><b>${totalMoneyFmt}</b></font>`;\n\n                cardPayload = createGoogleCard(\"✅ KẾ TOÁN XÁC NHẬN: \" + dot.label, \"Trạng thái: Hoàn tất\", ICON_CHECK, content, proofUrl, milestoneHtml, false);\n            }\n        }\n        else if (accountingValue.includes(\"KHÔNG\") || accountingValue.includes(\"TỪ CHỐI\")) {\n            // ❌ KẾ TOÁN TỪ CHỐI -> MÀU ĐỎ ĐẬM\n            if (!currentTags.includes(noKey)) {\n                newTag = noKey;\n                // Tạo dải ruy băng Đỏ đậm ở đỉnh thẻ\n                let content = `<font color=\"#C0392B\">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</font><br>` +\n                              `⚠️ <font color=\"#C0392B\"><b>KẾ TOÁN ĐÃ TỪ CHỐI BÁO PHÍ NÀY!</b></font><br><br>` +\n                              `👤 <b>Sinh viên:</b> <font color=\"#2980B9\"><b>${name}</b></font> <font color=\"#7F8C8D\">(${idSV})</font><br>` +\n                              `💸 <b>Số tiền báo:</b> <font color=\"#C0392B\"><b>${moneyFormatted}</b></font>` +\n                              `${noteHtml}<br>` +\n                              `<font color=\"#BDC3C7\">━━━━━━━━━━━━━</font><br>` +\n                              `👉 <b>Yêu cầu xử lý:</b> TVV <font color=\"#E67E22\"><b>${adv}</b></font> kiểm tra lại ngay!`;\n\n                cardPayload = createGoogleCard(\"❌ CẢNH BÁO TỪ CHỐI: \" + dot.label, \"Trạng thái: Cần xử lý\", ICON_WARN, content, proofUrl, \"\", true);\n            }\n        }\n        else {\n            // 🚨 TVV GỬI DUYỆT -> MÀU CAM / ĐỎ TƯƠI\n            if (!currentTags.includes(confirmKey) && !currentTags.includes(okKey) && !currentTags.includes(noKey)) {\n                newTag = confirmKey;\n                // Tạo dải ruy băng Cam ở đỉnh thẻ\n                let content = `<font color=\"#E67E22\">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</font><br>` +\n                              `🔔 <font color=\"#E67E22\"><b>TƯ VẤN VIÊN GỬI YÊU CẦU DUYỆT PHÍ</b></font><br><br>` +\n                              `👨‍💼 <b>TVV:</b> <font color=\"#D35400\"><b>${adv}</b></font><br>` +\n                              `👤 <b>Sinh viên:</b> <font color=\"#2980B9\"><b>${name}</b></font> <font color=\"#7F8C8D\">(${idSV})</font><br>` +\n                              `🏫 <b>Hệ:</b> ${eduSys}  |  <b>Ngành:</b> ${major}<br>` +\n                              `🎁 <b>Học bổng:</b> <font color=\"#8E44AD\"><b>${scholar}</b></font><br><br>` +\n                              `💸 <b>ĐỢT NÀY NỘP:</b> <font color=\"#E74C3C\"><b>${moneyFormatted}</b></font>` +\n                              `${sourceHtml}${noteHtml}<br>` +\n                              `<font color=\"#BDC3C7\">━━━━━━━━━━━━━</font><br>` +\n                              `💰 <b><font color=\"#D35400\">TỔNG ĐÃ NỘP:</font></b> <font color=\"#D35400\"><b>${totalMoneyFmt}</b></font>`;\n\n                cardPayload = createGoogleCard(\"🚨 CẦN XÁC NHẬN: \" + dot.label, \"Đề nghị kế toán tra soát\", ICON_BELL, content, proofUrl, milestoneHtml, true);\n            }\n        }\n\n        if (cardPayload) {\n            currentTags.push(newTag); \n            results.push({\n                json: { google_chat_payload: cardPayload, studentId: idSV, row_number: rowIndex, new_status_value: currentTags.join(',') }\n            });\n            hasUpdate = true;\n        }\n    }\n});\n\n// =========================================================\n// 4. HÀM ĐÓNG GÓI THẺ CARD\n// =========================================================\nfunction createGoogleCard(title, subtitle, iconUrl, contentHtml, proofUrl, milestoneHtml, showButton) {\n    const widgets = [];\n    widgets.push({ \"textParagraph\": { \"text\": contentHtml } });\n\n    if (showButton && proofUrl) {\n        widgets.push({ \"buttonList\": { \"buttons\": [ { \"text\": \"👉 XEM MINH CHỨNG\", \"icon\": { \"iconUrl\": \"https://img.icons8.com/ios-glyphs/30/link--v1.png\" }, \"onClick\": { \"openLink\": { \"url\": proofUrl } } } ] } });\n    } else if (showButton && !proofUrl) {\n         widgets.push({ \"textParagraph\": { \"text\": \"<font color=\\\"#C0392B\\\"><i>⚠️ Không đính kèm link minh chứng</i></font>\" } });\n    }\n\n    if (milestoneHtml) {\n        // Đặt mốc Milestone vào một khối tách biệt ở dưới cùng\n        widgets.push({ \"textParagraph\": { \"text\": \"<font color=\\\"#BDC3C7\\\">━━━━━━━━━━━━━</font><br>\" + milestoneHtml } });\n    }\n\n    return { \"cardsV2\": [ { \"cardId\": \"unique-card-id-\" + Math.random(), \"card\": { \"header\": { \"title\": title, \"subtitle\": subtitle, \"imageUrl\": iconUrl, \"imageType\": \"CIRCLE\" }, \"sections\": [ { \"widgets\": widgets } ] } } ] };\n}\n\nif (!hasUpdate) return [];\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        -288
+      ],
+      "id": "7e705a4b-5084-46dc-8814-bcacfe02d986",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.googleapis.com/v1/spaces/AAAAMpyq-fI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=jJ4MlN0IC0tjg_cA6CWfouLUH1kZFCWi-VeuRcM8klA",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.google_chat_payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -560,
+        -288
+      ],
+      "id": "5a802286-0273-458b-8c3a-087c5da44423",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "testctsv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1296,
+        -288
+      ],
+      "id": "19c6f75f-6ff9-4bdb-b2fe-7f43f022a628",
+      "name": "Webhook",
+      "webhookId": "b0b225fe-64bb-41d0-8f61-d87899bb2613"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1O9tUgfvLxIH8GrWevIUD-csDCqEo8Qmg8C8S7hX5474",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1561332725,
+          "mode": "list",
+          "cachedResultName": "DU_LIEU_SINH_VIEN",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1O9tUgfvLxIH8GrWevIUD-csDCqEo8Qmg8C8S7hX5474/edit#gid=1561332725"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Code in JavaScript').item.json.row_number }}",
+            "n8n_Status": "={{ $('Code in JavaScript').item.json.new_status_value }}",
+            "Mã sinh viên": "={{ $('Code in JavaScript').item.json.studentId }}"
+          },
+          "matchingColumns": [
+            "Mã sinh viên"
+          ],
+          "schema": [
+            {
+              "id": "STT",
+              "displayName": "STT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mã sinh viên",
+              "displayName": "Mã sinh viên",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Họ và tên",
+              "displayName": "Họ và tên",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Giới tính",
+              "displayName": "Giới tính",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ngày sinh",
+              "displayName": "Ngày sinh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Số điện thoại",
+              "displayName": "Số điện thoại",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email cá nhân",
+              "displayName": "Email cá nhân",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Khu vực",
+              "displayName": "Khu vực",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Địa chỉ VNeID",
+              "displayName": "Địa chỉ VNeID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Địa chỉ tạm trú/ Nơi ở hiện tại",
+              "displayName": "Địa chỉ tạm trú/ Nơi ở hiện tại",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Hệ đào tạo",
+              "displayName": "Hệ đào tạo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Khoa đào tạo",
+              "displayName": "Khoa đào tạo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ngành",
+              "displayName": "Ngành",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Niên khóa",
+              "displayName": "Niên khóa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nơi sinh",
+              "displayName": "Nơi sinh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Dân tộc",
+              "displayName": "Dân tộc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Căn cước",
+              "displayName": "Căn cước",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ngày nhập học",
+              "displayName": "Ngày nhập học",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tư vấn tuyển sinh",
+              "displayName": "Tư vấn tuyển sinh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Cơ sở học",
+              "displayName": "Cơ sở học",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Họ tên cha",
+              "displayName": "Họ tên cha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sđt cha",
+              "displayName": "Sđt cha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Họ tên mẹ",
+              "displayName": "Họ tên mẹ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sđt mẹ",
+              "displayName": "Sđt mẹ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Người giám hộ",
+              "displayName": "Người giám hộ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sđt người giám hộ",
+              "displayName": "Sđt người giám hộ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Trường THPT",
+              "displayName": "Trường THPT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tỉnh trường",
+              "displayName": "Tỉnh trường",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Khu vực",
+              "displayName": "Khu vực",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Học bổng",
+              "displayName": "Học bổng",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ứng/Cọc",
+              "displayName": "Ứng/Cọc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tiền Bổ sung",
+              "displayName": "Tiền Bổ sung",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Các khoản giảm trừ",
+              "displayName": "Các khoản giảm trừ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tư vấn viên",
+              "displayName": "Tư vấn viên",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bill Ứng/Cọc",
+              "displayName": "Bill Ứng/Cọc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bill Bổ sung",
+              "displayName": "Bill Bổ sung",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Giấy mời học",
+              "displayName": "Giấy mời học",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tổng tiền đã nộp",
+              "displayName": "Tổng tiền đã nộp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lưu ý",
+              "displayName": "Lưu ý",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tình trạng",
+              "displayName": "Tình trạng",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Trạng thái KT",
+              "displayName": "Trạng thái KT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Trạng thái CTSV",
+              "displayName": "Trạng thái CTSV",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Đối tượng ",
+              "displayName": "Đối tượng ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Điểm trung bình",
+              "displayName": "Điểm trung bình",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bổ sung 3",
+              "displayName": "Bổ sung 3",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bill 3",
+              "displayName": "bill 3",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bổ sung 4",
+              "displayName": "bổ sung 4",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bill 4",
+              "displayName": "Bill 4",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bổ sung 5",
+              "displayName": "bổ sung 5",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bill 5",
+              "displayName": "Bill 5",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Xác nhận 1",
+              "displayName": "Xác nhận 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Xác nhận 2",
+              "displayName": "Xác nhận 2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Xác nhận 3",
+              "displayName": "Xác nhận 3",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Xác nhận 4",
+              "displayName": "Xác nhận 4",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Xác nhận 5",
+              "displayName": "Xác nhận 5",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "n8n_Status",
+              "displayName": "n8n_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -144,
+        -288
+      ],
+      "id": "d6735bf7-26d0-4afd-9096-623ab40c23b2",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "X1eWJlFCd39SML18",
+          "name": "duongcanhquan@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -352,
+        -288
+      ],
+      "id": "51aee1ec-9038-4345-9f4a-e03a482e548e",
+      "name": "Wait",
+      "webhookId": "ae48de47-ba94-44ae-8caf-757605099fb8"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -816,
+        -288
+      ],
+      "id": "2efe0a98-1444-4bab-a329-abc682efa6bf",
+      "name": "Wait1",
+      "webhookId": "9f14bdfb-c537-43c3-9ad2-2835c4d52fc8"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "baocao-ngay",
+        "options": {}
+      },
+      "id": "96ffafd0-ef0f-491a-9ee2-e8d9fab6d7d8",
+      "name": "Nhận Báo Cáo Ngày",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1296,
+        -112
+      ],
+      "webhookId": "baocao-ngay-id"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "baocao-thang",
+        "options": {}
+      },
+      "id": "0c8e66a1-6c8e-4850-b447-a634a51f0ec0",
+      "name": "Nhận Báo Cáo Tháng",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1296,
+        96
+      ],
+      "webhookId": "baocao-thang-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.item.json.body || $input.item.json;\nlet cardPayload = {};\n\n// ÉP MÚI GIỜ VIỆT NAM (GMT+7)\nconst options = { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false };\nconst currentTime = new Date().toLocaleTimeString('vi-VN', options);\n\nif (payload.date) {\n    // =======================================================\n    // BÁO CÁO NGÀY (Lấy giao diện trực tiếp từ Apps Script)\n    // =======================================================\n    cardPayload = {\n        \"cardsV2\": [{\n            \"cardId\": \"daily-\" + Date.now(),\n            \"card\": {\n                \"header\": { \n                    \"title\": \"📊 BÁO CÁO TỔNG KẾT NGÀY\", \n                    \"subtitle\": \"Cập nhật lúc: \" + currentTime, \n                    \"imageUrl\": \"https://img.icons8.com/color/48/combo-chart--v1.png\", \n                    \"imageType\": \"CIRCLE\" \n                },\n                \"sections\": [{\n                    \"widgets\": [{\n                        \"textParagraph\": {\n                            \"text\": payload.dailyDetailHtml // <-- Chỉ cần gọi đúng 1 dòng này!\n                        }\n                    }]\n                }]\n            }\n        }]\n    };\n} else if (payload.month) {\n    // =======================================================\n    // BÁO CÁO THÁNG\n    // =======================================================\n    cardPayload = {\n        \"cardsV2\": [{\n            \"cardId\": \"monthly-\" + Date.now(),\n            \"card\": {\n                \"header\": { \"title\": \"🏆 BÁO CÁO TỔNG KẾT THÁNG\", \"subtitle\": \"Tháng \" + payload.month, \"imageUrl\": \"https://img.icons8.com/fluency/48/trophy.png\", \"imageType\": \"CIRCLE\" },\n                \"sections\": [{\n                    \"widgets\": [{\n                        \"textParagraph\": {\n                            \"text\": `<b>🔸 Tổng NB toàn tháng:</b> <font color=\"#ffaa00\\\"><b>${payload.nbMonth || 0}</b></font><br><b>🔹 Tổng LPXT toàn tháng:</b> <font color=\\\"#0056b3\\\"><b>${payload.lpxtMonth || 0}</b></font><br><b>⭐ Tổng hoàn thiện cọc:</b> <font color=\\\"#198754\\\"><b>${payload.neMonth || 0}</b></font><br>----------------<br>🥇 <b>BEST SELLER THÁNG:</b><br><font color=\\\"#e67e22\\\"><b>${payload.topTvvName || 'Chưa có'}</b></font> (${payload.topTvvCount || 0} NE)`\n                        }\n                    }]\n                }]\n            }\n        }]\n    };\n}\n\nreturn { json: { google_chat_payload: cardPayload } };"
+      },
+      "id": "46a3c30a-032c-482e-8045-aac4b898fe94",
+      "name": "Tạo giao diện Google Chat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.googleapis.com/v1/spaces/AAAAMpyq-fI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=jJ4MlN0IC0tjg_cA6CWfouLUH1kZFCWi-VeuRcM8klA",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.google_chat_payload }}",
+        "options": {}
+      },
+      "id": "20b4ff50-44cc-4895-951c-0ac2185e0607",
+      "name": "HTTP Request2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -800,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nhận Báo Cáo Ngày": {
+      "main": [
+        [
+          {
+            "node": "Tạo giao diện Google Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nhận Báo Cáo Tháng": {
+      "main": [
+        [
+          {
+            "node": "Tạo giao diện Google Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tạo giao diện Google Chat": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d4dbe31e-b7f4-4a87-8e2e-8f1ca0d4b69b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "11cf124f3552cdbc216dccd7d22c6c8436b1a6c2213808d49b9aedc94f7e7322"
+  },
+  "id": "8g81qcosAinwL3KG",
+  "tags": []
+}

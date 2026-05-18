@@ -10,6 +10,7 @@ import { LoginView } from './views/LoginView'
 import { SettingsView } from './views/SettingsView'
 import { UserManualView } from './views/UserManualView'
 import { AnalyticsAdvancedView } from './views/AnalyticsAdvancedView'
+import { AccountantView } from './views/AccountantView'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
                 <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
+                <Route path="accountant" element={<AccountantView />} />
                 <Route path="settings" element={<SettingsView />} />
                 <Route path="huong-dan" element={<UserManualView />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

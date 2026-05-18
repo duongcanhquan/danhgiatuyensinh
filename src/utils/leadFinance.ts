@@ -218,6 +218,7 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
   const firestoreFinance: LeadFinanceRecord = {
     payments: nextPayments,
     declaredTotalVnd: sumFinanceDraft(draft),
+    enrollmentStatus: before?.enrollmentStatus?.trim() || 'MỚI',
     reqFullNe: draft.reqFullNe,
     fullNeStatus: fullNeStatus || undefined,
     n8nStatus: n8nStatus || undefined,

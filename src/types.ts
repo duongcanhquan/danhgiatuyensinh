@@ -136,6 +136,10 @@ export const PERMISSIONS = [
   /** Cấu hình tác vụ AI trên Firestore (`ai_tasks`) — Admin / Siêu quản trị. */
   'config:ai_engine',
   'analytics:advanced',
+  /** Cổng kế toán — duyệt thu/chi, Full NE, gửi n8n kế toán. */
+  'finance:accountant',
+  /** Báo cáo thu ngày/tháng từ Firestore → webhook n8n. */
+  'finance:reports',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -246,6 +250,8 @@ export interface LeadPaymentLine {
 export interface LeadFinanceRecord {
   payments?: Partial<Record<LeadPaymentSlotKey, LeadPaymentLine>>
   declaredTotalVnd?: number
+  /** Trạng thái tuyển sinh / thu phí (MỚI, ĐANG HOÀN THIỆN, CỌC THÀNH CÔNG…) — cột 39 hệ cũ */
+  enrollmentStatus?: string
   /** TVV tick «đã thu đủ FULL NE» — map cột 65: YÊU CẦU FULL NE / ĐÃ FULL NE */
   reqFullNe?: boolean
   fullNeStatus?: string
@@ -1025,7 +1031,24 @@ export const FS_COLLECTIONS = {
   leadSources: 'leadSources',
   /** Danh mục học bổng (Học bổng 1 / 2). */
   scholarships: 'scholarships',
+  /** Lịch sử gửi báo cáo thu ngày/tháng (kiểm tra trực tiếp trên app). */
+  financeReports: 'financeReports',
 } as const
+
+export type FinanceReportKind = 'daily' | 'monthly'
+
+export interface FinanceReportLog {
+  id: string
+  kind: FinanceReportKind
+  /** dd/MM/yyyy hoặc MM/yyyy */
+  periodLabel: string
+  sentAt: Timestamp
+  triggeredBy?: UserId
+  triggeredByName?: string
+  payloadPreview?: string
+  n8nOk: boolean
+  errorMessage?: string
+}
 
 /** Nhóm học bổng trên form hồ sơ. */
 export type ScholarshipCategoryId = 'phcd' | 'cdcq'
