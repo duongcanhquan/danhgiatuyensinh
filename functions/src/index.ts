@@ -30,6 +30,7 @@ const COLLECTIONS = {
   auditLogs: 'auditLogs',
   scoringAux: 'scoringAux',
   omicallCalls: 'omicallCalls',
+  omicallCallAnalyses: 'omicallCallAnalyses',
   kpiDaily: 'kpiDaily',
   kpiActivityEvents: 'kpiActivityEvents',
   kpiFinanceEvents: 'kpiFinanceEvents',
@@ -42,6 +43,7 @@ type Direction = 'outbound' | 'inbound' | 'local' | string
 type NormalizedOmicallCall = {
   transactionId: string
   callUuid?: string
+  state?: string
   direction: Direction
   phoneNumber: string
   displayNumber: string
@@ -145,10 +147,19 @@ function dayKeyFromTs(ts?: Timestamp): string {
   return d.toISOString().slice(0, 10)
 }
 
-function callOutcome(answerSeconds: number, billSeconds: number, hangupCause: string): CallOutcome {
+function callOutcome(answerSeconds: number, billSeconds: number, hangupCause: string, disposition: string): CallOutcome {
   if (answerSeconds > 0 || billSeconds > 0) return 'CONNECTED'
+  const d = disposition.toLowerCase()
+  if (d === 'answered' || d === 'answer' || d === 'connected') return 'CONNECTED'
+  if (d.includes('no_answer') || d.includes('no answer') || d.includes('busy') || d.includes('failed')) return 'NO_ANSWER'
   if (hangupCause) return 'NO_ANSWER'
   return 'OTHER'
+}
+
+function isFinalCallState(call: Pick<NormalizedOmicallCall, 'state' | 'endedAt'>, source: 'webhook' | 'history_sync'): boolean {
+  if (source === 'history_sync') return true
+  const state = str(call.state).toLowerCase()
+  return state === 'hangup' || state === 'cdr' || state === 'completed' || state === 'ended' || Boolean(call.endedAt)
 }
 
 function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall | null {
@@ -169,24 +180,29 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
   const durationSeconds = num(raw.duration)
   const recordSeconds = num(raw.record_seconds)
   const hangupCause = str(raw.hangup_cause)
-  const outcome = callOutcome(answerSeconds, billSeconds, hangupCause)
+  const disposition = str(raw.disposition)
+  const outcome = callOutcome(answerSeconds, billSeconds, hangupCause, disposition)
+  const state = str(raw.state) || undefined
+  const stateLower = str(state).toLowerCase()
+  const eventTime = raw.date_time || raw.last_updated_date || raw.created_time || raw.created_date
   return {
     transactionId,
     callUuid: str(raw.call_uuid) || undefined,
+    state,
     direction: str(raw.direction) || 'outbound',
     phoneNumber,
     displayNumber,
     hotline: str(raw.hotline) || str(raw.sip_number) || undefined,
     sipUser: str(raw.sip_user) || str(raw.extension) || str(asObject(raw.create_by).id) || undefined,
-    startedAt: toTs(raw.time_start_call || raw.created_date || raw.created_time),
-    answeredAt: toTs(raw.time_answer_start),
-    endedAt: toTs(raw.time_end_call),
-    createdAt: toTs(raw.created_date || raw.created_time),
+    startedAt: toTs(raw.time_start_call || raw.created_date || raw.created_time || raw.date_time),
+    answeredAt: toTs(raw.time_answer_start || raw.time_start_to_answer || (stateLower === 'answered' ? eventTime : undefined)),
+    endedAt: toTs(raw.time_end_call || (stateLower === 'hangup' || stateLower === 'cdr' ? eventTime : undefined)),
+    createdAt: toTs(raw.created_date || raw.created_time || raw.date_time),
     answerSeconds,
     billSeconds,
     durationSeconds,
     recordSeconds,
-    recordingFileUrl: str(raw.recording_file_url) || undefined,
+    recordingFileUrl: str(raw.recording_file_url) || str(raw.recording_file) || undefined,
     hangupCause: hangupCause || undefined,
     endByName: str(raw.endby_name) || undefined,
     provider: str(raw.provider) || undefined,
@@ -271,11 +287,14 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   const callRef = db.collection(COLLECTIONS.omicallCalls).doc(call.transactionId)
   const now = Timestamp.now()
   const existing = await callRef.get()
+  const existingData = existing.data()
+  const isFinal = isFinalCallState(call, source)
   const payload = {
     ...call,
     leadId: match.leadId ?? null,
     counselorUid: match.counselorUid ?? null,
     teamLeadUid: match.teamLeadUid ?? null,
+    isFinal,
     syncSource: source,
     syncedAt: now,
     updatedAt: now,
@@ -283,7 +302,9 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   }
   await callRef.set(payload, { merge: true })
 
-  if (match.leadId && !existing.data()?.interactionId) {
+  if (!isFinal) return
+
+  if (match.leadId && !existingData?.interactionId) {
     const interactionRef = await db
       .collection(COLLECTIONS.leads)
       .doc(match.leadId)
@@ -311,7 +332,10 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     await callRef.set({ interactionId: interactionRef.id }, { merge: true })
   }
 
-  await updateDailyKpi(call, match)
+  if (!existingData?.kpiAppliedAt) {
+    await updateDailyKpi(call, match)
+    await callRef.set({ kpiAppliedAt: now }, { merge: true })
+  }
 }
 
 async function updateDailyKpi(call: NormalizedOmicallCall, match: LeadMatch) {
@@ -531,7 +555,7 @@ export const omicallCallWebhook = onRequest(
       return
     }
     await upsertCallAndInteraction(call, 'webhook')
-    res.json({ ok: true, transactionId: call.transactionId })
+    res.json({ ok: true, transactionId: call.transactionId, state: call.state ?? null, final: isFinalCallState(call, 'webhook') })
   },
 )
 
@@ -576,6 +600,184 @@ function rowsFromHistoryResponse(data: Record<string, unknown>): Record<string, 
   return []
 }
 
+async function fetchCallAnalysisList(baseUrl: string, apiKey: string, transactionIds: string[]) {
+  const url = `${baseUrl.replace(/\/$/, '')}/api/ai/call_transaction/list`
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: omicallHeaders(apiKey),
+    body: JSON.stringify({ transaction_ids: transactionIds }),
+  })
+  if (!resp.ok) throw new Error(`OMICall analysis HTTP ${resp.status}`)
+  return (await resp.json()) as Record<string, unknown>
+}
+
+function rowsFromAnalysisResponse(data: Record<string, unknown>): Record<string, unknown>[] {
+  const payload = data.payload
+  if (Array.isArray(payload)) return payload.map(asObject)
+  const payloadObj = asObject(payload)
+  return Object.keys(payloadObj).length ? [payloadObj] : []
+}
+
+function compactCallAnalysis(row: Record<string, unknown>) {
+  const staffAlignments = Array.isArray(row.staff_word_alignments) ? row.staff_word_alignments : []
+  const customerAlignments = Array.isArray(row.customer_word_alignments) ? row.customer_word_alignments : []
+  return {
+    tenantId: str(row.tenant_id) || null,
+    transactionId: str(row.transaction_id),
+    direction: str(row.direction) || null,
+    recordingFile: str(row.recording_file) || null,
+    sipNumber: str(row.sip_number) || null,
+    phoneNumber: normalizePhone(row.phone_number) || null,
+    timeStartToAnswer: toTs(row.time_start_to_answer) ?? null,
+    durationSeconds: num(row.duration),
+    billSeconds: num(row.bill_sec),
+    resultSpeechAnalytics: asObject(row.result_speech_analytics),
+    resultNlpAnalytics: asObject(row.result_nlp_analytics),
+    analystResults: asObject(row.analyst_results),
+    qualityEvaluationResult: asObject(row.quality_evaluation_result),
+    nlAnalyzeResult: asObject(row.nl_analyze_result),
+    staffWordAlignmentCount: staffAlignments.length,
+    customerWordAlignmentCount: customerAlignments.length,
+  }
+}
+
+function valueByKeys(input: unknown, keys: readonly string[], depth = 0): unknown {
+  if (!input || depth > 4) return undefined
+  if (Array.isArray(input)) {
+    for (const item of input.slice(0, 20)) {
+      const found = valueByKeys(item, keys, depth + 1)
+      if (found !== undefined && found !== null && str(found)) return found
+    }
+    return undefined
+  }
+  if (typeof input !== 'object') return undefined
+  const obj = input as Record<string, unknown>
+  const normalized = new Map(Object.keys(obj).map((k) => [k.toLowerCase(), k]))
+  for (const key of keys) {
+    const realKey = normalized.get(key.toLowerCase())
+    if (realKey) {
+      const value = obj[realKey]
+      if (value !== undefined && value !== null && str(value)) return value
+    }
+  }
+  for (const value of Object.values(obj)) {
+    const found = valueByKeys(value, keys, depth + 1)
+    if (found !== undefined && found !== null && str(found)) return found
+  }
+  return undefined
+}
+
+function compactText(v: unknown, max = 180): string {
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : ''
+  if (typeof v === 'boolean') return v ? 'Có' : 'Không'
+  if (typeof v === 'string') return v.replace(/\s+/g, ' ').trim().slice(0, max)
+  if (Array.isArray(v)) return compactText(v.find((x) => str(x)), max)
+  const obj = asObject(v)
+  for (const key of ['summary', 'text', 'content', 'value', 'label', 'name', 'comment', 'result']) {
+    const text = compactText(obj[key], max)
+    if (text) return text
+  }
+  return ''
+}
+
+function analysisSummaryText(compact: ReturnType<typeof compactCallAnalysis>): string {
+  const sources = [compact.qualityEvaluationResult, compact.nlAnalyzeResult, compact.analystResults, compact.resultNlpAnalytics]
+  const score = compactText(valueByKeys(sources, ['score', 'total_score', 'quality_score', 'final_score', 'point', 'points']), 24)
+  const summary = compactText(
+    valueByKeys(sources, ['summary', 'summarize', 'overall', 'overview', 'comment', 'remark', 'evaluation']),
+  )
+  const sentiment = compactText(valueByKeys(sources, ['sentiment', 'customer_sentiment', 'emotion', 'attitude']), 80)
+  const nextAction = compactText(
+    valueByKeys(sources, ['next_action', 'recommendation', 'suggestion', 'action', 'follow_up', 'advice']),
+  )
+  return [
+    score ? `Điểm chất lượng: ${score}` : '',
+    summary ? `Tóm tắt: ${summary}` : '',
+    sentiment ? `Cảm xúc/nhu cầu: ${sentiment}` : '',
+    nextAction ? `Gợi ý tiếp theo: ${nextAction}` : '',
+  ]
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(' · ')
+}
+
+function mergeAnalysisIntoNote(note: string, summary: string): string {
+  if (!summary) return note
+  const marker = 'Phân tích OMICall:'
+  const base = note.includes(marker) ? note.slice(0, note.indexOf(marker)).replace(/[·\s]+$/g, '') : note.trim()
+  return base ? `${base} · ${marker} ${summary}` : `${marker} ${summary}`
+}
+
+async function syncCallAnalyses(baseUrl: string, apiKey: string, transactionIds: string[]) {
+  const ids = [...new Set(transactionIds.map(str).filter(Boolean))].slice(0, 50)
+  if (!ids.length) return 0
+  const data = await fetchCallAnalysisList(baseUrl, apiKey, ids)
+  const rows = rowsFromAnalysisResponse(data)
+  if (!rows.length) return 0
+  const statusCode = num(data.status_code)
+  const version = str(data.instance_version)
+  const batch = db.batch()
+  let processed = 0
+  const now = Timestamp.now()
+  for (const row of rows) {
+    const compact = compactCallAnalysis(row)
+    if (!compact.transactionId) continue
+    const analysisRef = db.collection(COLLECTIONS.omicallCallAnalyses).doc(compact.transactionId)
+    const callRef = db.collection(COLLECTIONS.omicallCalls).doc(compact.transactionId)
+    const callSnap = await callRef.get()
+    const callData = callSnap.data()
+    const leadId = str(callData?.leadId)
+    const interactionId = str(callData?.interactionId)
+    const summary = analysisSummaryText(compact)
+    batch.set(
+      analysisRef,
+      {
+        ...compact,
+        summaryText: summary || null,
+        instanceVersion: version || null,
+        statusCode: statusCode || null,
+        syncedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    )
+    batch.set(
+      callRef,
+      {
+        aiAnalysisId: compact.transactionId,
+        aiAnalysisSyncedAt: now,
+        aiAnalysisStatusCode: statusCode || null,
+        aiAnalysisSummary: summary || null,
+        aiQualityEvaluationResult: compact.qualityEvaluationResult,
+        aiNlAnalyzeResult: compact.nlAnalyzeResult,
+      },
+      { merge: true },
+    )
+    if (summary && leadId && interactionId) {
+      const interactionRef = db
+        .collection(COLLECTIONS.leads)
+        .doc(leadId)
+        .collection(COLLECTIONS.interactions)
+        .doc(interactionId)
+      const interactionSnap = await interactionRef.get()
+      const currentNote = str(interactionSnap.data()?.counselorNote)
+      batch.set(
+        interactionRef,
+        {
+          counselorNote: mergeAnalysisIntoNote(currentNote, summary),
+          omicallAnalysisSummary: summary,
+          omicallAnalysisId: compact.transactionId,
+          omicallAnalysisSyncedAt: now,
+        },
+        { merge: true },
+      )
+    }
+    processed++
+  }
+  await batch.commit()
+  return processed
+}
+
 export const syncOmicallCallHistory = onSchedule(
   { schedule: 'every 15 minutes', secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
   async (): Promise<void> => {
@@ -589,8 +791,11 @@ export const syncOmicallCallHistory = onSchedule(
       return
     }
     let processed = 0
+    let analysesProcessed = 0
+    let analysisError: string | null = null
     let error: string | null = null
     try {
+      const analysisTransactionIds: string[] = []
       for (let page = 1; page <= 5; page++) {
         const data = await fetchHistoryPage(baseUrl, apiKey, page)
         const rows = rowsFromHistoryResponse(data)
@@ -599,9 +804,15 @@ export const syncOmicallCallHistory = onSchedule(
           const call = normalizeCall(row)
           if (!call) continue
           await upsertCallAndInteraction(call, 'history_sync')
+          if (call.outcome === 'CONNECTED') analysisTransactionIds.push(call.transactionId)
           processed++
         }
         if (rows.length < 50) break
+      }
+      try {
+        analysesProcessed = await syncCallAnalyses(baseUrl, apiKey, analysisTransactionIds)
+      } catch (e) {
+        analysisError = e instanceof Error ? e.message : String(e)
       }
       await updateDailyCrmKpiFromAuditLogs()
       await updateDailyFinanceKpiFromLeads()
@@ -612,6 +823,8 @@ export const syncOmicallCallHistory = onSchedule(
         startedAt,
         finishedAt: Timestamp.now(),
         processed,
+        analysesProcessed,
+        ...(analysisError ? { analysisError } : {}),
         status: error ? 'error' : 'ok',
         ...(error ? { error } : {}),
       })

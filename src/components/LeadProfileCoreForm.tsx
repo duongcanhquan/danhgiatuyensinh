@@ -207,7 +207,7 @@ function PhoneFieldWithCall({
 }) {
   return (
     <Field label={label}>
-      <div className="flex min-w-0 items-start gap-1.5">
+      <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:gap-1.5">
         <input
           className={`${INPUT_CLS} min-w-0 flex-1`}
           inputMode="tel"

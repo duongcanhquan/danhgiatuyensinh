@@ -1054,6 +1054,8 @@ export const FS_COLLECTIONS = {
   financeReports: 'financeReports',
   /** Lịch sử cuộc gọi OMICall đã đồng bộ từ webhook/API. */
   omicallCalls: 'omicallCalls',
+  /** Kết quả phân tích AI của OMICall, tách riêng để tránh làm nặng doc cuộc gọi. */
+  omicallCallAnalyses: 'omicallCallAnalyses',
   /** KPI tổng hợp theo ngày: `kpiDaily/{date}/counselors|teams/{id}`. */
   kpiDaily: 'kpiDaily',
   /** Log các lần đồng bộ OMICall từ Cloud Functions. */
@@ -1145,9 +1147,39 @@ export interface OmicallCallRecord {
   endByName?: string
   provider?: string
   outcome: OmicallCallOutcome
+  state?: string
+  isFinal?: boolean
   syncSource?: 'webhook' | 'history_sync'
   syncedAt?: Timestamp
   interactionId?: string
+  kpiAppliedAt?: Timestamp
+  aiAnalysisId?: string
+  aiAnalysisSyncedAt?: Timestamp
+  aiAnalysisStatusCode?: number | null
+}
+
+export interface OmicallCallAnalysisRecord {
+  id: DocumentId
+  transactionId: string
+  tenantId?: string | null
+  direction?: string | null
+  recordingFile?: string | null
+  sipNumber?: string | null
+  phoneNumber?: string | null
+  timeStartToAnswer?: Timestamp | null
+  durationSeconds: number
+  billSeconds: number
+  resultSpeechAnalytics?: Record<string, unknown>
+  resultNlpAnalytics?: Record<string, unknown>
+  analystResults?: Record<string, unknown>
+  qualityEvaluationResult?: Record<string, unknown>
+  nlAnalyzeResult?: Record<string, unknown>
+  staffWordAlignmentCount?: number
+  customerWordAlignmentCount?: number
+  statusCode?: number | null
+  instanceVersion?: string | null
+  syncedAt?: Timestamp
+  updatedAt?: Timestamp
 }
 
 export interface CounselorDailyKpi {
