@@ -18,7 +18,7 @@ export function getDefaultOmicallConfig(): OmicallIntegrationConfig {
     ...(envApiKey ? { apiKey: envApiKey } : {}),
     hideDialPad: true,
     autoLogCalls: true,
-    dialFormat: 'local',
+    dialFormat: 'intl84',
     callMode: 'browser',
   }
 }
@@ -70,18 +70,20 @@ export function resolveOmicallSipCredentials(
   return { sipRealm, sipUser, sipPassword }
 }
 
-/** Chuẩn hoá SĐT VN — mặc định `intl84` (849…) vì nhiều tổng đài SIP VN yêu cầu. */
+/** Chuẩn hoá SĐT VN — `intl84` đổi 0912345678 thành +84912345678. */
 export function normalizePhoneForDial(
   raw: string,
   format: 'intl84' | 'local' = 'intl84',
 ): string | null {
-  let d = raw.replace(/\D/g, '')
+  let d = raw.trim().replace(/[^\d+]/g, '')
+  if (d.startsWith('+')) d = d.slice(1)
+  d = d.replace(/\D/g, '')
   if (d.length < 9) return null
   if (d.startsWith('0')) d = `84${d.slice(1)}`
   else if (!d.startsWith('84') && d.length === 9) d = `84${d}`
   if (d.length < 11 || !d.startsWith('84')) return null
   if (format === 'local') return `0${d.slice(2)}`
-  return d
+  return `+${d}`
 }
 
 /** Xin quyền micro trước khi gọi — tránh UI «đang gọi» nhưng không có media. */

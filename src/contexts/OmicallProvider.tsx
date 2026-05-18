@@ -77,6 +77,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const [bootToken, setBootToken] = useState(0)
   const sdkRef = useRef<OmicallSdkGlobal | null>(null)
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
+  const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -123,9 +124,21 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const db = getFirestoreDb()
       if (!db) return
       try {
-        await logOmicallInteraction(db, call, profile)
+        const pendingMeta = pendingCallMetaRef.current
+        const callWithMeta: OmicallCallData =
+          call.userData || !pendingMeta
+            ? call
+            : {
+                ...call,
+                userData: JSON.stringify(pendingMeta),
+                displayNumber: call.displayNumber || pendingMeta.phone,
+                remoteNumber: call.remoteNumber || pendingMeta.phone,
+              }
+        await logOmicallInteraction(db, callWithMeta, profile)
       } catch (e) {
         console.error('[OMICall] log interaction', e)
+      } finally {
+        pendingCallMetaRef.current = null
       }
     },
     [config.autoLogCalls, profile],
@@ -164,7 +177,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         setLastCallHint(`Cuộc gọi kết thúc (mã lỗi tổng đài: ${call.rejectCode}). Kiểm tra đầu số gọi ra trên OMICall.`)
       } else if ((call.callingDuration?.value ?? 0) === 0 && (call.ringingDuration?.value ?? 0) === 0) {
         setLastCallHint(
-          'Cuộc gọi kết thúc ngay — thử đổi «Định dạng quay số» (84… / 0…), bật micro, hoặc gán đầu số gọi ra trên OMICall.',
+          'Cuộc gọi kết thúc ngay — thử đổi «Định dạng quay số» (+84… / 0…), bật micro, hoặc gán đầu số gọi ra trên OMICall.',
         )
       } else {
         setLastCallHint(null)
@@ -306,6 +319,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
         phone: normalized,
       }
+      pendingCallMetaRef.current = userData
       const outbound = config.defaultOutboundNumber?.trim()
       const userDataStr = JSON.stringify(userData)
       const useDeskPhone = config.callMode === 'deskPhone'

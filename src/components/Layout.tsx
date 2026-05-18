@@ -9,6 +9,7 @@ import {
   LineChart,
   LogOut,
   Menu,
+  PhoneCall,
   Settings2,
   User,
   Users,
@@ -32,6 +33,7 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: 
 const mainNav: NavDef[] = [
   { to: '/', label: 'Tổng kết', icon: LayoutDashboard },
   { to: '/leads', label: 'Hồ sơ', icon: Users },
+  { to: '/kpi', label: 'KPI tư vấn', icon: PhoneCall },
   { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, perm: 'analytics:advanced' },
   { to: '/import', label: 'Nhập liệu', icon: Database, perm: 'data:intake' },
   { to: '/accountant', label: 'Kế toán', icon: Wallet, perm: 'finance:accountant' },

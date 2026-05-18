@@ -191,8 +191,8 @@ export function OmicallSettingsTab() {
               value={draft.dialFormat === 'local' ? 'local' : 'intl84'}
               onChange={(e) => patch({ dialFormat: e.target.value === 'local' ? 'local' : 'intl84' })}
             >
-              <option value="local">Trong nước 0… (giống bàn phím OMICall)</option>
-              <option value="intl84">Quốc tế 84…</option>
+              <option value="intl84">Tự đổi 0… thành +84…</option>
+              <option value="local">Giữ trong nước 0… (giống bàn phím OMICall)</option>
             </select>
           </label>
           <label className="block text-sm">
@@ -270,7 +270,7 @@ export function OmicallSettingsTab() {
           <li>Trạng thái phải là <strong>Sẵn sàng gọi</strong> (SIP đã kết nối), không chỉ «đang đăng ký».</li>
           <li>Cho phép <strong>micro</strong> trên trình duyệt khi được hỏi.</li>
           <li>Thử <strong>Cách gọi → Máy bàn / IP phone</strong> nếu bàn phím OMICall gọi được mà nút hồ sơ treo.</li>
-          <li>Thử đổi <strong>Định dạng quay số</strong> (0… ↔ 84…) rồi gọi lại.</li>
+          <li>Thử đổi <strong>Định dạng quay số</strong> (0… ↔ +84…) rồi gọi lại.</li>
           <li>Trên OMICall: extension phải có <strong>đầu số gọi ra</strong> — điền vào ô hotline ở trên nếu cần.</li>
           <li>Gọi thử từ bàn phím OMICall (tắt «Ẩn bàn phím») cùng số — nếu vẫn lỗi thì do tổng đài/SIP, không phải app.</li>
         </ul>

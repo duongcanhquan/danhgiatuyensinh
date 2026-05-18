@@ -4,10 +4,12 @@ export type OmicallCallDuration = { value: number; text: string }
 
 export type OmicallCallData = {
   uid: string
+  uuid?: string
   state: 'connecting' | 'ringing' | 'accepted' | 'ended'
   direction: 'outbound' | 'inbound'
   remoteNumber: string
   displayNumber: string
+  sipNumber?: { number: string }
   ringingDuration?: OmicallCallDuration
   callingDuration?: OmicallCallDuration
   userData?: string

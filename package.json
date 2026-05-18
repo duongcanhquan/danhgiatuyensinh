@@ -16,6 +16,8 @@
     "seed:consulting-playbooks": "node scripts/seed-consulting-playbooks.mjs",
     "seed:script-snippets": "node scripts/seed-script-snippets.mjs",
     "migrate:strip-import-description": "node scripts/strip-lead-import-description.mjs",
+    "functions:build": "npm --prefix functions run build",
+    "deploy:functions": "firebase deploy --only functions",
     "deploy:firestore-indexes": "firebase deploy --only firestore:indexes"
   },
   "dependencies": {

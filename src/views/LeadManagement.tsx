@@ -127,6 +127,15 @@ function interactionChannelVi(ch: string): string {
   return m[ch] ?? ch
 }
 
+function formatCallSeconds(seconds: number | undefined): string {
+  const s = Math.max(0, Math.floor(Number(seconds ?? 0)))
+  if (!s) return '0 giây'
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  if (!m) return `${r} giây`
+  return `${m} phút ${r.toString().padStart(2, '0')} giây`
+}
+
 const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
 const EVALUATION_TAGS = [
@@ -3475,7 +3484,22 @@ function LeadDetailPanel({
               <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
             ) : null}
             {it.callOutcome ? (
-              <p className="mt-1 text-[11px] font-medium text-slate-600">Kết quả: {it.callOutcome}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                <span>Kết quả: {it.callOutcome}</span>
+                {it.durationSeconds !== undefined ? <span>· Nói chuyện: {formatCallSeconds(it.durationSeconds)}</span> : null}
+                {it.hotline ? <span>· Đầu số: {it.hotline}</span> : null}
+                {it.sipUser ? <span>· Máy lẻ: {it.sipUser}</span> : null}
+                {it.recordingUrl ? (
+                  <a
+                    href={it.recordingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-sky-800 hover:bg-sky-100"
+                  >
+                    Nghe ghi âm
+                  </a>
+                ) : null}
+              </div>
             ) : null}
             {it.aiSentiment ? (
               <p className="mt-1 text-[11px] leading-snug text-violet-800">

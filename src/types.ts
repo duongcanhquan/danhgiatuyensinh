@@ -892,6 +892,17 @@ export interface Interaction {
   /** Structured outcome for funnel metrics */
   callOutcome?: 'NO_ANSWER' | 'CONNECTED' | 'FOLLOW_UP' | 'DISQUALIFIED' | 'APPOINTMENT_SET' | 'OTHER'
   durationSeconds?: number
+  /** Đồng bộ từ nhà cung cấp tổng đài (vd. OMICall) */
+  provider?: 'OMICALL'
+  providerCallId?: string
+  providerUuid?: string
+  recordingUrl?: string
+  recordSeconds?: number
+  billSeconds?: number
+  answerSeconds?: number
+  hotline?: string
+  sipUser?: string
+  syncedFrom?: 'sdk' | 'webhook' | 'history_sync'
   /** Post-call AI enrichment */
   aiSentiment?: AiSentimentAnalysis
   /** Optional evaluation tag for QA (Head of Profession) */
@@ -1039,6 +1050,12 @@ export const FS_COLLECTIONS = {
   scholarships: 'scholarships',
   /** Lịch sử gửi báo cáo thu ngày/tháng (kiểm tra trực tiếp trên app). */
   financeReports: 'financeReports',
+  /** Lịch sử cuộc gọi OMICall đã đồng bộ từ webhook/API. */
+  omicallCalls: 'omicallCalls',
+  /** KPI tổng hợp theo ngày: `kpiDaily/{date}/counselors|teams/{id}`. */
+  kpiDaily: 'kpiDaily',
+  /** Log các lần đồng bộ OMICall từ Cloud Functions. */
+  omicallSyncRuns: 'omicallSyncRuns',
 } as const
 
 export type FinanceReportKind = 'daily' | 'monthly'
@@ -1099,6 +1116,66 @@ export const SCORING_AUX_OMICALL_DOC_ID = 'omicallIntegration' as const
 /** Đích gọi — gắn vào `userData` cuộc gọi & log tương tác. */
 export type OmicallCallTarget = 'student' | 'parent' | 'father' | 'mother'
 
+export type OmicallCallOutcome = 'CONNECTED' | 'NO_ANSWER' | 'OTHER'
+
+export interface OmicallCallRecord {
+  id: DocumentId
+  transactionId: string
+  callUuid?: string
+  direction: 'outbound' | 'inbound' | 'local' | string
+  phoneNumber: string
+  displayNumber?: string
+  hotline?: string
+  sipUser?: string
+  leadId?: DocumentId | null
+  counselorUid?: UserId | null
+  teamLeadUid?: UserId | null
+  startedAt?: Timestamp
+  answeredAt?: Timestamp
+  endedAt?: Timestamp
+  createdAt?: Timestamp
+  answerSeconds: number
+  billSeconds: number
+  durationSeconds: number
+  recordSeconds: number
+  recordingFileUrl?: string
+  hangupCause?: string
+  endByName?: string
+  provider?: string
+  outcome: OmicallCallOutcome
+  syncSource?: 'webhook' | 'history_sync'
+  syncedAt?: Timestamp
+  interactionId?: string
+}
+
+export interface CounselorDailyKpi {
+  id: string
+  date: string
+  counselorUid?: UserId
+  teamLeadUid?: UserId | null
+  totalCalls: number
+  outboundCalls: number
+  inboundCalls: number
+  connectedCalls: number
+  missedCalls: number
+  talkSeconds: number
+  ringSeconds: number
+  recordings: number
+  crmActions?: number
+  notesAdded?: number
+  statusChanges?: number
+  reassignments?: number
+  aiRuns?: number
+  depositPaidCount?: number
+  tuitionPaidCount?: number
+  paidCount?: number
+  depositRevenueVnd?: number
+  tuitionRevenueVnd?: number
+  approvedRevenueVnd?: number
+  fullNeCount?: number
+  updatedAt?: Timestamp
+}
+
 /** Payload JSON trong `makeCall` → `userData` (OMICall). */
 export interface OmicallCallUserData {
   leadId: string
@@ -1125,7 +1202,7 @@ export type OmicallIntegrationConfig = {
   /** Tự ghi `interactions` khi cuộc gọi kết thúc */
   autoLogCalls?: boolean
   /**
-   * Định dạng quay số gửi OMICall: `intl84` = 84912345678 (hay dùng trên tổng đài VN),
+   * Định dạng quay số gửi OMICall: `intl84` = +84912345678,
    * `local` = 0912345678.
    */
   dialFormat?: 'intl84' | 'local'

@@ -5,6 +5,7 @@ service cloud.firestore {
     // --- Bảng kê collection id (đồng bộ `FS_COLLECTIONS` trong src/types.ts) ---
     // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux, masterData,
     // consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
+    // omicallCalls, omicallSyncRuns, kpiDaily,
     // leads/{id}/interactions, leads/{id}/aiInsightTasks
     // (scoringRuleSets, routingPolicies: id dự phòng — app chưa ghi đọc.)
     //
@@ -17,6 +18,12 @@ service cloud.firestore {
     //
     // `scoringAux/omicallIntegration`: OMICall — đọc: authenticated; ghi: admin (`config:omicall`).
     // Trường `defaultSipPassword` / `apiKey` nhạy cảm — cân nhắc Cloud Function thay vì Rules mở.
+    //
+    // `omicallCalls`, `omicallSyncRuns`, `kpiDaily`: Cloud Functions ghi bằng Admin SDK.
+    // Client chỉ đọc theo phạm vi:
+    // - TVV: doc có counselorUid == request.auth.uid hoặc kpiDaily/.../counselors/{uid của mình}.
+    // - Trưởng nhóm: doc có teamLeadUid == request.auth.uid.
+    // - Admin/Siêu quản trị: đọc toàn bộ.
     //
     // `scoringProfiles`: gợi ý — đọc: mọi user đã đăng nhập (để chọn profile chấm điểm).
     // Ghi: admin (mọi doc); TVV chỉ doc có `createdBy == request.auth.uid` và không được

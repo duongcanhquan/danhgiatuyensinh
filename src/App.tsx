@@ -12,6 +12,7 @@ import { SettingsView } from './views/SettingsView'
 import { UserManualView } from './views/UserManualView'
 import { AnalyticsAdvancedView } from './views/AnalyticsAdvancedView'
 import { AccountantView } from './views/AccountantView'
+import { CounselorKpiView } from './views/CounselorKpiView'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
                 <Route path="counselor" element={<Navigate to="/leads" replace />} />
                 <Route path="import" element={<DataIntake />} />
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
+                <Route path="kpi" element={<CounselorKpiView />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
                 <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
                 <Route path="accountant" element={<AccountantView />} />
