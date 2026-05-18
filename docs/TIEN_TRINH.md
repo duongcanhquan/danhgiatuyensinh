@@ -1,7 +1,7 @@
 # Tiến trình dự án — Đánh giá dữ liệu / VietMy
 
 > **Cập nhật lần cuối:** 2026-05-18  
-> **Commit gần nhất:** _(sẽ ghi sau khi push)_  
+> **Commit gần nhất:** `a343e72` — [xem trên GitHub](https://github.com/duongcanhquan/danhgiatuyensinh/commit/a343e72)  
 > **Mục đích file này:** Sau mỗi lần chỉnh code, bổ sung mục **Nhật ký thay đổi** + cập nhật **Việc bạn cần làm** và **Chưa xong / cần xử lý**.
 
 ---
@@ -85,7 +85,7 @@
 
 ### 2026-05-18 — Tài chính Firebase, Cổng kế toán, báo cáo Firestore
 
-**Commit:** _(ghi hash sau push)_
+**Commit:** `a343e72`
 
 **Đã làm trong code:**
 
