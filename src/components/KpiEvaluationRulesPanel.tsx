@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, PhoneCall, RotateCcw, Save, Trash2, Trophy } from 'lucide-react'
-import type { KpiEvaluationConfigPersisted } from '../types'
+import type { KpiEvaluationConfigPersisted, KpiMetricTargets } from '../types'
 import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
 import {
   getDefaultKpiEvaluationRules,
   KPI_SCORE_BREAKDOWN_LABELS,
   mergeKpiEvaluationRules,
-  monthlyPerformanceScore,
   validCallRuleHint,
 } from '../utils/kpiEvaluationRules'
+import { computeCompositeKpiScore } from '../utils/kpiCompositeScore'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
 
 function NumField({
@@ -84,21 +84,24 @@ export function KpiEvaluationRulesPanel({ canEdit }: { canEdit: boolean }) {
     setDraft(merged)
   }, [merged])
 
-  const previewScore = useMemo(
-    () =>
-      monthlyPerformanceScore(
-        {
-          validCalls: 90,
-          warmNew: 4,
-          hotNew: 2,
-          depositPaidCount: 3,
-          approvedRevenueVnd: 25_000_000,
-          newToInterested: 6,
-        },
-        runtime,
-      ),
-    [runtime],
-  )
+  const previewScore = useMemo(() => {
+    const sample = {
+      totalCalls: 200,
+      validCalls: 90,
+      uniqueLeadsCalled: 70,
+      connectedCalls: 120,
+      warmNew: 4,
+      hotNew: 2,
+      newToInterested: 6,
+      crmActions: 150,
+      notesAdded: 40,
+      depositPaidCount: 3,
+      toEnrolled: 1,
+      fullNeCount: 1,
+      approvedRevenueVnd: 25_000_000,
+    }
+    return computeCompositeKpiScore(sample, runtime, runtime.composite.globalTargets, 85).total
+  }, [runtime])
 
   const patch = useCallback((fn: (d: KpiEvaluationConfigPersisted) => KpiEvaluationConfigPersisted) => {
     setDraft((d) => fn(d))
@@ -124,6 +127,14 @@ export function KpiEvaluationRulesPanel({ canEdit }: { canEdit: boolean }) {
       if (capSum <= 0) {
         setMsg('Tổng trần điểm tháng phải > 0.')
         return
+      }
+      const cw = clean.composite?.weights
+      if (cw) {
+        const wSum = cw.call + cw.conversion + cw.compliance + cw.enrollment
+        if (wSum !== 100) {
+          setMsg(`Trọng số 4 trụ KPI phải cộng = 100 (hiện ${wSum}).`)
+          return
+        }
       }
       await saveRules(clean)
       setMsg('Đã lưu cấu hình KPI Sale.')
@@ -298,15 +309,53 @@ export function KpiEvaluationRulesPanel({ canEdit }: { canEdit: boolean }) {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 shadow-sm">
+        <p className="font-semibold text-slate-900">KPI tổng hợp 40/30/10/20 (schema v2)</p>
+        <p className="mt-1 text-xs text-slate-600">
+          Ví dụ TVV: 90 HL, 70 lead, 6 WARM/HOT, 150 CRM, 3 cọc, 2 NB → điểm xem trước:{' '}
+          <strong>{previewScore}%</strong>
+        </p>
+        <p className="mt-4 text-xs font-semibold uppercase text-slate-500">Mục tiêu mặc định toàn trường</p>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {(
+            [
+              ['validCalls', 'Gọi HL'],
+              ['uniqueLeadsCalled', 'Lead chạm'],
+              ['warmHot', 'WARM+HOT'],
+              ['newToInterested', 'NEW→QT'],
+              ['crmActions', 'CRM'],
+              ['depositPaidCount', 'Cọc'],
+              ['enrolled', 'NB/NE'],
+              ['approvedRevenueVnd', 'Doanh thu VNĐ'],
+            ] as const
+          ).map(([key, label]) => (
+            <NumField
+              key={key}
+              label={label}
+              value={draft.composite?.globalTargets[key] ?? 0}
+              min={0}
+              step={key === 'approvedRevenueVnd' ? 1_000_000 : 1}
+              disabled={!canEdit}
+              onChange={(n) =>
+                patch((d) => ({
+                  ...d,
+                  composite: {
+                    ...d.composite!,
+                    globalTargets: { ...d.composite!.globalTargets, [key]: n } as KpiMetricTargets,
+                  },
+                }))
+              }
+            />
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
         <div className="flex items-center gap-2 font-semibold text-slate-900">
           <Trophy className="h-4 w-4 text-violet-700" aria-hidden />
-          Điểm tháng (0–{runtime.monthlyScore.capCalls + runtime.monthlyScore.capConversion + runtime.monthlyScore.capDeposit + runtime.monthlyScore.capRevenue + runtime.monthlyScore.capInterested})
+          Điểm tháng legacy (0–{runtime.monthlyScore.capCalls + runtime.monthlyScore.capConversion + runtime.monthlyScore.capDeposit + runtime.monthlyScore.capRevenue + runtime.monthlyScore.capInterested})
         </div>
-        <p className="mt-1 text-xs text-slate-500">
-          Ví dụ TVV: 90 HL, 4 WARM+2 HOT, 3 cọc, 25tr doanh thu, 6 NEW→QT → điểm xem trước:{' '}
-          <strong>{previewScore}</strong>
-        </p>
+        <p className="mt-1 text-xs text-slate-500">Công thức cũ — giữ tương thích.</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {KPI_SCORE_BREAKDOWN_LABELS.map(({ key, label, capKey }) => (
             <div key={key} className="rounded-lg border border-slate-100 bg-slate-50/80 p-2">

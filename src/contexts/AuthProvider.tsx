@@ -52,6 +52,8 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
     allowLlmAndAiTasks: d.allowLlmAndAiTasks === true ? true : undefined,
     omicallSipUser: d.omicallSipUser ? String(d.omicallSipUser) : undefined,
     omicallSipPassword: d.omicallSipPassword ? String(d.omicallSipPassword) : undefined,
+    omicallAgentId: d.omicallAgentId ? String(d.omicallAgentId) : undefined,
+    omicallOutboundNumber: d.omicallOutboundNumber ? String(d.omicallOutboundNumber) : undefined,
     extraPermissions: d.extraPermissions as VietMyUserProfile['extraPermissions'],
     deniedPermissions: d.deniedPermissions as VietMyUserProfile['deniedPermissions'],
     createdAt: (d.createdAt as Timestamp) ?? now,
@@ -273,6 +275,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       managedCounselorIds?: string[]
       omicallSipUser?: string
       omicallSipPassword?: string
+      omicallAgentId?: string
+      omicallOutboundNumber?: string
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
       const canTeam = hasPermission(permissions, 'config:users:team')
@@ -339,6 +343,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (input.omicallSipPassword !== undefined) {
         const v = input.omicallSipPassword.trim()
         patch.omicallSipPassword = v || null
+      }
+      if (input.omicallAgentId !== undefined) {
+        const v = input.omicallAgentId.trim()
+        patch.omicallAgentId = v || null
+      }
+      if (input.omicallOutboundNumber !== undefined) {
+        const v = input.omicallOutboundNumber.trim()
+        patch.omicallOutboundNumber = v || null
       }
       await updateDoc(ref, patch)
     },

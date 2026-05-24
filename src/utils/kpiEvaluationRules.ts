@@ -1,8 +1,15 @@
-import type { CounselorMonthlyKpi, KpiBonusTier, KpiEvaluationConfigPersisted } from '../types'
+import type {
+  CounselorMonthlyKpi,
+  KpiBonusTier,
+  KpiCompositeConfig,
+  KpiEvaluationConfigPersisted,
+} from '../types'
 import type { CounselorKpiSummary } from './kpiMap'
+import { getDefaultKpiMetricTargets, mergeKpiMetricTargets } from './kpiTargets'
 
 export type KpiEvaluationRuntime = KpiEvaluationConfigPersisted & {
   validCallDedupWindowMs: number
+  composite: KpiCompositeConfig
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -15,9 +22,84 @@ function str(v: unknown, fallback: string): string {
   return s || fallback
 }
 
+export function getDefaultKpiCompositeConfig(): KpiCompositeConfig {
+  return {
+    weights: { call: 40, conversion: 30, compliance: 10, enrollment: 20 },
+    rankBy: 'composite',
+    call: {
+      subWeights: { validCalls: 50, uniqueLeads: 25, quality: 25 },
+      minValidRatio: 0.35,
+      minConnectRatio: 0.25,
+    },
+    conversion: {
+      subWeights: { warmHot: 40, interested: 30, crm: 30 },
+    },
+    compliance: {
+      autoWeightPercent: 60,
+      penalizeSpamWarning: 40,
+      penalizeNoDepositWarning: 15,
+      penalizeLowConnectWarning: 15,
+      minNoteRatioPerValidCall: 0.3,
+    },
+    enrollment: {
+      subWeights: { deposit: 50, enrolled: 30, revenue: 20 },
+    },
+    globalTargets: getDefaultKpiMetricTargets(),
+  }
+}
+
+function mergeComposite(raw: Partial<KpiCompositeConfig> | undefined): KpiCompositeConfig {
+  const d = getDefaultKpiCompositeConfig()
+  if (!raw) return d
+  const w = raw.weights ?? d.weights
+  const callW = raw.call?.subWeights ?? d.call.subWeights
+  const convW = raw.conversion?.subWeights ?? d.conversion.subWeights
+  const enrollW = raw.enrollment?.subWeights ?? d.enrollment.subWeights
+  return {
+    weights: {
+      call: clamp(Math.round(w.call ?? d.weights.call), 0, 100),
+      conversion: clamp(Math.round(w.conversion ?? d.weights.conversion), 0, 100),
+      compliance: clamp(Math.round(w.compliance ?? d.weights.compliance), 0, 100),
+      enrollment: clamp(Math.round(w.enrollment ?? d.weights.enrollment), 0, 100),
+    },
+    rankBy: raw.rankBy === 'revenue' ? 'revenue' : 'composite',
+    call: {
+      subWeights: {
+        validCalls: clamp(Math.round(callW.validCalls ?? 50), 1, 100),
+        uniqueLeads: clamp(Math.round(callW.uniqueLeads ?? 25), 1, 100),
+        quality: clamp(Math.round(callW.quality ?? 25), 1, 100),
+      },
+      minValidRatio: clamp(Number(raw.call?.minValidRatio ?? d.call.minValidRatio), 0.05, 1),
+      minConnectRatio: clamp(Number(raw.call?.minConnectRatio ?? d.call.minConnectRatio), 0.05, 1),
+    },
+    conversion: {
+      subWeights: {
+        warmHot: clamp(Math.round(convW.warmHot ?? 40), 1, 100),
+        interested: clamp(Math.round(convW.interested ?? 30), 1, 100),
+        crm: clamp(Math.round(convW.crm ?? 30), 1, 100),
+      },
+    },
+    compliance: {
+      autoWeightPercent: clamp(Math.round(raw.compliance?.autoWeightPercent ?? d.compliance.autoWeightPercent), 0, 100),
+      penalizeSpamWarning: clamp(Math.round(raw.compliance?.penalizeSpamWarning ?? 40), 0, 100),
+      penalizeNoDepositWarning: clamp(Math.round(raw.compliance?.penalizeNoDepositWarning ?? 15), 0, 100),
+      penalizeLowConnectWarning: clamp(Math.round(raw.compliance?.penalizeLowConnectWarning ?? 15), 0, 100),
+      minNoteRatioPerValidCall: clamp(Number(raw.compliance?.minNoteRatioPerValidCall ?? 0.3), 0, 1),
+    },
+    enrollment: {
+      subWeights: {
+        deposit: clamp(Math.round(enrollW.deposit ?? 50), 1, 100),
+        enrolled: clamp(Math.round(enrollW.enrolled ?? 30), 1, 100),
+        revenue: clamp(Math.round(enrollW.revenue ?? 20), 1, 100),
+      },
+    },
+    globalTargets: mergeKpiMetricTargets(d.globalTargets, raw.globalTargets),
+  }
+}
+
 export function getDefaultKpiEvaluationRules(): KpiEvaluationConfigPersisted {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     validCall: {
       minBillSeconds: 45,
       dedupWindowHours: 4,
@@ -52,6 +134,7 @@ export function getDefaultKpiEvaluationRules(): KpiEvaluationConfigPersisted {
       approvalStatus: 'ĐỒNG Ý',
       fullNeStatus: 'ĐÃ FULL NE',
     },
+    composite: getDefaultKpiCompositeConfig(),
   }
 }
 
@@ -59,9 +142,9 @@ export function mergeKpiEvaluationRules(
   remote: KpiEvaluationConfigPersisted | null | undefined,
 ): KpiEvaluationConfigPersisted {
   const d = getDefaultKpiEvaluationRules()
-  if (!remote || remote.schemaVersion !== 1) return d
-  return {
-    schemaVersion: 1,
+  if (!remote || (remote.schemaVersion !== 1 && remote.schemaVersion !== 2)) return d
+  const merged: KpiEvaluationConfigPersisted = {
+    schemaVersion: 2,
     validCall: {
       minBillSeconds: clamp(Math.round(remote.validCall?.minBillSeconds ?? d.validCall.minBillSeconds), 10, 600),
       dedupWindowHours: clamp(Math.round(remote.validCall?.dedupWindowHours ?? d.validCall.dedupWindowHours), 1, 24),
@@ -134,7 +217,9 @@ export function mergeKpiEvaluationRules(
       approvalStatus: str(remote.finance?.approvalStatus, d.finance.approvalStatus),
       fullNeStatus: str(remote.finance?.fullNeStatus, d.finance.fullNeStatus),
     },
+    composite: mergeComposite(remote.composite ?? d.composite),
   }
+  return merged
 }
 
 export function buildKpiEvaluationRuntime(merged: KpiEvaluationConfigPersisted): KpiEvaluationRuntime {
@@ -146,11 +231,13 @@ export function buildKpiEvaluationRuntime(merged: KpiEvaluationConfigPersisted):
     ...m,
     bonusTiers: { ...m.bonusTiers, goldMaxPercentile, silverMaxPercentile, bronzeMaxPercentile },
     validCallDedupWindowMs: m.validCall.dedupWindowHours * 60 * 60 * 1000,
+    composite: mergeComposite(m.composite),
   }
 }
 
 export function parseKpiEvaluationDoc(raw: Record<string, unknown>): KpiEvaluationConfigPersisted | null {
-  if (Number(raw.schemaVersion) !== 1) return null
+  const v = Number(raw.schemaVersion)
+  if (v !== 1 && v !== 2) return null
   return mergeKpiEvaluationRules(raw as unknown as KpiEvaluationConfigPersisted)
 }
 

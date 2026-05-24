@@ -30,6 +30,7 @@ function mapMonthly(id: string, data: Record<string, unknown>): CounselorMonthly
     newToInterested: numKpi(data.newToInterested),
     toDeposit: numKpi(data.toDeposit),
     toEnrolled: numKpi(data.toEnrolled),
+    notesAdded: numKpi(data.notesAdded),
     updatedAt: data.updatedAt as CounselorMonthlyKpi['updatedAt'],
   }
 }

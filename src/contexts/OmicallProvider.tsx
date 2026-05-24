@@ -20,7 +20,9 @@ import {
   normalizePhoneForDial,
   parseOmicallConfigDoc,
   resolveOmicallSipCredentials,
+  resolveOmicallOutboundNumber,
 } from '../utils/omicallConfig'
+import { resolveOmicallCallContext } from '../services/omicallResolveCallContext'
 import {
   loadOmicallSdk,
   type OmicallCallData,
@@ -75,6 +77,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const [lastCallHint, setLastCallHint] = useState<string | null>(null)
   const [sipReady, setSipReady] = useState(false)
   const [bootToken, setBootToken] = useState(0)
+  const [availableHotlines, setAvailableHotlines] = useState<string[]>([])
+  const [resolvedOutbound, setResolvedOutbound] = useState<string | undefined>()
   const sdkRef = useRef<OmicallSdkGlobal | null>(null)
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
   const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
@@ -151,6 +155,23 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionStatus('connected')
       setConnectionLabel(data.name || 'Sẵn sàng gọi')
       setLastError(null)
+      if (sipCreds?.sipUser) {
+        void resolveOmicallCallContext(sipCreds.sipUser)
+          .then((ctx) => {
+            setAvailableHotlines(ctx.hotlines)
+            setResolvedOutbound(
+              resolveOmicallOutboundNumber(config, profile, ctx.recommendedOutbound || ctx.hotlines[0]),
+            )
+            if (ctx.sipRealmFromApi && config.sipRealm && !ctx.realmMatch) {
+              setLastCallHint(
+                `Cảnh báo: domain API «${ctx.sipRealmFromApi}» khác sipRealm «${config.sipRealm}» — kiểm tra Cài đặt.`,
+              )
+            }
+          })
+          .catch(() => {
+            setResolvedOutbound(resolveOmicallOutboundNumber(config, profile))
+          })
+      }
     } else if (data.status === 'connecting') {
       setSipReady(false)
       setConnectionStatus('registering')
@@ -161,7 +182,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionLabel(data.name || 'Mất kết nối tổng đài')
       setLastError('SIP ngắt — bấm «Kết nối lại» trên Cài đặt → Gọi điện.')
     }
-  }, [])
+  }, [config, profile, sipCreds?.sipUser])
 
   const onCallEvent = useCallback((raw: unknown) => {
     const call = raw as OmicallCallData
@@ -320,7 +341,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         phone: normalized,
       }
       pendingCallMetaRef.current = userData
-      const outbound = config.defaultOutboundNumber?.trim()
+      const outbound =
+        resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
       const userDataStr = JSON.stringify(userData)
       const useDeskPhone = config.callMode === 'deskPhone'
 
@@ -328,17 +350,26 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         if (typeof sdk.remoteCall !== 'function') {
           throw new Error('SDK không hỗ trợ gọi máy bàn — đổi «Cách gọi» sang Trình duyệt trong Cài đặt → OMICall.')
         }
-        sdk.remoteCall(normalized, outbound || undefined)
-        setLastCallHint(`Đang gọi ${normalized} — máy bàn / IP phone sẽ đổ chuông.`)
+        sdk.remoteCall(normalized, outbound)
+        setLastCallHint(
+          outbound
+            ? `Đang gọi ${normalized} qua đầu số ${outbound} — máy bàn / IP phone sẽ đổ chuông.`
+            : `Đang gọi ${normalized} — máy bàn / IP phone sẽ đổ chuông.`,
+        )
         return
       }
 
       await ensureMicrophoneForCall()
-      /** Chỉ userData — tránh tra cứu contact làm treo connecting. */
-      sdk.makeCall(normalized, { userData: userDataStr })
-      setLastCallHint(`Đang gọi ${normalized} qua trình duyệt…`)
+      const callOptions: Record<string, unknown> = { userData: userDataStr }
+      if (outbound) callOptions.sipNumber = outbound
+      sdk.makeCall(normalized, callOptions)
+      setLastCallHint(
+        outbound
+          ? `Đang gọi ${normalized} qua đầu số ${outbound}…`
+          : `Đang gọi ${normalized} qua trình duyệt…`,
+      )
     },
-    [canCall, config.dialFormat, config.defaultOutboundNumber, config.callMode, connectionStatus],
+    [canCall, config, profile, resolvedOutbound, availableHotlines, connectionStatus],
   )
 
   const saveConfig = useCallback(async (next: OmicallIntegrationConfig) => {
@@ -370,6 +401,14 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     payload.apiKey = ak || null
     payload.apiBaseUrl = base || null
     payload.webhookSecret = webhookSecret || null
+    payload.historyApiVersion = next.historyApiVersion === 'v2' ? 'v2' : 'v3'
+    payload.historySyncEnabled = next.historySyncEnabled !== false
+    payload.historyLookbackMinutes =
+      next.historyLookbackMinutes !== undefined
+        ? Math.max(15, Math.min(4320, Number(next.historyLookbackMinutes)))
+        : 180
+    payload.historyMaxPages =
+      next.historyMaxPages !== undefined ? Math.max(1, Math.min(100, Number(next.historyMaxPages))) : 20
     await setDoc(ref, payload, { merge: true })
     setBootToken((t) => t + 1)
   }, [])

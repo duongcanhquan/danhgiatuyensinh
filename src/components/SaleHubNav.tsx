@@ -10,6 +10,12 @@ const LINKS = [
     show: (can: (p: import('../types').Permission) => boolean) =>
       can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead'),
   },
+  {
+    to: '/call-history',
+    label: 'Lịch sử gọi',
+    show: (can: (p: import('../types').Permission) => boolean) =>
+      can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead'),
+  },
   { to: '/scorecard', label: 'Bảng điểm tháng', perm: 'analytics:advanced' as const },
 ]
 

@@ -1,4 +1,5 @@
 import type { OmicallIntegrationConfig, VietMyUserProfile } from '../types'
+import { formatPhoneForDial, normalizeHotlineNumber } from './phoneNormalize'
 
 export const DEFAULT_OMICALL_SDK_VERSION = '3.0.41'
 
@@ -24,6 +25,10 @@ export function getDefaultOmicallConfig(): OmicallIntegrationConfig {
     autoLogCalls: true,
     dialFormat: 'intl84',
     callMode: 'browser',
+    historyApiVersion: 'v3',
+    historySyncEnabled: true,
+    historyLookbackMinutes: 180,
+    historyMaxPages: 20,
   }
 }
 
@@ -53,6 +58,12 @@ export function parseOmicallConfigDoc(raw: Record<string, unknown> | null | unde
     dialFormat: raw.dialFormat === 'local' ? 'local' : 'intl84',
     defaultOutboundNumber: String(raw.defaultOutboundNumber ?? '').trim() || undefined,
     callMode: raw.callMode === 'deskPhone' ? 'deskPhone' : 'browser',
+    historyApiVersion: raw.historyApiVersion === 'v2' ? 'v2' : 'v3',
+    historySyncEnabled: raw.historySyncEnabled !== false,
+    historyLookbackMinutes:
+      raw.historyLookbackMinutes !== undefined ? Math.max(15, Math.min(4320, Number(raw.historyLookbackMinutes))) : 180,
+    historyMaxPages:
+      raw.historyMaxPages !== undefined ? Math.max(1, Math.min(100, Number(raw.historyMaxPages))) : 20,
   }
 }
 
@@ -78,21 +89,29 @@ export function resolveOmicallSipCredentials(
   return { sipRealm, sipUser, sipPassword }
 }
 
+/** Đầu số gọi ra: TVV → cấu hình trường → public_number từ sync. */
+export function resolveOmicallOutboundNumber(
+  config: OmicallIntegrationConfig,
+  profile: Pick<VietMyUserProfile, 'omicallOutboundNumber'> | null | undefined,
+  hotlineFallback?: string | null,
+): string | undefined {
+  const fromProfile = normalizeHotlineNumber(profile?.omicallOutboundNumber ?? '')
+  if (fromProfile) return fromProfile
+  const fromConfig = normalizeHotlineNumber(config.defaultOutboundNumber ?? '')
+  if (fromConfig) return fromConfig
+  const fromApi = normalizeHotlineNumber(hotlineFallback ?? '')
+  return fromApi || undefined
+}
+
 /** Chuẩn hoá SĐT VN — `intl84` đổi 0912345678 thành +84912345678. */
 export function normalizePhoneForDial(
   raw: string,
   format: 'intl84' | 'local' = 'intl84',
 ): string | null {
-  let d = raw.trim().replace(/[^\d+]/g, '')
-  if (d.startsWith('+')) d = d.slice(1)
-  d = d.replace(/\D/g, '')
-  if (d.length < 9) return null
-  if (d.startsWith('0')) d = `84${d.slice(1)}`
-  else if (!d.startsWith('84') && d.length === 9) d = `84${d}`
-  if (d.length < 11 || !d.startsWith('84')) return null
-  if (format === 'local') return `0${d.slice(2)}`
-  return `+${d}`
+  return formatPhoneForDial(raw, format)
 }
+
+export { normalizePhoneLocal, normalizePhoneIntl, phoneLookupVariants, phonesMatch, normalizeHotlineNumber } from './phoneNormalize'
 
 /** Xin quyền micro trước khi gọi — tránh UI «đang gọi» nhưng không có media. */
 export async function ensureMicrophoneForCall(): Promise<void> {

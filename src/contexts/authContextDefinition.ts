@@ -31,6 +31,8 @@ export type AuthContextValue = AuthState & {
     managedCounselorIds?: string[]
     omicallSipUser?: string
     omicallSipPassword?: string
+    omicallAgentId?: string
+    omicallOutboundNumber?: string
   }) => Promise<void>
   /**
    * Admin: gửi email «đặt lại mật khẩu» (Firebase Auth) tới địa chỉ đã đăng ký.

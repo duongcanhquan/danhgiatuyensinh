@@ -82,6 +82,12 @@ export interface VietMyUserProfile {
   omicallSipUser?: string
   /** Mật khẩu SIP số nội bộ — chỉ quản trị sửa trên Firestore / form nhân sự. */
   omicallSipPassword?: string
+  /** ID nhân viên OMICall (`create_by.id`) — map lịch sử cuộc gọi REST API. */
+  omicallAgentId?: string
+  /** Đầu số gọi ra mặc định của TVV (từ hotline/list hoặc public_number). */
+  omicallOutboundNumber?: string
+  /** Lần đồng bộ số nội bộ từ API Tổng đài gần nhất. */
+  omicallSyncedAt?: Timestamp
   /**
    * Bổ sung quyền ngoài ma trận vai trò (gán trên Firestore `users/{uid}` — thường do Siêu quản trị).
    * Firestore Rules vẫn là nguồn chân lý; UI chỉ mở rộng tính năng khi Rules cho phép.
@@ -1064,6 +1070,10 @@ export const FS_COLLECTIONS = {
   leadEvents: 'leadEvents',
   /** KPI tổng hợp tháng: `kpiMonthly/{YYYY-MM}/counselors/{uid}`. */
   kpiMonthly: 'kpiMonthly',
+  /** Mục tiêu KPI tháng: `kpiTargets/{YYYY-MM}` + `counselors/{uid}`. */
+  kpiTargets: 'kpiTargets',
+  /** Điểm tuân thủ thủ công (trưởng nhóm): `kpiManualScores/{YYYY-MM}/counselors/{uid}`. */
+  kpiManualScores: 'kpiManualScores',
 } as const
 
 export type LeadEventType = 'TAG_CHANGED' | 'STATUS_CHANGED' | 'PIPELINE_CHANGED'
@@ -1105,6 +1115,7 @@ export interface CounselorMonthlyKpi {
   newToInterested: number
   toDeposit: number
   toEnrolled: number
+  notesAdded?: number
   updatedAt?: Timestamp
 }
 
@@ -1166,9 +1177,65 @@ export const SCORING_AUX_OMICALL_DOC_ID = 'omicallIntegration' as const
 /** Doc cố định: `scoringAux/kpiEvaluationConfig` — quy tắc KPI Sale (gọi HL, cảnh báo, điểm tháng, hạng thưởng). */
 export const SCORING_AUX_KPI_EVAL_DOC_ID = 'kpiEvaluationConfig' as const
 
+/** Mục tiêu KPI theo tháng (mặc định chung hoặc ghi đè từng TVV). */
+export type KpiMetricTargets = {
+  validCalls: number
+  uniqueLeadsCalled: number
+  warmHot: number
+  newToInterested: number
+  crmActions: number
+  depositPaidCount: number
+  enrolled: number
+  approvedRevenueVnd: number
+}
+
+/** Trọng số 4 trụ KPI tổng hợp (tổng = 100). */
+export type KpiCompositeWeights = {
+  call: number
+  conversion: number
+  compliance: number
+  enrollment: number
+}
+
+export type KpiCompositeConfig = {
+  weights: KpiCompositeWeights
+  /** Xếp hạng thưởng trên scorecard: composite hoặc doanh thu server */
+  rankBy: 'composite' | 'revenue'
+  call: {
+    subWeights: { validCalls: number; uniqueLeads: number; quality: number }
+    minValidRatio: number
+    minConnectRatio: number
+  }
+  conversion: {
+    subWeights: { warmHot: number; interested: number; crm: number }
+  }
+  compliance: {
+    /** % phần tự động trong trụ tuân thủ (còn lại = thủ công trưởng nhóm) */
+    autoWeightPercent: number
+    penalizeSpamWarning: number
+    penalizeNoDepositWarning: number
+    penalizeLowConnectWarning: number
+    minNoteRatioPerValidCall: number
+  }
+  enrollment: {
+    subWeights: { deposit: number; enrolled: number; revenue: number }
+  }
+  globalTargets: KpiMetricTargets
+}
+
+/** Điểm tuân thủ thủ công do trưởng nhóm chấm (0–100). */
+export type KpiManualScoreRecord = {
+  counselorUid: UserId
+  month: string
+  complianceScore: number
+  note?: string
+  updatedBy?: UserId
+  updatedAt?: Timestamp
+}
+
 /** Cấu hình đánh giá KPI Sale — lưu Firestore, đồng bộ Cloud Functions + UI. */
 export type KpiEvaluationConfigPersisted = {
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   validCall: {
     /** Thời lượng tối thiểu (giây) — bill_sec hoặc answer_sec */
     minBillSeconds: number
@@ -1206,6 +1273,8 @@ export type KpiEvaluationConfigPersisted = {
     approvalStatus: string
     fullNeStatus: string
   }
+  /** KPI tổng hợp 40/30/10/20 — schema v2 */
+  composite?: KpiCompositeConfig
 }
 
 /** Đích gọi — gắn vào `userData` cuộc gọi & log tương tác. */
@@ -1250,6 +1319,14 @@ export interface OmicallCallRecord {
   aiAnalysisId?: string
   aiAnalysisSyncedAt?: Timestamp
   aiAnalysisStatusCode?: number | null
+  disposition?: string
+  agentId?: string
+  agentName?: string
+  customerName?: string
+  callNote?: string
+  isAutoCall?: boolean
+  evaluationScore?: number
+  aiAnalysisSummary?: string
 }
 
 export interface OmicallCallAnalysisRecord {
@@ -1354,6 +1431,14 @@ export type OmicallIntegrationConfig = {
    * `deskPhone` — click-to-call ra máy bàn / IP phone (`remoteCall`), giống nhiều cấu hình tổng đài.
    */
   callMode?: 'browser' | 'deskPhone'
+  /** Phiên bản REST API lịch sử: v3 (khuyến nghị) hoặc v2. */
+  historyApiVersion?: 'v3' | 'v2'
+  /** Bật job đồng bộ lịch sử (Cloud Functions 15 phút). */
+  historySyncEnabled?: boolean
+  /** Số phút lùi khi quét API (max 4320 = 3 tháng theo OMICall). */
+  historyLookbackMinutes?: number
+  /** Số trang tối đa mỗi lần sync (50 cuộc/trang). */
+  historyMaxPages?: number
 }
 
 /** Các trường hồ sơ dùng trong công thức điểm thông tin — đồng bộ 20 cột Excel + 2 trường mở rộng (legacy). */

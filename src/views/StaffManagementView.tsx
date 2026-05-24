@@ -4,6 +4,7 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { USER_ROLE_LABELS, type UserRole, type VietMyUserProfile } from '../types'
 import { isSuperAdminRole } from '../auth/roleUtils'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import { isTeamLeadRole } from '../auth/roleUtils'
 import {
   counselorIdsInManagerScope,
@@ -51,7 +52,10 @@ export function StaffManagementView({
   const [editAllowLlm, setEditAllowLlm] = useState(false)
   const [editOmicallUser, setEditOmicallUser] = useState('')
   const [editOmicallPassword, setEditOmicallPassword] = useState('')
+  const [editOmicallAgentId, setEditOmicallAgentId] = useState('')
+  const [editOmicallOutbound, setEditOmicallOutbound] = useState('')
   const [editTeamIds, setEditTeamIds] = useState<string[]>([])
+  const [omicallSyncBusy, setOmicallSyncBusy] = useState(false)
   /** Trưởng nhóm phụ trách (khi sửa TVV — admin). */
   const [editTeamLeadId, setEditTeamLeadId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
@@ -117,6 +121,34 @@ export function StaffManagementView({
       <strong>Trưởng nhóm:</strong> chỉ quản lý TVV trong nhóm; không tạo tài khoản Quản trị / Trưởng nhóm khác.
     </p>
   ) : null
+
+  const omicallSyncBanner =
+    canOmicallConfig && !teamScopeOnly ? (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
+        <p>
+          <strong>OMICall:</strong> đồng bộ số nội bộ, SIP, agent ID và đầu số từ API Tổng đài vào hồ sơ TVV (match email).
+        </p>
+        <button
+          type="button"
+          disabled={omicallSyncBusy}
+          onClick={() => {
+            setOmicallSyncBusy(true)
+            setMsg(null)
+            void syncOmicallInternalPhones(false)
+              .then((r) =>
+                setMsg(
+                  `Đồng bộ OMICall: ${r.updated} TVV cập nhật / ${r.matched} khớp · ${r.totalExtensions} extension trên tổng đài.`,
+                ),
+              )
+              .catch((e) => setErr(e instanceof Error ? e.message : 'Lỗi đồng bộ OMICall'))
+              .finally(() => setOmicallSyncBusy(false))
+          }}
+          className="rounded-lg bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50"
+        >
+          {omicallSyncBusy ? 'Đang đồng bộ…' : 'Đồng bộ số nội bộ → TVV'}
+        </button>
+      </div>
+    ) : null
 
   const toggleTeamId = (ids: string[], uid: string, on: boolean) => {
     if (on) return [...new Set([...ids, uid])]
@@ -186,6 +218,8 @@ export function StaffManagementView({
     setEditAllowLlm(u.allowLlmAndAiTasks === true)
     setEditOmicallUser(u.omicallSipUser ?? '')
     setEditOmicallPassword(u.omicallSipPassword ?? '')
+    setEditOmicallAgentId(u.omicallAgentId ?? '')
+    setEditOmicallOutbound(u.omicallOutboundNumber ?? '')
     setEditTeamIds(u.managedCounselorIds ?? [])
     const primaryLead = primaryTeamLeadForCounselor(u.id, users)
     setEditTeamLeadId(primaryLead?.id ?? '')
@@ -206,7 +240,12 @@ export function StaffManagementView({
         displayName: editDisplayName,
         ...(!isSuperAdminRole(editing.role) ? { allowLlmAndAiTasks: editAllowLlm } : {}),
         ...(canOmicallConfig
-          ? { omicallSipUser: editOmicallUser, omicallSipPassword: editOmicallPassword }
+          ? {
+              omicallSipUser: editOmicallUser,
+              omicallSipPassword: editOmicallPassword,
+              omicallAgentId: editOmicallAgentId,
+              omicallOutboundNumber: editOmicallOutbound,
+            }
           : {}),
         ...(!isSelf ? { role: editRole, isActive: editActive } : {}),
         ...(editRole === 'team_lead' || editing.role === 'team_lead'
@@ -294,6 +333,7 @@ export function StaffManagementView({
       )}
 
       {teamBanner}
+      {omicallSyncBanner}
 
       {canStaffAll && !teamScopeOnly ? (
         <section className="app-glass-panel rounded-2xl p-6 shadow-lg">
@@ -689,8 +729,31 @@ export function StaffManagementView({
                       autoComplete="new-password"
                     />
                   </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    Đầu số gọi ra (hotline)
+                    <input
+                      value={editOmicallOutbound}
+                      onChange={(e) => setEditOmicallOutbound(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="Từ API hotline/list"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    Agent ID OMICall
+                    <input
+                      value={editOmicallAgentId}
+                      onChange={(e) => setEditOmicallAgentId(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
+                      placeholder="create_by.id từ API lịch sử"
+                      autoComplete="off"
+                    />
+                  </label>
                   <p className="text-xs text-slate-600">
-                    Để trống cả hai nếu TVV dùng số mặc định trong Cài đặt → Gọi điện (OMICall).
+                    Agent ID lấy từ lịch sử cuộc gọi API (`create_by.id`) — giúp map cuộc gọi đúng TVV khi SIP trùng.
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    Để trống SIP nếu TVV dùng số mặc định trong Cài đặt → Gọi điện (OMICall).
                   </p>
                 </div>
               ) : null}

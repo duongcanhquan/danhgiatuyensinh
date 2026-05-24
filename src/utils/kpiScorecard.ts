@@ -1,4 +1,4 @@
-import type { CounselorMonthlyKpi, KpiBonusTier } from '../types'
+import type { CounselorMonthlyKpi, KpiBonusTier, KpiManualScoreRecord, KpiMetricTargets } from '../types'
 import type { KpiEvaluationRuntime } from './kpiEvaluationRules'
 import {
   bonusTierLabels,
@@ -6,10 +6,11 @@ import {
   buildKpiEvaluationRuntime,
   monthlyPerformanceScore as scoreWithConfig,
 } from './kpiEvaluationRules'
+import { computeCompositeForCounselor } from './kpiCompositeScore'
 
 const defaultRuntime = buildKpiEvaluationRuntime(getDefaultKpiEvaluationRules())
 
-/** Điểm tổng hợp tháng — dùng cấu hình runtime (mặc định nếu không truyền). */
+/** Điểm tổng hợp tháng legacy — công thức cũ. */
 export function monthlyPerformanceScore(
   k: Pick<
     CounselorMonthlyKpi,
@@ -18,6 +19,23 @@ export function monthlyPerformanceScore(
   cfg: KpiEvaluationRuntime = defaultRuntime,
 ): number {
   return scoreWithConfig(k, cfg)
+}
+
+/** Điểm KPI tổng hợp 40/30/10/20 — dùng mục tiêu tháng + ghi đè TVV. */
+export function compositePerformanceScore(
+  k: CounselorMonthlyKpi & { notesAdded?: number },
+  cfg: KpiEvaluationRuntime = defaultRuntime,
+  monthDefaults?: Partial<KpiMetricTargets> | null,
+  counselorOverrides?: Partial<KpiMetricTargets> | null,
+  manual?: KpiManualScoreRecord | null,
+): number {
+  return computeCompositeForCounselor(
+    { ...k, notesAdded: k.notesAdded ?? 0 },
+    cfg,
+    monthDefaults,
+    counselorOverrides,
+    manual,
+  ).total
 }
 
 export function getBonusTierLabels(cfg: KpiEvaluationRuntime = defaultRuntime): Record<KpiBonusTier, string> {

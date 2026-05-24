@@ -16,6 +16,7 @@ import { CounselorKpiView } from './views/CounselorKpiView'
 import { CommandCenterView } from './views/CommandCenterView'
 import { MyDayView } from './views/MyDayView'
 import { ScorecardView } from './views/ScorecardView'
+import { CallHistoryView } from './views/CallHistoryView'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
                 <Route path="command" element={<CommandCenterView />} />
                 <Route path="my-day" element={<MyDayView />} />
                 <Route path="scorecard" element={<ScorecardView />} />
+                <Route path="call-history" element={<CallHistoryView />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
                 <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
                 <Route path="accountant" element={<AccountantView />} />

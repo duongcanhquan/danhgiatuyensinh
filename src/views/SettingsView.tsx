@@ -39,6 +39,7 @@ import {
 import { CircleHelp, Maximize2, X } from 'lucide-react'
 import { InfoCompletenessRulesPanel } from '../components/InfoCompletenessRulesPanel'
 import { KpiEvaluationRulesPanel } from '../components/KpiEvaluationRulesPanel'
+import { KpiTargetsPanel } from '../components/KpiTargetsPanel'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { RuleTemplateLibraryPanel } from '../components/RuleTemplateLibraryPanel'
 import { TvvSignalDefinitionsPanel } from '../components/TvvSignalDefinitionsPanel'
@@ -949,8 +950,9 @@ export function SettingsView() {
       ) : null}
 
       {db && activeTab === 'kpi' ? (
-        <div role="tabpanel" aria-label="KPI Sale" className="min-w-0 max-w-full">
+        <div role="tabpanel" aria-label="KPI Sale" className="min-w-0 max-w-full space-y-8">
           <KpiEvaluationRulesPanel canEdit={canScoringRules} />
+          <KpiTargetsPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 

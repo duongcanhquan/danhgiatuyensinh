@@ -8,7 +8,7 @@ import {
   type QuerySnapshot,
 } from 'firebase-admin/firestore'
 import { setGlobalOptions } from 'firebase-functions/v2'
-import { onRequest } from 'firebase-functions/v2/https'
+import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { defineSecret } from 'firebase-functions/params'
 import { loadKpiEvalConfig } from './kpiEvaluationConfig.js'
@@ -18,6 +18,20 @@ import {
   processRecentLeadEvents,
   rollupKpiMonthly,
 } from './kpiEngine.js'
+import {
+  fetchOmicallHistoryPage,
+  parseOmicallUserDataLeadId,
+  extractAgentFromCall,
+  extractCustomerName,
+  type OmicallHistoryApiVersion,
+} from './omicallHistoryApi.js'
+import {
+  fetchExtensionDetail,
+  fetchHotlineListForExtension,
+  fetchInternalPhoneList,
+  fetchAllInternalPhones,
+} from './omicallCallCenterApi.js'
+import { normalizePhoneLocal, normalizeHotlineNumber, phoneLookupVariants } from './omicallPhone.js'
 
 const app = initializeApp()
 setGlobalOptions({ region: 'asia-southeast1', maxInstances: 10 })
@@ -69,13 +83,23 @@ type NormalizedOmicallCall = {
   endByName?: string
   provider?: string
   outcome: CallOutcome
+  disposition?: string
+  agentId?: string
+  agentName?: string
+  customerName?: string
+  callNote?: string
+  userDataLeadId?: string
+  isAutoCall?: boolean
+  evaluationScore?: number
   raw: Record<string, unknown>
 }
 
 type UserProfileLite = {
   uid: string
   role: string
+  email?: string
   omicallSipUser?: string
+  omicallAgentId?: string
 }
 
 type LeadMatch = {
@@ -90,10 +114,17 @@ const OMICALL_CONFIG_DOC_ID = 'omicallIntegration'
 async function loadOmicallServerConfig() {
   const snap = await db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID).get()
   const data = snap.exists ? snap.data() ?? {} : {}
+  const apiVersion = str(data.historyApiVersion) === 'v2' ? 'v2' : 'v3'
   return {
     apiKey: str(data.apiKey),
     apiBaseUrl: str(data.apiBaseUrl),
     webhookSecret: str(data.webhookSecret),
+    sipRealm: str(data.sipRealm),
+    defaultOutboundNumber: str(data.defaultOutboundNumber),
+    historySyncEnabled: data.historySyncEnabled !== false,
+    historyLookbackMinutes: Math.max(15, Math.min(4320, Math.round(num(data.historyLookbackMinutes) || 180))),
+    historyMaxPages: Math.max(1, Math.min(100, Math.round(num(data.historyMaxPages) || 20))),
+    historyApiVersion: apiVersion as OmicallHistoryApiVersion,
   }
 }
 
@@ -115,12 +146,7 @@ function num(v: unknown): number {
 }
 
 function normalizePhone(raw: unknown): string {
-  let d = str(raw).replace(/[^\d+]/g, '')
-  if (d.startsWith('+')) d = d.slice(1)
-  d = d.replace(/\D/g, '')
-  if (d.startsWith('84') && d.length >= 11) return `0${d.slice(2)}`
-  if (!d.startsWith('0') && d.length === 9) return `0${d}`
-  return d
+  return normalizePhoneLocal(raw)
 }
 
 function toTs(raw: unknown): Timestamp | undefined {
@@ -192,6 +218,8 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
   const state = str(raw.state) || undefined
   const stateLower = str(state).toLowerCase()
   const eventTime = raw.date_time || raw.last_updated_date || raw.created_time || raw.created_date
+  const agent = extractAgentFromCall(raw)
+  const totalEval = asObject(raw.total_evaluate ?? raw.totalEvaluate)
   return {
     transactionId,
     callUuid: str(raw.call_uuid) || undefined,
@@ -200,7 +228,7 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
     phoneNumber,
     displayNumber,
     hotline: str(raw.hotline) || str(raw.sip_number) || undefined,
-    sipUser: str(raw.sip_user) || str(raw.extension) || str(asObject(raw.create_by).id) || undefined,
+    sipUser: str(raw.sip_user) || str(raw.extension) || agent.agentContactId || undefined,
     startedAt: toTs(raw.time_start_call || raw.created_date || raw.created_time || raw.date_time),
     answeredAt: toTs(raw.time_answer_start || raw.time_start_to_answer || (stateLower === 'answered' ? eventTime : undefined)),
     endedAt: toTs(raw.time_end_call || (stateLower === 'hangup' || stateLower === 'cdr' ? eventTime : undefined)),
@@ -214,6 +242,14 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
     endByName: str(raw.endby_name) || undefined,
     provider: str(raw.provider) || undefined,
     outcome,
+    disposition: disposition || undefined,
+    agentId: agent.agentId,
+    agentName: agent.agentName,
+    customerName: extractCustomerName(raw),
+    callNote: str(raw.note) || undefined,
+    userDataLeadId: parseOmicallUserDataLeadId(raw),
+    isAutoCall: raw.is_auto_call === true,
+    evaluationScore: num(totalEval.point) || undefined,
     raw: rawInput,
   }
 }
@@ -240,27 +276,47 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
     return {
       uid: d.id,
       role: str(data.role) || 'counselor',
+      email: str(data.email).toLowerCase() || undefined,
       omicallSipUser: str(data.omicallSipUser) || undefined,
+      omicallAgentId: str(data.omicallAgentId) || undefined,
     }
   })
   const teamLeadMap = buildTeamLeadMap(users, usersSnap)
   const bySip = call.sipUser ? users.find((u) => u.omicallSipUser === call.sipUser) : undefined
-  const counselorUid = bySip?.uid
+  const byAgent = call.agentId ? users.find((u) => u.omicallAgentId === call.agentId) : undefined
+  const counselorUid = bySip?.uid || byAgent?.uid
 
-  const phone = normalizePhone(call.phoneNumber)
-  let leadId: string | undefined
-  if (phone) {
+  let leadId: string | undefined = call.userDataLeadId
+  if (leadId) {
+    const leadSnap = await fs.collection(COLLECTIONS.leads).doc(leadId).get()
+    if (leadSnap.exists) {
+      const assignedTo = str(leadSnap.data()?.assignedTo || leadSnap.data()?.assignedCounselorId)
+      const uid = counselorUid || assignedTo || undefined
+      return {
+        leadId,
+        counselorUid: uid,
+        teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
+      }
+    }
+    leadId = undefined
+  }
+
+  const phoneVariants = phoneLookupVariants(call.phoneNumber)
+  if (phoneVariants.length) {
     const fields = ['phone', 'parentPhone', 'fatherPhone', 'motherPhone']
     for (const field of fields) {
-      const snap = await fs.collection(COLLECTIONS.leads).where(field, '==', phone).limit(1).get()
-      if (!snap.empty) {
-        const doc = snap.docs[0]
-        leadId = doc.id
-        const assignedTo = str(doc.data().assignedTo || doc.data().assignedCounselorId)
-        return {
-          leadId,
-          counselorUid: counselorUid || assignedTo || undefined,
-          teamLeadUid: teamLeadMap.get(counselorUid || assignedTo) || undefined,
+      for (const variant of phoneVariants) {
+        const snap = await fs.collection(COLLECTIONS.leads).where(field, '==', variant).limit(1).get()
+        if (!snap.empty) {
+          const doc = snap.docs[0]
+          leadId = doc.id
+          const assignedTo = str(doc.data().assignedTo || doc.data().assignedCounselorId)
+          const uid = counselorUid || assignedTo || undefined
+          return {
+            leadId,
+            counselorUid: uid,
+            teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
+          }
         }
       }
     }
@@ -298,11 +354,19 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   const existingData = existing.data()
   const isFinal = isFinalCallState(call, source)
   const validity = evaluateValidCall(call, match, kpiCfg)
+  const { raw: _raw, ...callFields } = call
   const payload = {
-    ...call,
+    ...callFields,
     leadId: match.leadId ?? null,
     counselorUid: match.counselorUid ?? null,
     teamLeadUid: match.teamLeadUid ?? null,
+    disposition: call.disposition ?? null,
+    agentId: call.agentId ?? null,
+    agentName: call.agentName ?? null,
+    customerName: call.customerName ?? null,
+    callNote: call.callNote ?? null,
+    isAutoCall: call.isAutoCall ?? false,
+    evaluationScore: call.evaluationScore ?? null,
     isValidCall: validity.isValid,
     invalidReason: validity.invalidReason ?? null,
     isFinal,
@@ -315,12 +379,13 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
 
   if (!isFinal) return
 
-  if (match.leadId && !existingData?.interactionId) {
-    const interactionRef = await db
-      .collection(COLLECTIONS.leads)
-      .doc(match.leadId)
-      .collection(COLLECTIONS.interactions)
-      .add({
+    if (match.leadId && !existingData?.interactionId) {
+      const interactionsCol = db.collection(COLLECTIONS.leads).doc(match.leadId).collection(COLLECTIONS.interactions)
+      const dupSnap = await interactionsCol.where('providerCallId', '==', call.transactionId).limit(1).get()
+      if (!dupSnap.empty) {
+        await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
+      } else {
+      const interactionRef = await interactionsCol.add({
         leadId: match.leadId,
         channel: 'CALL',
         authorUid: match.counselorUid || 'omicall',
@@ -340,8 +405,9 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
         syncedFrom: source,
         timestamp: call.endedAt ?? call.startedAt ?? now,
       })
-    await callRef.set({ interactionId: interactionRef.id }, { merge: true })
-  }
+      await callRef.set({ interactionId: interactionRef.id }, { merge: true })
+      }
+    }
 
   if (!existingData?.kpiAppliedAt) {
     await updateDailyKpi(call, match, validity.isValid, kpiCfg)
@@ -588,37 +654,41 @@ function omicallHeaders(apiKey: string): Record<string, string> {
   }
 }
 
-function historyPayload(minutesBack: number): Record<string, unknown> {
+async function runOmicallHistorySync(opts: {
+  apiKey: string
+  baseUrl: string
+  lookbackMinutes: number
+  maxPages: number
+  apiVersion: OmicallHistoryApiVersion
+}): Promise<{ processed: number; analysesProcessed: number; analysisError: string | null }> {
   const to = Date.now()
-  const from = to - minutesBack * 60_000
-  return {
-    from_date: from,
-    to_date: to,
-    date_from: from,
-    date_to: to,
+  const from = to - opts.lookbackMinutes * 60_000
+  const analysisTransactionIds: string[] = []
+  let processed = 0
+  for (let page = 1; page <= opts.maxPages; page++) {
+    const result = await fetchOmicallHistoryPage(opts.baseUrl, opts.apiKey, page, {
+      fromMs: from,
+      toMs: to,
+      apiVersion: opts.apiVersion,
+    })
+    if (result.items.length === 0) break
+    for (const row of result.items) {
+      const call = normalizeCall(row)
+      if (!call) continue
+      await upsertCallAndInteraction(call, 'history_sync')
+      if (call.outcome === 'CONNECTED') analysisTransactionIds.push(call.transactionId)
+      processed++
+    }
+    if (!result.hasNext || result.items.length < 50) break
   }
-}
-
-async function fetchHistoryPage(baseUrl: string, apiKey: string, page: number) {
-  const url = `${baseUrl.replace(/\/$/, '')}/api/v3/call-transaction/search?page=${page}&size=50`
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: omicallHeaders(apiKey),
-    body: JSON.stringify(historyPayload(60)),
-  })
-  if (!resp.ok) throw new Error(`OMICall history HTTP ${resp.status}`)
-  return (await resp.json()) as Record<string, unknown>
-}
-
-function rowsFromHistoryResponse(data: Record<string, unknown>): Record<string, unknown>[] {
-  const payload = data.payload
-  if (Array.isArray(payload)) return payload.map(asObject)
-  const payloadObj = asObject(payload)
-  for (const key of ['items', 'data', 'rows', 'docs']) {
-    const arr = payloadObj[key]
-    if (Array.isArray(arr)) return arr.map(asObject)
+  let analysesProcessed = 0
+  let analysisError: string | null = null
+  try {
+    analysesProcessed = await syncCallAnalyses(opts.baseUrl, opts.apiKey, analysisTransactionIds)
+  } catch (e) {
+    analysisError = e instanceof Error ? e.message : String(e)
   }
-  return []
+  return { processed, analysesProcessed, analysisError }
 }
 
 async function fetchCallAnalysisList(baseUrl: string, apiKey: string, transactionIds: string[]) {
@@ -807,6 +877,10 @@ export const syncOmicallCallHistory = onSchedule(
     const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
     const runRef = db.collection(COLLECTIONS.omicallSyncRuns).doc()
     const startedAt = Timestamp.now()
+    if (!serverConfig.historySyncEnabled) {
+      await runRef.set({ startedAt, status: 'skipped', reason: 'sync_disabled' })
+      return
+    }
     if (!apiKey || !baseUrl) {
       await runRef.set({ startedAt, status: 'skipped', reason: 'missing_secret' })
       return
@@ -816,25 +890,16 @@ export const syncOmicallCallHistory = onSchedule(
     let analysisError: string | null = null
     let error: string | null = null
     try {
-      const analysisTransactionIds: string[] = []
-      for (let page = 1; page <= 5; page++) {
-        const data = await fetchHistoryPage(baseUrl, apiKey, page)
-        const rows = rowsFromHistoryResponse(data)
-        if (rows.length === 0) break
-        for (const row of rows) {
-          const call = normalizeCall(row)
-          if (!call) continue
-          await upsertCallAndInteraction(call, 'history_sync')
-          if (call.outcome === 'CONNECTED') analysisTransactionIds.push(call.transactionId)
-          processed++
-        }
-        if (rows.length < 50) break
-      }
-      try {
-        analysesProcessed = await syncCallAnalyses(baseUrl, apiKey, analysisTransactionIds)
-      } catch (e) {
-        analysisError = e instanceof Error ? e.message : String(e)
-      }
+      const syncResult = await runOmicallHistorySync({
+        apiKey,
+        baseUrl,
+        lookbackMinutes: serverConfig.historyLookbackMinutes,
+        maxPages: serverConfig.historyMaxPages,
+        apiVersion: serverConfig.historyApiVersion,
+      })
+      processed = syncResult.processed
+      analysesProcessed = syncResult.analysesProcessed
+      analysisError = syncResult.analysisError
       const kpiCfg = await loadKpiEvalConfig(db)
       await updateDailyCrmKpiFromAuditLogs()
       await updateDailyFinanceKpiFromLeads(kpiCfg)
@@ -849,10 +914,298 @@ export const syncOmicallCallHistory = onSchedule(
         finishedAt: Timestamp.now(),
         processed,
         analysesProcessed,
+        lookbackMinutes: serverConfig.historyLookbackMinutes,
+        apiVersion: serverConfig.historyApiVersion,
         ...(analysisError ? { analysisError } : {}),
         status: error ? 'error' : 'ok',
         ...(error ? { error } : {}),
       })
+    }
+  },
+)
+
+/** Đồng bộ thủ công từ Settings — admin / quyền config:omicall. */
+export const triggerOmicallHistorySync = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    }
+    const userSnap = await db.collection(COLLECTIONS.users).doc(request.auth.uid).get()
+    const role = str(userSnap.data()?.role)
+    if (role !== 'admin' && role !== 'super_admin') {
+      throw new HttpsError('permission-denied', 'Chỉ quản trị mới chạy đồng bộ thủ công.')
+    }
+    const serverConfig = await loadOmicallServerConfig()
+    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
+    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
+    if (!apiKey || !baseUrl) {
+      throw new HttpsError('failed-precondition', 'Thiếu API key hoặc base URL OMICall.')
+    }
+    const lookbackMinutes = Math.max(
+      15,
+      Math.min(4320, Math.round(num(request.data?.lookbackMinutes) || serverConfig.historyLookbackMinutes)),
+    )
+    const runRef = db.collection(COLLECTIONS.omicallSyncRuns).doc()
+    const startedAt = Timestamp.now()
+    try {
+      const result = await runOmicallHistorySync({
+        apiKey,
+        baseUrl,
+        lookbackMinutes,
+        maxPages: serverConfig.historyMaxPages,
+        apiVersion: serverConfig.historyApiVersion,
+      })
+      await runRef.set({
+        startedAt,
+        finishedAt: Timestamp.now(),
+        processed: result.processed,
+        analysesProcessed: result.analysesProcessed,
+        lookbackMinutes,
+        apiVersion: serverConfig.historyApiVersion,
+        triggeredBy: request.auth.uid,
+        status: 'ok',
+        manual: true,
+        ...(result.analysisError ? { analysisError: result.analysisError } : {}),
+      })
+      return {
+        ok: true,
+        processed: result.processed,
+        analysesProcessed: result.analysesProcessed,
+        lookbackMinutes,
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await runRef.set({
+        startedAt,
+        finishedAt: Timestamp.now(),
+        status: 'error',
+        error: msg,
+        manual: true,
+        triggeredBy: request.auth.uid,
+      })
+      throw new HttpsError('internal', msg)
+    }
+  },
+)
+
+type CallCenterProbeAction = 'internal_phones' | 'hotlines' | 'extension_detail'
+
+/** Kiểm tra API Tổng đài (call_center/*) — đối chiếu cấu hình SIP / hotline. */
+export const omicallCallCenterProbe = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    }
+    const userSnap = await db.collection(COLLECTIONS.users).doc(request.auth.uid).get()
+    const role = str(userSnap.data()?.role)
+    if (role !== 'admin' && role !== 'super_admin') {
+      throw new HttpsError('permission-denied', 'Chỉ quản trị mới kiểm tra API Tổng đài.')
+    }
+    const serverConfig = await loadOmicallServerConfig()
+    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
+    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
+    if (!apiKey || !baseUrl) {
+      throw new HttpsError('failed-precondition', 'Thiếu API key hoặc base URL OMICall.')
+    }
+    const action = str(request.data?.action) as CallCenterProbeAction
+    if (action === 'internal_phones') {
+      const keyword = str(request.data?.keyword)
+      const page = Math.max(1, Math.round(num(request.data?.page) || 1))
+      const size = Math.min(50, Math.max(1, Math.round(num(request.data?.size) || 50)))
+      const result = await fetchInternalPhoneList(baseUrl, apiKey, { keyword, page, size })
+      return {
+        ok: true,
+        action,
+        items: result.items.map(({ sipPassword, ...row }) => ({
+          ...row,
+          hasPassword: Boolean(sipPassword),
+        })),
+        totalItems: result.totalItems,
+      }
+    }
+    if (action === 'hotlines') {
+      const extension = str(request.data?.extension)
+      if (!extension) throw new HttpsError('invalid-argument', 'Cần extension (số nội bộ).')
+      const hotlines = await fetchHotlineListForExtension(baseUrl, apiKey, extension)
+      return { ok: true, action, extension, hotlines }
+    }
+    if (action === 'extension_detail') {
+      const type = str(request.data?.type) as 'sip_user' | 'user_email' | 'usr_uuid'
+      const keyword = str(request.data?.keyword)
+      if (!keyword) throw new HttpsError('invalid-argument', 'Cần keyword.')
+      const detailType = type === 'user_email' || type === 'usr_uuid' ? type : 'sip_user'
+      const detail = await fetchExtensionDetail(baseUrl, apiKey, detailType, keyword)
+      return { ok: true, action, detail }
+    }
+    throw new HttpsError('invalid-argument', 'action không hợp lệ.')
+  },
+)
+
+async function requireOmicallApiCreds() {
+  const serverConfig = await loadOmicallServerConfig()
+  const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
+  const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
+  if (!apiKey || !baseUrl) {
+    throw new HttpsError('failed-precondition', 'Thiếu API key hoặc base URL OMICall.')
+  }
+  return { apiKey, baseUrl, serverConfig }
+}
+
+/** Đồng bộ số nội bộ OMICall → users (email) + cập nhật sipRealm / hotline mặc định. */
+export const omicallSyncInternalPhones = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    const callerSnap = await db.collection(COLLECTIONS.users).doc(request.auth.uid).get()
+    const role = str(callerSnap.data()?.role)
+    if (role !== 'admin' && role !== 'super_admin') {
+      throw new HttpsError('permission-denied', 'Chỉ quản trị mới đồng bộ số nội bộ.')
+    }
+    const { apiKey, baseUrl, serverConfig } = await requireOmicallApiCreds()
+    const dryRun = request.data?.dryRun === true
+    const phones = await fetchAllInternalPhones(baseUrl, apiKey, { maxPages: 30 })
+    const usersSnap = await db.collection(COLLECTIONS.users).get()
+    const usersByEmail = new Map<string, (typeof usersSnap.docs)[number]>()
+    for (const doc of usersSnap.docs) {
+      const email = str(doc.data().email).toLowerCase()
+      if (email) usersByEmail.set(email, doc)
+    }
+
+    let matched = 0
+    let updated = 0
+    let skippedNoEmail = 0
+    let skippedNoUser = 0
+    let domainHint: string | undefined
+    const details: { email: string; sipUser: string; status: string }[] = []
+
+    for (const row of phones) {
+      if (row.domain && !domainHint) domainHint = row.domain
+      if (!row.email) {
+        skippedNoEmail++
+        continue
+      }
+      const userDoc = usersByEmail.get(row.email)
+      if (!userDoc) {
+        skippedNoUser++
+        details.push({ email: row.email, sipUser: row.sipUser, status: 'no_crm_user' })
+        continue
+      }
+      matched++
+
+      let outbound = normalizeHotlineNumber(row.publicNumber)
+      let sipPassword = row.sipPassword
+      if (row.sipUser) {
+        try {
+          const hotlines = await fetchHotlineListForExtension(baseUrl, apiKey, row.sipUser)
+          if (hotlines[0]) outbound = normalizeHotlineNumber(hotlines[0]) || outbound
+        } catch {
+          /* hotline list optional */
+        }
+        if (!sipPassword) {
+          try {
+            const detail = await fetchExtensionDetail(baseUrl, apiKey, 'sip_user', row.sipUser)
+            if (detail?.sipPassword) sipPassword = detail.sipPassword
+            if (detail?.sipRealm && !domainHint) domainHint = detail.sipRealm
+          } catch {
+            /* detail optional */
+          }
+        }
+      }
+
+      const patch: Record<string, unknown> = {
+        omicallSipUser: row.sipUser || null,
+        omicallAgentId: row.agentId || null,
+        omicallOutboundNumber: outbound || null,
+        omicallSyncedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      }
+      if (sipPassword) patch.omicallSipPassword = sipPassword
+
+      if (!dryRun) {
+        await userDoc.ref.set(patch, { merge: true })
+        updated++
+      }
+      details.push({
+        email: row.email,
+        sipUser: row.sipUser,
+        status: dryRun ? 'would_update' : 'updated',
+      })
+    }
+
+    if (!dryRun && domainHint) {
+      const realm = domainHint.trim()
+      const configRef = db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID)
+      const configSnap = await configRef.get()
+      const currentRealm = str(configSnap.data()?.sipRealm)
+      if (!currentRealm && realm) {
+        await configRef.set({ sipRealm: realm, updatedAt: Timestamp.now() }, { merge: true })
+      }
+      const defaultHotline = phones.find((p) => p.publicNumber)?.publicNumber
+      if (defaultHotline && !serverConfig.defaultOutboundNumber) {
+        await configRef.set(
+          { defaultOutboundNumber: normalizeHotlineNumber(defaultHotline), updatedAt: Timestamp.now() },
+          { merge: true },
+        )
+      }
+    }
+
+    return {
+      ok: true,
+      dryRun,
+      totalExtensions: phones.length,
+      matched,
+      updated: dryRun ? 0 : updated,
+      skippedNoEmail,
+      skippedNoUser,
+      domainHint: domainHint ?? null,
+      details: details.slice(0, 100),
+    }
+  },
+)
+
+/** Lấy hotline + xác nhận extension cho TVV đang đăng nhập (trước khi gọi). */
+export const omicallResolveCallContext = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    const userSnap = await db.collection(COLLECTIONS.users).doc(request.auth.uid).get()
+    if (!userSnap.exists) throw new HttpsError('not-found', 'Không tìm thấy hồ sơ user.')
+    const user = userSnap.data() ?? {}
+    let sipUser = str(user.omicallSipUser) || str(request.data?.extension)
+    const { apiKey, baseUrl, serverConfig } = await requireOmicallApiCreds()
+    let detail = null as Awaited<ReturnType<typeof fetchExtensionDetail>> | null
+    if (!sipUser) {
+      const email = str(user.email).toLowerCase()
+      if (email) {
+        detail = await fetchExtensionDetail(baseUrl, apiKey, 'user_email', email)
+        sipUser = detail?.sipUser || ''
+      }
+    }
+    if (!sipUser) {
+      throw new HttpsError(
+        'failed-precondition',
+        'TVV chưa có số nội bộ — chạy «Đồng bộ số nội bộ» trong Cài đặt hoặc nhập trong Quản lý nhân sự.',
+      )
+    }
+    const hotlines = await fetchHotlineListForExtension(baseUrl, apiKey, sipUser)
+    if (!detail) detail = await fetchExtensionDetail(baseUrl, apiKey, 'sip_user', sipUser)
+    const outboundFromProfile = normalizeHotlineNumber(user.omicallOutboundNumber)
+    const outboundFromConfig = normalizeHotlineNumber(serverConfig.defaultOutboundNumber)
+    const outboundFromHotline = hotlines[0] ? normalizeHotlineNumber(hotlines[0]) : ''
+    const recommendedOutbound = outboundFromProfile || outboundFromConfig || outboundFromHotline || ''
+    const sipRealmConfigured = str(serverConfig.sipRealm)
+    const sipRealmFromApi = detail?.sipRealm || ''
+    return {
+      ok: true,
+      sipUser,
+      hotlines,
+      recommendedOutbound,
+      sipRealmConfigured,
+      sipRealmFromApi,
+      realmMatch: !sipRealmFromApi || !sipRealmConfigured || sipRealmFromApi === sipRealmConfigured,
+      extensionEmail: detail?.email || str(user.email).toLowerCase(),
     }
   },
 )

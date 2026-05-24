@@ -240,6 +240,7 @@ const MONTHLY_SUM_FIELDS = [
   'newToInterested',
   'toDeposit',
   'toEnrolled',
+  'notesAdded',
 ] as const
 
 function num(v: unknown): number {

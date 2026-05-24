@@ -1,4 +1,4 @@
-import { addDoc, collection, Timestamp, type Firestore } from 'firebase/firestore'
+import { addDoc, collection, getDocs, limit, query, Timestamp, where, type Firestore } from 'firebase/firestore'
 import type { Interaction, OmicallCallTarget, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { commitAuditLog } from './auditLog'
@@ -28,16 +28,23 @@ function callOutcomeFromCall(call: OmicallCallData): Interaction['callOutcome'] 
 export async function logOmicallInteraction(
   db: Firestore,
   call: OmicallCallData,
-  profile: Pick<VietMyUserProfile, 'id' | 'role' | 'displayName'>,
+  profile: Pick<VietMyUserProfile, 'id' | 'role' | 'displayName' | 'omicallSipUser'>,
 ): Promise<{ leadId: string } | null> {
   const meta = parseOmicallUserData(call.userData)
   if (!meta?.leadId) return null
+
+  const sub = collection(db, FS_COLLECTIONS.leads, meta.leadId, FS_COLLECTIONS.interactions)
+  if (call.uid) {
+    const dup = await getDocs(query(sub, where('providerCallId', '==', call.uid), limit(1)))
+    if (!dup.empty) return { leadId: meta.leadId }
+  }
 
   const targetLabel = OMICALL_TARGET_LABELS[meta.target as OmicallCallTarget] ?? meta.target
   const dir = call.direction === 'inbound' ? 'gọi vào' : 'gọi ra'
   const outcome = callOutcomeFromCall(call)
   const durationSeconds = durationSecondsFromCall(call)
   const ringingSeconds = call.ringingDuration?.value ?? 0
+  const hotline = call.sipNumber?.number
   const noteParts = [
     `OMICall — ${dir} ${targetLabel}`,
     `SĐT: ${call.displayNumber || meta.phone}`,
@@ -45,12 +52,11 @@ export async function logOmicallInteraction(
     `Thời lượng nói chuyện: ${durationText(durationSeconds)}`,
   ]
   if (ringingSeconds > 0) noteParts.push(`Đổ chuông: ${durationText(ringingSeconds)}`)
-  if (call.sipNumber?.number) noteParts.push(`Đầu số gọi ra: ${call.sipNumber.number}`)
+  if (hotline) noteParts.push(`Đầu số gọi ra: ${hotline}`)
   if (call.rejectCode) noteParts.push(`Mã kết thúc: ${call.rejectCode}`)
   if (call.uuid) noteParts.push(`UUID tổng đài: ${call.uuid}`)
   if (call.uid) noteParts.push(`Mã cuộc gọi: ${call.uid}`)
 
-  const sub = collection(db, FS_COLLECTIONS.leads, meta.leadId, FS_COLLECTIONS.interactions)
   await addDoc(sub, {
     leadId: meta.leadId,
     channel: 'CALL',
@@ -64,8 +70,8 @@ export async function logOmicallInteraction(
     providerUuid: call.uuid,
     billSeconds: durationSeconds,
     answerSeconds: durationSeconds,
-    hotline: call.sipNumber?.number,
-    sipUser: call.sipNumber?.number,
+    hotline: hotline ?? null,
+    sipUser: profile.omicallSipUser ?? null,
     syncedFrom: 'sdk',
     timestamp: Timestamp.now(),
   })

@@ -112,6 +112,10 @@ export async function initFirebaseAnalytics(): Promise<void> {
   }
 }
 
+export function getFirebaseApp(): FirebaseApp | null {
+  return ensureApp()
+}
+
 /** Firestore — mặc định `(default)`; database đặt tên (vd. `warmlist`) cần `VITE_FIREBASE_FIRESTORE_DATABASE_ID`. */
 export function getFirestoreDb(): Firestore | null {
   const a = ensureApp()
