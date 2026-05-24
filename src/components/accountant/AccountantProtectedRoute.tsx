@@ -47,7 +47,7 @@ export function AccountantProtectedRoute() {
     )
   }
 
-  if (!canAccessAccountantPortal(can)) {
+  if (!canAccessAccountantPortal(can, profile)) {
     return (
       <div className="mx-auto max-w-lg p-8">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-950">

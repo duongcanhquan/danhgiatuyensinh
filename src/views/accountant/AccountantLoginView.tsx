@@ -7,7 +7,7 @@ import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '.
 import { mapFirebaseLoginError } from '../../utils/firebaseLoginErrors'
 
 export function AccountantLoginView() {
-  const { status, firebaseUser, signInWithEmail, can } = useAuth()
+  const { status, firebaseUser, profile, signInWithEmail, can } = useAuth()
   const location = useLocation()
   const rawFrom = (location.state as { from?: string } | null)?.from
   const from =
@@ -40,13 +40,12 @@ export function AccountantLoginView() {
     )
   }
 
-  if (
-    firebaseUser &&
-    (status === 'authenticated' || status === 'authenticating') &&
-    canAccessAccountantPortal(can)
-  ) {
+  if (firebaseUser && status === 'authenticated' && profile && canAccessAccountantPortal(can, profile)) {
     return <Navigate to={from} replace />
   }
+
+  const loggedInWithoutPortalAccess =
+    firebaseUser && status === 'authenticated' && profile && !canAccessAccountantPortal(can, profile)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -83,8 +82,8 @@ export function AccountantLoginView() {
           <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden />
             <p>
-              Chỉ đăng nhập bằng <strong>tài khoản kế toán được cấp quyền</strong>. Không chia sẻ mật khẩu; đăng xuất
-              khi rời máy.
+              Dùng tài khoản <strong>kế toán</strong> hoặc <strong>quản trị / super admin</strong>. Không chia sẻ mật
+              khẩu; đăng xuất khi rời máy.
             </p>
           </div>
 
@@ -123,6 +122,15 @@ export function AccountantLoginView() {
                 </button>
               </div>
             </label>
+            {loggedInWithoutPortalAccess ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="alert">
+                Tài khoản này không có quyền cổng kế toán.{' '}
+                <Link to="/login" className="font-semibold underline">
+                  Đăng nhập CRM
+                </Link>{' '}
+                nếu bạn là TVV tuyển sinh.
+              </div>
+            ) : null}
             {error ? (
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800" role="alert">
                 {error}

@@ -1,6 +1,14 @@
 import type { Permission, VietMyUserProfile } from '../types'
+import { normalizeUserRole } from './roleUtils'
 
-export function canAccessAccountantPortal(can: (p: Permission) => boolean): boolean {
+/** Quản trị vào được cổng kế toán để giám sát; TVV kế toán cần `finance:accountant`. */
+export function canAccessAccountantPortal(
+  can: (p: Permission) => boolean,
+  profile?: Pick<VietMyUserProfile, 'role' | 'isActive'> | null,
+): boolean {
+  if (profile?.isActive === false) return false
+  const role = normalizeUserRole(profile?.role)
+  if (role === 'super_admin' || role === 'admin') return true
   return can('finance:accountant')
 }
 
