@@ -166,6 +166,8 @@ export function catalogIdForScoringTargetField(targetField: string): string | nu
       return 'regions'
     case 'majorInterest':
       return 'majors'
+    case 'educationLevel':
+      return 'training_programs'
     case 'academicLevel':
       return 'academic_performance'
     case 'highSchool':

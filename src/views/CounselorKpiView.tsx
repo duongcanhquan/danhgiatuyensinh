@@ -106,7 +106,7 @@ export function CounselorKpiView() {
             {can('config:scoring_rules') ? (
               <>
                 {' '}
-                <Link to="/settings?tab=kpi" className="font-semibold text-sky-800 underline">
+                <Link to="/settings?tab=kpi_permissions&sub=kpi" className="font-semibold text-sky-800 underline">
                   Cài đặt KPI
                 </Link>
               </>

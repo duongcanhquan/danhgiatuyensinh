@@ -149,12 +149,14 @@ function sectionsData(): Section[] {
       body: (
         <div className="space-y-1">
           <p className={p}>
-            Màn <strong>Tổng kết</strong> là trang đầu sau khi đăng nhập: biểu đồ và con số tóm tắt hồ sơ đã tải trên
-            trình duyệt của bạn (có thể có nút <strong>Tải thêm</strong> nếu danh sách rất lớn).
+            Màn <strong>Tổng kết</strong> là trang đầu sau khi đăng nhập. Admin / Trưởng nhóm có tab{' '}
+            <strong>KPI &amp; đánh giá nhân sự</strong> (mặc định): xem KPI theo nhóm và từng TVV, điểm tổng hợp, hạng
+            thưởng, nhập điểm tuân thủ. Tab <strong>Pipeline tuyển sinh</strong> là biểu đồ hồ sơ như trước.
           </p>
           <ul className={ul}>
             <li>Dùng để họp nhanh hoặc nắm xu hướng pipeline, mức ưu tiên (HOT / WARM / COLD).</li>
-            <li>Muốn xem hoặc sửa chi tiết từng người: chuyển sang menu <strong>Hồ sơ</strong>.</li>
+            <li>Chi tiết KPI ngày / kỳ / gọi: liên kết nhanh sang Điều hành, KPI kỳ, Bảng điểm, Lịch sử gọi.</li>
+            <li>Muốn xem hoặc sửa chi tiết từng hồ sơ: chuyển sang menu <strong>Hồ sơ</strong>.</li>
           </ul>
         </div>
       ),
@@ -342,7 +344,7 @@ function sectionsData(): Section[] {
           </p>
           <p className={p}>
             Chỉnh ngưỡng:{' '}
-            <Link to="/settings?tab=kpi" className="font-semibold text-sky-800 underline">
+            <Link to="/settings?tab=kpi_permissions&sub=kpi" className="font-semibold text-sky-800 underline">
               Cài đặt → KPI Sale
             </Link>
             . Đồng bộ server ~15 phút sau khi lưu.

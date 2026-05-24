@@ -55,8 +55,8 @@ export default function App() {
                 <Route path="my-day" element={<MyDayView />} />
                 <Route path="scorecard" element={<ScorecardView />} />
                 <Route path="call-history" element={<CallHistoryView />} />
-                <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
-                <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
+                <Route path="ai" element={<Navigate to="/settings?tab=knowledge_advisory&sub=llm" replace />} />
+                <Route path="staff" element={<Navigate to="/settings?tab=kpi_permissions&sub=staff" replace />} />
                 <Route path="accountant" element={<Navigate to="/ke-toan" replace />} />
                 <Route path="settings" element={<SettingsView />} />
                 <Route path="huong-dan" element={<UserManualView />} />

@@ -15,6 +15,7 @@ import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import type { MasterDataBuckets } from '../utils/scoring'
+import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 
@@ -50,6 +51,7 @@ export function CreateLeadModal({
   const [duplicateId, setDuplicateId] = useState<string | null>(null)
   const { active: leadSources } = useLeadSources()
   const { items: scholarships } = useScholarships()
+  const { catalogs, onEnsureCatalogEntry } = useLeadProfileCatalogs()
 
   const elevated = isAdminLikeRole(profile?.role)
   const teamLead = isTeamLeadRole(profile?.role)
@@ -223,6 +225,8 @@ export function CreateLeadModal({
               disabled={busy}
               leadSources={leadSources}
               scholarships={scholarships}
+              catalogs={catalogs}
+              onEnsureCatalogEntry={onEnsureCatalogEntry}
               layout="tabs"
               wideGrid
             />

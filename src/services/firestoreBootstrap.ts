@@ -95,12 +95,22 @@ function defaultHighSchools(): MasterDataEntry[] {
   return [{ id: 'sample-thpt', label: 'THPT (ví dụ — chỉnh trong Cài đặt)' }]
 }
 
+function defaultTrainingPrograms(): MasterDataEntry[] {
+  return [
+    { id: 'phcd', label: 'PHCD (Phổ thông cao đẳng)' },
+    { id: 'cdcq', label: 'CD CQ (Cao đẳng chính quy)' },
+    { id: '9plus4', label: '9+4' },
+    { id: 'lien-thong', label: 'Liên thông' },
+  ]
+}
+
 function defaultMajors(): MasterDataEntry[] {
   return [
-    { id: 'dd', label: 'Điều dưỡng' },
-    { id: 'cntt', label: 'Công nghệ thông tin' },
-    { id: 'qtdl', label: 'Quản trị du lịch & lữ hành' },
-    { id: 'tkdh', label: 'Thiết kế đồ họa' },
+    { id: 'dd', label: 'Điều dưỡng', departmentId: 'cdcq' },
+    { id: 'cntt', label: 'Công nghệ thông tin', departmentId: 'cdcq' },
+    { id: 'qtdl', label: 'Quản trị du lịch & lữ hành', departmentId: 'cdcq' },
+    { id: 'tkdh', label: 'Thiết kế đồ họa', departmentId: 'cdcq' },
+    { id: 'du-lich-phcd', label: 'Du lịch', departmentId: 'phcd' },
     {
       id: 'ngoai-nganh',
       label: 'Ngoài ngành đào tạo / chưa xác định ngành',
@@ -138,6 +148,8 @@ function entriesForKind(kind: string): MasterDataEntry[] {
       return defaultHanoiAreas()
     case 'high_schools':
       return defaultHighSchools()
+    case 'training_programs':
+      return defaultTrainingPrograms()
     case 'majors':
       return defaultMajors()
     case 'school_types':

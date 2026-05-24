@@ -43,6 +43,15 @@ export function useMasterData() {
   const hanoiAreaLabels = useMemo(() => (byKind.hanoi_areas ?? []).map((e) => e.label), [byKind])
   const highSchoolLabels = useMemo(() => (byKind.high_schools ?? []).map((e) => e.label), [byKind])
   const majorLabels = useMemo(() => (byKind.majors ?? []).map((e) => e.label), [byKind])
+  const trainingProgramLabels = useMemo(
+    () => (byKind.training_programs ?? []).map((e) => e.label),
+    [byKind],
+  )
+  const schoolTypeLabels = useMemo(() => (byKind.school_types ?? []).map((e) => e.label), [byKind])
+  const financialProfileLabels = useMemo(
+    () => (byKind.financial_profiles ?? []).map((e) => e.label),
+    [byKind],
+  )
   const academicPerformanceLabels = useMemo(
     () => (byKind.academic_performance ?? []).map((e) => e.label),
     [byKind],
@@ -124,6 +133,9 @@ export function useMasterData() {
     hanoiAreaLabels,
     highSchoolLabels,
     majorLabels,
+    trainingProgramLabels,
+    schoolTypeLabels,
+    financialProfileLabels,
     academicPerformanceLabels,
     studyIntentionLabels,
     loading,

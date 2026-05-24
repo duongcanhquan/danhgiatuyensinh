@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   Area,
   AreaChart,
@@ -24,6 +24,7 @@ import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { AdminPersonnelKpiPanel } from '../components/AdminPersonnelKpiPanel'
 
 /** Nhãn ưu tiên — đồng bộ amber / brass theme (sidebar + OS) */
 const TAG_COLORS: Record<PriorityTag, string> = {
@@ -76,8 +77,13 @@ function formatMonth(d: Date): string {
 }
 
 export function DashboardView() {
-  const { profile } = useAuth()
+  const { profile, can } = useAuth()
   const isAdmin = isAdminLikeRole(profile?.role)
+  const showPersonnelTab =
+    can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead')
+  const [summaryTab, setSummaryTab] = useState<'personnel' | 'pipeline'>(
+    showPersonnelTab ? 'personnel' : 'pipeline',
+  )
   const { leads, loading, error, totalLeadCount, totalLeadCountError, totalPages, currentPage } = useLeads()
   const adminAgg = useAdminDashboardAggregates(isAdmin)
   const {
@@ -206,15 +212,60 @@ export function DashboardView() {
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Tổng kết
         </VietMyAccentHeading>
-        {!isAdmin ? (
+        {showPersonnelTab ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSummaryTab('personnel')}
+              className={[
+                'rounded-xl px-4 py-2 text-sm font-semibold transition',
+                summaryTab === 'personnel'
+                  ? 'bg-violet-700 text-white shadow-sm'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              KPI &amp; đánh giá nhân sự
+            </button>
+            <button
+              type="button"
+              onClick={() => setSummaryTab('pipeline')}
+              className={[
+                'rounded-xl px-4 py-2 text-sm font-semibold transition',
+                summaryTab === 'pipeline'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              Pipeline tuyển sinh
+            </button>
+          </div>
+        ) : null}
+        {!isAdmin && !showPersonnelTab ? (
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
             Ô <strong className="font-semibold text-slate-800">Tổng hồ sơ</strong> dùng đếm Firestore (đúng phạm vi
             quyền của bạn). Các biểu đồ khác theo hồ sơ đã tải vào trình duyệt — dùng «Tải thêm» trên trang Hồ sơ
             nếu cần xem thêm bản ghi cho phân tích cục bộ.
           </p>
+        ) : showPersonnelTab && summaryTab === 'personnel' ? (
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+            Xem KPI theo <strong>nhóm</strong> và <strong>từng TVV</strong>, nhập điểm tuân thủ, mở chi tiết 4 trụ đánh
+            giá. Tab «Pipeline tuyển sinh» là biểu đồ hồ sơ toàn trường.
+          </p>
+        ) : isAdmin ? (
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+            Thống kê hồ sơ toàn hệ thống (Firestore aggregates). Tab «KPI &amp; đánh giá nhân sự» để xem theo nhóm / TVV.
+          </p>
         ) : null}
       </header>
 
+      {showPersonnelTab && summaryTab === 'personnel' ? (
+        <section className="relative">
+          <AdminPersonnelKpiPanel />
+        </section>
+      ) : null}
+
+      {(!showPersonnelTab || summaryTab === 'pipeline') && (
+      <>
       {error ? (
         <div className="relative rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm">
           {error}
@@ -482,6 +533,8 @@ export function DashboardView() {
           </p>
         </GlassChartCard>
       </section>
+      </>
+      )}
     </div>
   )
 }

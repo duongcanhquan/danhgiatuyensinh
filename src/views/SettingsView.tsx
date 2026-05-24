@@ -51,23 +51,18 @@ import { StaffManagementView } from '../views/StaffManagementView'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
-import { ScholarshipSettingsTab } from '../components/ScholarshipSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
+import {
+  enabledMainTabs,
+  enabledSubsForMain,
+  resolveSettingsRoute,
+  SETTINGS_MAIN_LABELS,
+  subTabLabel,
+  type SettingsAccessContext,
+  type SettingsMainTabId,
+  type SettingsSubTabId,
+} from '../utils/settingsNavigation'
 
-type SettingsTabId =
-  | 'master'
-  | 'lead_profile'
-  | 'scholarships'
-  | 'rule_templates'
-  | 'scoring'
-  | 'scoring_profiles'
-  | 'consulting'
-  | 'knowledge'
-  | 'llm'
-  | 'omicall'
-  | 'staff'
-  | 'permissions'
-  | 'kpi'
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -91,25 +86,16 @@ const settingsCopy = 'text-sm leading-relaxed text-slate-800'
 const settingsCopyMuted = 'text-sm leading-relaxed text-slate-600'
 const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight text-slate-900'
 
-function settingsGuideBody(tab: SettingsTabId): ReactNode {
-  switch (tab) {
+function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): ReactNode {
+  switch (sub) {
     case 'lead_profile':
       return (
         <>
-          <p className="font-semibold text-slate-900">Cài đặt hồ sơ — Nguồn</p>
+          <p className="font-semibold text-slate-900">Hồ sơ &amp; danh mục tuyển sinh</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Quản lý danh mục <strong>Nguồn</strong> (Nguồn 1 / Nguồn 2 trên form hồ sơ). Học bổng cấu hình ở tab{' '}
-            <strong>Cài đặt học bổng</strong>.
-          </p>
-        </>
-      )
-    case 'scholarships':
-      return (
-        <>
-          <p className="font-semibold text-slate-900">Cài đặt học bổng</p>
-          <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Bảng học bổng theo hệ PHCD / CDCQ: thời gian áp dụng, mức tiền, hình thức trừ học phí, đối tượng, số lượng
-            suất. Dùng «Đồng bộ bảng chuẩn» để cập nhật theo kế hoạch tuyển sinh.
+            Tab con: <strong>Nguồn</strong>, <strong>Học bổng</strong>, <strong>Hệ đào tạo</strong>,{' '}
+            <strong>Chuyên ngành</strong>, <strong>Địa lý &amp; THPT</strong>, <strong>Học tập khác</strong>. OMICall
+            cấu hình ở tab <strong>Gọi điện</strong> cùng nhóm «Cài đặt hệ thống».
           </p>
         </>
       )
@@ -257,7 +243,7 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'staff':
       return (
         <>
-          <p className="font-semibold text-slate-900">Quản lý Nhân Sự</p>
+          <p className="font-semibold text-slate-900">{subTabLabel('staff', ctx)}</p>
           <p className="mt-1.5">
             <strong>Sửa / vô hiệu:</strong> cập nhật <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">users/{'{uid}'}</code> trên Firestore.{' '}
             <strong>Đổi mật khẩu:</strong> trong form «Sửa» dùng nút gửi email đặt lại (Firebase) — app <strong>không</strong> gán
@@ -273,27 +259,6 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     default:
       return null
   }
-}
-
-function parseSettingsTab(raw: string | null): SettingsTabId | null {
-  if (
-    raw === 'master' ||
-    raw === 'lead_profile' ||
-    raw === 'scholarships' ||
-    raw === 'rule_templates' ||
-    raw === 'scoring' ||
-    raw === 'scoring_profiles' ||
-    raw === 'consulting' ||
-    raw === 'knowledge' ||
-    raw === 'llm' ||
-    raw === 'omicall' ||
-    raw === 'staff' ||
-    raw === 'permissions' ||
-    raw === 'kpi'
-  )
-    return raw
-  if (raw === 'ai_lab') return 'llm'
-  return null
 }
 
 export function SettingsView() {
@@ -481,62 +446,50 @@ export function SettingsView() {
     }
   }
 
-  const tabDefs = useMemo(() => {
-    const base: { id: SettingsTabId; label: string; enabled: boolean }[] = []
-    if (db && (canScoringRules || canScoringProfilesTeam)) {
-      base.push({ id: 'scoring_profiles', label: 'Cài đặt Profile', enabled: true })
-    }
-    if (db && canScoringRules) {
-      base.push({ id: 'scoring', label: 'Điểm thông tin', enabled: true })
-      base.push({ id: 'kpi', label: 'KPI Sale', enabled: true })
-    }
-    if (db && canMaster) {
-      base.push({ id: 'master', label: 'Cài đặt danh mục', enabled: true })
-      base.push({ id: 'lead_profile', label: 'Cài đặt hồ sơ', enabled: true })
-      base.push({ id: 'scholarships', label: 'Cài đặt học bổng', enabled: true })
-    }
-    if (db && canScoringRules) base.push({ id: 'rule_templates', label: 'Quy tắc mẫu', enabled: true })
-    if (db && canPlaybooks) base.push({ id: 'consulting', label: 'Thông tin T.Vấn', enabled: true })
-    if (db && canAiEngine) {
-      base.push({ id: 'knowledge', label: 'Tri thức T.Sinh', enabled: true })
-      base.push({ id: 'llm', label: 'LLM & Tư vấn AI', enabled: true })
-    }
-    if (db && canOmicall) {
-      base.push({ id: 'omicall', label: 'Gọi điện (OMICall)', enabled: true })
-    }
-    if (db && (canStaff || canStaffTeam)) {
-      base.push({
-        id: 'staff',
-        label: canStaff ? 'Quản lý Nhân Sự' : 'Nhóm tư vấn',
-        enabled: true,
-      })
-    }
-    if (canPermMatrix) base.push({ id: 'permissions', label: 'Phân Quyền', enabled: true })
-    return base
-  }, [
-    db,
-    canMaster,
-    canScoringRules,
-    canScoringProfilesOwn,
-    canScoringProfilesTeam,
-    canPlaybooks,
-    canAiEngine,
-    canOmicall,
-    canStaff,
-    canStaffTeam,
-    canPermMatrix,
-  ])
+  const settingsAccessCtx = useMemo(
+    (): SettingsAccessContext => ({
+      canMaster,
+      canScoringRules,
+      canScoringProfilesTeam,
+      canPlaybooks,
+      canAiEngine,
+      canOmicall,
+      canStaff,
+      canStaffTeam,
+      canPermMatrix,
+    }),
+    [
+      canMaster,
+      canScoringRules,
+      canScoringProfilesTeam,
+      canPlaybooks,
+      canAiEngine,
+      canOmicall,
+      canStaff,
+      canStaffTeam,
+      canPermMatrix,
+    ],
+  )
 
   const tabParam = searchParams.get('tab')
+  const subParam = searchParams.get('sub')
   const scoringSubLegacy = searchParams.get('scoringSub')
   const editSnippetParam = searchParams.get('editSnippet')
-  const urlTab = parseSettingsTab(tabParam)
 
-  const activeTab: SettingsTabId = useMemo(() => {
-    if (db && editSnippetParam) return 'consulting'
-    if (urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled)) return urlTab
-    return tabDefs.find((t) => t.enabled)?.id ?? 'master'
-  }, [db, editSnippetParam, urlTab, tabDefs])
+  const route = useMemo(() => {
+    if (db && editSnippetParam) {
+      return { main: 'knowledge_advisory' as SettingsMainTabId, sub: 'consulting' as SettingsSubTabId }
+    }
+    return resolveSettingsRoute(tabParam, subParam, settingsAccessCtx)
+  }, [db, editSnippetParam, tabParam, subParam, settingsAccessCtx])
+  const activeMainTab = route.main
+  const activeSubTab = route.sub
+
+  const mainTabs = useMemo(() => enabledMainTabs(settingsAccessCtx), [settingsAccessCtx])
+  const subTabs = useMemo(
+    () => enabledSubsForMain(activeMainTab, settingsAccessCtx),
+    [activeMainTab, settingsAccessCtx],
+  )
 
   useEffect(() => {
     setMasterWorkspaceOpen(false)
@@ -544,7 +497,7 @@ export function SettingsView() {
     setKnowledgeWorkspaceOpen(false)
     setLlmWorkspaceOpen(false)
     setGuideOpen(false)
-  }, [activeTab])
+  }, [activeMainTab, activeSubTab])
 
   useEffect(() => {
     if (!guideOpen) return
@@ -557,11 +510,25 @@ export function SettingsView() {
 
   useEffect(() => {
     if (!db) return
-    if (editSnippetParam && tabParam !== 'consulting') {
+    if (tabParam === 'scholarships') {
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
-          n.set('tab', 'consulting')
+          n.set('tab', 'system')
+          n.set('sub', 'lead_profile')
+          n.set('profileSub', 'scholarships')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
+    if (editSnippetParam && (tabParam !== 'knowledge_advisory' || subParam !== 'consulting')) {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'knowledge_advisory')
+          n.set('sub', 'consulting')
           return n
         },
         { replace: true },
@@ -584,25 +551,40 @@ export function SettingsView() {
         (prev) => {
           const n = new URLSearchParams(prev)
           n.delete('scoringSub')
-          if (scoringSubLegacy === 'profile') n.set('tab', 'scoring_profiles')
-          else n.set('tab', 'scoring')
+          n.set('tab', 'catalog_profile')
+          n.set('sub', scoringSubLegacy === 'profile' ? 'scoring_profiles' : 'scoring')
           return n
         },
         { replace: true },
       )
       return
     }
-    const validTab = Boolean(urlTab && tabDefs.some((t) => t.id === urlTab && t.enabled))
-    if (validTab) return
+
+    const normalized = resolveSettingsRoute(tabParam, subParam, settingsAccessCtx)
+    const needsNormalize = tabParam !== normalized.main || subParam !== normalized.sub
+
+    if (!needsNormalize || !mainTabs.length) return
+
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        n.set('tab', activeTab)
+        n.set('tab', normalized.main)
+        n.set('sub', normalized.sub)
+        n.delete('scoringSub')
         return n
       },
       { replace: true },
     )
-  }, [db, tabParam, editSnippetParam, urlTab, tabDefs, activeTab, setSearchParams, scoringSubLegacy])
+  }, [
+    db,
+    tabParam,
+    subParam,
+    editSnippetParam,
+    settingsAccessCtx,
+    mainTabs.length,
+    setSearchParams,
+    scoringSubLegacy,
+  ])
 
   const settingsRoleHint =
     canPlaybooks || canAiEngine
@@ -613,12 +595,29 @@ export function SettingsView() {
           ? ' — chỉ tab «Cài đặt Profile» (profile do bạn tạo); không chỉnh Playbook hay Tri thức.'
           : ' — chỉ các mục cấu hình được phép hiển thị bên dưới.'
 
-  const setTab = (id: SettingsTabId) => {
-    if (!tabDefs.some((t) => t.id === id && t.enabled)) return
+  const setMainTab = (main: SettingsMainTabId) => {
+    if (!mainTabs.includes(main)) return
+    const subs = enabledSubsForMain(main, settingsAccessCtx)
+    if (!subs.length) return
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        n.set('tab', id)
+        n.set('tab', main)
+        n.set('sub', subs[0])
+        n.delete('scoringSub')
+        return n
+      },
+      { replace: true },
+    )
+  }
+
+  const setSubTab = (sub: SettingsSubTabId) => {
+    if (!subTabs.includes(sub)) return
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        n.set('tab', activeMainTab)
+        n.set('sub', sub)
         n.delete('scoringSub')
         return n
       },
@@ -654,49 +653,73 @@ export function SettingsView() {
       ) : null}
 
       {db && settingsAccess ? (
-        <div className="min-w-0 max-w-full rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-md md:p-3">
-          <div className="scroll-touch flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain pb-1 md:gap-1.5 md:pb-0">
+        <div className="min-w-0 max-w-full space-y-2 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-md md:p-3">
+          <nav
+            className="scroll-touch flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-1"
+            role="tablist"
+            aria-label="Nhóm cài đặt chính"
+          >
+            {mainTabs.map((main) => {
+              const selected = activeMainTab === main
+              return (
+                <button
+                  key={main}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setMainTab(main)}
+                  className={[
+                    'shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold transition',
+                    selected
+                      ? 'border-violet-600/40 bg-violet-700 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                  ].join(' ')}
+                >
+                  {SETTINGS_MAIN_LABELS[main]}
+                </button>
+              )
+            })}
+          </nav>
+          <div className="scroll-touch flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-2 md:gap-1.5 md:pb-0">
             <nav
               className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 md:gap-1.5"
               role="tablist"
-              aria-label="Nhóm cấu hình"
+              aria-label="Tab con"
             >
-              {tabDefs.map((t) => {
-                const selected = activeTab === t.id
+              {subTabs.map((sub) => {
+                const selected = activeSubTab === sub
                 return (
                   <button
-                    key={t.id}
+                    key={sub}
                     type="button"
                     role="tab"
                     id={
-                      t.id === 'master'
+                      sub === 'master'
                         ? 'tab-master'
-                        : t.id === 'consulting'
+                        : sub === 'consulting'
                           ? 'tab-consulting'
-                          : t.id === 'knowledge'
+                          : sub === 'knowledge'
                             ? 'tab-knowledge'
-                            : t.id === 'llm'
+                            : sub === 'llm'
                               ? 'tab-llm'
                               : undefined
                     }
                     aria-selected={selected}
-                    disabled={!t.enabled}
-                    onClick={() => setTab(t.id)}
+                    onClick={() => setSubTab(sub)}
                     className={[
                       'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
                       settingsCopy,
                       selected
                         ? 'border-amber-500/50 bg-amber-50 text-slate-900 shadow-sm ring-1 ring-amber-800/10'
                         : 'border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50',
-                      !t.enabled ? 'cursor-not-allowed opacity-50' : '',
                     ].join(' ')}
                   >
-                    {t.label}
+                    {subTabLabel(sub, settingsAccessCtx)}
                   </button>
                 )
               })}
             </nav>
-            {db && activeTab === 'master' && !masterWorkspaceOpen ? (
+            {db && activeSubTab === 'master' && !masterWorkspaceOpen ? (
               <button
                 type="button"
                 onClick={() => setMasterWorkspaceOpen(true)}
@@ -706,7 +729,7 @@ export function SettingsView() {
                 Toàn màn
               </button>
             ) : null}
-            {db && activeTab === 'consulting' && !consultingWorkspaceOpen ? (
+            {db && activeSubTab === 'consulting' && !consultingWorkspaceOpen ? (
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(true)}
@@ -716,7 +739,7 @@ export function SettingsView() {
                 Toàn màn
               </button>
             ) : null}
-            {db && activeTab === 'knowledge' && !knowledgeWorkspaceOpen ? (
+            {db && activeSubTab === 'knowledge' && !knowledgeWorkspaceOpen ? (
               <button
                 type="button"
                 onClick={() => setKnowledgeWorkspaceOpen(true)}
@@ -726,7 +749,7 @@ export function SettingsView() {
                 Toàn màn
               </button>
             ) : null}
-            {db && activeTab === 'llm' && !llmWorkspaceOpen ? (
+            {db && activeSubTab === 'llm' && !llmWorkspaceOpen ? (
               <button
                 type="button"
                 onClick={() => setLlmWorkspaceOpen(true)}
@@ -751,7 +774,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'master' ? (
+      {db && activeSubTab === 'master' ? (
         <section
           role="tabpanel"
           aria-labelledby="tab-master"
@@ -933,19 +956,13 @@ export function SettingsView() {
         </section>
       ) : null}
 
-      {db && activeTab === 'lead_profile' ? (
-        <div role="tabpanel" aria-label="Cài đặt hồ sơ" className="min-w-0 max-w-full">
+      {db && activeSubTab === 'lead_profile' ? (
+        <div role="tabpanel" aria-label="Hồ sơ & danh mục" className="min-w-0 max-w-full">
           <LeadProfileSettingsTab db={db} canEdit={canMaster} />
         </div>
       ) : null}
 
-      {db && activeTab === 'scholarships' ? (
-        <div role="tabpanel" aria-label="Cài đặt học bổng" className="min-w-0 max-w-full">
-          <ScholarshipSettingsTab db={db} canEdit={canMaster} />
-        </div>
-      ) : null}
-
-      {db && activeTab === 'rule_templates' ? (
+      {db && activeSubTab === 'rule_templates' ? (
         <section
           role="tabpanel"
           aria-label="Quy tắc mẫu"
@@ -963,20 +980,20 @@ export function SettingsView() {
         </section>
       ) : null}
 
-      {db && activeTab === 'scoring' ? (
+      {db && activeSubTab === 'scoring' ? (
         <div role="tabpanel" aria-label="Điểm thông tin" className="min-w-0 max-w-full">
           <InfoCompletenessRulesPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 
-      {db && activeTab === 'kpi' ? (
+      {db && activeSubTab === 'kpi' ? (
         <div role="tabpanel" aria-label="KPI Sale" className="min-w-0 max-w-full space-y-8">
           <KpiEvaluationRulesPanel canEdit={canScoringRules} />
           <KpiTargetsPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 
-      {db && activeTab === 'scoring_profiles' ? (
+      {db && activeSubTab === 'scoring_profiles' ? (
         <div role="tabpanel" aria-label="Cài đặt Profile" className="min-w-0 max-w-full space-y-4">
           <ProfileManagerTab db={db} />
           <section className="border-t border-slate-200 pt-4">
@@ -1006,7 +1023,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'consulting' && canPlaybooks ? (
+      {db && activeSubTab === 'consulting' && canPlaybooks ? (
         <div
           role="tabpanel"
           aria-labelledby="tab-consulting"
@@ -1086,7 +1103,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'knowledge' && canAiEngine ? (
+      {db && activeSubTab === 'knowledge' && canAiEngine ? (
         <div
           role="tabpanel"
           aria-labelledby="tab-knowledge"
@@ -1120,7 +1137,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'llm' && canAiEngine ? (
+      {db && activeSubTab === 'llm' && canAiEngine ? (
         <div
           role="tabpanel"
           aria-labelledby="tab-llm"
@@ -1154,7 +1171,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'omicall' && canOmicall ? (
+      {db && activeSubTab === 'omicall' && canOmicall ? (
         <div role="tabpanel" aria-labelledby="tab-omicall" className="space-y-3">
           <h2 id="tab-omicall" className="sr-only">
             Gọi điện OMICall
@@ -1163,7 +1180,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeTab === 'staff' && (canStaff || canStaffTeam) ? (
+      {db && activeSubTab === 'staff' && (canStaff || canStaffTeam) ? (
         <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-3">
           <h2 id="tab-staff" className="sr-only">
             {canStaff ? 'Quản lý nhân sự' : 'Nhóm tư vấn'}
@@ -1172,7 +1189,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {activeTab === 'permissions' && canPermMatrix ? (
+      {activeSubTab === 'permissions' && canPermMatrix ? (
         <div role="tabpanel" aria-label="Phân Quyền" className="space-y-3">
           <PermissionMatrixPanel />
         </div>
@@ -1199,7 +1216,7 @@ export function SettingsView() {
                   Hướng dẫn
                 </h2>
                 <p className={`mt-0.5 ${settingsCopyMuted}`}>
-                  {tabDefs.find((t) => t.id === activeTab)?.label ?? activeTab}
+                  {subTabLabel(activeSubTab, settingsAccessCtx)}
                 </p>
               </div>
               <button
@@ -1211,7 +1228,7 @@ export function SettingsView() {
                 <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
-            <div className={`space-y-3 pt-4 ${settingsCopy}`}>{settingsGuideBody(activeTab)}</div>
+            <div className={`space-y-3 pt-4 ${settingsCopy}`}>{settingsGuideBody(activeSubTab, settingsAccessCtx)}</div>
           </div>
         </div>
       ) : null}

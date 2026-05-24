@@ -1,14 +1,34 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
-import type { LeadSourceRecord, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
+import type { LeadSourceRecord, MasterDataEntry, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
 import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
 import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
 import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
+import { CatalogCombobox } from './CatalogCombobox'
+import { labelsFromEntries, majorsForTrainingProgram, resolveTrainingProgramId } from '../utils/masterDataCatalogOps'
 
 const INPUT_CLS =
   'w-full max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500'
+
+export type LeadProfileCatalogBundle = {
+  trainingPrograms?: readonly MasterDataEntry[]
+  majors?: readonly MasterDataEntry[]
+  provinces?: readonly string[]
+  hanoiAreas?: readonly string[]
+  highSchools?: readonly string[]
+  academicPerformance?: readonly string[]
+  studyIntentions?: readonly string[]
+  schoolTypes?: readonly string[]
+  financialProfiles?: readonly string[]
+}
+
+export type LeadProfileCatalogEnsure = (
+  catalogId: string,
+  label: string,
+  extra?: Partial<MasterDataEntry>,
+) => void | Promise<void>
 
 export type LeadProfileFormTabId =
   | 'contact'
@@ -239,6 +259,8 @@ export function LeadProfileCoreForm({
   disabled,
   leadSources = [],
   scholarships = [],
+  catalogs,
+  onEnsureCatalogEntry,
   layout = 'accordion',
   defaultTab = 'contact',
   wideGrid = false,
@@ -251,6 +273,8 @@ export function LeadProfileCoreForm({
   disabled: boolean
   leadSources?: readonly LeadSourceRecord[]
   scholarships?: readonly ScholarshipRecord[]
+  catalogs?: LeadProfileCatalogBundle
+  onEnsureCatalogEntry?: LeadProfileCatalogEnsure
   layout?: 'accordion' | 'tabs'
   defaultTab?: LeadProfileFormTabId
   wideGrid?: boolean
@@ -266,6 +290,36 @@ export function LeadProfileCoreForm({
     ? 'grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3'
     : 'grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2'
   const noteSpan = wideGrid ? 3 : 2
+
+  const trainingProgramId = useMemo(
+    () => resolveTrainingProgramId(catalogs?.trainingPrograms, draft.educationLevel),
+    [catalogs?.trainingPrograms, draft.educationLevel],
+  )
+
+  const majorOptions = useMemo(() => {
+    const filtered = majorsForTrainingProgram(catalogs?.majors, trainingProgramId)
+    return labelsFromEntries(filtered)
+  }, [catalogs?.majors, trainingProgramId])
+
+  const ensure =
+    (catalogId: string, extra?: Partial<MasterDataEntry>) =>
+    (label: string) =>
+      onEnsureCatalogEntry?.(catalogId, label, extra)
+
+  const setEducationLevel = (v: string) => {
+    const nextProgramId = resolveTrainingProgramId(catalogs?.trainingPrograms, v)
+    const allowedMajors = labelsFromEntries(
+      majorsForTrainingProgram(catalogs?.majors, nextProgramId),
+    )
+    const keepMajor =
+      !draft.majorInterest.trim() ||
+      allowedMajors.some((m) => m.toLowerCase() === draft.majorInterest.trim().toLowerCase())
+    onChange({
+      ...draft,
+      educationLevel: v,
+      majorInterest: keepMajor ? draft.majorInterest : '',
+    })
+  }
 
   const body = (
     <>
@@ -402,16 +456,34 @@ export function LeadProfileCoreForm({
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Trường học">
         <div className={grid}>
           <Field label="Tỉnh / TP">
-            <input className={INPUT_CLS} value={draft.province} disabled={disabled} onChange={(e) => patch('province', e.target.value)} />
+            <CatalogCombobox
+              value={draft.province}
+              options={catalogs?.provinces ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('province', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('regions') : undefined}
+            />
           </Field>
           <Field label="Quận / huyện">
-            <input className={INPUT_CLS} value={draft.hanoiArea} disabled={disabled} onChange={(e) => patch('hanoiArea', e.target.value)} />
+            <CatalogCombobox
+              value={draft.hanoiArea}
+              options={catalogs?.hanoiAreas ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('hanoiArea', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('hanoi_areas') : undefined}
+            />
           </Field>
           <Field label="Địa chỉ" span={noteSpan}>
             <input className={INPUT_CLS} value={draft.address} disabled={disabled} onChange={(e) => patch('address', e.target.value)} />
           </Field>
           <Field label="Trường THPT">
-            <input className={INPUT_CLS} value={draft.highSchool} disabled={disabled} onChange={(e) => patch('highSchool', e.target.value)} />
+            <CatalogCombobox
+              value={draft.highSchool}
+              options={catalogs?.highSchools ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('highSchool', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('high_schools') : undefined}
+            />
           </Field>
           <Field label="Lớp hiện đang học">
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
@@ -422,22 +494,64 @@ export function LeadProfileCoreForm({
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Học tập & định hướng">
         <div className={grid}>
           <Field label="Hệ đào tạo">
-            <input className={INPUT_CLS} value={draft.educationLevel} disabled={disabled} onChange={(e) => patch('educationLevel', e.target.value)} />
+            <CatalogCombobox
+              value={draft.educationLevel}
+              options={labelsFromEntries(catalogs?.trainingPrograms)}
+              disabled={disabled}
+              onChange={setEducationLevel}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('training_programs') : undefined}
+              placeholder="Chọn hoặc thêm hệ đào tạo…"
+            />
           </Field>
-          <Field label="Ngành quan tâm">
-            <input className={INPUT_CLS} value={draft.majorInterest} disabled={disabled} onChange={(e) => patch('majorInterest', e.target.value)} />
+          <Field label="Chuyên ngành / ngành quan tâm">
+            <CatalogCombobox
+              value={draft.majorInterest}
+              options={majorOptions}
+              disabled={disabled}
+              onChange={(v) => patch('majorInterest', v)}
+              onEnsureOption={
+                onEnsureCatalogEntry
+                  ? ensure('majors', trainingProgramId ? { departmentId: trainingProgramId } : undefined)
+                  : undefined
+              }
+              placeholder={draft.educationLevel.trim() ? 'Chọn ngành thuộc hệ đã chọn…' : 'Chọn hệ đào tạo trước'}
+            />
           </Field>
           <Field label="Học lực / xếp loại">
-            <input className={INPUT_CLS} value={draft.academicPerformance} disabled={disabled} onChange={(e) => patch('academicPerformance', e.target.value)} />
+            <CatalogCombobox
+              value={draft.academicPerformance}
+              options={catalogs?.academicPerformance ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('academicPerformance', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('academic_performance') : undefined}
+            />
           </Field>
           <Field label="Dự định (hình thức)">
-            <input className={INPUT_CLS} value={draft.studyIntention} disabled={disabled} onChange={(e) => patch('studyIntention', e.target.value)} />
+            <CatalogCombobox
+              value={draft.studyIntention}
+              options={catalogs?.studyIntentions ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('studyIntention', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('study_intentions') : undefined}
+            />
           </Field>
           <Field label="Loại hình trường">
-            <input className={INPUT_CLS} value={draft.schoolType} disabled={disabled} onChange={(e) => patch('schoolType', e.target.value)} />
+            <CatalogCombobox
+              value={draft.schoolType}
+              options={catalogs?.schoolTypes ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('schoolType', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('school_types') : undefined}
+            />
           </Field>
           <Field label="Nhóm tài chính">
-            <input className={INPUT_CLS} value={draft.financialStatus} disabled={disabled} onChange={(e) => patch('financialStatus', e.target.value)} />
+            <CatalogCombobox
+              value={draft.financialStatus}
+              options={catalogs?.financialProfiles ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('financialStatus', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('financial_profiles') : undefined}
+            />
           </Field>
         </div>
       </FormSection>

@@ -34,6 +34,7 @@ import {
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useLeads, mapDoc, type LeadListServerFilters, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
+import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
@@ -198,7 +199,7 @@ export function LeadManagement() {
     majorLabels,
     byKind,
     academicPerformanceLabels,
-    catalogs,
+    catalogs: scoringCatalogDefs,
   } = useMasterData()
   const { profile, can, canRunLlmAnalysis } = useAuth()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
@@ -330,10 +331,10 @@ export function LeadManagement() {
       academicPerformanceLabels,
       regionEntries: byKind.regions,
       majorEntries: byKind.majors,
-      catalogs,
+      catalogs: scoringCatalogDefs,
       entriesByCatalogId: byKind,
     }),
-    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, scoringCatalogDefs],
   )
 
   const {
@@ -2839,6 +2840,7 @@ function LeadDetailPanel({
   const { categories: knowledgeCategories } = useKnowledgeCategories()
   const { active: leadSources } = useLeadSources()
   const { items: scholarships } = useScholarships()
+  const { catalogs: profileCatalogs, onEnsureCatalogEntry } = useLeadProfileCatalogs()
 
   const consultingInsights = useMemo(
     () =>
@@ -3663,6 +3665,8 @@ function LeadDetailPanel({
                             disabled={!showCounselorProgressForm || financeSaving}
                             leadSources={leadSources}
                             scholarships={scholarships}
+                            catalogs={profileCatalogs}
+                            onEnsureCatalogEntry={onEnsureCatalogEntry}
                             layout="tabs"
                             callContext={{
                               leadId: lead.id,
