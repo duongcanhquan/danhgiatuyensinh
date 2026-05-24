@@ -47,5 +47,16 @@ export function ProtectedRoute() {
     return <Navigate to="/ke-toan" replace />
   }
 
+  if (profile.isActive === false) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="app-glass-panel max-w-md rounded-2xl px-8 py-6 text-center text-sm shadow-lg">
+          <p className="font-semibold text-slate-900">Tài khoản đã bị vô hiệu hóa</p>
+          <p className="mt-2 text-slate-600">Liên hệ quản trị để được kích hoạt lại.</p>
+        </div>
+      </div>
+    )
+  }
+
   return <Outlet />
 }

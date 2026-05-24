@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import {
   FieldValue,
   Timestamp,
@@ -1209,3 +1210,163 @@ export const omicallResolveCallContext = onCall(
     }
   },
 )
+
+type StaffUserLite = {
+  id: string
+  role: string
+  email: string
+  isActive: boolean
+  managedCounselorIds: string[]
+}
+
+async function loadStaffUser(uid: string): Promise<StaffUserLite | null> {
+  const snap = await db.collection(COLLECTIONS.users).doc(uid).get()
+  if (!snap.exists) return null
+  const d = snap.data() ?? {}
+  return {
+    id: uid,
+    role: str(d.role) || 'counselor',
+    email: str(d.email),
+    isActive: d.isActive !== false,
+    managedCounselorIds: Array.isArray(d.managedCounselorIds)
+      ? d.managedCounselorIds.map((x) => String(x))
+      : [],
+  }
+}
+
+function isAdminLikeRole(role: string): boolean {
+  return role === 'admin' || role === 'super_admin'
+}
+
+function counselorInTeamRoster(counselorId: string, lead: StaffUserLite): boolean {
+  return lead.managedCounselorIds.includes(counselorId)
+}
+
+async function assertStaffManagementPermission(
+  callerId: string,
+  target: StaffUserLite,
+  opts?: { accountantPortalOnly?: boolean },
+): Promise<StaffUserLite> {
+  const caller = await loadStaffUser(callerId)
+  if (!caller || !caller.isActive) {
+    throw new HttpsError('permission-denied', 'Không có quyền quản lý nhân sự.')
+  }
+  if (callerId === target.id) {
+    throw new HttpsError('failed-precondition', 'Không thao tác trên chính tài khoản đang đăng nhập.')
+  }
+  if (target.role === 'super_admin' && caller.role !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới quản lý tài khoản Siêu quản trị khác.')
+  }
+
+  const callerAdmin = isAdminLikeRole(caller.role)
+  const callerTeamLead = caller.role === 'team_lead'
+
+  if (opts?.accountantPortalOnly) {
+    if (target.role !== 'accountant') {
+      throw new HttpsError('permission-denied', 'Chỉ quản lý tài khoản kế toán.')
+    }
+    if (!callerAdmin && caller.role !== 'accountant') {
+      throw new HttpsError('permission-denied', 'Không có quyền quản lý kế toán viên.')
+    }
+    return caller
+  }
+
+  if (callerAdmin) return caller
+
+  if (callerTeamLead) {
+    if (target.role !== 'counselor') {
+      throw new HttpsError('permission-denied', 'Trưởng nhóm chỉ quản lý tư vấn viên trong nhóm.')
+    }
+    if (!counselorInTeamRoster(target.id, caller)) {
+      throw new HttpsError('permission-denied', 'TVV không thuộc nhóm bạn quản lý.')
+    }
+    return caller
+  }
+
+  throw new HttpsError('permission-denied', 'Không có quyền quản lý nhân sự.')
+}
+
+async function removeCounselorFromTeamRosters(counselorId: string): Promise<void> {
+  const snap = await db.collection(COLLECTIONS.users).where('role', '==', 'team_lead').get()
+  const batch = db.batch()
+  let writes = 0
+  for (const doc of snap.docs) {
+    const ids = Array.isArray(doc.data()?.managedCounselorIds)
+      ? doc.data()!.managedCounselorIds.map((x: unknown) => String(x))
+      : []
+    if (!ids.includes(counselorId)) continue
+    batch.update(doc.ref, {
+      managedCounselorIds: ids.filter((id: string) => id !== counselorId),
+      updatedAt: Timestamp.now(),
+    })
+    writes += 1
+  }
+  if (writes > 0) await batch.commit()
+}
+
+type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete'
+
+/** Khóa / mở / xóa tài khoản nhân sự (Firebase Auth + Firestore). */
+export const adminStaffAccountAction = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+  const targetUserId = str(request.data?.targetUserId).trim()
+  const action = str(request.data?.action).trim() as StaffAccountAction
+  const accountantPortalOnly = request.data?.accountantPortalOnly === true
+  if (!targetUserId) throw new HttpsError('invalid-argument', 'Thiếu targetUserId.')
+  if (!['disable_login', 'enable_login', 'delete'].includes(action)) {
+    throw new HttpsError('invalid-argument', 'action không hợp lệ.')
+  }
+
+  const target = await loadStaffUser(targetUserId)
+  if (!target) throw new HttpsError('not-found', 'Không tìm thấy users/{uid}.')
+
+  await assertStaffManagementPermission(request.auth.uid, target, { accountantPortalOnly })
+
+  const auth = getAuth()
+
+  if (action === 'disable_login') {
+    await db.collection(COLLECTIONS.users).doc(targetUserId).update({
+      isActive: false,
+      updatedAt: Timestamp.now(),
+    })
+    try {
+      await auth.updateUser(targetUserId, { disabled: true })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!msg.includes('user-not-found')) throw new HttpsError('internal', msg)
+    }
+    return { ok: true, action, targetUserId }
+  }
+
+  if (action === 'enable_login') {
+    await db.collection(COLLECTIONS.users).doc(targetUserId).update({
+      isActive: true,
+      updatedAt: Timestamp.now(),
+    })
+    try {
+      await auth.updateUser(targetUserId, { disabled: false })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!msg.includes('user-not-found')) throw new HttpsError('internal', msg)
+    }
+    return { ok: true, action, targetUserId }
+  }
+
+  if (target.role === 'counselor') {
+    await removeCounselorFromTeamRosters(targetUserId)
+  }
+  await db.collection(COLLECTIONS.users).doc(targetUserId).delete()
+  try {
+    await auth.deleteUser(targetUserId)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!msg.includes('user-not-found')) {
+      try {
+        await auth.updateUser(targetUserId, { disabled: true })
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return { ok: true, action: 'delete', targetUserId }
+})

@@ -20,7 +20,7 @@ function dateKeysBetween(from: string, to: string): string[] {
 }
 
 /** KPI daily gộp theo khoảng ngày tùy chọn (admin / team). */
-export function useCounselorKpiDateRange(from: string, to: string) {
+export function useCounselorKpiDateRange(from: string, to: string, counselorUidFilter?: string) {
   const { firebaseUser, profile, can } = useAuth()
   const [rows, setRows] = useState<CounselorDailyKpi[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,7 +69,11 @@ export function useCounselorKpiDateRange(from: string, to: string) {
     }
   }, [canGlobal, canTeam, dates, firebaseUser, profile?.id])
 
-  const summaries = useMemo(() => foldKpiRows(rows, '30d'), [rows])
+  const summaries = useMemo(() => {
+    const all = foldKpiRows(rows, '30d')
+    if (!counselorUidFilter) return all
+    return all.filter((s) => s.counselorUid === counselorUidFilter)
+  }, [rows, counselorUidFilter])
   const totals = useMemo(() => sumKpiSummaries(summaries), [summaries])
 
   return { rows, summaries, totals, loading, error, dayCount: dates.length }

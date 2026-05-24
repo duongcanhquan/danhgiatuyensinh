@@ -25,7 +25,7 @@ export function StaffManagementView({
   embedded?: boolean
   teamScopeOnly?: boolean
 }) {
-  const { can, createStaffAccount, updateStaffProfile, sendStaffPasswordResetEmail, profile, firebaseUser } = useAuth()
+  const { can, createStaffAccount, updateStaffProfile, sendStaffPasswordResetEmail, disableStaffLogin, enableStaffLogin, deleteStaffAccount, profile, firebaseUser } = useAuth()
   const canStaffAll = can('config:users')
   const canStaffTeam = can('config:users:team')
   const canOmicallConfig = can('config:omicall')
@@ -278,14 +278,35 @@ export function StaffManagementView({
   }
 
   const toggleActive = async (u: VietMyUserProfile, next: boolean) => {
-    if (!window.confirm(next ? `Kích hoạt lại tài khoản «${u.email}»?` : `Vô hiệu hóa «${u.email}» trong hệ thống?`)) return
+    const label = next ? 'Kích hoạt' : 'Vô hiệu (khóa đăng nhập)'
+    if (!window.confirm(`${label} tài khoản «${u.email}»?`)) return
     setErr(null)
     setMsg(null)
     try {
-      await updateStaffProfile({ userId: u.id, isActive: next })
-      setMsg(next ? `Đã kích hoạt ${u.email}` : `Đã vô hiệu hóa ${u.email}`)
+      if (next) await enableStaffLogin(u.id)
+      else await disableStaffLogin(u.id)
+      setMsg(next ? `Đã kích hoạt ${u.email}` : `Đã vô hiệu hóa ${u.email} — không đăng nhập được.`)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Không cập nhật được')
+    }
+  }
+
+  const removeUser = async (u: VietMyUserProfile) => {
+    if (
+      !window.confirm(
+        `Xóa vĩnh viễn «${u.displayName || u.email}»?\n\nHồ sơ Firestore và tài khoản Auth sẽ bị gỡ — không hoàn tác.`,
+      )
+    ) {
+      return
+    }
+    setErr(null)
+    setMsg(null)
+    try {
+      await deleteStaffAccount(u.id)
+      if (editing?.id === u.id) setEditing(null)
+      setMsg(`Đã xóa tài khoản ${u.email}`)
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Không xóa được tài khoản')
     }
   }
 
@@ -494,7 +515,8 @@ export function StaffManagementView({
         </form>
 
         <div className="app-glass-panel rounded-2xl p-6 shadow-lg">
-          <h2 className="app-section-heading">Danh sách users</h2>
+          <h2 className="app-section-heading">Danh sách nhân sự</h2>
+          <p className="mt-1 text-xs text-slate-500">Sửa · Vô hiệu (khóa đăng nhập) · Xóa (gỡ Auth + Firestore).</p>
           {loading ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p> : null}
           <ul className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto text-sm">
             {sortedUsers.map((u) => {
@@ -558,7 +580,7 @@ export function StaffManagementView({
                           <button
                             type="button"
                             onClick={() => openEdit(u)}
-                            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                           >
                             Sửa
                           </button>
@@ -567,7 +589,7 @@ export function StaffManagementView({
                               <button
                                 type="button"
                                 onClick={() => void toggleActive(u, true)}
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
                               >
                                 Kích hoạt
                               </button>
@@ -575,11 +597,20 @@ export function StaffManagementView({
                               <button
                                 type="button"
                                 onClick={() => void toggleActive(u, false)}
-                                className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-900 hover:bg-rose-100"
+                                className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100"
                               >
                                 Vô hiệu
                               </button>
                             )
+                          ) : null}
+                          {!isSelf ? (
+                            <button
+                              type="button"
+                              onClick={() => void removeUser(u)}
+                              className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-100"
+                            >
+                              Xóa
+                            </button>
                           ) : null}
                         </>
                       ) : (

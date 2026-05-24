@@ -43,6 +43,12 @@ export type AuthContextValue = AuthState & {
   createAccountantStaff: (input: { email: string; password: string; displayName: string }) => Promise<void>
   /** Cổng kế toán: sửa / vô hiệu kế toán viên. */
   updateAccountantStaff: (input: { userId: string; displayName?: string; isActive?: boolean }) => Promise<void>
+  /** Khóa đăng nhập Firebase Auth (đồng bộ isActive=false). */
+  disableStaffLogin: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
+  /** Mở khóa đăng nhập (isActive=true). */
+  enableStaffLogin: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
+  /** Xóa hồ sơ Firestore + tài khoản Auth (không thể hoàn tác). */
+  deleteStaffAccount: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

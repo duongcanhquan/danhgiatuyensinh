@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { BarChart3, Headphones, PhoneCall, PhoneMissed, TrendingUp, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -88,6 +88,10 @@ function CallRow({
           <span className="text-slate-400">—</span>
         )}
       </td>
+      <td className="px-3 py-2 text-slate-600">{call.agentName || call.sipUser || '—'}</td>
+      <td className="px-3 py-2 max-w-[10rem] truncate text-slate-600" title={call.callNote || call.disposition || ''}>
+        {call.callNote || call.disposition || '—'}
+      </td>
       <td className="px-3 py-2 text-right tabular-nums">
         {formatCallDuration(call.billSeconds || call.answerSeconds)}
       </td>
@@ -123,39 +127,60 @@ function CallRow({
 
 export function CallHistoryView() {
   const { can, profile, firebaseUser } = useAuth()
+  const [searchParams] = useSearchParams()
   const { users, counselors } = useCounselorDirectory()
   const canTeam = can('dashboard:team_lead') || can('leads:read:team_scope')
   const canGlobal = can('analytics:advanced') || can('leads:read:global')
   const allowed = can('dashboard:counselor') || canTeam || canGlobal
 
-  const [range, setRange] = useState(defaultDateRange)
+  const [range, setRange] = useState(() => {
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
+    if (from && to) return { from, to }
+    return defaultDateRange()
+  })
   const [viewMode, setViewMode] = useState<ViewMode>(canGlobal ? 'global' : canTeam ? 'team' : 'self')
-  const [counselorFilter, setCounselorFilter] = useState('')
+  const [counselorFilter, setCounselorFilter] = useState(() => searchParams.get('counselor') ?? '')
+
+  useEffect(() => {
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
+    const counselor = searchParams.get('counselor')
+    if (from && to) setRange({ from, to })
+    if (counselor) {
+      setCounselorFilter(counselor)
+      setViewMode('self')
+    }
+  }, [searchParams])
 
   const scope = useMemo((): OmicallCallsScope => {
+    if (counselorFilter) return { mode: 'counselor', counselorUid: counselorFilter }
     if (viewMode === 'global' && canGlobal) return { mode: 'global' }
     if (viewMode === 'team' && canTeam && profile?.id) return { mode: 'team', teamLeadUid: profile.id }
-    const uid = counselorFilter || profile?.id || firebaseUser?.uid || ''
+    const uid = profile?.id || firebaseUser?.uid || ''
     return { mode: 'counselor', counselorUid: uid }
   }, [viewMode, canGlobal, canTeam, profile?.id, counselorFilter, firebaseUser?.uid])
 
   const fromDate = useMemo(() => new Date(`${range.from}T00:00:00`), [range.from])
   const toDate = useMemo(() => new Date(`${range.to}T23:59:59`), [range.to])
+  const maxRows = viewMode === 'global' && !counselorFilter ? 2000 : 1000
 
-  const { calls, loading, error } = useOmicallCalls({ scope, from: fromDate, to: toDate })
+  const { calls, loading, error, indexUrl } = useOmicallCalls({ scope, from: fromDate, to: toDate, maxRows })
 
   const filteredCalls = useMemo(() => {
-    if (viewMode !== 'team' && viewMode !== 'global') return calls
+    if (scope.mode === 'counselor') return calls
     if (!counselorFilter) return calls
     return calls.filter((c) => c.counselorUid === counselorFilter)
-  }, [calls, counselorFilter, viewMode])
+  }, [calls, counselorFilter, scope.mode])
 
   const stats = useMemo(() => aggregateOmicallCalls(filteredCalls), [filteredCalls])
 
   const showAdminInsights = canTeam || canGlobal
+  const kpiCounselorFilter = counselorFilter || (viewMode === 'self' ? profile?.id : undefined)
   const { totals: kpiTotals, loading: kpiLoading, error: kpiError } = useCounselorKpiDateRange(
     range.from,
     range.to,
+    kpiCounselorFilter,
   )
 
   const uniqueLeadIds = useMemo(() => {
@@ -294,7 +319,7 @@ export function CallHistoryView() {
             ) : null}
           </div>
         )}
-        {(viewMode === 'team' || viewMode === 'global') && (
+        {(viewMode === 'team' || viewMode === 'global' || canGlobal || canTeam) && (
           <label className="text-sm font-medium text-slate-700">
             Lọc TVV
             <select
@@ -314,7 +339,14 @@ export function CallHistoryView() {
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <p>{error}</p>
+          {indexUrl ? (
+            <a href={indexUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline">
+              Tạo index Firestore (warmlist)
+            </a>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -505,6 +537,8 @@ export function CallHistoryView() {
                 <th className="px-3 py-2">Khách</th>
                 <th className="px-3 py-2">TVV</th>
                 <th className="px-3 py-2">Hồ sơ</th>
+                <th className="px-3 py-2">Agent</th>
+                <th className="px-3 py-2">Ghi chú</th>
                 <th className="px-3 py-2 text-right">Thời lượng</th>
                 <th className="px-3 py-2 text-center">KPI gọi</th>
                 {showAdminInsights ? <th className="px-3 py-2 text-center">Hồ sơ</th> : null}

@@ -162,7 +162,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "counselorUid", "order": "ASCENDING" },
-        { "fieldPath": "endedAt", "order": "DESCENDING" }
+        { "fieldPath": "endedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },
     {
@@ -170,7 +171,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "teamLeadUid", "order": "ASCENDING" },
-        { "fieldPath": "endedAt", "order": "DESCENDING" }
+        { "fieldPath": "endedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },
     {
@@ -178,7 +180,16 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "leadId", "order": "ASCENDING" },
-        { "fieldPath": "endedAt", "order": "DESCENDING" }
+        { "fieldPath": "endedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "omicallCalls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "endedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },
     {

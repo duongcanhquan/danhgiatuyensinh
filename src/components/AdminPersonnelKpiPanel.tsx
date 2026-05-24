@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+﻿import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart3, ClipboardList, PhoneCall, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
@@ -11,6 +11,7 @@ import { fmtKpiNum, fmtKpiVnd } from '../utils/kpiDisplay'
 import { computeCompositeForCounselor, KPI_PILLAR_LABELS } from '../utils/kpiCompositeScore'
 import { BONUS_TIER_STYLES, getBonusTierLabels } from '../utils/kpiScorecard'
 import { aggregateMonthlyKpiByTeam } from '../utils/kpiTeamAggregate'
+import { PeriodKpiReportSection } from './PeriodKpiReportSection'
 import type { KpiBonusTier } from '../types'
 
 function canAccessPersonnelSummary(can: (p: import('../types').Permission) => boolean): boolean {
@@ -32,6 +33,7 @@ export function AdminPersonnelKpiPanel() {
   const { runtime } = useKpiEvaluationRules()
   const tierLabels = useMemo(() => getBonusTierLabels(runtime), [runtime])
   const [month, setMonth] = useState(currentMonthKey())
+  const [reportTab, setReportTab] = useState<'period' | 'monthly'>('period')
   const { rows, loading, error } = useCounselorMonthlyKpi(month)
   const { users } = useCounselorDirectory()
   const { monthDefaults, counselorOverrides } = useKpiTargets(month, runtime.composite.globalTargets)
@@ -114,19 +116,39 @@ export function AdminPersonnelKpiPanel() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">KPI &amp; đánh giá nhân sự</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Tổng hợp theo <strong>nhóm (Trưởng nhóm)</strong> và <strong>từng TVV</strong> — điểm tổng hợp 4 trụ, hạng
-            thưởng, doanh thu duyệt.
+            Báo cáo theo <strong>khoảng ngày</strong> hoặc <strong>đánh giá tháng</strong> — cuộc gọi, NE, cọc, doanh thu
+            duyệt.
           </p>
         </div>
-        <label className="text-sm font-medium text-slate-700">
-          Tháng KPI
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="mt-1 block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-          />
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setReportTab('period')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${reportTab === 'period' ? 'bg-slate-800 text-white' : 'text-slate-700'}`}
+            >
+              Báo cáo kỳ
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportTab('monthly')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${reportTab === 'monthly' ? 'bg-slate-800 text-white' : 'text-slate-700'}`}
+            >
+              Đánh giá tháng
+            </button>
+          </div>
+          {reportTab === 'monthly' ? (
+            <label className="text-sm font-medium text-slate-700">
+              Tháng KPI
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="mt-1 block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              />
+            </label>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -147,10 +169,14 @@ export function AdminPersonnelKpiPanel() {
         ))}
       </div>
 
-      {error ? (
+      {reportTab === 'period' ? <PeriodKpiReportSection /> : null}
+
+      {reportTab === 'monthly' && error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
       ) : null}
 
+      {reportTab === 'monthly' ? (
+        <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatTile label="Phạm vi" value={scopeLabel} hint={month} />
         <StatTile label="TVV có KPI" value={loading ? '…' : String(enriched.length)} hint={`${teamRows.length} nhóm`} />
@@ -318,6 +344,8 @@ export function AdminPersonnelKpiPanel() {
           </table>
         </div>
       </section>
+        </>
+      ) : null}
     </div>
   )
 }

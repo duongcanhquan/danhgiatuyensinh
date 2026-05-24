@@ -16,6 +16,7 @@ import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
 import { ensureDefaultFirestoreData } from '../services/firestoreBootstrap'
 import { defaultAccountantEmailFromEnv } from '../auth/accountantPortal'
+import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
@@ -183,6 +184,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
         }
         setProfile(p)
+        if (p.isActive === false) {
+          const auth = getFirebaseAuth()
+          if (auth) await auth.signOut()
+          setProfile(null)
+          setStatus('unauthenticated')
+          return
+        }
         setStatus('authenticated')
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
@@ -369,8 +377,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         patch.omicallOutboundNumber = v || null
       }
       await updateDoc(ref, patch)
+      if (input.isActive !== undefined) {
+        const acctOnly = canAcctStaff && !canAll && !canTeam
+        try {
+          await adminStaffAccountAction(
+            uid,
+            input.isActive ? 'enable_login' : 'disable_login',
+            acctOnly ? { accountantPortalOnly: true } : undefined,
+          )
+        } catch (e) {
+          console.warn('[updateStaffProfile] đồng bộ Auth', e)
+        }
+      }
     },
     [permissions, firebaseUser?.uid, profile?.role],
+  )
+
+  const disableStaffLogin = useCallback(
+    async (userId: string, opts?: { accountantPortalOnly?: boolean }) => {
+      if (firebaseUser?.uid === userId) {
+        throw new Error('Không tự vô hiệu hóa chính tài khoản đang đăng nhập.')
+      }
+      await adminStaffAccountAction(userId, 'disable_login', opts)
+    },
+    [firebaseUser?.uid],
+  )
+
+  const enableStaffLogin = useCallback(
+    async (userId: string, opts?: { accountantPortalOnly?: boolean }) => {
+      await adminStaffAccountAction(userId, 'enable_login', opts)
+    },
+    [],
+  )
+
+  const deleteStaffAccount = useCallback(
+    async (userId: string, opts?: { accountantPortalOnly?: boolean }) => {
+      if (firebaseUser?.uid === userId) {
+        throw new Error('Không xóa chính tài khoản đang đăng nhập.')
+      }
+      await adminStaffAccountAction(userId, 'delete', opts)
+    },
+    [firebaseUser?.uid],
   )
 
   const sendStaffPasswordResetEmail = useCallback(
@@ -443,6 +490,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendStaffPasswordResetEmail,
       createAccountantStaff,
       updateAccountantStaff,
+      disableStaffLogin,
+      enableStaffLogin,
+      deleteStaffAccount,
     }),
     [
       status,
@@ -458,6 +508,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendStaffPasswordResetEmail,
       createAccountantStaff,
       updateAccountantStaff,
+      disableStaffLogin,
+      enableStaffLogin,
+      deleteStaffAccount,
     ],
   )
 

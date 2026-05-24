@@ -1,4 +1,5 @@
 import type { CounselorMonthlyKpi } from '../types'
+import type { CounselorKpiSummary } from './kpiMap'
 
 const TEAM_SUM_KEYS = [
   'totalCalls',
@@ -70,4 +71,20 @@ export function aggregateMonthlyKpiByTeam(
       avgCompositeScore: rest.counselorCount ? Math.round(compositeSum / rest.counselorCount) : 0,
     }))
     .sort((a, b) => b.approvedRevenueVnd - a.approvedRevenueVnd || b.validCalls - a.validCalls)
+}
+
+export function aggregateKpiSummariesByTeam(rows: CounselorKpiSummary[]): TeamMonthlyKpiAggregate[] {
+  const map = new Map<string, TeamMonthlyKpiAggregate>()
+
+  for (const row of rows) {
+    const key = row.teamLeadUid ?? '__none__'
+    const agg = map.get(key) ?? emptyTeamAggregate(row.teamLeadUid ?? null)
+    agg.counselorCount += 1
+    for (const k of TEAM_SUM_KEYS) {
+      agg[k] += Number(row[k] ?? 0)
+    }
+    map.set(key, agg)
+  }
+
+  return [...map.values()].sort((a, b) => b.approvedRevenueVnd - a.approvedRevenueVnd || b.validCalls - a.validCalls)
 }

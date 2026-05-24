@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
+import { Wallet } from 'lucide-react'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
@@ -205,13 +206,17 @@ export function LoginView() {
               disabled={busy}
               className="w-full rounded-xl bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-amber-950/25 ring-1 ring-amber-50/50 transition hover:brightness-105 disabled:opacity-50"
             >
-              {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
+              {busy ? 'Đang đăng nhập…' : 'Đăng nhập CRM'}
             </button>
-            <p className="text-center text-sm text-white/55">
-              Kế toán?{' '}
-              <Link to="/ke-toan/login" className="font-semibold text-amber-200/90 underline-offset-2 hover:underline">
-                Đăng nhập cổng kế toán
-              </Link>
+            <Link
+              to="/ke-toan/login"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/50 bg-emerald-500/15 py-3 text-sm font-semibold text-emerald-100 ring-1 ring-emerald-400/20 transition hover:bg-emerald-500/25"
+            >
+              <Wallet className="h-4 w-4" aria-hidden />
+              Cổng kế toán — truy cập nhanh
+            </Link>
+            <p className="text-center text-xs text-white/45">
+              Chỉ dành tài khoản có quyền kế toán. TVV dùng nút đăng nhập CRM phía trên.
             </p>
           </form>
         </motion.div>
