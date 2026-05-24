@@ -1,15 +1,18 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
+  Activity,
   BarChart3,
-  CalendarDays,
   BookOpen,
+  CalendarDays,
+  ClipboardList,
   Database,
   LayoutDashboard,
   LineChart,
   LogOut,
   Menu,
+  PhoneCall,
   Settings2,
   User,
   Users,
@@ -24,65 +27,168 @@ import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 
-type NavDef = { to: string; label: string; icon: LucideIcon; perm?: Permission }
+type NavGroup = 'overview' | 'kpi' | 'admin'
+
+type NavDef = {
+  to: string
+  label: string
+  icon: LucideIcon
+  group: NavGroup
+  perm?: Permission
+  show?: (can: (p: Permission) => boolean) => boolean
+}
+
+const GROUP_LABELS: Record<NavGroup, string> = {
+  overview: 'Tổng quan',
+  kpi: 'KPI & cuộc gọi',
+  admin: 'Quản trị',
+}
+
+const GROUP_ORDER: NavGroup[] = ['overview', 'kpi', 'admin']
 
 function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: readonly Permission[]) {
   if (item.to === '/settings') return canAccessSettingsPage(permissions)
+  if (item.show) return item.show(can)
   return !item.perm || can(item.perm)
 }
 
 const mainNav: NavDef[] = [
-  { to: '/', label: 'Tổng kết', icon: LayoutDashboard },
-  { to: '/leads', label: 'Hồ sơ', icon: Users },
-  { to: '/my-day', label: 'Ngày của tôi', icon: CalendarDays, perm: 'dashboard:counselor' },
-  { to: '/command', label: 'Điều hành', icon: BarChart3, perm: 'analytics:advanced' },
-  { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, perm: 'analytics:advanced' },
-  { to: '/import', label: 'Nhập liệu', icon: Database, perm: 'data:intake' },
-  { to: '/accountant', label: 'Kế toán', icon: Wallet, perm: 'finance:accountant' },
-  { to: '/settings', label: 'Cài đặt', icon: Settings2 },
-  { to: '/huong-dan', label: 'Hướng dẫn', icon: BookOpen },
+  { to: '/', label: 'Tổng kết', icon: LayoutDashboard, group: 'overview' },
+  { to: '/leads', label: 'Hồ sơ', icon: Users, group: 'overview' },
+  { to: '/my-day', label: 'Ngày của tôi', icon: CalendarDays, group: 'overview', perm: 'dashboard:counselor' },
+  {
+    to: '/kpi',
+    label: 'KPI kỳ',
+    icon: Activity,
+    group: 'kpi',
+    show: (can) => can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead'),
+  },
+  {
+    to: '/call-history',
+    label: 'Lịch sử gọi',
+    icon: PhoneCall,
+    group: 'kpi',
+    show: (can) => can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead'),
+  },
+  { to: '/scorecard', label: 'Bảng điểm tháng', icon: ClipboardList, group: 'kpi', perm: 'analytics:advanced' },
+  { to: '/command', label: 'Điều hành', icon: BarChart3, group: 'kpi', perm: 'analytics:advanced' },
+  { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, group: 'kpi', perm: 'analytics:advanced' },
+  { to: '/import', label: 'Nhập liệu', icon: Database, group: 'admin', perm: 'data:intake' },
+  { to: '/accountant', label: 'Kế toán', icon: Wallet, group: 'admin', perm: 'finance:accountant' },
+  { to: '/settings', label: 'Cài đặt', icon: Settings2, group: 'admin' },
+  { to: '/huong-dan', label: 'Hướng dẫn', icon: BookOpen, group: 'admin' },
 ]
+
+function sidebarLinkClass(isActive: boolean) {
+  return [
+    'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition',
+    isActive
+      ? 'bg-amber-500/20 text-amber-50 ring-1 ring-amber-400/35 shadow-sm'
+      : 'text-slate-300 hover:bg-white/[0.08] hover:text-amber-50',
+  ].join(' ')
+}
 
 export function Layout() {
   const { profile, firebaseUser, can, signOut, permissions } = useAuth()
   const location = useLocation()
   const showSignOut = Boolean(isFirebaseConfigured() && getFirebaseAuth() && firebaseUser)
-
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const headerRef = useRef<HTMLElement>(null)
-  /** Chiều cao thanh điều hướng (kể cả panel mobile mở) — dùng spacer để nội dung không chui dưới header fixed. */
-  const [headerBlockHeight, setHeaderBlockHeight] = useState(64)
-
-  useLayoutEffect(() => {
-    const el = headerRef.current
-    if (!el) return
-    const measure = () => setHeaderBlockHeight(Math.ceil(el.getBoundingClientRect().height))
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    setMobileNavOpen(false)
+    setSidebarOpen(false)
   }, [location.pathname])
 
   const navItems = mainNav.filter((item) => navAllowed(item, can, permissions))
 
-  const navLinkClass = (isActive: boolean, compact: boolean) =>
-    [
-      compact
-        ? 'flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left text-base font-semibold transition'
-        : 'flex shrink-0 flex-row items-center gap-2 rounded-lg border-b-2 border-transparent px-3 py-2 text-sm font-semibold leading-snug tracking-tight transition md:px-3.5 md:py-2.5',
-      isActive
-        ? compact
-          ? 'bg-amber-500/20 text-amber-50 ring-1 ring-amber-400/40'
-          : 'border-amber-400 bg-white/[0.08] text-amber-50 shadow-[inset_0_-2px_0_0_rgba(251,191,36,0.45)]'
-        : compact
-          ? 'text-slate-200 hover:bg-white/10'
-          : 'text-slate-300 hover:border-white/20 hover:bg-white/[0.06] hover:text-amber-50',
-    ].join(' ')
+  const navByGroup = useMemo(() => {
+    const map = new Map<NavGroup, NavDef[]>()
+    for (const g of GROUP_ORDER) map.set(g, [])
+    for (const item of navItems) {
+      map.get(item.group)?.push(item)
+    }
+    return map
+  }, [navItems])
+
+  const currentPageLabel = useMemo(() => {
+    const sorted = [...navItems].sort((a, b) => b.to.length - a.to.length)
+    const hit = sorted.find((item) =>
+      item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to),
+    )
+    return hit?.label ?? 'VIETMY COLLEGE'
+  }, [navItems, location.pathname])
+
+  const sidebarContent = (
+    <>
+      <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 shadow-md ring-1 ring-amber-200/35">
+          <BarChart3 className="h-5 w-5 text-slate-950" strokeWidth={2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold tracking-wide text-amber-100">VIETMY COLLEGE</p>
+          <p className="truncate text-xs text-amber-200/60">Tuyển sinh & KPI</p>
+        </div>
+        <button
+          type="button"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 text-amber-100 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Đóng menu"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-3 py-4" aria-label="Điều hướng chính">
+        {GROUP_ORDER.map((group) => {
+          const items = navByGroup.get(group) ?? []
+          if (!items.length) return null
+          return (
+            <div key={group}>
+              <p className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-wider text-amber-200/45">
+                {GROUP_LABELS[group]}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {items.map(({ to, label, icon: Icon }) => (
+                  <li key={to}>
+                    <NavLink to={to} end={to === '/'} title={label} className={({ isActive }) => sidebarLinkClass(isActive)}>
+                      {({ isActive }) => (
+                        <>
+                          <Icon
+                            className={`h-[1.15rem] w-[1.15rem] shrink-0 ${isActive ? 'text-amber-300' : 'text-slate-500'}`}
+                            strokeWidth={2}
+                          />
+                          <span className="truncate">{label}</span>
+                        </>
+                      )}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })}
+      </nav>
+
+      <div className="shrink-0 border-t border-white/10 px-3 py-3">
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5">
+          <User className="h-9 w-9 shrink-0 text-amber-200/90" strokeWidth={1.75} aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-amber-50">{profile?.displayName ?? 'Khách'}</p>
+            <p className="truncate text-xs text-amber-200/65">{profile ? USER_ROLE_LABELS[profile.role] : '—'}</p>
+          </div>
+        </div>
+        {showSignOut ? (
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] py-2.5 text-sm font-semibold text-amber-50 transition hover:border-amber-400/40 hover:bg-amber-500/15"
+          >
+            <LogOut className="h-4 w-4" aria-hidden />
+            Đăng xuất
+          </button>
+        ) : null}
+      </div>
+    </>
+  )
 
   return (
     <div className="relative min-h-[100dvh] text-slate-800 antialiased">
@@ -93,172 +199,54 @@ export function Layout() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(201,162,39,0.08),transparent_55%)]" />
       </div>
 
-      <div className="relative z-10 flex min-h-[100dvh] flex-col">
-        <header
-          ref={headerRef}
-          className="safe-area-pt fixed inset-x-0 top-0 z-50 w-full border-b border-amber-500/25 bg-gradient-to-r from-[#0b0f16] via-[#0e141d] to-[#0a0d14] shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+      <div className="relative z-10 flex min-h-[100dvh]">
+        {sidebarOpen ? (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-[2px] lg:hidden"
+            aria-label="Đóng menu"
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
+
+        <aside
+          className={[
+            'safe-area-pt fixed inset-y-0 left-0 z-50 flex w-[min(17.5rem,88vw)] shrink-0 flex-col',
+            'border-r border-amber-500/25 bg-gradient-to-b from-[#0b0f16] via-[#0e141d] to-[#0a0d14]',
+            'shadow-[4px_0_32px_rgba(0,0,0,0.35)] transition-transform duration-200 ease-out',
+            'lg:static lg:z-auto lg:h-auto lg:min-h-[100dvh] lg:w-72 lg:translate-x-0 lg:shadow-none',
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+          ].join(' ')}
+          aria-label="Menu bên trái"
         >
-          <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4 md:flex-nowrap md:gap-x-4 md:py-3 md:px-5">
-            <div className="flex min-w-0 shrink-0 items-center gap-2.5 sm:gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-800 shadow-md ring-1 ring-amber-200/35 md:h-11 md:w-11">
-                <BarChart3 className="h-5 w-5 text-slate-950 md:h-[1.35rem] md:w-[1.35rem]" strokeWidth={2} />
-              </div>
-              <div className="min-w-0">
-                <div className="hidden min-w-0 md:block">
-                  <span className="text-base font-semibold tracking-wide text-amber-100 md:text-lg">
-                    VIETMY COLLEGE
-                  </span>
-                </div>
-                <div className="flex w-full min-w-0 flex-col gap-1.5 md:hidden">
-                  <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1 self-center">
-                      <p className="truncate text-base font-semibold tracking-wide leading-tight text-amber-100">
-                        VIETMY COLLEGE
-                      </p>
-                    </div>
-                    {showSignOut ? (
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <p
-                          className="max-w-[9.5rem] truncate text-right text-sm font-semibold leading-tight text-amber-50/95"
-                          title={profile?.displayName ?? 'Khách'}
-                        >
-                          {profile?.displayName ?? 'Khách'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => void signOut()}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/18 bg-white/[0.08] px-2.5 py-1 text-xs font-semibold text-amber-50"
-                        >
-                          <LogOut className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
-                          Đăng xuất
-                        </button>
-                      </div>
-                    ) : profile?.displayName ? (
-                      <p className="max-w-[9.5rem] shrink-0 truncate text-right text-sm font-semibold text-amber-50/95">
-                        {profile.displayName}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </div>
+          {sidebarContent}
+        </aside>
 
-            <nav
-              className="order-3 hidden min-h-0 min-w-0 flex-1 basis-[100%] items-center gap-0.5 overflow-x-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:basis-auto sm:gap-1 md:order-none md:flex md:max-w-none md:basis-auto md:justify-start [&::-webkit-scrollbar]:hidden"
-              aria-label="Điều hướng chính"
-            >
-              {navItems.map(({ to, label, icon: Icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === '/'}
-                  title={label}
-                  className={({ isActive }) => navLinkClass(isActive, false)}
-                >
-                  {({ isActive }) => (
-                    <>
-                      <Icon
-                        className={`h-[1.1rem] w-[1.1rem] shrink-0 md:h-5 md:w-5 ${isActive ? 'text-amber-300' : 'text-slate-500'}`}
-                        strokeWidth={2}
-                      />
-                      <span className="max-w-[11rem] truncate sm:max-w-[13rem]">{label}</span>
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </nav>
-
-            {showSignOut ? (
-              <div className="order-2 hidden shrink-0 flex-col items-end gap-0.5 md:flex">
-                <span
-                  className="max-w-[16rem] truncate text-right text-sm font-semibold leading-tight text-amber-50/95"
-                  title={profile?.displayName ?? 'Khách'}
-                >
-                  {profile?.displayName ?? 'Khách'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void signOut()}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/18 bg-white/[0.08] px-3 py-2 text-sm font-semibold text-amber-50/95 shadow-sm transition hover:border-amber-400/40 hover:bg-amber-500/15"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-                  Đăng xuất
-                </button>
-              </div>
-            ) : null}
-
+        <div className="flex min-h-[100dvh] min-w-0 flex-1 flex-col lg:min-h-0">
+          <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-3 border-b border-slate-200/80 bg-[#e8ecf2]/95 px-3 py-2.5 backdrop-blur-md lg:hidden">
             <button
               type="button"
-              className="order-2 ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/[0.07] text-amber-100 shadow-sm md:hidden"
-              aria-expanded={mobileNavOpen}
-              aria-controls="mobile-nav-panel"
-              onClick={() => setMobileNavOpen((o) => !o)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-300/80 bg-white text-slate-800 shadow-sm"
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen(true)}
             >
-              {mobileNavOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
-              <span className="sr-only">{mobileNavOpen ? 'Đóng menu' : 'Mở menu'}</span>
+              <Menu className="h-5 w-5" aria-hidden />
+              <span className="sr-only">Mở menu</span>
             </button>
-          </div>
+            <p className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900">{currentPageLabel}</p>
+          </header>
 
-          <div
-            id="mobile-nav-panel"
-            className={[
-              'border-t border-white/10 md:hidden',
-              mobileNavOpen ? 'max-h-[min(70dvh,520px)] overflow-y-auto overscroll-contain' : 'hidden',
-            ].join(' ')}
-          >
-            <nav className="flex flex-col gap-1 px-2 py-3" aria-label="Điều hướng chính (mobile)">
-              {navItems.map(({ to, label, icon: Icon }) => (
-                <NavLink key={to} to={to} end={to === '/'} title={label} className={({ isActive }) => navLinkClass(isActive, true)}>
-                  {({ isActive }) => (
-                    <>
-                      <Icon
-                        className={`h-[1.15rem] w-[1.15rem] shrink-0 ${isActive ? 'text-amber-300' : 'text-slate-400'}`}
-                        strokeWidth={2}
-                      />
-                      <span>{label}</span>
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </nav>
-            <div className="border-t border-white/10 px-3 py-3">
-              <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2">
-                <User className="h-8 w-8 shrink-0 text-amber-200/90" strokeWidth={1.75} aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-amber-50">{profile?.displayName ?? 'Khách'}</p>
-                  <p className="truncate text-xs text-amber-200/65">{profile ? USER_ROLE_LABELS[profile.role] : '—'}</p>
-                </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto bg-[#e8ecf2]">
+            <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col">
+              <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-sm font-normal leading-relaxed text-slate-800 sm:px-3 sm:py-2.5 md:px-4 md:py-3 lg:px-5 lg:py-4">
+                <InfoScoreRulesProvider>
+                  <KpiEvaluationRulesProvider>
+                    <Outlet />
+                  </KpiEvaluationRulesProvider>
+                </InfoScoreRulesProvider>
               </div>
-              {showSignOut ? (
-                <button
-                  type="button"
-                  onClick={() => void signOut()}
-                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] py-2.5 text-sm font-semibold text-amber-50"
-                >
-                  <LogOut className="h-4 w-4" aria-hidden />
-                  Đăng xuất
-                </button>
-              ) : null}
-            </div>
+            </main>
           </div>
-        </header>
-
-        <div
-          aria-hidden
-          className="shrink-0"
-          style={{ height: `${headerBlockHeight}px` }}
-        />
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto bg-[#e8ecf2]">
-          <main className="safe-area-pb flex min-h-0 min-w-0 w-full flex-1 flex-col px-0 py-0">
-            <div className="min-h-0 min-w-0 w-full flex-1 px-2 py-2 text-sm font-normal leading-relaxed text-slate-800 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
-              <InfoScoreRulesProvider>
-                <KpiEvaluationRulesProvider>
-                  <Outlet />
-                </KpiEvaluationRulesProvider>
-              </InfoScoreRulesProvider>
-            </div>
-          </main>
         </div>
       </div>
     </div>

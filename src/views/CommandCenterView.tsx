@@ -5,7 +5,6 @@ import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { KpiCounselorTable } from '../components/KpiCounselorTable'
-import { SaleHubNav } from '../components/SaleHubNav'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
 import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd, todayDateKey } from '../utils/kpiDisplay'
@@ -70,7 +69,6 @@ export function CommandCenterView() {
 
   return (
     <div className="space-y-5">
-      <SaleHubNav />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">

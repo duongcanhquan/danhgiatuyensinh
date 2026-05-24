@@ -4,7 +4,6 @@ import { Headphones, PhoneCall, PhoneMissed } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useOmicallCalls, type OmicallCallsScope } from '../hooks/useOmicallCalls'
-import { SaleHubNav } from '../components/SaleHubNav'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { aggregateOmicallCalls, formatCallDuration } from '../utils/omicallCallMap'
 import type { OmicallCallRecord } from '../types'
@@ -150,7 +149,6 @@ export function CallHistoryView() {
 
   return (
     <div className="space-y-5">
-      <SaleHubNav />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">

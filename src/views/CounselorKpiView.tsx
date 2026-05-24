@@ -8,7 +8,6 @@ import { sumKpiSummaries } from '../utils/kpiMap'
 import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
 import { validCallRuleHint } from '../utils/kpiEvaluationRules'
 import { KpiCounselorTable } from '../components/KpiCounselorTable'
-import { SaleHubNav } from '../components/SaleHubNav'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 function fmtNum(n: number): string {
@@ -96,7 +95,6 @@ export function CounselorKpiView() {
 
   return (
     <div className="space-y-5">
-      <SaleHubNav />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">

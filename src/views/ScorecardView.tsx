@@ -6,7 +6,6 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { currentMonthKey, useCounselorMonthlyKpi } from '../hooks/useCounselorMonthlyKpi'
 import { useKpiManualScores } from '../hooks/useKpiManualScores'
 import { useKpiTargets } from '../hooks/useKpiTargets'
-import { SaleHubNav } from '../components/SaleHubNav'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { fmtKpiNum, fmtKpiVnd } from '../utils/kpiDisplay'
 import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
@@ -100,7 +99,6 @@ export function ScorecardView() {
 
   return (
     <div className="space-y-5">
-      <SaleHubNav />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
