@@ -152,6 +152,8 @@ export const PERMISSIONS = [
   'analytics:advanced',
   /** Cổng kế toán — duyệt thu/chi, Full NE, gửi n8n kế toán. */
   'finance:accountant',
+  /** Quản lý tài khoản kế toán viên trong cổng kế toán. */
+  'finance:manage_accountants',
   /** Báo cáo thu ngày/tháng từ Firestore → webhook n8n. */
   'finance:reports',
 ] as const
@@ -591,6 +593,8 @@ export interface ProfileCustomScoringSignal {
 /**
  * Bộ quy tắc chấm điểm có tên — cùng một lead có thể được “nhìn” khác nhau theo profile.
  */
+export type ScoringProfileScope = 'global' | 'team'
+
 export interface ScoringProfile {
   id: DocumentId
   profileName: string
@@ -606,6 +610,10 @@ export interface ScoringProfile {
   thresholds: ScoringProfileThresholds
   /** Profile mặc định toàn cục (import + màn hình khi chưa chọn tay) */
   isDefaultForImport?: boolean
+  /** `global` = admin — áp dụng toàn hệ thống; `team` = trưởng nhóm — áp dụng nhóm TVV. */
+  scope?: ScoringProfileScope
+  /** UID trưởng nhóm sở hữu profile nhóm (khi `scope === 'team'`). */
+  scopeOwnerUid?: UserId
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy?: UserId
@@ -1134,9 +1142,6 @@ export interface FinanceReportLog {
   errorMessage?: string
 }
 
-/** Nhóm học bổng trên form hồ sơ. */
-export type ScholarshipCategoryId = 'phcd' | 'cdcq'
-
 export interface LeadSourceRecord {
   id: DocumentId
   label: string
@@ -1146,6 +1151,23 @@ export interface LeadSourceRecord {
   updatedAt?: Timestamp
 }
 
+/** Nhóm học bổng trên form hồ sơ. */
+export type ScholarshipCategoryId = 'phcd' | 'cdcq'
+
+/** Ô chọn học bổng trên hồ sơ: HB1 / HB2. */
+export type ScholarshipApplySlot = 'slot1' | 'slot2'
+
+/** Nhãn đối tượng áp dụng (cấu hình nhanh trong admin). */
+export type ScholarshipAudienceTag =
+  | 'all'
+  | 'new_enrollment'
+  | 'early_bird'
+  | 'transfer'
+  | 'continuing'
+  | 'event_participant'
+  | 'referral'
+  | 'high_achiever'
+
 export interface ScholarshipRecord {
   id: DocumentId
   label: string
@@ -1154,6 +1176,23 @@ export interface ScholarshipRecord {
   amountVnd: number
   sortOrder: number
   isActive: boolean
+  /** ISO YYYY-MM-DD — bỏ trống = không giới hạn */
+  validFrom?: string
+  validTo?: string
+  /** Ô HB1 / HB2 trên form — mặc định cả hai nếu bỏ trống */
+  applySlots?: ScholarshipApplySlot[]
+  /** Tag đối tượng (checkbox admin) */
+  audienceTags?: ScholarshipAudienceTag[]
+  /** Mô tả đối tượng (hiển thị cho TVV) */
+  targetAudience?: string
+  /** Điều kiện / phần học phí áp dụng */
+  eligibilityNotes?: string
+  /** Ghi chú nội bộ admin */
+  adminNotes?: string
+  /** Hình thức áp dụng — vd. «Cộng dồn 5 kỳ: 3-3-3-3-3 triệu», «Trừ học phí HK1» */
+  applicationMethod?: string
+  /** Số lượng suất học bổng (theo kế hoạch) */
+  quantityLimit?: number
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -1161,6 +1200,22 @@ export interface ScholarshipRecord {
 export const SCHOLARSHIP_CATEGORY_LABELS: Record<ScholarshipCategoryId, string> = {
   phcd: 'PHỔ THÔNG CAO ĐẲNG',
   cdcq: 'CAO ĐẲNG CHÍNH QUY',
+}
+
+export const SCHOLARSHIP_APPLY_SLOT_LABELS: Record<ScholarshipApplySlot, string> = {
+  slot1: 'Học bổng 1',
+  slot2: 'Học bổng 2',
+}
+
+export const SCHOLARSHIP_AUDIENCE_LABELS: Record<ScholarshipAudienceTag, string> = {
+  all: 'Tất cả ứng viên',
+  new_enrollment: 'Tân sinh viên / nhập học mới',
+  early_bird: 'Đăng ký sớm (Early Bird)',
+  transfer: 'Chuyển trường',
+  continuing: 'Sinh viên tiếp nối (Continuing)',
+  event_participant: 'Tham gia sự kiện / hội thảo',
+  referral: 'Giới thiệu / CBNV',
+  high_achiever: 'Học lực cao / xuất sắc',
 }
 
 export type FsCollectionKey = keyof typeof FS_COLLECTIONS

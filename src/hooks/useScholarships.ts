@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, orderBy, query, type DocumentData } from 'firebase/firestore'
-import type { ScholarshipRecord } from '../types'
+import type { ScholarshipApplySlot, ScholarshipRecord } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { activeScholarships, mapScholarshipDoc } from '../utils/leadProfileCatalog'
+import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
 
 export function useScholarships() {
   const [items, setItems] = useState<ScholarshipRecord[]>([])
@@ -39,11 +40,20 @@ export function useScholarships() {
 
   const active = useMemo(() => activeScholarships(items), [items])
 
+  const activeForSlot1 = useMemo(() => activeScholarshipsForSlot(items, 'slot1'), [items])
+  const activeForSlot2 = useMemo(() => activeScholarshipsForSlot(items, 'slot2'), [items])
+
+  const activeForSlot = useCallback(
+    (slot: ScholarshipApplySlot, includeIds: readonly string[] = []) =>
+      activeScholarshipsForSlot(items, slot, new Date(), includeIds),
+    [items],
+  )
+
   const byId = useMemo(() => {
     const m = new Map<string, ScholarshipRecord>()
     for (const s of items) m.set(s.id, s)
     return m
   }, [items])
 
-  return { items, active, byId, loading, error }
+  return { items, active, activeForSlot1, activeForSlot2, activeForSlot, byId, loading, error }
 }

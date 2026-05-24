@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "export:public-seed": "node scripts/export-public-seed-assets.mjs",
     "seed:knowledge-base": "node scripts/seed-knowledge-base.mjs",
+    "seed:super-admin": "node scripts/create-super-admin.mjs",
+    "seed:accountant": "node scripts/create-accountant.mjs",
     "seed:consulting-playbooks": "node scripts/seed-consulting-playbooks.mjs",
     "seed:script-snippets": "node scripts/seed-script-snippets.mjs",
     "migrate:strip-import-description": "node scripts/strip-lead-import-description.mjs",

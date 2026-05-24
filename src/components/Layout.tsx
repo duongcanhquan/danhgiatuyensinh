@@ -16,7 +16,6 @@ import {
   Settings2,
   User,
   Users,
-  Wallet,
   X,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
@@ -74,7 +73,6 @@ const mainNav: NavDef[] = [
   { to: '/command', label: 'Điều hành', icon: BarChart3, group: 'kpi', perm: 'analytics:advanced' },
   { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, group: 'kpi', perm: 'analytics:advanced' },
   { to: '/import', label: 'Nhập liệu', icon: Database, group: 'admin', perm: 'data:intake' },
-  { to: '/accountant', label: 'Kế toán', icon: Wallet, group: 'admin', perm: 'finance:accountant' },
   { to: '/settings', label: 'Cài đặt', icon: Settings2, group: 'admin' },
   { to: '/huong-dan', label: 'Hướng dẫn', icon: BookOpen, group: 'admin' },
 ]

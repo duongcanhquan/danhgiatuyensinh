@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { Lead, PriorityTag, ProfileCustomScoringSignal, ScoringProfile } from '../types'
 import { evaluateLead, leadToEvaluationRecord, type MasterDataBuckets } from '../utils/scoring'
+import { filterApplicableScoringProfiles } from '../utils/scoringProfileAccess'
 import { useScoringProfiles } from './useScoringProfiles'
 import { useMasterData } from './useMasterData'
 import { useSchoolTvvSignalDefinitions } from './useSchoolTvvSignalDefinitions'
+import { useAuth } from './useAuth'
+import { useCounselorDirectory } from './useCounselorDirectory'
 
 export type LeadScorePreview = { calculatedScore: number; priorityTag: PriorityTag }
 
@@ -19,7 +22,13 @@ export type UseLeadScoringOptions = {
  * Chọn profile chấm điểm + map lead → điểm/nhãn preview (đồng bộ Lead / Dashboard / Analytics).
  */
 export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
-  const { profiles: scoringProfiles, loading: profilesLoading } = useScoringProfiles()
+  const { profile, can } = useAuth()
+  const { users: directoryUsers } = useCounselorDirectory()
+  const { profiles: allScoringProfiles, loading: profilesLoading } = useScoringProfiles()
+  const scoringProfiles = useMemo(
+    () => filterApplicableScoringProfiles(allScoringProfiles, profile, directoryUsers, can),
+    [allScoringProfiles, profile, directoryUsers, can],
+  )
   const { items: hookSchoolDefs } = useSchoolTvvSignalDefinitions()
   const schoolTvvSignalDefs = options?.schoolTvvSignalDefs ?? hookSchoolDefs
   const {

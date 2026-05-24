@@ -35,8 +35,35 @@ export type OmicallSdkGlobal = {
   makeCall: (remoteNumber: string, options?: Record<string, unknown> | null) => void
   /** Click-to-call — máy bàn / IP phone đổ chuông, không dùng micro trình duyệt. */
   remoteCall?: (remoteNumber: string, sipNumber?: string) => void
+  /** Kết thúc cuộc gọi (tên method khác nhau theo phiên bản SDK). */
+  hangup?: () => void
+  stopCall?: () => void
+  endCall?: () => void
+  acceptCall?: () => void
   on: (event: string, cb: (data: unknown) => void) => void
   off: (event: string, cb: (data: unknown) => void) => void
+}
+
+/** Gọi method kết thúc cuộc gọi có sẵn trên SDK. */
+export function hangUpOmicallCall(sdk: OmicallSdkGlobal): boolean {
+  if (typeof sdk.hangup === 'function') {
+    sdk.hangup()
+    return true
+  }
+  if (typeof sdk.stopCall === 'function') {
+    sdk.stopCall()
+    return true
+  }
+  if (typeof sdk.endCall === 'function') {
+    sdk.endCall()
+    return true
+  }
+  const extra = sdk as OmicallSdkGlobal & { hangUp?: () => void }
+  if (typeof extra.hangUp === 'function') {
+    extra.hangUp()
+    return true
+  }
+  return false
 }
 
 export type OmicallUiGlobal = {

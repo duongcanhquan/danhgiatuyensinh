@@ -39,6 +39,10 @@ export type AuthContextValue = AuthState & {
    * Không đặt mật khẩu thủ công được từ client — cần Admin SDK / Cloud Function nếu muốn gán pass trực tiếp.
    */
   sendStaffPasswordResetEmail: (email: string) => Promise<void>
+  /** Cổng kế toán: tạo tài khoản role accountant. */
+  createAccountantStaff: (input: { email: string; password: string; displayName: string }) => Promise<void>
+  /** Cổng kế toán: sửa / vô hiệu kế toán viên. */
+  updateAccountantStaff: (input: { userId: string; displayName?: string; isActive?: boolean }) => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

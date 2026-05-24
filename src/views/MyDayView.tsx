@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Activity, PhoneCall, Target, TrendingUp, Wallet } from 'lucide-react'
+import { Activity, PhoneCall, Target, TrendingUp, UserPlus, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
@@ -110,6 +110,13 @@ export function MyDayView() {
           <li>Tiền cọc/học phí chỉ vào KPI khi <strong>kế toán duyệt</strong>.</li>
         </ul>
         <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            to="/leads?create=1"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            <UserPlus className="h-4 w-4" aria-hidden />
+            Tạo hồ sơ mới
+          </Link>
           <Link
             to="/leads"
             className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900"

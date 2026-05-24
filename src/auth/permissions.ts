@@ -5,7 +5,11 @@ import { normalizeUserRole } from './roleUtils'
 const ALL = PERMISSIONS as unknown as readonly Permission[]
 
 /** Admin thường: mọi quyền trừ cấu hình khóa API LLM (chỉ Siêu quản trị). */
-const FINANCE_PERMISSIONS: readonly Permission[] = ['finance:accountant', 'finance:reports']
+const FINANCE_PERMISSIONS: readonly Permission[] = [
+  'finance:accountant',
+  'finance:manage_accountants',
+  'finance:reports',
+]
 const ALL_EXCEPT_LLM_API_AND_FINANCE = ALL.filter(
   (p) => p !== 'config:llm_api' && !FINANCE_PERMISSIONS.includes(p),
 )
@@ -20,7 +24,6 @@ const TEAM_LEAD_PERMISSIONS: readonly Permission[] = [
   'interactions:create:team_scope',
   'dashboard:team_lead',
   'config:scoring_profiles_team',
-  'config:scoring_profiles_own',
   'config:users:team',
   'config:playbooks',
   'analytics:advanced',
@@ -48,7 +51,6 @@ export function defaultPermissionsForRole(role: UserRole | string): readonly Per
         'leads:reassign:peer',
         'interactions:create:self_assigned',
         'dashboard:counselor',
-        'config:scoring_profiles_own',
         'ai:use',
       ]
     case 'team_lead':

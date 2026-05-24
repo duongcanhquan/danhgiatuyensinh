@@ -16,8 +16,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'dashboard:counselor': 'Bảng TVV cá nhân',
   'dashboard:team_lead': 'Bảng trưởng nhóm',
   'config:scoring_rules': 'Cấu hình điểm thông tin & quy tắc mẫu',
-  'config:scoring_profiles_own': 'Profile chấm điểm hồ sơ (của mình)',
-  'config:scoring_profiles_team': 'Profile chấm điểm hồ sơ (nhóm TVV)',
+  'config:scoring_profiles_own': 'Profile chấm điểm (legacy — TVV không còn tự tạo)',
+  'config:scoring_profiles_team': 'Profile chấm điểm hồ sơ (nhóm TVV — trưởng nhóm)',
   'config:master_data': 'Danh mục master data',
   'config:playbooks': 'Mẫu tư vấn tuyển sinh (Thông tin TV)',
   'config:routing_policies': 'Chính sách phân bổ lead',
@@ -30,6 +30,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'config:omicall': 'Tổng đài OMICall (gọi từ web & cấu hình)',
   'analytics:advanced': 'Phân tích nâng cao',
   'finance:accountant': 'Cổng kế toán — duyệt thu & Full NE',
+  'finance:manage_accountants': 'Quản lý kế toán viên (cổng kế toán)',
   'finance:reports': 'Báo cáo thu ngày/tháng → n8n',
 }
 

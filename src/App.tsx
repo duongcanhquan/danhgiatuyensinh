@@ -12,6 +12,11 @@ import { SettingsView } from './views/SettingsView'
 import { UserManualView } from './views/UserManualView'
 import { AnalyticsAdvancedView } from './views/AnalyticsAdvancedView'
 import { AccountantView } from './views/AccountantView'
+import { AccountantLoginView } from './views/accountant/AccountantLoginView'
+import { AccountantStaffView } from './views/accountant/AccountantStaffView'
+import { AccountantReportsView } from './views/accountant/AccountantReportsView'
+import { AccountantLayout } from './components/accountant/AccountantLayout'
+import { AccountantProtectedRoute } from './components/accountant/AccountantProtectedRoute'
 import { CounselorKpiView } from './views/CounselorKpiView'
 import { CommandCenterView } from './views/CommandCenterView'
 import { MyDayView } from './views/MyDayView'
@@ -29,6 +34,14 @@ export default function App() {
         <OmicallProvider>
         <BrowserRouter basename={basename}>
           <Routes>
+            <Route path="/ke-toan/login" element={<AccountantLoginView />} />
+            <Route element={<AccountantProtectedRoute />}>
+              <Route path="/ke-toan" element={<AccountantLayout />}>
+                <Route index element={<AccountantView portalMode />} />
+                <Route path="nhan-su" element={<AccountantStaffView />} />
+                <Route path="bao-cao" element={<AccountantReportsView />} />
+              </Route>
+            </Route>
             <Route path="/login" element={<LoginView />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
@@ -44,7 +57,7 @@ export default function App() {
                 <Route path="call-history" element={<CallHistoryView />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=llm" replace />} />
                 <Route path="staff" element={<Navigate to="/settings?tab=staff" replace />} />
-                <Route path="accountant" element={<AccountantView />} />
+                <Route path="accountant" element={<Navigate to="/ke-toan" replace />} />
                 <Route path="settings" element={<SettingsView />} />
                 <Route path="huong-dan" element={<UserManualView />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

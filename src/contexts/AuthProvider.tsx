@@ -15,6 +15,7 @@ import { isUserInManagerTeamScope } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
 import { ensureDefaultFirestoreData } from '../services/firestoreBootstrap'
+import { defaultAccountantEmailFromEnv } from '../auth/accountantPortal'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
@@ -106,7 +107,9 @@ async function syncUserProfileWithRetry(
 async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>>, user: User) {
   const ref = doc(db, FS_COLLECTIONS.users, user.uid)
   const superEmail = (import.meta.env.VITE_SUPER_ADMIN_EMAIL as string | undefined)?.trim().toLowerCase()
+  const accountantEmail = defaultAccountantEmailFromEnv()
   const isSuper = Boolean(user.email && superEmail && user.email.toLowerCase() === superEmail)
+  const isDefaultAccountant = Boolean(user.email && user.email.toLowerCase() === accountantEmail)
   const snap = await getDoc(ref)
   const now = Timestamp.now()
 
@@ -115,7 +118,7 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
       id: user.uid,
       email: user.email ?? '',
       displayName: user.displayName || user.email?.split('@')[0] || 'Người dùng',
-      role: isSuper ? 'super_admin' : 'counselor',
+      role: isSuper ? 'super_admin' : isDefaultAccountant ? 'accountant' : 'counselor',
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -221,10 +224,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
       const canTeam = hasPermission(permissions, 'config:users:team')
-      if (!canAll && !canTeam) {
+      const canAcctStaff = hasPermission(permissions, 'finance:manage_accountants')
+      if (!canAll && !canTeam && !canAcctStaff) {
         throw new Error('Bạn không có quyền thêm nhân sự.')
       }
-      if (canTeam && !canAll) {
+      if (canAcctStaff && !canAll && !canTeam) {
+        if (input.role !== 'accountant') {
+          throw new Error('Cổng kế toán chỉ được tạo tài khoản vai trò Kế toán.')
+        }
+      }
+      if (canTeam && !canAll && !canAcctStaff) {
         if (input.role !== 'counselor') {
           throw new Error('Quản lý nhóm chỉ được tạo tài khoản tư vấn viên.')
         }
@@ -280,7 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
       const canTeam = hasPermission(permissions, 'config:users:team')
-      if (!canAll && !canTeam) {
+      const canAcctStaff = hasPermission(permissions, 'finance:manage_accountants')
+      if (!canAll && !canTeam && !canAcctStaff) {
         throw new Error('Bạn không có quyền sửa nhân sự.')
       }
       const db = getFirestoreDb()
@@ -294,7 +304,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = snap.data() as Record<string, unknown>
       const currentRole = (data.role as UserRole) ?? 'counselor'
 
-      if (canTeam && !canAll && profile) {
+      if (canAcctStaff && !canAll && !canTeam) {
+        if (normalizeUserRole(String(data.role ?? '')) !== 'accountant') {
+          throw new Error('Chỉ được sửa tài khoản vai trò Kế toán.')
+        }
+      }
+
+      if (canTeam && !canAll && !canAcctStaff && profile) {
         const targetProfile = mapProfileFromDoc(uid, firebaseUser!, data)
         if (!isUserInManagerTeamScope(profile, targetProfile, [targetProfile])) {
           throw new Error('Chỉ được sửa tư vấn viên trong nhóm bạn quản lý.')
@@ -359,8 +375,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendStaffPasswordResetEmail = useCallback(
     async (email: string) => {
-      if (!hasPermission(permissions, 'config:users')) {
-        throw new Error('Chỉ quản trị mới gửi được email đặt lại mật khẩu.')
+      const canUsers = hasPermission(permissions, 'config:users')
+      const canAcctStaff = hasPermission(permissions, 'finance:manage_accountants')
+      if (!canUsers && !canAcctStaff) {
+        throw new Error('Không có quyền gửi email đặt lại mật khẩu.')
       }
       const auth = getFirebaseAuth()
       if (!auth) throw new Error('Firebase Auth chưa cấu hình.')
@@ -369,6 +387,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await sendPasswordResetEmail(auth, normalized)
     },
     [permissions],
+  )
+
+  const createAccountantStaff = useCallback(
+    async (input: { email: string; password: string; displayName: string }) => {
+      if (!hasPermission(permissions, 'finance:manage_accountants')) {
+        throw new Error('Bạn không có quyền thêm kế toán viên.')
+      }
+      await createStaffAccount({
+        email: input.email,
+        password: input.password,
+        displayName: input.displayName,
+        role: 'accountant',
+      })
+    },
+    [permissions, createStaffAccount],
+  )
+
+  const updateAccountantStaff = useCallback(
+    async (input: { userId: string; displayName?: string; isActive?: boolean }) => {
+      if (!hasPermission(permissions, 'finance:manage_accountants')) {
+        throw new Error('Bạn không có quyền sửa kế toán viên.')
+      }
+      const db = getFirestoreDb()
+      if (!db) throw new Error('Firestore chưa cấu hình.')
+      const ref = doc(db, FS_COLLECTIONS.users, input.userId.trim())
+      const snap = await getDoc(ref)
+      if (!snap.exists()) throw new Error('Không tìm thấy user.')
+      const data = snap.data() as Record<string, unknown>
+      if (normalizeUserRole(String(data.role ?? '')) !== 'accountant') {
+        throw new Error('Chỉ được sửa tài khoản vai trò Kế toán.')
+      }
+      await updateStaffProfile({
+        userId: input.userId,
+        displayName: input.displayName,
+        isActive: input.isActive,
+      })
+    },
+    [permissions, updateStaffProfile],
   )
 
   const value = useMemo<AuthContextValue>(
@@ -385,6 +441,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createStaffAccount,
       updateStaffProfile,
       sendStaffPasswordResetEmail,
+      createAccountantStaff,
+      updateAccountantStaff,
     }),
     [
       status,
@@ -398,6 +456,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createStaffAccount,
       updateStaffProfile,
       sendStaffPasswordResetEmail,
+      createAccountantStaff,
+      updateAccountantStaff,
     ],
   )
 

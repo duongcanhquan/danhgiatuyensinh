@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
-import type { LeadSourceRecord, OmicallCallTarget, ScholarshipCategoryId, ScholarshipRecord } from '../types'
+import type { LeadSourceRecord, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
 import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
 import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
+import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
 
 const INPUT_CLS =
   'w-full max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500'
@@ -158,27 +159,30 @@ function ScholarshipSelect({
   label,
   value,
   scholarships,
+  slot,
   disabled,
   onChange,
 }: {
   label: string
   value: string
   scholarships: readonly ScholarshipRecord[]
+  slot: ScholarshipApplySlot
   disabled: boolean
   onChange: (v: string) => void
 }) {
   const cats = Object.keys(SCHOLARSHIP_CATEGORY_LABELS) as ScholarshipCategoryId[]
+  const options = activeScholarshipsForSlot(scholarships, slot, new Date(), value ? [value] : [])
   return (
     <Field label={label}>
       <select className={INPUT_CLS} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">— Không có học bổng —</option>
         {cats.map((cat) => {
-          const rows = scholarships.filter((s) => s.category === cat)
+          const rows = options.filter((s) => s.category === cat)
           if (!rows.length) return null
           return (
             <optgroup key={cat} label={SCHOLARSHIP_CATEGORY_LABELS[cat]}>
               {rows.map((s) => (
-                <option key={s.id} value={s.id}>
+                <option key={s.id} value={s.id} title={[s.targetAudience, s.applicationMethod].filter(Boolean).join(' · ')}>
                   {scholarshipSelectLabel(s)}
                 </option>
               ))}
@@ -378,6 +382,7 @@ export function LeadProfileCoreForm({
         <div className={grid}>
           <ScholarshipSelect
             label="Học bổng 1"
+            slot="slot1"
             value={draft.scholarship1Id}
             scholarships={scholarships}
             disabled={disabled}
@@ -385,6 +390,7 @@ export function LeadProfileCoreForm({
           />
           <ScholarshipSelect
             label="Học bổng 2"
+            slot="slot2"
             value={draft.scholarship2Id}
             scholarships={scholarships}
             disabled={disabled}

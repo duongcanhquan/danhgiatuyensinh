@@ -24,14 +24,29 @@ import {
 } from '../utils/omicallConfig'
 import { resolveOmicallCallContext } from '../services/omicallResolveCallContext'
 import {
+  hangUpOmicallCall,
   loadOmicallSdk,
   type OmicallCallData,
   type OmicallRegisterData,
   type OmicallSdkGlobal,
 } from '../services/omicallSdk'
+import { OmicallActiveCallPanel } from '../components/OmicallActiveCallPanel'
 import { logOmicallInteraction } from '../services/logOmicallInteraction'
 
 export type OmicallConnectionStatus = 'off' | 'loading' | 'ready' | 'registering' | 'connected' | 'error'
+
+export type OmicallActiveCall = {
+  uid: string
+  state: OmicallCallData['state']
+  direction: OmicallCallData['direction']
+  phone: string
+  leadId?: string
+  leadName?: string
+  target?: OmicallCallTarget
+  outbound?: string
+  durationSec: number
+  durationLabel?: string
+}
 
 type OmicallContextValue = {
   config: OmicallIntegrationConfig
@@ -42,6 +57,9 @@ type OmicallContextValue = {
   lastError: string | null
   /** Lỗi / trạng thái cuộc gọi gần nhất (từ SDK). */
   lastCallHint: string | null
+  /** Cuộc gọi đang diễn ra (panel dập máy + thông tin). */
+  activeCall: OmicallActiveCall | null
+  hangUpCall: () => void
   canCall: boolean
   saveConfig: (next: OmicallIntegrationConfig) => Promise<void>
   resetConfig: () => Promise<void>
@@ -75,6 +93,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const [connectionLabel, setConnectionLabel] = useState('Chưa bật tổng đài')
   const [lastError, setLastError] = useState<string | null>(null)
   const [lastCallHint, setLastCallHint] = useState<string | null>(null)
+  const [activeCall, setActiveCall] = useState<OmicallActiveCall | null>(null)
   const [sipReady, setSipReady] = useState(false)
   const [bootToken, setBootToken] = useState(0)
   const [availableHotlines, setAvailableHotlines] = useState<string[]>([])
@@ -82,6 +101,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const sdkRef = useRef<OmicallSdkGlobal | null>(null)
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
   const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
+  const pendingCallDisplayRef = useRef<{ leadId: string; leadName: string; target: OmicallCallTarget } | null>(null)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -143,6 +163,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         console.error('[OMICall] log interaction', e)
       } finally {
         pendingCallMetaRef.current = null
+        pendingCallDisplayRef.current = null
       }
     },
     [config.autoLogCalls, profile],
@@ -184,27 +205,72 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
   }, [config, profile, sipCreds?.sipUser])
 
-  const onCallEvent = useCallback((raw: unknown) => {
-    const call = raw as OmicallCallData
-    if (!call?.uid) return
-    if (call.state === 'connecting') {
-      setLastCallHint('Đang kết nối cuộc gọi…')
-    } else if (call.state === 'ringing') {
-      setLastCallHint('Đang đổ chuông phía khách…')
-    } else if (call.state === 'accepted') {
-      setLastCallHint('Đã bắt máy — nói qua micro trình duyệt / tai nghe.')
-    } else if (call.state === 'ended') {
-      if (call.rejectCode) {
-        setLastCallHint(`Cuộc gọi kết thúc (mã lỗi tổng đài: ${call.rejectCode}). Kiểm tra đầu số gọi ra trên OMICall.`)
-      } else if ((call.callingDuration?.value ?? 0) === 0 && (call.ringingDuration?.value ?? 0) === 0) {
-        setLastCallHint(
-          'Cuộc gọi kết thúc ngay — thử đổi «Định dạng quay số» (+84… / 0…), bật micro, hoặc gán đầu số gọi ra trên OMICall.',
-        )
-      } else {
-        setLastCallHint(null)
+  const syncActiveCallFromSdk = useCallback(
+    (raw: unknown) => {
+      const call = raw as OmicallCallData
+      if (!call?.uid) return
+      if (call.state === 'ended') {
+        setActiveCall(null)
+        return
       }
-    }
-  }, [])
+      const pending = pendingCallMetaRef.current
+      const display = pendingCallDisplayRef.current
+      let leadId = display?.leadId
+      let leadName = display?.leadName
+      let target = display?.target ?? pending?.target
+      let phone = call.displayNumber || call.remoteNumber || pending?.phone || ''
+      if (call.userData) {
+        try {
+          const parsed = JSON.parse(call.userData) as OmicallCallUserData
+          if (parsed.leadId) leadId = parsed.leadId
+          if (parsed.phone) phone = parsed.phone
+          if (parsed.target) target = parsed.target
+        } catch {
+          /* ignore */
+        }
+      }
+      const durationSec = call.callingDuration?.value ?? 0
+      setActiveCall({
+        uid: call.uid,
+        state: call.state,
+        direction: call.direction,
+        phone,
+        leadId,
+        leadName,
+        target,
+        outbound: call.sipNumber?.number || resolvedOutbound || availableHotlines[0],
+        durationSec,
+        durationLabel: call.callingDuration?.text,
+      })
+    },
+    [availableHotlines, resolvedOutbound],
+  )
+
+  const onCallEvent = useCallback(
+    (raw: unknown) => {
+      const call = raw as OmicallCallData
+      if (!call?.uid) return
+      syncActiveCallFromSdk(raw)
+      if (call.state === 'connecting') {
+        setLastCallHint('Đang kết nối cuộc gọi…')
+      } else if (call.state === 'ringing') {
+        setLastCallHint('Đang đổ chuông phía khách…')
+      } else if (call.state === 'accepted') {
+        setLastCallHint('Đã bắt máy — nói qua micro trình duyệt / tai nghe.')
+      } else if (call.state === 'ended') {
+        if (call.rejectCode) {
+          setLastCallHint(`Cuộc gọi kết thúc (mã lỗi tổng đài: ${call.rejectCode}). Kiểm tra đầu số gọi ra trên OMICall.`)
+        } else if ((call.callingDuration?.value ?? 0) === 0 && (call.ringingDuration?.value ?? 0) === 0) {
+          setLastCallHint(
+            'Cuộc gọi kết thúc ngay — thử đổi «Định dạng quay số» (+84… / 0…), bật micro, hoặc gán đầu số gọi ra trên OMICall.',
+          )
+        } else {
+          setLastCallHint(null)
+        }
+      }
+    },
+    [syncActiveCallFromSdk],
+  )
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !profile || !config.enabled) {
@@ -229,6 +295,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
     const registerHandler = (d: unknown) => onRegister(d)
     const callTraceHandler = (d: unknown) => onCallEvent(d)
+    const incallHandler = (d: unknown) => syncActiveCallFromSdk(d)
 
     ;(async () => {
       setConnectionStatus('loading')
@@ -258,13 +325,19 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         setSipReady(false)
         setConnectionStatus('registering')
         setConnectionLabel('Đang đăng ký số nội bộ…')
-        const events = ['ended', 'register', 'connecting', 'ringing', 'accepted'] as const
-        for (const ev of events) sdk.off(ev, ev === 'ended' ? endedHandler : ev === 'register' ? registerHandler : callTraceHandler)
+        const events = ['ended', 'register', 'connecting', 'ringing', 'accepted', 'incall'] as const
+        for (const ev of events) {
+          if (ev === 'ended') sdk.off(ev, endedHandler)
+          else if (ev === 'register') sdk.off(ev, registerHandler)
+          else if (ev === 'incall') sdk.off(ev, incallHandler)
+          else sdk.off(ev, callTraceHandler)
+        }
         sdk.on('ended', endedHandler)
         sdk.on('register', registerHandler)
         sdk.on('connecting', callTraceHandler)
         sdk.on('ringing', callTraceHandler)
         sdk.on('accepted', callTraceHandler)
+        sdk.on('incall', incallHandler)
         const reg = await sdk.register({
           sipRealm: sipCreds.sipRealm,
           sipUser: sipCreds.sipUser,
@@ -296,8 +369,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       sdk?.off('connecting', callTraceHandler)
       sdk?.off('ringing', callTraceHandler)
       sdk?.off('accepted', callTraceHandler)
+      sdk?.off('incall', incallHandler)
       sdk?.unregister()
       setSipReady(false)
+      setActiveCall(null)
     }
   }, [
     authStatus,
@@ -314,7 +389,19 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     onEnded,
     onRegister,
     onCallEvent,
+    syncActiveCallFromSdk,
   ])
+
+  const hangUpCall = useCallback(() => {
+    const sdk = sdkRef.current
+    if (!sdk) {
+      setLastCallHint('SDK chưa sẵn sàng — không thể dập máy từ trình duyệt.')
+      return
+    }
+    if (!hangUpOmicallCall(sdk)) {
+      setLastCallHint('SDK không hỗ trợ dập máy từ web — hãy cắt trên máy bàn / IP phone hoặc cập nhật phiên bản OMICall.')
+    }
+  }, [])
 
   const canCall = config.enabled && sipReady && Boolean(sipCreds)
 
@@ -341,8 +428,24 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         phone: normalized,
       }
       pendingCallMetaRef.current = userData
+      pendingCallDisplayRef.current = {
+        leadId: input.leadId,
+        leadName: input.leadName,
+        target: input.target,
+      }
       const outbound =
         resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
+      setActiveCall({
+        uid: `pending-${Date.now()}`,
+        state: 'connecting',
+        direction: 'outbound',
+        phone: normalized,
+        leadId: input.leadId,
+        leadName: input.leadName,
+        target: input.target,
+        outbound,
+        durationSec: 0,
+      })
       const userDataStr = JSON.stringify(userData)
       const useDeskPhone = config.callMode === 'deskPhone'
 
@@ -434,6 +537,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       connectionLabel,
       lastError,
       lastCallHint,
+      activeCall,
+      hangUpCall,
       canCall,
       saveConfig,
       resetConfig,
@@ -448,6 +553,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       connectionLabel,
       lastError,
       lastCallHint,
+      activeCall,
+      hangUpCall,
       canCall,
       saveConfig,
       resetConfig,
@@ -456,5 +563,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     ],
   )
 
-  return <OmicallContext.Provider value={value}>{children}</OmicallContext.Provider>
+  return (
+    <OmicallContext.Provider value={value}>
+      {children}
+      <OmicallActiveCallPanel />
+    </OmicallContext.Provider>
+  )
 }

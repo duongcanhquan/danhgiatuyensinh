@@ -49,7 +49,7 @@ export function CreateLeadModal({
   const [error, setError] = useState<string | null>(null)
   const [duplicateId, setDuplicateId] = useState<string | null>(null)
   const { active: leadSources } = useLeadSources()
-  const { active: scholarships } = useScholarships()
+  const { items: scholarships } = useScholarships()
 
   const elevated = isAdminLikeRole(profile?.role)
   const teamLead = isTeamLeadRole(profile?.role)

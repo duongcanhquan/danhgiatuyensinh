@@ -5,6 +5,7 @@ import { FS_COLLECTIONS } from '../types'
 import { uploadLeadReceiptFile } from '../services/leadReceiptStorage'
 import { buildFinanceSavePlan, mergeUploadedReceipts, type LeadFinanceDraft } from './leadFinance'
 import { triggerProfileFinanceN8n } from './n8nIntegration'
+import { resolveScholarshipLabels } from './scholarshipLabelResolver'
 import { leadTouchPatch } from './leadTouch'
 
 export async function persistLeadFinance(opts: {
@@ -43,11 +44,14 @@ export async function persistLeadFinance(opts: {
 
   if (plan.triggerN8n) {
     const moneyChanged = Object.keys(uploads).length > 0 || plan.resetApprovalSlots.length > 0
+    const scholarshipLabels = await resolveScholarshipLabels(db, lead)
     await triggerProfileFinanceN8n({
       lead: { ...lead, finance: financeWithEnrollment },
       finance: financeWithEnrollment,
       isMoneyChanged: moneyChanged,
       counselorName,
+      scholarship1Label: scholarshipLabels.scholarship1Label,
+      scholarship2Label: scholarshipLabels.scholarship2Label,
     })
   }
 

@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { Headphones, PhoneCall, PhoneMissed } from 'lucide-react'
+import { BarChart3, Headphones, PhoneCall, PhoneMissed, TrendingUp, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
+import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
+import { useLeadCallOutcomes } from '../hooks/useLeadCallOutcomes'
 import { useOmicallCalls, type OmicallCallsScope } from '../hooks/useOmicallCalls'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { aggregateOmicallCalls, formatCallDuration } from '../utils/omicallCallMap'
+import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
+import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
+import type { LeadCallOutcomeSnapshot } from '../utils/leadFinanceHelpers'
 import type { OmicallCallRecord } from '../types'
 
 type ViewMode = 'self' | 'team' | 'global'
@@ -30,14 +35,36 @@ function StatCard({ label, value, hint }: { label: string; value: string | numbe
   )
 }
 
+function OutcomeBadge({ snap }: { snap?: LeadCallOutcomeSnapshot }) {
+  if (!snap) return <span className="text-slate-400">—</span>
+  return (
+    <div className="flex flex-wrap justify-center gap-0.5">
+      {snap.hasDeposit ? (
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">Cọc</span>
+      ) : null}
+      {snap.isEnrolled ? (
+        <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-900">NE</span>
+      ) : null}
+      {snap.isFullNe ? (
+        <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-900">Full</span>
+      ) : null}
+      {!snap.hasDeposit && !snap.isEnrolled && !snap.isFullNe ? (
+        <span className="text-[10px] text-slate-500">{LEAD_COUNSELOR_STATUS_LABELS[snap.status] ?? snap.status}</span>
+      ) : null}
+    </div>
+  )
+}
+
 function CallRow({
   call,
   counselorName,
   leadLabel,
+  leadOutcome,
 }: {
   call: OmicallCallRecord
   counselorName: string
   leadLabel?: string
+  leadOutcome?: LeadCallOutcomeSnapshot
 }) {
   const when = call.endedAt?.toDate?.() ?? call.startedAt?.toDate?.()
   const timeStr = when
@@ -72,6 +99,9 @@ function CallRow({
         ) : (
           <span className="text-[10px] text-rose-600">Miss</span>
         )}
+      </td>
+      <td className="px-3 py-2 text-center">
+        <OutcomeBadge snap={leadOutcome} />
       </td>
       <td className="px-3 py-2 text-right">
         {call.recordingFileUrl ? (
@@ -121,6 +151,58 @@ export function CallHistoryView() {
   }, [calls, counselorFilter, viewMode])
 
   const stats = useMemo(() => aggregateOmicallCalls(filteredCalls), [filteredCalls])
+
+  const showAdminInsights = canTeam || canGlobal
+  const { totals: kpiTotals, loading: kpiLoading, error: kpiError } = useCounselorKpiDateRange(
+    range.from,
+    range.to,
+  )
+
+  const uniqueLeadIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const c of filteredCalls) {
+      if (c.leadId) ids.add(c.leadId)
+    }
+    return [...ids]
+  }, [filteredCalls])
+
+  const { snapshots: leadOutcomes, loading: outcomesLoading } = useLeadCallOutcomes(uniqueLeadIds)
+
+  const conversionFunnel = useMemo(() => {
+    let withDeposit = 0
+    let enrolled = 0
+    let fullNe = 0
+    for (const id of uniqueLeadIds) {
+      const s = leadOutcomes.get(id)
+      if (!s) continue
+      if (s.hasDeposit) withDeposit += 1
+      if (s.isEnrolled) enrolled += 1
+      if (s.isFullNe) fullNe += 1
+    }
+    const called = uniqueLeadIds.length
+    const pct = (n: number) => (called > 0 ? Math.round((n / called) * 100) : 0)
+    return { called, withDeposit, enrolled, fullNe, depositPct: pct(withDeposit), enrolledPct: pct(enrolled) }
+  }, [uniqueLeadIds, leadOutcomes])
+
+  const leadOutcomeRows = useMemo(() => {
+    return uniqueLeadIds
+      .map((id) => {
+        const snap = leadOutcomes.get(id)
+        const callsForLead = filteredCalls.filter((c) => c.leadId === id)
+        const agg = aggregateOmicallCalls(callsForLead)
+        return {
+          id,
+          snap,
+          callCount: callsForLead.length,
+          validCalls: agg.validCalls,
+        }
+      })
+      .sort((a, b) => {
+        const score = (s?: LeadCallOutcomeSnapshot) =>
+          (s?.isFullNe ? 4 : 0) + (s?.isEnrolled ? 3 : 0) + (s?.hasDeposit ? 2 : 0)
+        return score(b.snap) - score(a.snap) || b.callCount - a.callCount
+      })
+  }, [uniqueLeadIds, leadOutcomes, filteredCalls])
 
   const nameMap = useMemo(() => {
     const m = new Map<string, string>()
@@ -249,6 +331,128 @@ export function CallHistoryView() {
         />
       </div>
 
+      {showAdminInsights ? (
+        <>
+          {kpiError ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              KPI kỳ: {kpiError}
+            </div>
+          ) : null}
+          <section className="app-card-glass overflow-hidden">
+            <div className="border-b border-slate-200/80 px-4 py-3">
+              <h2 className="app-section-heading flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" aria-hidden />
+                KPI tổng hợp theo kỳ ({range.from} → {range.to})
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Gộp từ <code className="rounded bg-slate-100 px-1">kpiDaily</code> — đồng bộ OMICall + CRM (cọc, NE, doanh thu).
+              </p>
+            </div>
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                label="Gọi HL (KPI)"
+                value={kpiLoading ? '…' : fmtKpiNum(kpiTotals.validCalls)}
+                hint={`${fmtKpiNum(kpiTotals.totalCalls)} tổng · ${fmtKpiPct(kpiTotals.connectedCalls, kpiTotals.totalCalls)} bắt máy`}
+              />
+              <StatCard
+                label="Lead chạm (unique)"
+                value={kpiLoading ? '…' : fmtKpiNum(kpiTotals.uniqueLeadsCalled)}
+                hint={`WARM+ ${fmtKpiNum(kpiTotals.warmNew)} · HOT+ ${fmtKpiNum(kpiTotals.hotNew)}`}
+              />
+              <StatCard
+                label="Cọc / NB (kpiDaily)"
+                value={kpiLoading ? '…' : fmtKpiNum(kpiTotals.depositPaidCount)}
+                hint={`Chuyển cọc: ${fmtKpiNum(kpiTotals.toDeposit)} · NE: ${fmtKpiNum(kpiTotals.toEnrolled)}`}
+              />
+              <StatCard
+                label="Doanh thu duyệt"
+                value={kpiLoading ? '…' : fmtKpiVnd(kpiTotals.approvedRevenueVnd)}
+                hint={`Full NE: ${fmtKpiNum(kpiTotals.fullNeCount)} · ${fmtKpiMinutes(kpiTotals.talkSeconds)} nói`}
+              />
+            </div>
+          </section>
+
+          <section className="app-card-glass overflow-hidden">
+            <div className="border-b border-slate-200/80 px-4 py-3">
+              <h2 className="app-section-heading flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" aria-hidden />
+                Phễu chuyển đổi hồ sơ đã gọi
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Trạng thái CRM hiện tại của các hồ sơ có <code className="rounded bg-slate-100 px-1">leadId</code> trong
+                lịch sử gọi kỳ này — admin theo dõi cọc → NE.
+              </p>
+            </div>
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                label="Hồ sơ đã gọi"
+                value={outcomesLoading ? '…' : conversionFunnel.called}
+                hint="Unique lead trong kỳ"
+              />
+              <StatCard
+                label="Đã cọc (NB)"
+                value={outcomesLoading ? '…' : `${conversionFunnel.withDeposit} (${conversionFunnel.depositPct}%)`}
+              />
+              <StatCard
+                label="Nhập học / NE"
+                value={outcomesLoading ? '…' : `${conversionFunnel.enrolled} (${conversionFunnel.enrolledPct}%)`}
+              />
+              <StatCard
+                label="Full NE"
+                value={outcomesLoading ? '…' : conversionFunnel.fullNe}
+                hint="Tick FULL NE trên hồ sơ"
+              />
+            </div>
+          </section>
+
+          {leadOutcomeRows.length > 0 ? (
+            <section className="app-card-glass overflow-hidden">
+              <div className="border-b border-slate-200/80 px-4 py-3">
+                <h2 className="app-section-heading flex items-center gap-2">
+                  <Wallet className="h-4 w-4" aria-hidden />
+                  Hồ sơ đã gọi — trạng thái thu phí
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">Hồ sơ</th>
+                      <th className="px-3 py-2 text-right">Cuộc gọi</th>
+                      <th className="px-3 py-2 text-right">HL</th>
+                      <th className="px-3 py-2 text-center">Cọc / NE</th>
+                      <th className="px-3 py-2">Trạng thái CRM</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {leadOutcomeRows.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50/80">
+                        <td className="px-3 py-2">
+                          <Link
+                            to={`/leads?id=${encodeURIComponent(row.id)}`}
+                            className="font-semibold text-sky-800 underline"
+                          >
+                            {row.snap?.name ?? row.id.slice(0, 10)}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{row.callCount}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-emerald-800">{row.validCalls}</td>
+                        <td className="px-3 py-2 text-center">
+                          <OutcomeBadge snap={row.snap} />
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {row.snap ? LEAD_COUNSELOR_STATUS_LABELS[row.snap.status] : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
+
       {(viewMode === 'team' || viewMode === 'global') && byCounselor.length > 1 ? (
         <section className="app-card-glass overflow-hidden">
           <div className="border-b border-slate-200/80 px-4 py-3">
@@ -302,7 +506,8 @@ export function CallHistoryView() {
                 <th className="px-3 py-2">TVV</th>
                 <th className="px-3 py-2">Hồ sơ</th>
                 <th className="px-3 py-2 text-right">Thời lượng</th>
-                <th className="px-3 py-2 text-center">KPI</th>
+                <th className="px-3 py-2 text-center">KPI gọi</th>
+                {showAdminInsights ? <th className="px-3 py-2 text-center">Hồ sơ</th> : null}
                 <th className="px-3 py-2 text-right">Ghi âm</th>
               </tr>
             </thead>
@@ -314,11 +519,13 @@ export function CallHistoryView() {
                   counselorName={
                     c.counselorUid ? nameMap.get(c.counselorUid) ?? c.agentName ?? '—' : c.agentName ?? '—'
                   }
+                  leadLabel={c.leadId ? leadOutcomes.get(c.leadId)?.name : undefined}
+                  leadOutcome={c.leadId ? leadOutcomes.get(c.leadId) : undefined}
                 />
               ))}
               {!loading && filteredCalls.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={showAdminInsights ? 10 : 9} className="px-4 py-10 text-center text-slate-500">
                     <PhoneMissed className="mx-auto mb-2 h-8 w-8 text-slate-300" aria-hidden />
                     Chưa có cuộc gọi trong khoảng thời gian — kiểm tra cấu hình API / webhook trong Settings → OMICall.
                   </td>

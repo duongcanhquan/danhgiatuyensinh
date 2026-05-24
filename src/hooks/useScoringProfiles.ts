@@ -13,6 +13,7 @@ import type {
 import { ALL_PROFILE_SCORING_CONDITIONS, FS_COLLECTIONS, RULE_CATEGORIES } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { inferRuleCategory, legacyRulesToBlocks } from '../utils/scoring'
+import { isGlobalScoringProfile } from '../utils/scoringProfileAccess'
 
 function isSavedProfileCondition(c: string): c is ProfileScoringCondition {
   return (ALL_PROFILE_SCORING_CONDITIONS as readonly string[]).includes(c)
@@ -155,6 +156,8 @@ function mapProfile(id: string, data: Record<string, unknown>): ScoringProfile |
         warmMinScore: Number.isFinite(warmMinScore) ? warmMinScore : 50,
       },
       isDefaultForImport: Boolean(data.isDefaultForImport),
+      scope: data.scope === 'team' ? 'team' : data.scope === 'global' ? 'global' : undefined,
+      scopeOwnerUid: data.scopeOwnerUid ? String(data.scopeOwnerUid) : undefined,
       createdAt: (data.createdAt as Timestamp) ?? now,
       updatedAt: (data.updatedAt as Timestamp) ?? now,
       createdBy: data.createdBy ? String(data.createdBy) : undefined,
@@ -164,11 +167,12 @@ function mapProfile(id: string, data: Record<string, unknown>): ScoringProfile |
   }
 }
 
-/** Profile dùng khi import Excel: cờ mặc định, không có thì profile đầu tiên */
+/** Profile dùng khi import Excel: cờ mặc định trên profile toàn hệ thống. */
 export function pickProfileForImport(profiles: ScoringProfile[]): ScoringProfile | null {
-  const def = profiles.find((p) => p.isDefaultForImport)
+  const globalProfiles = profiles.filter((p) => isGlobalScoringProfile(p))
+  const def = globalProfiles.find((p) => p.isDefaultForImport)
   if (def) return def
-  return profiles[0] ?? null
+  return globalProfiles[0] ?? profiles.find((p) => p.isDefaultForImport) ?? profiles[0] ?? null
 }
 
 /** Real-time `scoringProfiles`. */

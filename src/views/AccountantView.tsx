@@ -215,7 +215,7 @@ function FullNeButton({
   )
 }
 
-export function AccountantView() {
+export function AccountantView({ portalMode = false }: { portalMode?: boolean }) {
   const { can, profile } = useAuth()
   const canAccountant = can('finance:accountant')
   const canReports = can('finance:reports')
@@ -300,7 +300,7 @@ export function AccountantView() {
     }
   }
 
-  if (!canAccountant) {
+  if (!canAccountant && !portalMode) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-950">
         Bạn chưa có quyền cổng kế toán. Liên hệ quản trị để được cấp quyền «Cổng kế toán».
@@ -309,7 +309,8 @@ export function AccountantView() {
   }
 
   return (
-    <div className="mx-auto max-w-[1800px] space-y-4 px-1 pb-10 md:px-0">
+    <div className={portalMode ? 'space-y-4' : 'mx-auto max-w-[1800px] space-y-4 px-1 pb-10 md:px-0'}>
+      {!portalMode ? (
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200/80 bg-white px-4 py-4 shadow-md">
         <div>
           <h1 className="text-xl font-extrabold text-emerald-800 md:text-2xl">Cổng kế toán</h1>
@@ -330,8 +331,24 @@ export function AccountantView() {
           </button>
         </div>
       </header>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+            Hiện «Cọc thành công»
+          </label>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-900"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Tải lại
+          </button>
+        </div>
+      )}
 
-      {canReports ? (
+      {!portalMode && canReports ? (
         <section className="rounded-2xl border border-sky-200/80 bg-sky-50/50 px-4 py-4">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-sky-900">Báo cáo thu (Firestore → n8n)</h2>
           <p className="mt-1 text-xs text-slate-600">

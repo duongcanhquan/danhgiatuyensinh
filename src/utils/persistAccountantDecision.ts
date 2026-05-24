@@ -6,6 +6,7 @@ import { uploadLeadReceiptFile } from '../services/leadReceiptStorage'
 import { PAYMENT_SLOT_DEFS, dateInputToStored } from './leadFinance'
 import { computeEnrollmentStatusAfterDecision } from './financeEnrollmentStatus'
 import { triggerAccountantDecisionN8n, triggerAccountantFullNeN8n } from './n8nIntegration'
+import { resolveScholarshipLabels } from './scholarshipLabelResolver'
 import { leadTouchPatch } from './leadTouch'
 
 const SLOT_BY_BATCH: LeadPaymentSlotKey[] = PAYMENT_SLOT_DEFS.map((s) => s.key)
@@ -59,12 +60,16 @@ export async function persistAccountantPaymentDecision(opts: {
     finance,
   })
 
+  const scholarshipLabels = await resolveScholarshipLabels(db, lead)
+
   await triggerAccountantDecisionN8n({
     lead: { ...lead, finance },
     finance,
     decision,
     amount: amountVnd,
     batch,
+    scholarship1Label: scholarshipLabels.scholarship1Label,
+    scholarship2Label: scholarshipLabels.scholarship2Label,
   })
 
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
@@ -102,7 +107,14 @@ export async function persistAccountantFullNe(opts: {
     finance,
   })
 
-  await triggerAccountantFullNeN8n({ lead: { ...lead, finance }, finance, autoApprovedAmount: autoApproved })
+  const scholarshipLabels = await resolveScholarshipLabels(db, lead)
+  await triggerAccountantFullNeN8n({
+    lead: { ...lead, finance },
+    finance,
+    autoApprovedAmount: autoApproved,
+    scholarship1Label: scholarshipLabels.scholarship1Label,
+    scholarship2Label: scholarshipLabels.scholarship2Label,
+  })
 
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
 }

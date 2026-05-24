@@ -21,7 +21,7 @@ describe('defaultPermissionsForRole', () => {
     const { PERMISSIONS } = await import('../types')
     const perms = defaultPermissionsForRole('super_admin')
     for (const p of PERMISSIONS as readonly Permission[]) {
-      if (p === 'finance:accountant' || p === 'finance:reports') continue
+      if (p === 'finance:accountant' || p === 'finance:reports' || p === 'finance:manage_accountants') continue
       expect(perms).toContain(p)
     }
     expect(hasPermission(perms, 'finance:accountant')).toBe(false)
@@ -33,7 +33,13 @@ describe('defaultPermissionsForRole', () => {
     expect(hasPermission(perms, 'config:llm_api')).toBe(false)
     expect(hasPermission(perms, 'finance:accountant')).toBe(false)
     for (const p of PERMISSIONS as readonly Permission[]) {
-      if (p === 'config:llm_api' || p === 'finance:accountant' || p === 'finance:reports') continue
+      if (
+        p === 'config:llm_api' ||
+        p === 'finance:accountant' ||
+        p === 'finance:reports' ||
+        p === 'finance:manage_accountants'
+      )
+        continue
       expect(perms).toContain(p)
     }
   })
@@ -42,22 +48,26 @@ describe('defaultPermissionsForRole', () => {
     const perms = defaultPermissionsForRole('accountant')
     expect(hasPermission(perms, 'finance:accountant')).toBe(true)
     expect(hasPermission(perms, 'finance:reports')).toBe(true)
+    expect(hasPermission(perms, 'finance:manage_accountants')).toBe(true)
     expect(hasPermission(perms, 'leads:read:global')).toBe(false)
     expect(canAccessSettingsPage(perms)).toBe(false)
   })
 
-  it('counselor: own leads and scoring profile only', () => {
+  it('counselor: own leads, no profile builder', () => {
     const perms = defaultPermissionsForRole('counselor')
     expect(hasPermission(perms, 'dashboard:counselor')).toBe(true)
+    expect(hasPermission(perms, 'config:scoring_profiles_own')).toBe(false)
     expect(hasPermission(perms, 'config:playbooks')).toBe(false)
   })
 
-  it('team_lead: team scope, playbooks, no global admin', () => {
+  it('team_lead: team scope, playbooks, team profiles only', () => {
     const perms = defaultPermissionsForRole('team_lead')
     expect(hasPermission(perms, 'leads:read:team_scope')).toBe(true)
     expect(hasPermission(perms, 'leads:write:team_scope')).toBe(true)
     expect(hasPermission(perms, 'leads:reassign:team')).toBe(true)
     expect(hasPermission(perms, 'config:playbooks')).toBe(true)
+    expect(hasPermission(perms, 'config:scoring_profiles_team')).toBe(true)
+    expect(hasPermission(perms, 'config:scoring_profiles_own')).toBe(false)
     expect(hasPermission(perms, 'dashboard:team_lead')).toBe(true)
     expect(hasPermission(perms, 'config:master_data')).toBe(false)
   })
@@ -67,8 +77,8 @@ describe('defaultPermissionsForRole', () => {
     expect(hasPermission(perms, 'config:playbooks')).toBe(true)
   })
 
-  it('counselor can access settings for own scoring profile', () => {
-    expect(canAccessSettingsPage(defaultPermissionsForRole('counselor'))).toBe(true)
+  it('counselor cannot access settings without config permissions', () => {
+    expect(canAccessSettingsPage(defaultPermissionsForRole('counselor'))).toBe(false)
   })
 })
 

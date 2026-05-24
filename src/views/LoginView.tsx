@@ -207,6 +207,12 @@ export function LoginView() {
             >
               {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
             </button>
+            <p className="text-center text-sm text-white/55">
+              Kế toán?{' '}
+              <Link to="/ke-toan/login" className="font-semibold text-amber-200/90 underline-offset-2 hover:underline">
+                Đăng nhập cổng kế toán
+              </Link>
+            </p>
           </form>
         </motion.div>
       </div>

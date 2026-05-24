@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ProfileSyncBlocked } from './ProfileSyncBlocked'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
+import { isAccountantOnlyUser } from '../auth/accountantPortal'
 
 /**
  * Chặn route khi chưa đăng nhập (Firebase Auth đã cấu hình).
@@ -40,6 +41,10 @@ export function ProtectedRoute() {
 
   if (!profile) {
     return <ProfileSyncBlocked />
+  }
+
+  if (isAccountantOnlyUser(profile)) {
+    return <Navigate to="/ke-toan" replace />
   }
 
   return <Outlet />

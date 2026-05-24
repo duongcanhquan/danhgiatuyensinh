@@ -33,11 +33,13 @@ export function extractDriveFolderId(url: string): string {
 export function buildN8nFullData(
   lead: Lead,
   finance?: LeadFinanceRecord,
-  extras?: { counselorName?: string; scholarshipLabel?: string },
+  extras?: { counselorName?: string; scholarshipLabel?: string; scholarship1Label?: string; scholarship2Label?: string },
 ): Record<string, unknown> {
   const f = finance ?? lead.finance
   const pay = f?.payments ?? {}
   const slot = (k: LeadPaymentSlotKey) => pay[k]
+  const scholarship1 = extras?.scholarship1Label ?? extras?.scholarshipLabel ?? ''
+  const scholarship2 = extras?.scholarship2Label ?? ''
 
   return {
     id: lead.customerId || lead.id,
@@ -55,8 +57,8 @@ export function buildN8nFullData(
     mother: lead.motherName ?? '',
     motherPhone: lead.motherPhone ?? '',
     guardian: lead.guardian ?? '',
-    scholarship: extras?.scholarshipLabel ?? '',
-    scholarship2: lead.scholarship2Id ?? '',
+    scholarship: scholarship1,
+    scholarship2,
     source: lead.source1 ?? lead.source ?? '',
     source2: lead.source2 ?? '',
     deposit_money: String(slot('deposit')?.amountVnd ?? ''),
@@ -102,15 +104,17 @@ export async function triggerProfileFinanceN8n(opts: {
   finance: LeadFinanceRecord
   isMoneyChanged: boolean
   counselorName?: string
+  scholarship1Label?: string
+  scholarship2Label?: string
 }): Promise<void> {
-  const { lead, finance, isMoneyChanged, counselorName } = opts
+  const { lead, finance, isMoneyChanged, counselorName, scholarship1Label, scholarship2Label } = opts
   const pl = {
     event: 'update_profile',
     is_money_changed: isMoneyChanged,
     studentId: lead.customerId || lead.id,
     counselor: counselorName ?? '',
     updatedAt: new Date().toISOString(),
-    full_data: buildN8nFullData(lead, finance, { counselorName }),
+    full_data: buildN8nFullData(lead, finance, { counselorName, scholarship1Label, scholarship2Label }),
     totalMoney: finance.declaredTotalVnd ?? 0,
   }
   const res = await postJson(webhookCtsv(), pl)
@@ -127,14 +131,16 @@ export async function triggerAccountantDecisionN8n(opts: {
   decision: 'ĐỒNG Ý' | 'TỪ CHỐI'
   amount: number
   batch: number
+  scholarship1Label?: string
+  scholarship2Label?: string
 }): Promise<void> {
-  const { lead, finance, decision, amount, batch } = opts
+  const { lead, finance, decision, amount, batch, scholarship1Label, scholarship2Label } = opts
   const pl = {
     event: 'accountant_decision',
     decision,
     amount: String(amount),
     batch,
-    full_data: buildN8nFullData(lead, finance),
+    full_data: buildN8nFullData(lead, finance, { scholarship1Label, scholarship2Label }),
   }
   const res = await postJson(webhookCtsv(), pl)
   if (!res.ok) {
@@ -147,12 +153,17 @@ export async function triggerAccountantFullNeN8n(opts: {
   lead: Lead
   finance: LeadFinanceRecord
   autoApprovedAmount?: number
+  scholarship1Label?: string
+  scholarship2Label?: string
 }): Promise<void> {
   const pl = {
     event: 'accountant_full_ne',
     decision: 'FULL NE',
     auto_approved_amount: opts.autoApprovedAmount ?? 0,
-    full_data: buildN8nFullData(opts.lead, opts.finance),
+    full_data: buildN8nFullData(opts.lead, opts.finance, {
+      scholarship1Label: opts.scholarship1Label,
+      scholarship2Label: opts.scholarship2Label,
+    }),
   }
   const res = await postJson(webhookCtsv(), pl)
   if (!res.ok) {
@@ -181,9 +192,10 @@ export async function triggerInvitationN8n(opts: {
   lead: Lead
   docType: InviteDocumentType
   scholarship: { label: string; amountVnd?: number } | null
+  scholarship2Label?: string
   inviteFolderUrl?: string
 }): Promise<{ folderUrl?: string }> {
-  const { lead, docType, scholarship, inviteFolderUrl } = opts
+  const { lead, docType, scholarship, scholarship2Label, inviteFolderUrl } = opts
   const folderId = inviteFolderUrl ? extractDriveFolderId(inviteFolderUrl) : ''
   const scholarshipName = scholarship?.label ?? ''
   const scholarshipValue = scholarship?.amountVnd ? String(scholarship.amountVnd) : ''
@@ -209,7 +221,7 @@ export async function triggerInvitationN8n(opts: {
       source1: lead.source1 ?? lead.source ?? '',
       source2: lead.source2 ?? '',
       scholarship1_text: scholarshipName,
-      scholarship2_text: lead.scholarship2Id ?? '',
+      scholarship2_text: scholarship2Label ?? '',
     },
   }
 

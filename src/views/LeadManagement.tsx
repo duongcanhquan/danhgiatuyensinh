@@ -495,6 +495,20 @@ export function LeadManagement() {
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
   const canCreateManualLead = canCreateLead(profile, can)
 
+  const wantsCreateFromUrl = searchParams.get('create') === '1'
+  useEffect(() => {
+    if (!wantsCreateFromUrl || !canCreateManualLead || !configured || !db) return
+    setCreateLeadOpen(true)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('create')
+        return next
+      },
+      { replace: true },
+    )
+  }, [wantsCreateFromUrl, canCreateManualLead, configured, db, setSearchParams])
+
   const openLeadById = useCallback(
     async (leadId: string) => {
       if (!db) return
@@ -2824,7 +2838,7 @@ function LeadDetailPanel({
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const { categories: knowledgeCategories } = useKnowledgeCategories()
   const { active: leadSources } = useLeadSources()
-  const { active: scholarships } = useScholarships()
+  const { items: scholarships } = useScholarships()
 
   const consultingInsights = useMemo(
     () =>
@@ -3088,10 +3102,14 @@ function LeadDetailPanel({
     setMsg(null)
     try {
       const scholarship = scholarshipId ? (scholarships.find((s) => s.id === scholarshipId) ?? null) : null
+      const scholarship2 = lead.scholarship2Id
+        ? (scholarships.find((s) => s.id === lead.scholarship2Id) ?? null)
+        : null
       const { folderUrl } = await triggerInvitationN8n({
         lead,
         docType,
         scholarship,
+        scholarship2Label: scholarship2?.label ?? '',
         inviteFolderUrl: lead.inviteFolderUrl,
       })
       if (folderUrl) {

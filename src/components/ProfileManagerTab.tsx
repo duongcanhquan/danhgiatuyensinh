@@ -3,7 +3,15 @@ import { useMasterData } from '../hooks/useMasterData'
 import { evaluateLead } from '../utils/scoring'
 import { PROFILE_SCORING_SAMPLE_LEAD, profileHasActiveRules } from '../utils/scoringProfileUtils'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
-import { canManagerEditScoringProfile } from '../utils/teamScope'
+import {
+  buildScoringProfileScopePayload,
+  canBuildScoringProfiles,
+  canEditScoringProfile,
+  filterManageableScoringProfiles,
+  isGlobalScoringProfile,
+  scoringProfileScopeLabel,
+} from '../utils/scoringProfileAccess'
+import { isAdminLikeRole } from '../auth/roleUtils'
 import { deleteDoc, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { ChevronRight, CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
@@ -41,6 +49,8 @@ function cloneProfile(p: ScoringProfile): Omit<ScoringProfile, 'createdAt' | 'up
     thresholds: { ...p.thresholds },
     isDefaultForImport: p.isDefaultForImport,
     createdBy: p.createdBy,
+    scope: p.scope,
+    scopeOwnerUid: p.scopeOwnerUid,
   }
 }
 
@@ -64,6 +74,7 @@ function ProfileEditorPanel({
   canCreateProfile,
   canSetDefaultImport,
   sessionUid,
+  directoryUsers,
 }: {
   db: Firestore
   profile: ScoringProfile
@@ -79,8 +90,9 @@ function ProfileEditorPanel({
   canCreateProfile: boolean
   /** Chỉ quản trị: đặt profile mặc định import (ảnh hưởng mọi profile khác). */
   canSetDefaultImport: boolean
-  /** UID đăng nhập — ghi `createdBy` khi TVV lưu profile cá nhân. */
+  /** UID đăng nhập — ghi phạm vi profile nhóm / global. */
   sessionUid: string | null
+  directoryUsers: readonly import('../types').VietMyUserProfile[]
   busy: boolean
   setBusy: (v: boolean) => void
   setSaveMsg: (v: string | null) => void
@@ -128,7 +140,7 @@ function ProfileEditorPanel({
   const saveProfile = useCallback(async () => {
     if (!canEditProfile) return
     if (!canSetDefaultImport && !sessionUid?.trim()) {
-      setSaveMsg('Không xác định được tài khoản — không thể lưu profile cá nhân.')
+      setSaveMsg('Không xác định được tài khoản — không thể lưu profile nhóm.')
       return
     }
     if (!draft.profileName.trim()) {
@@ -141,11 +153,10 @@ function ProfileEditorPanel({
       const t = Timestamp.now()
       const ref = doc(db, FS_COLLECTIONS.scoringProfiles, draft.id)
       const isDefaultForImport = canSetDefaultImport && Boolean(draft.isDefaultForImport)
-      const createdByPayload = canSetDefaultImport
-        ? draft.createdBy?.trim()
-          ? { createdBy: draft.createdBy.trim() }
-          : {}
-        : { createdBy: sessionUid!.trim() }
+      const scopePayload = buildScoringProfileScopePayload({
+        isAdminLike: canSetDefaultImport,
+        sessionUid,
+      })
       const payload = {
         profileName: draft.profileName.trim(),
         description: draft.description.trim(),
@@ -177,8 +188,10 @@ function ProfileEditorPanel({
           warmMinScore: Math.min(100, Math.max(0, draft.thresholds.warmMinScore)),
         },
         isDefaultForImport,
+        scope: scopePayload.scope,
+        scopeOwnerUid: scopePayload.scopeOwnerUid ?? null,
+        createdBy: scopePayload.createdBy ?? null,
         updatedAt: t,
-        ...createdByPayload,
       }
 
       const batch = writeBatch(db)
@@ -228,7 +241,9 @@ function ProfileEditorPanel({
     >
       {canCreateProfile && !canEditProfile ? (
         <p className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs leading-snug text-sky-950">
-          Đang xem profile toàn trường hoặc của đồng nghiệp — chỉ xem; vẫn chọn profile này trên màn hồ sơ để chấm điểm. Không lưu hay xóa tại đây.
+          {isGlobalScoringProfile(profile)
+            ? 'Profile toàn hệ thống — chỉ xem; chọn profile này trên màn Hồ sơ để chấm điểm. Chỉ quản trị mới chỉnh được.'
+            : 'Profile nhóm khác — chỉ xem và chọn khi chấm điểm. Không lưu hay xóa tại đây.'}
         </p>
       ) : null}
       <div className="shrink-0 border-b border-slate-200 bg-slate-50/60 px-3 py-2.5 sm:px-4">
@@ -311,7 +326,7 @@ function ProfileEditorPanel({
                     ) : null}
                     {profileList.map((p) => (
                       <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                        {profileSelectLabel(p, sessionUid)}
+                        {profileSelectLabel(p, directoryUsers)}
                       </option>
                     ))}
                   </select>
@@ -553,12 +568,13 @@ function ProfileEditorPanel({
   )
 }
 
-function profileSelectLabel(p: ScoringProfile, sessionUid: string | null) {
-  const base = `${p.profileName.trim() || '—'} · HOT≥${p.thresholds.hotMinScore} · WARM≥${p.thresholds.warmMinScore}${p.isDefaultForImport ? ' · Mặc định' : ''}`
-  if (!sessionUid) return base
-  if (p.createdBy === sessionUid) return `${base} · Của bạn`
-  if (!p.createdBy?.trim()) return `${base} · Toàn trường`
-  return `${base} · Người khác`
+function profileSelectLabel(
+  p: ScoringProfile,
+  directory: readonly import('../types').VietMyUserProfile[],
+) {
+  const scope = scoringProfileScopeLabel(p, directory)
+  const base = `${p.profileName.trim() || '—'} · ${scope} · HOT≥${p.thresholds.hotMinScore} · WARM≥${p.thresholds.warmMinScore}${p.isDefaultForImport ? ' · Mặc định' : ''}`
+  return base
 }
 
 export function ProfileManagerTab({ db }: { db: Firestore }) {
@@ -566,11 +582,16 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
   const { profiles, loading, error } = useScoringProfiles()
   const { ruleLibraryTemplates, error: templatesError } = useScoringRuleTemplates()
   const canManageAll = can('config:scoring_rules')
-  const canManageOwn = can('config:scoring_profiles_own')
   const canManageTeam = can('config:scoring_profiles_team')
-  const canAccessProfiles = canManageAll || canManageOwn || canManageTeam
+  const canAccessProfiles = canBuildScoringProfiles(can)
   const { users: directoryUsers } = useCounselorDirectory()
   const sessionUid = profile?.id ?? null
+  const isAdminLike = isAdminLikeRole(profile?.role)
+
+  const manageableProfiles = useMemo(
+    () => filterManageableScoringProfiles(profiles, profile, directoryUsers, can),
+    [profiles, profile, directoryUsers, can],
+  )
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -592,29 +613,25 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
   }, [workspaceFullscreen])
 
   const effectiveSelectedId = useMemo(() => {
-    if (!profiles.length) return null
-    if (selectedId && profiles.some((p) => p.id === selectedId)) return selectedId
-    return profiles[0].id
-  }, [profiles, selectedId])
+    if (!manageableProfiles.length) return null
+    if (selectedId && manageableProfiles.some((p) => p.id === selectedId)) return selectedId
+    return manageableProfiles[0].id
+  }, [manageableProfiles, selectedId])
 
   const selectedProfile = useMemo(
-    () => (effectiveSelectedId ? profiles.find((p) => p.id === effectiveSelectedId) ?? null : null),
-    [profiles, effectiveSelectedId],
+    () => (effectiveSelectedId ? manageableProfiles.find((p) => p.id === effectiveSelectedId) ?? null : null),
+    [manageableProfiles, effectiveSelectedId],
   )
 
   const canEditSelected = Boolean(
-    selectedProfile &&
-      (canManageAll ||
-        (canManageOwn && sessionUid && selectedProfile.createdBy === sessionUid) ||
-        (canManageTeam &&
-          profile &&
-          canManagerEditScoringProfile(profile, selectedProfile.createdBy, directoryUsers))),
+    selectedProfile && profile && canEditScoringProfile(selectedProfile, profile, directoryUsers, can),
   )
 
   const createProfile = useCallback(async () => {
     if (!canAccessProfiles) return
-    if (!canManageAll && !canManageTeam && !sessionUid?.trim()) {
-      setSaveMsg('Chưa xác định được tài khoản — không thể tạo profile cá nhân.')
+    if (!canManageAll && !canManageTeam) return
+    if (!canManageAll && !sessionUid?.trim()) {
+      setSaveMsg('Chưa xác định được tài khoản — không thể tạo profile nhóm.')
       return
     }
     setBusy(true)
@@ -622,22 +639,23 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
     try {
       const id = crypto.randomUUID()
       const t = Timestamp.now()
+      const scopePayload = buildScoringProfileScopePayload({
+        isAdminLike: Boolean(canManageAll || isAdminLike),
+        sessionUid,
+      })
       const payload = {
         ...emptyProfileDraft(),
+        ...scopePayload,
+        scopeOwnerUid: scopePayload.scopeOwnerUid ?? null,
         createdAt: t,
         updatedAt: t,
-        ...(sessionUid?.trim()
-          ? { createdBy: sessionUid.trim() }
-          : canManageAll
-            ? {}
-            : {}),
       }
       await setDoc(doc(db, FS_COLLECTIONS.scoringProfiles, id), payload)
       setSelectedId(id)
     } finally {
       setBusy(false)
     }
-  }, [db, canAccessProfiles, canManageAll, canManageTeam, sessionUid])
+  }, [db, canAccessProfiles, canManageAll, canManageTeam, isAdminLike, sessionUid])
 
   return (
     <section
@@ -658,14 +676,19 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
         ) : null}
         {!canAccessProfiles ? (
           <p className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
-            Bạn chỉ được xem — chưa có quyền tạo hay chỉnh bộ chấm điểm. Liên hệ quản trị nếu cần quyền TVV (profile riêng) hoặc quản trị toàn phần.
+            Tư vấn viên không tự xây profile — chọn bộ chấm điểm do quản trị hoặc trưởng nhóm cấp trên màn{' '}
+            <strong>Hồ sơ</strong>.
           </p>
         ) : null}
-        {canAccessProfiles && (canManageOwn || canManageTeam) && !canManageAll ? (
+        {canAccessProfiles && canManageTeam && !canManageAll ? (
           <p className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-snug text-sky-950">
-            Profile toàn trường hoặc của đồng nghiệp ngoài nhóm: chỉ xem và chọn khi chấm điểm. Bạn sửa được profile{' '}
-            <strong>do bạn tạo</strong>
-            {canManageTeam ? ' hoặc do TVV trong nhóm bạn quản lý' : ''} (nhãn «Của bạn» / TVV nhóm).
+            Profile <strong>toàn hệ thống</strong> (admin): xem và áp dụng cho nhóm bạn. Profile{' '}
+            <strong>nhóm</strong> do bạn tạo: TVV trong nhóm được chọn khi chấm điểm hồ sơ.
+          </p>
+        ) : null}
+        {canManageAll ? (
+          <p className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-snug text-emerald-950">
+            Profile admin lưu ở phạm vi <strong>toàn hệ thống</strong> — mọi TVV và trưởng nhóm đều xem và áp dụng được.
           </p>
         ) : null}
         {error ? (
@@ -740,7 +763,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 db={db}
                 profile={selectedProfile}
                 allProfiles={profiles}
-                profileList={profiles}
+                profileList={manageableProfiles}
                 profilesLoading={loading}
                 onSelectProfileId={(id) => {
                   setSelectedId(id)
@@ -759,6 +782,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                 setWorkspaceFullscreen={setWorkspaceFullscreen}
                 onCreateProfile={() => void createProfile()}
                 ruleTemplateExtras={ruleLibraryTemplates}
+                directoryUsers={directoryUsers}
               />
             )}
       </div>

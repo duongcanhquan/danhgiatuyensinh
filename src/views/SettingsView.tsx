@@ -51,11 +51,13 @@ import { StaffManagementView } from '../views/StaffManagementView'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
+import { ScholarshipSettingsTab } from '../components/ScholarshipSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 
 type SettingsTabId =
   | 'master'
   | 'lead_profile'
+  | 'scholarships'
   | 'rule_templates'
   | 'scoring'
   | 'scoring_profiles'
@@ -94,10 +96,20 @@ function settingsGuideBody(tab: SettingsTabId): ReactNode {
     case 'lead_profile':
       return (
         <>
-          <p className="font-semibold text-slate-900">Cài đặt hồ sơ</p>
+          <p className="font-semibold text-slate-900">Cài đặt hồ sơ — Nguồn</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Quản lý danh mục <strong>Nguồn</strong> (Nguồn 1 / Nguồn 2 trên form hồ sơ) và <strong>Học bổng</strong> (theo nhóm
-            PHCD / CDCQ). Có thể nạp danh sách mặc định rồi chỉnh sửa; TVV chọn giá trị khi tạo hoặc sửa hồ sơ.
+            Quản lý danh mục <strong>Nguồn</strong> (Nguồn 1 / Nguồn 2 trên form hồ sơ). Học bổng cấu hình ở tab{' '}
+            <strong>Cài đặt học bổng</strong>.
+          </p>
+        </>
+      )
+    case 'scholarships':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Cài đặt học bổng</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Bảng học bổng theo hệ PHCD / CDCQ: thời gian áp dụng, mức tiền, hình thức trừ học phí, đối tượng, số lượng
+            suất. Dùng «Đồng bộ bảng chuẩn» để cập nhật theo kế hoạch tuyển sinh.
           </p>
         </>
       )
@@ -267,6 +279,7 @@ function parseSettingsTab(raw: string | null): SettingsTabId | null {
   if (
     raw === 'master' ||
     raw === 'lead_profile' ||
+    raw === 'scholarships' ||
     raw === 'rule_templates' ||
     raw === 'scoring' ||
     raw === 'scoring_profiles' ||
@@ -470,7 +483,7 @@ export function SettingsView() {
 
   const tabDefs = useMemo(() => {
     const base: { id: SettingsTabId; label: string; enabled: boolean }[] = []
-    if (db && (canScoringRules || canScoringProfilesOwn || canScoringProfilesTeam)) {
+    if (db && (canScoringRules || canScoringProfilesTeam)) {
       base.push({ id: 'scoring_profiles', label: 'Cài đặt Profile', enabled: true })
     }
     if (db && canScoringRules) {
@@ -480,6 +493,7 @@ export function SettingsView() {
     if (db && canMaster) {
       base.push({ id: 'master', label: 'Cài đặt danh mục', enabled: true })
       base.push({ id: 'lead_profile', label: 'Cài đặt hồ sơ', enabled: true })
+      base.push({ id: 'scholarships', label: 'Cài đặt học bổng', enabled: true })
     }
     if (db && canScoringRules) base.push({ id: 'rule_templates', label: 'Quy tắc mẫu', enabled: true })
     if (db && canPlaybooks) base.push({ id: 'consulting', label: 'Thông tin T.Vấn', enabled: true })
@@ -922,6 +936,12 @@ export function SettingsView() {
       {db && activeTab === 'lead_profile' ? (
         <div role="tabpanel" aria-label="Cài đặt hồ sơ" className="min-w-0 max-w-full">
           <LeadProfileSettingsTab db={db} canEdit={canMaster} />
+        </div>
+      ) : null}
+
+      {db && activeTab === 'scholarships' ? (
+        <div role="tabpanel" aria-label="Cài đặt học bổng" className="min-w-0 max-w-full">
+          <ScholarshipSettingsTab db={db} canEdit={canMaster} />
         </div>
       ) : null}
 
