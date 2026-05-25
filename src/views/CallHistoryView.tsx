@@ -125,7 +125,7 @@ function CallRow({
   )
 }
 
-export function CallHistoryView() {
+export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
   const { can, profile, firebaseUser } = useAuth()
   const [searchParams] = useSearchParams()
   const { users, counselors } = useCounselorDirectory()
@@ -258,9 +258,13 @@ export function CallHistoryView() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Lịch sử cuộc gọi OMICall
-          </VietMyAccentHeading>
+          {!embedded ? (
+            <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+              Lịch sử cuộc gọi OMICall
+            </VietMyAccentHeading>
+          ) : (
+            <p className="text-sm font-semibold text-slate-800">Lịch sử cuộc gọi</p>
+          )}
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             Dữ liệu từ webhook + đồng bộ API{' '}
             <code className="rounded bg-slate-100 px-1 text-xs">/api/v3/call-transaction/search</code> — gắn TVV qua

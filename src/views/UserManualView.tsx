@@ -344,7 +344,7 @@ function sectionsData(): Section[] {
           </p>
           <p className={p}>
             Chỉnh ngưỡng:{' '}
-            <Link to="/settings?tab=kpi_permissions&sub=kpi" className="font-semibold text-sky-800 underline">
+            <Link to="/settings?tab=people&sub=kpi" className="font-semibold text-sky-800 underline">
               Cài đặt → KPI Sale
             </Link>
             . Đồng bộ server ~15 phút sau khi lưu.

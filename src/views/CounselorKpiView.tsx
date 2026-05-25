@@ -51,7 +51,7 @@ function StatCard({
   )
 }
 
-export function CounselorKpiView() {
+export function CounselorKpiView({ embedded = false }: { embedded?: boolean }) {
   const { profile, can } = useAuth()
   const { runtime } = useKpiEvaluationRules()
   const [range, setRange] = useState<KpiRangePreset>('7d')
@@ -97,16 +97,20 @@ export function CounselorKpiView() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            KPI tư vấn &amp; cuộc gọi
-          </VietMyAccentHeading>
+          {!embedded ? (
+            <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+              KPI tư vấn &amp; cuộc gọi
+            </VietMyAccentHeading>
+          ) : (
+            <p className="text-sm font-semibold text-slate-800">KPI &amp; nhân sự theo kỳ</p>
+          )}
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
             Tổng hợp từ OMICall webhook/API và thao tác trên CRM. Dữ liệu cuộc gọi đầy đủ sẽ xuất hiện sau khi Cloud
             Functions đồng bộ `omicallCalls` và `kpiDaily`. {validCallRuleHint(runtime)}.
             {can('config:scoring_rules') ? (
               <>
                 {' '}
-                <Link to="/settings?tab=kpi_permissions&sub=kpi" className="font-semibold text-sky-800 underline">
+                <Link to="/settings?tab=people&sub=kpi" className="font-semibold text-sky-800 underline">
                   Cài đặt KPI
                 </Link>
               </>
@@ -169,7 +173,7 @@ export function CounselorKpiView() {
       {showCommandHint ? (
         <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
           Xem hôm nay theo từng TVV và cảnh báo spam tại{' '}
-          <Link to="/command" className="font-semibold underline">
+          <Link to="/?tab=van-hanh" className="font-semibold underline">
             Điều hành Sale
           </Link>
           .

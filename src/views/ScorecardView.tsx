@@ -35,7 +35,7 @@ function PillarCell({ score, weight }: { score: number; weight: number }) {
   )
 }
 
-export function ScorecardView() {
+export function ScorecardView({ embedded = false }: { embedded?: boolean }) {
   const { can, profile } = useAuth()
   const { runtime } = useKpiEvaluationRules()
   const tierLabels = useMemo(() => getBonusTierLabels(runtime), [runtime])
@@ -101,9 +101,13 @@ export function ScorecardView() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Bảng điểm &amp; thưởng tháng
-          </VietMyAccentHeading>
+          {!embedded ? (
+            <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+              Bảng điểm &amp; thưởng tháng
+            </VietMyAccentHeading>
+          ) : (
+            <p className="text-sm font-semibold text-slate-800">Bảng điểm &amp; thưởng theo tháng</p>
+          )}
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             KPI tổng hợp: Gọi {w.call}% · Chuyển đổi {w.conversion}% · Tuân thủ {w.compliance}% · NB/NE{' '}
             {w.enrollment}%. Hạng Vàng/Bạc/Đồng tính theo doanh thu duyệt (Cloud Functions).

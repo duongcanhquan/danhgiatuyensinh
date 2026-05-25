@@ -94,7 +94,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
         const n = new URLSearchParams(prev)
 
-        n.set('tab', 'system')
+        n.set('tab', 'data')
         n.set('sub', 'lead_profile')
 
         n.set('profileSub', id)

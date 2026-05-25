@@ -4,8 +4,7 @@ import { AuthProvider } from './contexts/AuthProvider'
 import { OmicallProvider } from './contexts/OmicallProvider'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { DataIntake } from './components/DataIntake'
-import { DashboardView } from './views/DashboardView'
+import { SummaryHubView } from './views/SummaryHubView'
 import { LeadsWorkspace } from './views/LeadsWorkspace'
 import { LoginView } from './views/LoginView'
 import { SettingsView } from './views/SettingsView'
@@ -17,11 +16,7 @@ import { AccountantStaffView } from './views/accountant/AccountantStaffView'
 import { AccountantReportsView } from './views/accountant/AccountantReportsView'
 import { AccountantLayout } from './components/accountant/AccountantLayout'
 import { AccountantProtectedRoute } from './components/accountant/AccountantProtectedRoute'
-import { CounselorKpiView } from './views/CounselorKpiView'
-import { CommandCenterView } from './views/CommandCenterView'
 import { MyDayView } from './views/MyDayView'
-import { ScorecardView } from './views/ScorecardView'
-import { CallHistoryView } from './views/CallHistoryView'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -31,8 +26,8 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <AuthProvider>
-        <OmicallProvider>
         <BrowserRouter basename={basename}>
+          <OmicallProvider>
           <Routes>
             <Route path="/ke-toan/login" element={<AccountantLoginView />} />
             <Route element={<AccountantProtectedRoute />}>
@@ -45,18 +40,18 @@ export default function App() {
             <Route path="/login" element={<LoginView />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
-                <Route index element={<DashboardView />} />
+                <Route index element={<SummaryHubView />} />
                 <Route path="leads" element={<LeadsWorkspace />} />
                 <Route path="counselor" element={<Navigate to="/leads" replace />} />
-                <Route path="import" element={<DataIntake />} />
+                <Route path="import" element={<Navigate to="/settings?tab=data&sub=intake" replace />} />
                 <Route path="analytics" element={<AnalyticsAdvancedView />} />
-                <Route path="kpi" element={<CounselorKpiView />} />
-                <Route path="command" element={<CommandCenterView />} />
+                <Route path="kpi" element={<Navigate to="/?tab=kpi-nhan-su" replace />} />
+                <Route path="command" element={<Navigate to="/?tab=van-hanh" replace />} />
                 <Route path="my-day" element={<MyDayView />} />
-                <Route path="scorecard" element={<ScorecardView />} />
-                <Route path="call-history" element={<CallHistoryView />} />
-                <Route path="ai" element={<Navigate to="/settings?tab=knowledge_advisory&sub=llm" replace />} />
-                <Route path="staff" element={<Navigate to="/settings?tab=kpi_permissions&sub=staff" replace />} />
+                <Route path="scorecard" element={<Navigate to="/?tab=bang-diem" replace />} />
+                <Route path="call-history" element={<Navigate to="/?tab=lich-goi" replace />} />
+                <Route path="ai" element={<Navigate to="/settings?tab=connect&sub=llm" replace />} />
+                <Route path="staff" element={<Navigate to="/settings?tab=people&sub=staff" replace />} />
                 <Route path="accountant" element={<Navigate to="/ke-toan" replace />} />
                 <Route path="settings" element={<SettingsView />} />
                 <Route path="huong-dan" element={<UserManualView />} />
@@ -64,8 +59,8 @@ export default function App() {
               </Route>
             </Route>
           </Routes>
+          </OmicallProvider>
         </BrowserRouter>
-        </OmicallProvider>
       </AuthProvider>
     </AppErrorBoundary>
   )

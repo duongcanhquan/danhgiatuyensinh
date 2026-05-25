@@ -2,17 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
-  Activity,
   BarChart3,
-  BookOpen,
   CalendarDays,
-  ClipboardList,
-  Database,
   LayoutDashboard,
   LineChart,
   LogOut,
   Menu,
-  PhoneCall,
   Settings2,
   User,
   Users,
@@ -26,7 +21,7 @@ import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 
-type NavGroup = 'overview' | 'kpi' | 'admin'
+type NavGroup = 'work' | 'more'
 
 type NavDef = {
   to: string
@@ -38,12 +33,11 @@ type NavDef = {
 }
 
 const GROUP_LABELS: Record<NavGroup, string> = {
-  overview: 'Tổng quan',
-  kpi: 'KPI & cuộc gọi',
-  admin: 'Quản trị',
+  work: 'Làm việc',
+  more: 'Thêm',
 }
 
-const GROUP_ORDER: NavGroup[] = ['overview', 'kpi', 'admin']
+const GROUP_ORDER: NavGroup[] = ['work', 'more']
 
 function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: readonly Permission[]) {
   if (item.to === '/settings') return canAccessSettingsPage(permissions)
@@ -52,29 +46,11 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: 
 }
 
 const mainNav: NavDef[] = [
-  { to: '/', label: 'Tổng kết', icon: LayoutDashboard, group: 'overview' },
-  { to: '/leads', label: 'Hồ sơ', icon: Users, group: 'overview' },
-  { to: '/my-day', label: 'Ngày của tôi', icon: CalendarDays, group: 'overview', perm: 'dashboard:counselor' },
-  {
-    to: '/kpi',
-    label: 'KPI kỳ',
-    icon: Activity,
-    group: 'kpi',
-    show: (can) => can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead'),
-  },
-  {
-    to: '/call-history',
-    label: 'Lịch sử gọi',
-    icon: PhoneCall,
-    group: 'kpi',
-    show: (can) => can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead'),
-  },
-  { to: '/scorecard', label: 'Bảng điểm tháng', icon: ClipboardList, group: 'kpi', perm: 'analytics:advanced' },
-  { to: '/command', label: 'Điều hành', icon: BarChart3, group: 'kpi', perm: 'analytics:advanced' },
-  { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, group: 'kpi', perm: 'analytics:advanced' },
-  { to: '/import', label: 'Nhập liệu', icon: Database, group: 'admin', perm: 'data:intake' },
-  { to: '/settings', label: 'Cài đặt', icon: Settings2, group: 'admin' },
-  { to: '/huong-dan', label: 'Hướng dẫn', icon: BookOpen, group: 'admin' },
+  { to: '/', label: 'Tổng kết', icon: LayoutDashboard, group: 'work' },
+  { to: '/leads', label: 'Hồ sơ', icon: Users, group: 'work' },
+  { to: '/my-day', label: 'Ngày của tôi', icon: CalendarDays, group: 'work', perm: 'dashboard:counselor' },
+  { to: '/analytics', label: 'Phân tích nâng cao', icon: LineChart, group: 'more', perm: 'analytics:advanced' },
+  { to: '/settings', label: 'Cài đặt', icon: Settings2, group: 'more' },
 ]
 
 function sidebarLinkClass(isActive: boolean) {

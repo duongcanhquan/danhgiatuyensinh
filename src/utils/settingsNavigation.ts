@@ -1,7 +1,9 @@
-export type SettingsMainTabId = 'catalog_profile' | 'knowledge_advisory' | 'kpi_permissions' | 'system'
+export type SettingsMainTabId = 'data' | 'rules' | 'people' | 'connect'
 
 export type SettingsSubTabId =
+  | 'intake'
   | 'master'
+  | 'lead_profile'
   | 'scoring_profiles'
   | 'scoring'
   | 'rule_templates'
@@ -11,63 +13,65 @@ export type SettingsSubTabId =
   | 'kpi'
   | 'staff'
   | 'permissions'
-  | 'lead_profile'
   | 'omicall'
 
-export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = [
-  'catalog_profile',
-  'knowledge_advisory',
-  'kpi_permissions',
-  'system',
-]
+export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = ['data', 'rules', 'people', 'connect']
 
 export const SETTINGS_MAIN_LABELS: Record<SettingsMainTabId, string> = {
-  catalog_profile: 'Danh mục & Profile',
-  knowledge_advisory: 'Kiến thức Tư vấn',
-  kpi_permissions: 'KPI & Phân quyền',
-  system: 'Cài đặt hệ thống',
+  data: 'Dữ liệu',
+  rules: 'Chấm điểm',
+  people: 'KPI & Nhân sự',
+  connect: 'Tích hợp',
 }
 
 export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
-  master: 'Cài đặt danh mục',
-  scoring_profiles: 'Cài đặt Profile',
+  intake: 'Nhập liệu',
+  master: 'Danh mục chung',
+  lead_profile: 'Hồ sơ tuyển sinh',
+  scoring_profiles: 'Profile chấm điểm',
   scoring: 'Điểm thông tin',
   rule_templates: 'Quy tắc mẫu',
   consulting: 'Thông tin tư vấn',
   knowledge: 'Tri thức tuyển sinh',
-  llm: 'LLM & Tư vấn AI',
-  kpi: 'KPI Sale',
+  llm: 'AI & LLM',
+  kpi: 'Quy tắc KPI',
   staff: 'Quản lý nhân sự',
   permissions: 'Phân quyền',
-  lead_profile: 'Hồ sơ & danh mục tuyển sinh',
-  omicall: 'Gọi điện (OMICall)',
+  omicall: 'Gọi điện',
 }
 
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
-  catalog_profile: ['master', 'scoring_profiles', 'scoring', 'rule_templates'],
-  knowledge_advisory: ['consulting', 'knowledge', 'llm'],
-  kpi_permissions: ['kpi', 'staff', 'permissions'],
-  system: ['lead_profile', 'omicall'],
+  data: ['intake', 'master', 'lead_profile'],
+  rules: ['scoring_profiles', 'scoring', 'rule_templates'],
+  people: ['kpi', 'staff', 'permissions'],
+  connect: ['consulting', 'knowledge', 'llm', 'omicall'],
 }
 
 const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: SettingsSubTabId }>> = {
-  master: { main: 'catalog_profile', sub: 'master' },
-  scoring_profiles: { main: 'catalog_profile', sub: 'scoring_profiles' },
-  scoring: { main: 'catalog_profile', sub: 'scoring' },
-  rule_templates: { main: 'catalog_profile', sub: 'rule_templates' },
-  consulting: { main: 'knowledge_advisory', sub: 'consulting' },
-  knowledge: { main: 'knowledge_advisory', sub: 'knowledge' },
-  llm: { main: 'knowledge_advisory', sub: 'llm' },
-  ai_lab: { main: 'knowledge_advisory', sub: 'llm' },
-  kpi: { main: 'kpi_permissions', sub: 'kpi' },
-  staff: { main: 'kpi_permissions', sub: 'staff' },
-  permissions: { main: 'kpi_permissions', sub: 'permissions' },
-  lead_profile: { main: 'system', sub: 'lead_profile' },
-  scholarships: { main: 'system', sub: 'lead_profile' },
-  omicall: { main: 'system', sub: 'omicall' },
+  import: { main: 'data', sub: 'intake' },
+  intake: { main: 'data', sub: 'intake' },
+  master: { main: 'data', sub: 'master' },
+  lead_profile: { main: 'data', sub: 'lead_profile' },
+  scholarships: { main: 'data', sub: 'lead_profile' },
+  catalog_profile: { main: 'data', sub: 'master' },
+  scoring_profiles: { main: 'rules', sub: 'scoring_profiles' },
+  scoring: { main: 'rules', sub: 'scoring' },
+  rule_templates: { main: 'rules', sub: 'rule_templates' },
+  consulting: { main: 'connect', sub: 'consulting' },
+  knowledge: { main: 'connect', sub: 'knowledge' },
+  llm: { main: 'connect', sub: 'llm' },
+  ai_lab: { main: 'connect', sub: 'llm' },
+  kpi: { main: 'people', sub: 'kpi' },
+  staff: { main: 'people', sub: 'staff' },
+  permissions: { main: 'people', sub: 'permissions' },
+  kpi_permissions: { main: 'people', sub: 'kpi' },
+  knowledge_advisory: { main: 'connect', sub: 'consulting' },
+  system: { main: 'connect', sub: 'omicall' },
+  omicall: { main: 'connect', sub: 'omicall' },
 }
 
 export type SettingsAccessContext = {
+  canIntake: boolean
   canMaster: boolean
   canScoringRules: boolean
   canScoringProfilesTeam: boolean
@@ -81,6 +85,8 @@ export type SettingsAccessContext = {
 
 export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessContext): boolean {
   switch (sub) {
+    case 'intake':
+      return ctx.canIntake
     case 'master':
     case 'lead_profile':
       return ctx.canMaster
@@ -120,8 +126,8 @@ export function resolveSettingsRoute(
   ctx: SettingsAccessContext,
 ): { main: SettingsMainTabId; sub: SettingsSubTabId } {
   const mains = enabledMainTabs(ctx)
-  const fallbackMain = mains[0] ?? 'catalog_profile'
-  const fallbackSub = enabledSubsForMain(fallbackMain, ctx)[0] ?? 'master'
+  const fallbackMain = mains[0] ?? 'data'
+  const fallbackSub = enabledSubsForMain(fallbackMain, ctx)[0] ?? 'intake'
 
   if (tabParam && (SETTINGS_MAIN_TAB_ORDER as string[]).includes(tabParam)) {
     const main = tabParam as SettingsMainTabId

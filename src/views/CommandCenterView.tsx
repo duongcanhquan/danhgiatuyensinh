@@ -28,7 +28,7 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
   )
 }
 
-export function CommandCenterView() {
+export function CommandCenterView({ embedded = false }: { embedded?: boolean }) {
   const { can, profile } = useAuth()
   const { runtime } = useKpiEvaluationRules()
   const hlHint = validCallRuleHint(runtime)
@@ -71,9 +71,13 @@ export function CommandCenterView() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-            Trung tâm điều hành Sale
-          </VietMyAccentHeading>
+          {!embedded ? (
+            <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+              Trung tâm điều hành Sale
+            </VietMyAccentHeading>
+          ) : (
+            <p className="text-sm font-semibold text-slate-800">Vận hành &amp; KPI trong ngày</p>
+          )}
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
             Báo cáo theo ngày từ OMICall và CRM — dùng cho họp sáng/chiều. Dữ liệu lấy từ{' '}
             <code className="rounded bg-slate-100 px-1 text-xs">kpiDaily</code> (Cloud Functions đồng bộ).

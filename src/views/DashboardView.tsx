@@ -76,11 +76,12 @@ function formatMonth(d: Date): string {
   return d.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' })
 }
 
-export function DashboardView() {
+export function DashboardView({ embedded = false }: { embedded?: boolean }) {
   const { profile, can } = useAuth()
   const isAdmin = isAdminLikeRole(profile?.role)
   const showPersonnelTab =
-    can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead')
+    !embedded &&
+    (can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead'))
   const [summaryTab, setSummaryTab] = useState<'personnel' | 'pipeline'>(
     showPersonnelTab ? 'personnel' : 'pipeline',
   )
@@ -209,9 +210,13 @@ export function DashboardView() {
       />
 
       <header className="relative">
-        <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-          Tổng kết
-        </VietMyAccentHeading>
+        {!embedded ? (
+          <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
+            Tổng kết
+          </VietMyAccentHeading>
+        ) : (
+          <p className="text-sm font-semibold text-slate-800">Số liệu hồ sơ &amp; pipeline tuyển sinh</p>
+        )}
         {showPersonnelTab ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <button

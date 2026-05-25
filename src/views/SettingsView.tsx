@@ -52,6 +52,7 @@ import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
+import { DataIntake } from '../components/DataIntake'
 import {
   enabledMainTabs,
   enabledSubsForMain,
@@ -88,6 +89,15 @@ const settingsHeading = 'text-sm font-semibold leading-relaxed tracking-tight te
 
 function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): ReactNode {
   switch (sub) {
+    case 'intake':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Nhập liệu hồ sơ</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Tải Excel/CSV, xem trước, gán TVV và đẩy vào hệ thống. Sau khi nhập, xem hồ sơ tại menu <strong>Hồ sơ</strong>.
+          </p>
+        </>
+      )
     case 'lead_profile':
       return (
         <>
@@ -95,7 +105,7 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Tab con: <strong>Nguồn</strong>, <strong>Học bổng</strong>, <strong>Hệ đào tạo</strong>,{' '}
             <strong>Chuyên ngành</strong>, <strong>Địa lý &amp; THPT</strong>, <strong>Học tập khác</strong>. OMICall
-            cấu hình ở tab <strong>Gọi điện</strong> cùng nhóm «Cài đặt hệ thống».
+            Gọi điện OMICall: tab <strong>Gọi điện</strong> trong nhóm <strong>Tích hợp</strong>.
           </p>
         </>
       )
@@ -346,6 +356,7 @@ export function SettingsView() {
     }
   }
 
+  const canIntake = can('data:intake')
   const canMaster = can('config:master_data')
   const canScoringRules = can('config:scoring_rules')
   const canScoringProfilesOwn = can('config:scoring_profiles_own')
@@ -357,6 +368,7 @@ export function SettingsView() {
   const canStaffTeam = can('config:users:team')
   const canPermMatrix = canViewPermissionMatrix(permissions)
   const settingsAccess =
+    canIntake ||
     canMaster ||
     canScoringRules ||
     canScoringProfilesOwn ||
@@ -448,6 +460,7 @@ export function SettingsView() {
 
   const settingsAccessCtx = useMemo(
     (): SettingsAccessContext => ({
+      canIntake,
       canMaster,
       canScoringRules,
       canScoringProfilesTeam,
@@ -459,6 +472,7 @@ export function SettingsView() {
       canPermMatrix,
     }),
     [
+      canIntake,
       canMaster,
       canScoringRules,
       canScoringProfilesTeam,
@@ -478,7 +492,7 @@ export function SettingsView() {
 
   const route = useMemo(() => {
     if (db && editSnippetParam) {
-      return { main: 'knowledge_advisory' as SettingsMainTabId, sub: 'consulting' as SettingsSubTabId }
+      return { main: 'connect' as SettingsMainTabId, sub: 'consulting' as SettingsSubTabId }
     }
     return resolveSettingsRoute(tabParam, subParam, settingsAccessCtx)
   }, [db, editSnippetParam, tabParam, subParam, settingsAccessCtx])
@@ -514,7 +528,7 @@ export function SettingsView() {
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
-          n.set('tab', 'system')
+          n.set('tab', 'data')
           n.set('sub', 'lead_profile')
           n.set('profileSub', 'scholarships')
           return n
@@ -523,11 +537,11 @@ export function SettingsView() {
       )
       return
     }
-    if (editSnippetParam && (tabParam !== 'knowledge_advisory' || subParam !== 'consulting')) {
+    if (editSnippetParam && (tabParam !== 'connect' || subParam !== 'consulting')) {
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
-          n.set('tab', 'knowledge_advisory')
+          n.set('tab', 'connect')
           n.set('sub', 'consulting')
           return n
         },
@@ -551,7 +565,7 @@ export function SettingsView() {
         (prev) => {
           const n = new URLSearchParams(prev)
           n.delete('scoringSub')
-          n.set('tab', 'catalog_profile')
+          n.set('tab', 'rules')
           n.set('sub', scoringSubLegacy === 'profile' ? 'scoring_profiles' : 'scoring')
           return n
         },
@@ -771,6 +785,15 @@ export function SettingsView() {
               <CircleHelp className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
             </button>
           </div>
+        </div>
+      ) : null}
+
+      {activeSubTab === 'intake' && canIntake ? (
+        <div role="tabpanel" aria-labelledby="tab-intake" className="space-y-3">
+          <h2 id="tab-intake" className="sr-only">
+            Nhập liệu
+          </h2>
+          <DataIntake />
         </div>
       ) : null}
 
