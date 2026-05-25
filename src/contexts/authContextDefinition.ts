@@ -16,6 +16,10 @@ export type AuthContextValue = AuthState & {
     displayName: string
     role: UserRole
     managedCounselorIds?: string[]
+    omicallSipUser?: string
+    omicallSipPassword?: string
+    omicallAgentId?: string
+    omicallOutboundNumber?: string
   }) => Promise<void>
   /**
    * Admin: cập nhật `users/{userId}` (tên, vai trò, hoạt động).

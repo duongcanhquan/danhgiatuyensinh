@@ -32,7 +32,14 @@ import {
   fetchInternalPhoneList,
   fetchAllInternalPhones,
 } from './omicallCallCenterApi.js'
-import { normalizePhoneLocal, normalizeHotlineNumber, phoneLookupVariants } from './omicallPhone.js'
+import { omicallClick2Call as postOmicallClick2Call } from './omicallClick2CallApi.js'
+import { registerOmicallCallWebhook } from './omicallWebhookApi.js'
+import {
+  normalizePhoneLocal,
+  normalizePhoneIntl,
+  normalizeHotlineNumber,
+  phoneLookupVariants,
+} from './omicallPhone.js'
 
 const app = initializeApp()
 setGlobalOptions({ region: 'asia-southeast1', maxInstances: 10 })
@@ -57,6 +64,7 @@ const COLLECTIONS = {
   kpiActivityEvents: 'kpiActivityEvents',
   kpiFinanceEvents: 'kpiFinanceEvents',
   omicallSyncRuns: 'omicallSyncRuns',
+  omicallPendingCalls: 'omicallPendingCalls',
 } as const
 
 type CallOutcome = 'CONNECTED' | 'NO_ANSWER' | 'OTHER'
@@ -117,11 +125,14 @@ async function loadOmicallServerConfig() {
   const data = snap.exists ? snap.data() ?? {} : {}
   const apiVersion = str(data.historyApiVersion) === 'v2' ? 'v2' : 'v3'
   return {
+    enabled: data.enabled === true,
     apiKey: str(data.apiKey),
     apiBaseUrl: str(data.apiBaseUrl),
     webhookSecret: str(data.webhookSecret),
+    click2callEnabled: data.click2callEnabled !== false,
     sipRealm: str(data.sipRealm),
     defaultOutboundNumber: str(data.defaultOutboundNumber),
+    dialFormat: data.dialFormat === 'local' ? ('local' as const) : ('intl84' as const),
     historySyncEnabled: data.historySyncEnabled !== false,
     historyLookbackMinutes: Math.max(15, Math.min(4320, Math.round(num(data.historyLookbackMinutes) || 180))),
     historyMaxPages: Math.max(1, Math.min(100, Math.round(num(data.historyMaxPages) || 20))),
@@ -288,6 +299,17 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
   const counselorUid = bySip?.uid || byAgent?.uid
 
   let leadId: string | undefined = call.userDataLeadId
+  if (!leadId) {
+    const pendingId = call.callUuid || call.transactionId
+    if (pendingId) {
+      const pendingSnap = await fs.collection(COLLECTIONS.omicallPendingCalls).doc(pendingId).get()
+      if (pendingSnap.exists) {
+        const p = pendingSnap.data() ?? {}
+        const pendingLeadId = str(p.leadId)
+        if (pendingLeadId) leadId = pendingLeadId
+      }
+    }
+  }
   if (leadId) {
     const leadSnap = await fs.collection(COLLECTIONS.leads).doc(leadId).get()
     if (leadSnap.exists) {
@@ -1208,6 +1230,124 @@ export const omicallResolveCallContext = onCall(
       realmMatch: !sipRealmFromApi || !sipRealmConfigured || sipRealmFromApi === sipRealmConfigured,
       extensionEmail: detail?.email || str(user.email).toLowerCase(),
     }
+  },
+)
+
+async function resolveTvExtensionAndHotline(
+  user: Record<string, unknown>,
+  serverConfig: Awaited<ReturnType<typeof loadOmicallServerConfig>>,
+  apiKey: string,
+  baseUrl: string,
+): Promise<{ extension: string; hotline: string }> {
+  let extension = str(user.omicallSipUser)
+  if (!extension) {
+    const email = str(user.email).toLowerCase()
+    if (email) {
+      const detail = await fetchExtensionDetail(baseUrl, apiKey, 'user_email', email)
+      extension = detail?.sipUser || ''
+    }
+  }
+  if (!extension) {
+    throw new HttpsError(
+      'failed-precondition',
+      'TVV chưa có số nội bộ — nhập trong Quản lý nhân sự hoặc chạy «Đồng bộ số nội bộ».',
+    )
+  }
+  const hotlines = await fetchHotlineListForExtension(baseUrl, apiKey, extension)
+  const hotline =
+    normalizeHotlineNumber(user.omicallOutboundNumber) ||
+    normalizeHotlineNumber(serverConfig.defaultOutboundNumber) ||
+    (hotlines[0] ? normalizeHotlineNumber(hotlines[0]) : '')
+  if (!hotline) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Chưa có đầu số gọi ra — gán trên hồ sơ TVV hoặc Cài đặt → Gọi điện.',
+    )
+  }
+  return { extension, hotline }
+}
+
+/** Click-to-call: đổ chuông số nội bộ TVV → nhấc máy → gọi ra SĐT khách (không cần SIP trên trình duyệt). */
+export const omicallClick2Call = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    const uid = request.auth.uid
+    const userSnap = await db.collection(COLLECTIONS.users).doc(uid).get()
+    if (!userSnap.exists) throw new HttpsError('not-found', 'Không tìm thấy hồ sơ user.')
+    const user = userSnap.data() ?? {}
+    const serverConfig = await loadOmicallServerConfig()
+    if (!serverConfig.enabled) {
+      throw new HttpsError('failed-precondition', 'Tích hợp OMICall chưa bật trong Cài đặt.')
+    }
+    if (serverConfig.click2callEnabled === false) {
+      throw new HttpsError('failed-precondition', 'Click-to-call API đang tắt trong Cài đặt.')
+    }
+    const { apiKey, baseUrl } = await requireOmicallApiCreds()
+    const leadId = str(request.data?.leadId)
+    const phoneRaw = str(request.data?.phone)
+    const target = str(request.data?.target)
+    if (!phoneRaw) throw new HttpsError('invalid-argument', 'Thiếu số điện thoại khách.')
+    const dialFormat = serverConfig.dialFormat === 'local' ? 'local' : 'intl84'
+    const phoneNumber =
+      dialFormat === 'local' ? normalizePhoneLocal(phoneRaw) : normalizePhoneIntl(phoneRaw) || ''
+    if (!phoneNumber || (dialFormat === 'local' && phoneNumber.length < 10)) {
+      throw new HttpsError('invalid-argument', 'Số điện thoại không hợp lệ.')
+    }
+    const { extension, hotline } = await resolveTvExtensionAndHotline(user, serverConfig, apiKey, baseUrl)
+    const result = await postOmicallClick2Call(baseUrl, apiKey, { extension, hotline, phoneNumber })
+    const now = Timestamp.now()
+    const expiresAt = Timestamp.fromMillis(now.toMillis() + 2 * 60 * 60 * 1000)
+    await db
+      .collection(COLLECTIONS.omicallPendingCalls)
+      .doc(result.callUuid)
+      .set({
+        callUuid: result.callUuid,
+        leadId: leadId || null,
+        target: target || null,
+        phone: phoneNumber,
+        extension,
+        hotline,
+        counselorUid: uid,
+        createdAt: now,
+        expiresAt,
+      })
+    return {
+      ok: true,
+      callUuid: result.callUuid,
+      extension,
+      hotline,
+      phoneNumber,
+      hint: `Đang gọi ${phoneNumber} — máy lẻ ${extension} sẽ đổ chuông trước, nhấc máy rồi mới nối ra khách.`,
+    }
+  },
+)
+
+function omicallWebhookUrlForProject(projectId: string, webhookSecret: string): string {
+  const secret = encodeURIComponent(webhookSecret.trim())
+  return `https://asia-southeast1-${projectId.trim()}.cloudfunctions.net/omicallCallWebhook?secret=${secret}`
+}
+
+/** Đăng ký webhook cuộc gọi trên OMICall (một lần sau khi lưu API key + webhook secret). */
+export const omicallRegisterWebhook = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    const callerSnap = await db.collection(COLLECTIONS.users).doc(request.auth.uid).get()
+    const role = str(callerSnap.data()?.role)
+    if (role !== 'admin' && role !== 'super_admin') {
+      throw new HttpsError('permission-denied', 'Chỉ quản trị mới đăng ký webhook.')
+    }
+    const { apiKey, baseUrl, serverConfig } = await requireOmicallApiCreds()
+    const webhookSecret = str(serverConfig.webhookSecret)
+    if (!webhookSecret) {
+      throw new HttpsError('failed-precondition', 'Chưa có mã webhook — lưu cấu hình trước.')
+    }
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || ''
+    if (!projectId) throw new HttpsError('internal', 'Không xác định được Firebase project ID.')
+    const webhookUrl = omicallWebhookUrlForProject(projectId, webhookSecret)
+    const result = await registerOmicallCallWebhook(baseUrl, apiKey, webhookUrl)
+    return { ok: true, webhookUrl, message: result.message }
   },
 )
 

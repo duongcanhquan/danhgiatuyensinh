@@ -29,6 +29,8 @@ export function getDefaultOmicallConfig(): OmicallIntegrationConfig {
     historySyncEnabled: true,
     historyLookbackMinutes: 180,
     historyMaxPages: 20,
+    click2callEnabled: true,
+    apiBaseUrl: 'https://public-v1.omicall.com',
   }
 }
 
@@ -58,6 +60,7 @@ export function parseOmicallConfigDoc(raw: Record<string, unknown> | null | unde
     dialFormat: raw.dialFormat === 'local' ? 'local' : 'intl84',
     defaultOutboundNumber: String(raw.defaultOutboundNumber ?? '').trim() || undefined,
     callMode: raw.callMode === 'deskPhone' ? 'deskPhone' : 'browser',
+    click2callEnabled: raw.click2callEnabled !== false,
     historyApiVersion: raw.historyApiVersion === 'v2' ? 'v2' : 'v3',
     historySyncEnabled: raw.historySyncEnabled !== false,
     historyLookbackMinutes:
@@ -90,6 +93,18 @@ export function resolveOmicallSipCredentials(
 }
 
 /** Đầu số gọi ra: TVV → cấu hình trường → public_number từ sync. */
+/** TVV có đủ số nội bộ + đầu số để gọi click-to-call API (không cần SIP trên trình duyệt). */
+export function canUseOmicallClick2Call(
+  config: OmicallIntegrationConfig,
+  profile: Pick<VietMyUserProfile, 'omicallSipUser' | 'omicallOutboundNumber'> | null | undefined,
+  hotlineFallback?: string | null,
+): boolean {
+  if (!config.enabled || config.click2callEnabled === false) return false
+  const extension = (profile?.omicallSipUser ?? config.defaultSipUser ?? '').trim()
+  if (!extension) return false
+  return Boolean(resolveOmicallOutboundNumber(config, profile, hotlineFallback))
+}
+
 export function resolveOmicallOutboundNumber(
   config: OmicallIntegrationConfig,
   profile: Pick<VietMyUserProfile, 'omicallOutboundNumber'> | null | undefined,

@@ -41,6 +41,10 @@ export function StaffManagementView({
   const [displayName, setDisplayName] = useState('')
   const [role, setRole] = useState<UserRole>('counselor')
   const [createTeamIds, setCreateTeamIds] = useState<string[]>([])
+  const [createOmicallUser, setCreateOmicallUser] = useState('')
+  const [createOmicallPassword, setCreateOmicallPassword] = useState('')
+  const [createOmicallOutbound, setCreateOmicallOutbound] = useState('')
+  const [createOmicallAgentId, setCreateOmicallAgentId] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -161,12 +165,22 @@ export function StaffManagementView({
     setErr(null)
     setBusy(true)
     try {
+      const omicallPayload =
+        role === 'counselor' && canOmicallConfig
+          ? {
+              ...(createOmicallUser.trim() ? { omicallSipUser: createOmicallUser.trim() } : {}),
+              ...(createOmicallPassword.trim() ? { omicallSipPassword: createOmicallPassword.trim() } : {}),
+              ...(createOmicallOutbound.trim() ? { omicallOutboundNumber: createOmicallOutbound.trim() } : {}),
+              ...(createOmicallAgentId.trim() ? { omicallAgentId: createOmicallAgentId.trim() } : {}),
+            }
+          : {}
       await createStaffAccount({
         email,
         password,
         displayName,
         role,
         ...(role === 'team_lead' ? { managedCounselorIds: createTeamIds } : {}),
+        ...omicallPayload,
       })
       setMsg(`Đã tạo tài khoản cho ${email}`)
       setEmail('')
@@ -174,6 +188,10 @@ export function StaffManagementView({
       setDisplayName('')
       setRole('counselor')
       setCreateTeamIds([])
+      setCreateOmicallUser('')
+      setCreateOmicallPassword('')
+      setCreateOmicallOutbound('')
+      setCreateOmicallAgentId('')
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Không tạo được tài khoản')
     } finally {
@@ -502,6 +520,52 @@ export function StaffManagementView({
             <p className="mt-2 text-xs text-amber-800">
               Nên chọn ít nhất một TVV — có thể chỉnh lại sau ở mục «Phân nhóm» phía trên.
             </p>
+          ) : null}
+          {role === 'counselor' && canOmicallConfig ? (
+            <div className="mt-4 rounded-xl border border-sky-200/80 bg-sky-50/50 px-3 py-3 space-y-2">
+              <p className="text-xs font-semibold text-sky-950">OMICall (tuỳ chọn)</p>
+              <p className="text-xs leading-snug text-slate-600">
+                Tạo số nội bộ trên OMICall cùng <strong>email</strong> này, rồi bấm «Đồng bộ số nội bộ → TVV» hoặc điền tay bên dưới.
+              </p>
+              <label className="block text-sm font-medium text-slate-700">
+                Số nội bộ
+                <input
+                  value={createOmicallUser}
+                  onChange={(e) => setCreateOmicallUser(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm"
+                  placeholder="vd. 100"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">
+                Mật khẩu SIP
+                <input
+                  type="password"
+                  value={createOmicallPassword}
+                  onChange={(e) => setCreateOmicallPassword(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm"
+                  autoComplete="new-password"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">
+                Đầu số gọi ra
+                <input
+                  value={createOmicallOutbound}
+                  onChange={(e) => setCreateOmicallOutbound(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">
+                Agent ID OMICall
+                <input
+                  value={createOmicallAgentId}
+                  onChange={(e) => setCreateOmicallAgentId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm font-mono"
+                  autoComplete="off"
+                />
+              </label>
+            </div>
           ) : null}
           {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
           {msg ? <p className="mt-3 text-sm text-emerald-700">{msg}</p> : null}

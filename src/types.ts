@@ -1484,9 +1484,11 @@ export type OmicallIntegrationConfig = {
   defaultOutboundNumber?: string
   /**
    * `browser` — nghe qua micro trình duyệt (`makeCall`).
-   * `deskPhone` — click-to-call ra máy bàn / IP phone (`remoteCall`), giống nhiều cấu hình tổng đài.
+   * `deskPhone` — gọi qua API click-to-call (đổ chuông máy bàn / app điện thoại trước).
    */
   callMode?: 'browser' | 'deskPhone'
+  /** Bật gọi qua REST `/api/click2call` (mặc định bật khi có API key trên server). */
+  click2callEnabled?: boolean
   /** Phiên bản REST API lịch sử: v3 (khuyến nghị) hoặc v2. */
   historyApiVersion?: 'v3' | 'v2'
   /** Bật job đồng bộ lịch sử (Cloud Functions 15 phút). */

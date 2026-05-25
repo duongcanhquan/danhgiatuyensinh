@@ -229,6 +229,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName: string
       role: UserRole
       managedCounselorIds?: string[]
+      omicallSipUser?: string
+      omicallSipPassword?: string
+      omicallAgentId?: string
+      omicallOutboundNumber?: string
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
       const canTeam = hasPermission(permissions, 'config:users:team')
@@ -264,6 +268,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           : {}
       const normalizedRole = normalizeUserRole(input.role)
+      const omicallSipUser = input.omicallSipUser?.trim()
+      const omicallSipPassword = input.omicallSipPassword?.trim()
+      const omicallAgentId = input.omicallAgentId?.trim()
+      const omicallOutboundNumber = input.omicallOutboundNumber?.trim()
       await setDoc(doc(db, FS_COLLECTIONS.users, cred.user.uid), {
         email,
         displayName: input.displayName.trim() || email.split('@')[0],
@@ -277,6 +285,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               managedCounselorIds: (input.managedCounselorIds ?? []).filter(Boolean).slice(0, 60),
             }
           : {}),
+        ...(omicallSipUser ? { omicallSipUser } : {}),
+        ...(omicallSipPassword ? { omicallSipPassword } : {}),
+        ...(omicallAgentId ? { omicallAgentId } : {}),
+        ...(omicallOutboundNumber ? { omicallOutboundNumber } : {}),
       })
     },
     [permissions, profile],

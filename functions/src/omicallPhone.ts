@@ -21,6 +21,14 @@ export function normalizePhoneIntl(raw: unknown): string | null {
   return `+84${local.slice(1)}`
 }
 
+/** Quay số theo cấu hình OMICall (giống client). */
+export function formatPhoneForDial(raw: unknown, format: 'intl84' | 'local' = 'intl84'): string | null {
+  const local = normalizePhoneLocal(raw)
+  if (!local || local.length < 10) return null
+  if (format === 'local') return local
+  return normalizePhoneIntl(local)
+}
+
 export function phoneLookupVariants(raw: unknown): string[] {
   const local = normalizePhoneLocal(raw)
   if (!local) return []

@@ -21,8 +21,10 @@ import {
   parseOmicallConfigDoc,
   resolveOmicallSipCredentials,
   resolveOmicallOutboundNumber,
+  canUseOmicallClick2Call,
 } from '../utils/omicallConfig'
 import { resolveOmicallCallContext } from '../services/omicallResolveCallContext'
+import { invokeOmicallClick2Call } from '../services/omicallClick2Call'
 import {
   hangUpOmicallCall,
   loadOmicallSdk,
@@ -61,10 +63,18 @@ type OmicallContextValue = {
   activeCall: OmicallActiveCall | null
   hangUpCall: () => void
   canCall: boolean
+  /** Gọi qua API click-to-call (máy bàn / app — không cần SIP sẵn sàng trên trình duyệt). */
+  canClick2Call: boolean
   saveConfig: (next: OmicallIntegrationConfig) => Promise<void>
   resetConfig: () => Promise<void>
   reconnect: () => void
   makeLeadCall: (input: {
+    leadId: string
+    leadName: string
+    phone: string
+    target: OmicallCallTarget
+  }) => Promise<void>
+  makeLeadCallClick2Call: (input: {
     leadId: string
     leadName: string
     phone: string
@@ -139,6 +149,27 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     [config, profile],
   )
 
+  const refreshCallContext = useCallback(() => {
+    if (!config.enabled || !profile) return
+    const ext = (profile.omicallSipUser ?? config.defaultSipUser ?? '').trim()
+    if (!ext) return
+    void resolveOmicallCallContext(ext)
+      .then((ctx) => {
+        setAvailableHotlines(ctx.hotlines)
+        setResolvedOutbound(
+          resolveOmicallOutboundNumber(config, profile, ctx.recommendedOutbound || ctx.hotlines[0]),
+        )
+      })
+      .catch(() => {
+        setResolvedOutbound(resolveOmicallOutboundNumber(config, profile))
+      })
+  }, [config, profile])
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !config.enabled || !profile) return
+    refreshCallContext()
+  }, [authStatus, config.enabled, profile?.id, profile?.omicallSipUser, refreshCallContext])
+
   const onEnded = useCallback(
     async (raw: unknown) => {
       const call = raw as OmicallCallData
@@ -177,21 +208,14 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionLabel(data.name || 'Sẵn sàng gọi')
       setLastError(null)
       if (sipCreds?.sipUser) {
-        void resolveOmicallCallContext(sipCreds.sipUser)
-          .then((ctx) => {
-            setAvailableHotlines(ctx.hotlines)
-            setResolvedOutbound(
-              resolveOmicallOutboundNumber(config, profile, ctx.recommendedOutbound || ctx.hotlines[0]),
+        refreshCallContext()
+        void resolveOmicallCallContext(sipCreds.sipUser).then((ctx) => {
+          if (ctx.sipRealmFromApi && config.sipRealm && !ctx.realmMatch) {
+            setLastCallHint(
+              `Cảnh báo: domain API «${ctx.sipRealmFromApi}» khác sipRealm «${config.sipRealm}» — kiểm tra Cài đặt.`,
             )
-            if (ctx.sipRealmFromApi && config.sipRealm && !ctx.realmMatch) {
-              setLastCallHint(
-                `Cảnh báo: domain API «${ctx.sipRealmFromApi}» khác sipRealm «${config.sipRealm}» — kiểm tra Cài đặt.`,
-              )
-            }
-          })
-          .catch(() => {
-            setResolvedOutbound(resolveOmicallOutboundNumber(config, profile))
-          })
+          }
+        })
       }
     } else if (data.status === 'connecting') {
       setSipReady(false)
@@ -203,7 +227,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionLabel(data.name || 'Mất kết nối tổng đài')
       setLastError('SIP ngắt — bấm «Kết nối lại» trên Cài đặt → Gọi điện.')
     }
-  }, [config, profile, sipCreds?.sipUser])
+  }, [config, profile, sipCreds?.sipUser, refreshCallContext])
 
   const syncActiveCallFromSdk = useCallback(
     (raw: unknown) => {
@@ -404,14 +428,78 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const canCall = config.enabled && sipReady && Boolean(sipCreds)
+  const canClick2Call = useMemo(
+    () =>
+      canUseOmicallClick2Call(
+        config,
+        profile,
+        resolvedOutbound || availableHotlines[0],
+      ),
+    [config, profile, resolvedOutbound, availableHotlines],
+  )
+
+  const makeLeadCallClick2Call = useCallback(
+    async (input: { leadId: string; leadName: string; phone: string; target: OmicallCallTarget }) => {
+      if (!canClick2Call) {
+        throw new Error(
+          'Chưa gọi được qua tổng đài — cần số nội bộ, đầu số gọi ra và API key trong Cài đặt → Gọi điện.',
+        )
+      }
+      const dialFormat = config.dialFormat === 'local' ? 'local' : 'intl84'
+      const normalized = normalizePhoneForDial(input.phone, dialFormat)
+      if (!normalized) {
+        throw new Error('Số điện thoại không hợp lệ (cần 9–11 chữ số, có thể bắt đầu 0 hoặc 84).')
+      }
+      setLastCallHint(null)
+      const outbound =
+        resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
+      pendingCallMetaRef.current = { leadId: input.leadId, target: input.target, phone: normalized }
+      pendingCallDisplayRef.current = {
+        leadId: input.leadId,
+        leadName: input.leadName,
+        target: input.target,
+      }
+      setActiveCall({
+        uid: `c2c-${Date.now()}`,
+        state: 'connecting',
+        direction: 'outbound',
+        phone: normalized,
+        leadId: input.leadId,
+        leadName: input.leadName,
+        target: input.target,
+        outbound,
+        durationSec: 0,
+      })
+      const res = await invokeOmicallClick2Call({
+        leadId: input.leadId,
+        phone: normalized,
+        target: input.target,
+      })
+      setActiveCall((prev) =>
+        prev
+          ? {
+              ...prev,
+              uid: res.callUuid,
+              state: 'ringing',
+            }
+          : null,
+      )
+      setLastCallHint(res.hint)
+    },
+    [canClick2Call, config, profile, resolvedOutbound, availableHotlines],
+  )
 
   const makeLeadCall = useCallback(
     async (input: { leadId: string; leadName: string; phone: string; target: OmicallCallTarget }) => {
+      if (config.callMode === 'deskPhone') {
+        return makeLeadCallClick2Call(input)
+      }
       if (!canCall) {
+        if (canClick2Call) return makeLeadCallClick2Call(input)
         throw new Error(
           connectionStatus === 'registering' || connectionStatus === 'loading'
-            ? 'Tổng đài chưa sẵn sàng — đợi trạng thái «Sẵn sàng gọi» trên Cài đặt → Gọi điện.'
-            : 'Tổng đài chưa kết nối — kiểm tra số nội bộ / mật khẩu SIP và bấm «Kết nối lại».',
+            ? 'Tổng đài chưa sẵn sàng — đợi «Sẵn sàng gọi» hoặc dùng «Gọi máy bàn».'
+            : 'Tổng đài chưa kết nối — kiểm tra số nội bộ / mật khẩu SIP hoặc dùng «Gọi máy bàn».',
         )
       }
       const dialFormat = config.dialFormat === 'local' ? 'local' : 'intl84'
@@ -447,20 +535,6 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         durationSec: 0,
       })
       const userDataStr = JSON.stringify(userData)
-      const useDeskPhone = config.callMode === 'deskPhone'
-
-      if (useDeskPhone) {
-        if (typeof sdk.remoteCall !== 'function') {
-          throw new Error('SDK không hỗ trợ gọi máy bàn — đổi «Cách gọi» sang Trình duyệt trong Cài đặt → OMICall.')
-        }
-        sdk.remoteCall(normalized, outbound)
-        setLastCallHint(
-          outbound
-            ? `Đang gọi ${normalized} qua đầu số ${outbound} — máy bàn / IP phone sẽ đổ chuông.`
-            : `Đang gọi ${normalized} — máy bàn / IP phone sẽ đổ chuông.`,
-        )
-        return
-      }
 
       await ensureMicrophoneForCall()
       const callOptions: Record<string, unknown> = { userData: userDataStr }
@@ -472,7 +546,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           : `Đang gọi ${normalized} qua trình duyệt…`,
       )
     },
-    [canCall, config, profile, resolvedOutbound, availableHotlines, connectionStatus],
+    [canCall, canClick2Call, config, profile, resolvedOutbound, availableHotlines, connectionStatus, makeLeadCallClick2Call],
   )
 
   const saveConfig = useCallback(async (next: OmicallIntegrationConfig) => {
@@ -490,6 +564,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       autoLogCalls: next.autoLogCalls !== false,
       dialFormat: next.dialFormat === 'local' ? 'local' : 'intl84',
       callMode: next.callMode === 'deskPhone' ? 'deskPhone' : 'browser',
+      click2callEnabled: next.click2callEnabled !== false,
       updatedAt: Timestamp.now(),
     }
     const outbound = next.defaultOutboundNumber?.trim()
@@ -540,10 +615,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       activeCall,
       hangUpCall,
       canCall,
+      canClick2Call,
       saveConfig,
       resetConfig,
       reconnect,
       makeLeadCall,
+      makeLeadCallClick2Call,
     }),
     [
       config,
@@ -556,10 +633,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       activeCall,
       hangUpCall,
       canCall,
+      canClick2Call,
       saveConfig,
       resetConfig,
       reconnect,
       makeLeadCall,
+      makeLeadCallClick2Call,
     ],
   )
 
