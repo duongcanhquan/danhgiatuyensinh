@@ -21,7 +21,7 @@
     "functions:build": "npm --prefix functions run build",
     "deploy:functions": "firebase deploy --only functions",
     "deploy:omicall": "firebase deploy --only functions:omicallCallWebhook,functions:omicallCallCenterProbe,functions:omicallSyncInternalPhones,functions:omicallResolveCallContext,functions:omicallClick2Call,functions:omicallRegisterWebhook,functions:syncOmicallCallHistory",
-    "deploy:firestore-indexes": "firebase deploy --only firestore:indexes"
+    "deploy:firestore-indexes": "npx firebase-tools deploy --only firestore:indexes --project tvts-8f713"
   },
   "dependencies": {
     "@noble/hashes": "^1.8.0",

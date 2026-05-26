@@ -36,11 +36,24 @@ export function extractFirestoreIndexUrl(message: string): string | null {
   return m?.[0] ?? null
 }
 
-function filterCallsByDate(calls: OmicallCallRecord[], fromMs: number, toMs: number): OmicallCallRecord[] {
-  return calls.filter((c) => {
-    const ms = tsMsCall(c.endedAt ?? c.createdAt)
-    return ms >= fromMs && ms <= toMs
-  })
+function filterCallsByScope(calls: OmicallCallRecord[], scope: OmicallCallsScope): OmicallCallRecord[] {
+  if (scope.mode === 'counselor') {
+    return calls.filter((c) => c.counselorUid === scope.counselorUid)
+  }
+  if (scope.mode === 'team') {
+    return calls.filter((c) => c.teamLeadUid === scope.teamLeadUid)
+  }
+  return calls
+}
+
+/** Truy vấn theo khoảng ngày — không cần index ghép counselorUid/teamLeadUid. */
+function dateRangeConstraints(fromTs: Timestamp, toTs: Timestamp, limitN: number): QueryConstraint[] {
+  return [
+    where('endedAt', '>=', fromTs),
+    where('endedAt', '<=', toTs),
+    orderBy('endedAt', 'desc'),
+    limit(limitN),
+  ]
 }
 
 async function runOmicallQuery(
@@ -62,9 +75,6 @@ export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCa
 
   const fromTs = useMemo(() => Timestamp.fromDate(from), [from.getTime()])
   const toTs = useMemo(() => Timestamp.fromDate(to), [to.getTime()])
-  const fromMs = from.getTime()
-  const toMs = to.getTime()
-
   useEffect(() => {
     const db = getFirestoreDb()
     if (!db || !isFirebaseConfigured()) {
@@ -96,49 +106,60 @@ export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCa
     setError(null)
     setIndexUrl(null)
 
-    const primaryConstraints: QueryConstraint[] = []
+    const scopedConstraints: QueryConstraint[] = []
     if (scope.mode === 'counselor') {
-      primaryConstraints.push(where('counselorUid', '==', scope.counselorUid))
+      scopedConstraints.push(where('counselorUid', '==', scope.counselorUid))
     } else if (scope.mode === 'team') {
-      primaryConstraints.push(where('teamLeadUid', '==', scope.teamLeadUid))
+      scopedConstraints.push(where('teamLeadUid', '==', scope.teamLeadUid))
     }
-    primaryConstraints.push(where('endedAt', '>=', fromTs), where('endedAt', '<=', toTs))
-    primaryConstraints.push(orderBy('endedAt', 'desc'), limit(maxRows))
+    scopedConstraints.push(where('endedAt', '>=', fromTs), where('endedAt', '<=', toTs))
+    scopedConstraints.push(orderBy('endedAt', 'desc'), limit(maxRows))
+
+    const globalConstraints = dateRangeConstraints(fromTs, toTs, maxRows)
 
     ;(async () => {
-      try {
-        let rows = await runOmicallQuery(db, primaryConstraints)
+      const finish = (rows: OmicallCallRecord[], err: string | null, url: string | null) => {
+        if (cancelled) return
         rows.sort((a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt))
-        if (!cancelled) setCalls(rows)
+        setCalls(rows.slice(0, maxRows))
+        setError(err)
+        setIndexUrl(url)
+      }
+
+      try {
+        const constraints = scope.mode === 'global' ? globalConstraints : scopedConstraints
+        const rows = await runOmicallQuery(db, constraints)
+        finish(rows, null, null)
+        return
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Không đọc lịch sử cuộc gọi.'
         const url = extractFirestoreIndexUrl(msg)
+
         if (isMissingIndexError(e) && scope.mode !== 'global') {
           try {
-            const fallback: QueryConstraint[] = []
-            if (scope.mode === 'counselor') {
-              fallback.push(where('counselorUid', '==', scope.counselorUid))
-            } else {
-              fallback.push(where('teamLeadUid', '==', scope.teamLeadUid))
-            }
-            fallback.push(orderBy('endedAt', 'desc'), limit(Math.max(maxRows * 3, 1500)))
-            let rows = filterCallsByDate(await runOmicallQuery(db, fallback), fromMs, toMs)
+            const fetchLimit = Math.min(Math.max(maxRows * 8, 2000), 5000)
+            let rows = filterCallsByScope(await runOmicallQuery(db, dateRangeConstraints(fromTs, toTs, fetchLimit)), scope)
             rows = rows.slice(0, maxRows)
-            rows.sort((a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt))
+            finish(
+              rows,
+              url
+                ? 'Đang hiển thị theo cách dự phòng (lọc sau khi tải). Nên tạo index Firestore (warmlist) để nhanh và đủ dữ liệu khi kỳ dài.'
+                : 'Đang hiển thị theo cách dự phòng — chạy npm run deploy:firestore-indexes (database warmlist).',
+              url,
+            )
+            return
+          } catch (fallbackErr) {
+            const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : msg
+            const fallbackUrl = extractFirestoreIndexUrl(fallbackMsg) ?? url
             if (!cancelled) {
-              setCalls(rows)
-              setError(
-                url
-                  ? 'Đang dùng dữ liệu dự phòng — cần tạo index Firestore (warmlist) để truy vấn đầy đủ theo ngày.'
-                  : 'Đang dùng dữ liệu dự phòng — triển khai firestore.indexes.json lên database warmlist.',
-              )
-              setIndexUrl(url)
+              setError(fallbackUrl ? `${fallbackMsg}\n\nTạo index: ${fallbackUrl}` : fallbackMsg)
+              setIndexUrl(fallbackUrl)
+              setCalls([])
             }
             return
-          } catch {
-            /* fall through */
           }
         }
+
         if (!cancelled) {
           setError(url ? `${msg}\n\nTạo index: ${url}` : msg)
           setIndexUrl(url)
@@ -152,7 +173,7 @@ export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCa
     return () => {
       cancelled = true
     }
-  }, [scope, fromTs, toTs, fromMs, toMs, maxRows])
+  }, [scope, fromTs, toTs, maxRows])
 
   return { calls, loading, error, indexUrl }
 }

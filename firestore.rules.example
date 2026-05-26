@@ -11,7 +11,8 @@ service cloud.firestore {
     //
     // Production: add rules for `auditLogs` (read/write scoped by role).
     // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
-    // Sau khi sửa index: `firebase deploy --only firestore:indexes` (database `warmlist` trong firebase.json).
+    // Index lịch sử gọi (omicallCalls): counselorUid/teamLeadUid + endedAt — xem firestore.indexes.json.
+    // Triển khai: `npm run deploy:firestore-indexes` (database `warmlist` trong firebase.json), hoặc bấm link «Tạo index» trên app.
 
     // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
     // write: admin only) — collection used by RAG / Settings → Kho tri thức.

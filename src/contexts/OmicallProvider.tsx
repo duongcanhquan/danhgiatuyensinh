@@ -112,6 +112,32 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
   const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
   const pendingCallDisplayRef = useRef<{ leadId: string; leadName: string; target: OmicallCallTarget } | null>(null)
+  const sipReadyRef = useRef(false)
+  const connectionStatusRef = useRef<OmicallConnectionStatus>('off')
+  const sipCredsRef = useRef<ReturnType<typeof resolveOmicallSipCredentials>>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const sessionActiveRef = useRef(false)
+  const onEndedRef = useRef<(raw: unknown) => void>(() => {})
+  const onRegisterRef = useRef<(raw: unknown) => void>(() => {})
+  const onCallEventRef = useRef<(raw: unknown) => void>(() => {})
+  const syncActiveCallRef = useRef<(raw: unknown) => void>(() => {})
+  const scheduleAutoReconnectRef = useRef<(fullReload?: boolean) => void>(() => {})
+
+  useEffect(() => {
+    sipReadyRef.current = sipReady
+  }, [sipReady])
+
+  useEffect(() => {
+    connectionStatusRef.current = connectionStatus
+  }, [connectionStatus])
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -148,6 +174,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     () => (config.enabled ? resolveOmicallSipCredentials(config, profile) : null),
     [config, profile],
   )
+
+  useEffect(() => {
+    sipCredsRef.current = sipCreds
+  }, [sipCreds])
 
   const refreshCallContext = useCallback(() => {
     if (!config.enabled || !profile) return
@@ -203,6 +233,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const onRegister = useCallback((raw: unknown) => {
     const data = raw as OmicallRegisterData
     if (data.status === 'connected') {
+      clearReconnectTimer()
+      reconnectAttemptRef.current = 0
       setSipReady(true)
       setConnectionStatus('connected')
       setConnectionLabel(data.name || 'Sẵn sàng gọi')
@@ -223,11 +255,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionLabel(data.name || 'Đang kết nối tổng đài…')
     } else {
       setSipReady(false)
-      setConnectionStatus('error')
-      setConnectionLabel(data.name || 'Mất kết nối tổng đài')
-      setLastError('SIP ngắt — bấm «Kết nối lại» trên Cài đặt → Gọi điện.')
+      setConnectionStatus('registering')
+      setConnectionLabel(data.name || 'Mất kết nối tạm — đang tự kết nối lại…')
+      setLastError(null)
+      scheduleAutoReconnectRef.current()
     }
-  }, [config, profile, sipCreds?.sipUser, refreshCallContext])
+  }, [config, profile, sipCreds?.sipUser, refreshCallContext, clearReconnectTimer])
 
   const syncActiveCallFromSdk = useCallback(
     (raw: unknown) => {
@@ -296,8 +329,94 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     [syncActiveCallFromSdk],
   )
 
+  const scheduleAutoReconnect = useCallback(
+    (fullReload = false) => {
+      clearReconnectTimer()
+      if (!sessionActiveRef.current) return
+
+      if (fullReload) {
+        reconnectAttemptRef.current = 0
+        setBootToken((t) => t + 1)
+        return
+      }
+
+      const creds = sipCredsRef.current
+      if (!creds) return
+
+      const attempt = reconnectAttemptRef.current
+      const delayMs = Math.min(2000 * 1.45 ** attempt, 25_000)
+
+      setSipReady(false)
+      setConnectionStatus('registering')
+      setConnectionLabel(
+        attempt === 0 ? 'Đang giữ kết nối tổng đài…' : `Đang kết nối lại tổng đài (lần ${attempt + 1})…`,
+      )
+      setLastError(null)
+
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null
+        if (!sessionActiveRef.current) return
+
+        const s = sdkRef.current
+        const c = sipCredsRef.current
+        if (!s || !c) {
+          scheduleAutoReconnect(true)
+          return
+        }
+
+        reconnectAttemptRef.current = attempt + 1
+
+        void s
+          .register({
+            sipRealm: c.sipRealm,
+            sipUser: c.sipUser,
+            sipPassword: c.sipPassword,
+          })
+          .then((reg) => {
+            if (!sessionActiveRef.current) return
+            if (!reg.status) {
+              if (reconnectAttemptRef.current >= 8) {
+                reconnectAttemptRef.current = 0
+                setConnectionStatus('error')
+                setConnectionLabel(reg.message || 'Chưa kết nối được tổng đài')
+                setLastError(reg.error || reg.message || 'Đăng ký tổng đài thất bại — thử «Kết nối lại».')
+                scheduleAutoReconnect(true)
+              } else {
+                scheduleAutoReconnectRef.current()
+              }
+              return
+            }
+            setConnectionLabel('Đang chờ tổng đài xác nhận… (Sẵn sàng gọi)')
+          })
+          .catch(() => {
+            if (!sessionActiveRef.current) return
+            if (reconnectAttemptRef.current >= 6) {
+              reconnectAttemptRef.current = 0
+              scheduleAutoReconnectRef.current(true)
+            } else {
+              scheduleAutoReconnectRef.current()
+            }
+          })
+      }, delayMs)
+    },
+    [clearReconnectTimer],
+  )
+
+  useEffect(() => {
+    scheduleAutoReconnectRef.current = scheduleAutoReconnect
+  }, [scheduleAutoReconnect])
+
+  useEffect(() => {
+    onEndedRef.current = onEnded
+    onRegisterRef.current = onRegister
+    onCallEventRef.current = onCallEvent
+    syncActiveCallRef.current = syncActiveCallFromSdk
+  }, [onEnded, onRegister, onCallEvent, syncActiveCallFromSdk])
+
   useEffect(() => {
     if (authStatus !== 'authenticated' || !profile || !config.enabled) {
+      sessionActiveRef.current = false
+      clearReconnectTimer()
       setConnectionStatus('off')
       setSipReady(false)
       setConnectionLabel(config.enabled ? 'Chưa đăng nhập hoặc thiếu số nội bộ' : 'Tổng đài chưa bật')
@@ -306,6 +425,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       return
     }
     if (!sipCreds) {
+      sessionActiveRef.current = false
+      clearReconnectTimer()
       setSipReady(false)
       setConnectionStatus('error')
       setConnectionLabel('Thiếu domain tổng đài hoặc số nội bộ / mật khẩu SIP')
@@ -313,13 +434,16 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false
+    sessionActiveRef.current = true
+    reconnectAttemptRef.current = 0
+
     const endedHandler = (d: unknown) => {
-      onCallEvent(d)
-      void onEnded(d)
+      onCallEventRef.current(d)
+      void onEndedRef.current(d)
     }
-    const registerHandler = (d: unknown) => onRegister(d)
-    const callTraceHandler = (d: unknown) => onCallEvent(d)
-    const incallHandler = (d: unknown) => syncActiveCallFromSdk(d)
+    const registerHandler = (d: unknown) => onRegisterRef.current(d)
+    const callTraceHandler = (d: unknown) => onCallEventRef.current(d)
+    const incallHandler = (d: unknown) => syncActiveCallRef.current(d)
 
     ;(async () => {
       setConnectionStatus('loading')
@@ -370,23 +494,27 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         if (cancelled) return
         if (!reg.status) {
           setSipReady(false)
-          setConnectionStatus('error')
-          setConnectionLabel(reg.message || 'Đăng ký tổng đài thất bại')
-          setLastError(reg.error || reg.message || 'register failed')
+          setConnectionStatus('registering')
+          setConnectionLabel(reg.message || 'Đang thử kết nối tổng đài…')
+          setLastError(null)
+          scheduleAutoReconnectRef.current()
           return
         }
-        setConnectionLabel('Đang chờ tổng đài xác nhận… (cần trạng thái «Sẵn sàng gọi»)')
+        setConnectionLabel('Đang chờ tổng đài xác nhận… (Sẵn sàng gọi)')
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
-        setConnectionStatus('error')
-        setConnectionLabel('Lỗi OMICall')
+        setConnectionStatus('registering')
+        setConnectionLabel('Lỗi kết nối — đang thử lại…')
         setLastError(msg)
+        scheduleAutoReconnectRef.current()
       }
     })()
 
     return () => {
       cancelled = true
+      sessionActiveRef.current = false
+      clearReconnectTimer()
       const sdk = sdkRef.current
       sdk?.off('ended', endedHandler)
       sdk?.off('register', registerHandler)
@@ -395,6 +523,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       sdk?.off('accepted', callTraceHandler)
       sdk?.off('incall', incallHandler)
       sdk?.unregister()
+      sdkRef.current = null
       setSipReady(false)
       setActiveCall(null)
     }
@@ -410,11 +539,33 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     sipCreds?.sipUser,
     sipCreds?.sipPassword,
     bootToken,
-    onEnded,
-    onRegister,
-    onCallEvent,
-    syncActiveCallFromSdk,
+    clearReconnectTimer,
   ])
+
+  /** Tự kết nối lại khi quay lại tab hoặc khi mất kết nối lâu. */
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !config.enabled || !sipCreds) return
+
+    const ensureConnected = () => {
+      if (!sessionActiveRef.current) return
+      if (sipReadyRef.current) return
+      const st = connectionStatusRef.current
+      if (st === 'loading' || st === 'registering') return
+      scheduleAutoReconnectRef.current()
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') ensureConnected()
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    const intervalId = window.setInterval(ensureConnected, 45_000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.clearInterval(intervalId)
+    }
+  }, [authStatus, config.enabled, sipCreds?.sipUser, sipCreds?.sipRealm])
 
   const hangUpCall = useCallback(() => {
     const sdk = sdkRef.current
@@ -489,18 +640,33 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     [canClick2Call, config, profile, resolvedOutbound, availableHotlines],
   )
 
+  const waitForSipReady = useCallback(async (maxMs = 22_000): Promise<boolean> => {
+    const deadline = Date.now() + maxMs
+    while (Date.now() < deadline) {
+      if (sipReadyRef.current && sdkRef.current) return true
+      const st = connectionStatusRef.current
+      if (st === 'error' || st === 'off' || st === 'ready') {
+        scheduleAutoReconnectRef.current()
+      }
+      await new Promise((r) => setTimeout(r, 450))
+    }
+    return Boolean(sipReadyRef.current && sdkRef.current)
+  }, [])
+
   const makeLeadCall = useCallback(
     async (input: { leadId: string; leadName: string; phone: string; target: OmicallCallTarget }) => {
       if (config.callMode === 'deskPhone') {
         return makeLeadCallClick2Call(input)
       }
-      if (!canCall) {
-        if (canClick2Call) return makeLeadCallClick2Call(input)
-        throw new Error(
-          connectionStatus === 'registering' || connectionStatus === 'loading'
-            ? 'Tổng đài chưa sẵn sàng — đợi «Sẵn sàng gọi» hoặc dùng «Gọi máy bàn».'
-            : 'Tổng đài chưa kết nối — kiểm tra số nội bộ / mật khẩu SIP hoặc dùng «Gọi máy bàn».',
-        )
+      if (!sipReadyRef.current || !sdkRef.current) {
+        scheduleAutoReconnectRef.current()
+        const ready = await waitForSipReady()
+        if (!ready) {
+          if (canClick2Call) return makeLeadCallClick2Call(input)
+          throw new Error(
+            'Tổng đài chưa sẵn sàng — đợi «Sẵn sàng gọi» hoặc dùng «Gọi máy bàn».',
+          )
+        }
       }
       const dialFormat = config.dialFormat === 'local' ? 'local' : 'intl84'
       const normalized = normalizePhoneForDial(input.phone, dialFormat)
@@ -547,7 +713,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           : `Đang gọi ${normalized} qua trình duyệt…`,
       )
     },
-    [canCall, canClick2Call, config, profile, resolvedOutbound, availableHotlines, connectionStatus, makeLeadCallClick2Call],
+    [canClick2Call, config, profile, resolvedOutbound, availableHotlines, makeLeadCallClick2Call, waitForSipReady],
   )
 
   const saveConfig = useCallback(async (next: OmicallIntegrationConfig) => {
@@ -601,8 +767,9 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const reconnect = useCallback(() => {
-    setBootToken((t) => t + 1)
-  }, [])
+    reconnectAttemptRef.current = 0
+    scheduleAutoReconnect(true)
+  }, [scheduleAutoReconnect])
 
   const value = useMemo(
     () => ({

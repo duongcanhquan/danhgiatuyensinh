@@ -318,7 +318,10 @@ export function OmicallSettingsTab() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-base font-bold text-slate-900">Trạng thái & thử gọi</h3>
-            <p className="text-xs text-slate-500">TVV mở hồ sơ → Gọi (micro) hoặc Máy bàn</p>
+            <p className="text-xs text-slate-500">
+              TVV mở hồ sơ → Gọi (micro) hoặc Máy bàn. Hệ thống <strong>tự giữ kết nối</strong> — chỉ bấm «Kết nối
+              lại» khi trạng thái đỏ lâu.
+            </p>
           </div>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(connectionStatus)}`}>
             {connectionLabel}

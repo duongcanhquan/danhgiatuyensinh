@@ -325,8 +325,15 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-          <p>{error}</p>
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            indexUrl && calls.length > 0
+              ? 'border-amber-200 bg-amber-50 text-amber-950'
+              : 'border-rose-200 bg-rose-50 text-rose-900'
+          }`}
+          role={indexUrl && calls.length > 0 ? 'status' : 'alert'}
+        >
+          <p className="whitespace-pre-wrap">{error}</p>
           {indexUrl ? (
             <a href={indexUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline">
               Tạo index Firestore (warmlist)

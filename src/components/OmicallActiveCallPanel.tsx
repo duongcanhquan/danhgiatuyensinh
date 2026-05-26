@@ -12,21 +12,15 @@ const STATE_LABEL: Record<string, string> = {
 
 export function OmicallActiveCallPanel() {
   const omicall = useOmicallOptional()
+  const call = omicall?.activeCall ?? null
   const [expanded, setExpanded] = useState(true)
   const [position, setPosition] = useState({ left: 16, bottom: 16 })
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const dragOffsetRef = useRef({ x: 0, y: 0 })
 
-  if (!omicall?.activeCall) return null
-
-  const call = omicall.activeCall
-  const stateLabel = STATE_LABEL[call.state] ?? call.state
-  const duration =
-    call.durationLabel ||
-    (call.durationSec > 0 ? formatCallDuration(call.durationSec) : call.state === 'accepted' ? '0:00' : '—')
-
   useEffect(() => {
+    if (!call) return
     const onPointerMove = (e: PointerEvent) => {
       if (!dragging) return
       const panel = panelRef.current
@@ -46,7 +40,14 @@ export function OmicallActiveCallPanel() {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
     }
-  }, [dragging])
+  }, [call, dragging])
+
+  if (!call || !omicall) return null
+
+  const stateLabel = STATE_LABEL[call.state] ?? call.state
+  const duration =
+    call.durationLabel ||
+    (call.durationSec > 0 ? formatCallDuration(call.durationSec) : call.state === 'accepted' ? '0:00' : '—')
 
   const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const panel = panelRef.current

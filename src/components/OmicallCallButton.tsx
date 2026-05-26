@@ -31,7 +31,13 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
   const nativeHref = nativeDialHref(phone)
   const omicallEnabled = omicall?.config.enabled === true
   const useDeskMode = omicall?.config.callMode === 'deskPhone'
-  const canSdk = Boolean(omicall?.canCall) && dialable && !disabled && !useDeskMode
+  const sipConnecting =
+    omicall?.connectionStatus === 'registering' || omicall?.connectionStatus === 'loading'
+  const canSdk =
+    (Boolean(omicall?.canCall) || (omicallEnabled && sipConnecting)) &&
+    dialable &&
+    !disabled &&
+    !useDeskMode
   const canClick2 = Boolean(omicall?.canClick2Call) && dialable && !disabled
   const canUse = (useDeskMode ? canClick2 : canSdk) || (!canSdk && canClick2)
   const showDeskButton = canClick2 && !useDeskMode && canSdk
@@ -40,11 +46,13 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
 
   const callInput = { leadId, leadName, phone, target }
 
-  const titleSdk = canSdk
+  const titleSdk = omicall?.canCall
     ? 'Gọi qua micro trình duyệt — cho phép micro nếu được hỏi'
-    : omicallEnabled && dialable
-      ? omicall?.connectionLabel || 'Chờ tổng đài sẵn sàng gọi (micro)'
-      : 'Chưa gọi được qua micro'
+    : sipConnecting
+      ? 'Đang kết nối tổng đài — bấm gọi sẽ chờ «Sẵn sàng gọi» rồi quay số'
+      : omicallEnabled && dialable
+        ? omicall?.connectionLabel || 'Chờ tổng đài sẵn sàng gọi (micro)'
+        : 'Chưa gọi được qua micro'
 
   const titleDesk =
     'Gọi máy bàn / app — số nội bộ đổ chuông trước, nhấc máy rồi nối ra khách (API click-to-call)'
