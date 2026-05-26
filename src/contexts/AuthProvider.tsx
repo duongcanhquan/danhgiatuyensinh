@@ -107,7 +107,9 @@ async function syncUserProfileWithRetry(
 
 async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>>, user: User) {
   const ref = doc(db, FS_COLLECTIONS.users, user.uid)
-  const superEmail = (import.meta.env.VITE_SUPER_ADMIN_EMAIL as string | undefined)?.trim().toLowerCase()
+  const superEmail = String(import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? 'quan.duong@caodangvietmy.edu.vn')
+    .trim()
+    .toLowerCase()
   const accountantEmail = defaultAccountantEmailFromEnv()
   const isSuper = Boolean(user.email && superEmail && user.email.toLowerCase() === superEmail)
   const isDefaultAccountant = Boolean(user.email && user.email.toLowerCase() === accountantEmail)

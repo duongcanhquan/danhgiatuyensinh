@@ -17,14 +17,13 @@ describe('normalizeUserRole', () => {
 })
 
 describe('defaultPermissionsForRole', () => {
-  it('grants super_admin every non-finance permission in PERMISSIONS', async () => {
+  it('grants super_admin every permission in PERMISSIONS', async () => {
     const { PERMISSIONS } = await import('../types')
     const perms = defaultPermissionsForRole('super_admin')
     for (const p of PERMISSIONS as readonly Permission[]) {
-      if (p === 'finance:accountant' || p === 'finance:reports' || p === 'finance:manage_accountants') continue
       expect(perms).toContain(p)
     }
-    expect(hasPermission(perms, 'finance:accountant')).toBe(false)
+    expect(hasPermission(perms, 'finance:accountant')).toBe(true)
   })
 
   it('grants admin all permissions except LLM API and finance', async () => {
