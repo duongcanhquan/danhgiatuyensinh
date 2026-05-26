@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
+  BookOpen,
   CalendarDays,
   LayoutDashboard,
   LineChart,
@@ -84,6 +85,7 @@ export function Layout() {
   }, [navItems])
 
   const currentPageLabel = useMemo(() => {
+    if (location.pathname.startsWith('/huong-dan')) return 'Hướng dẫn'
     const sorted = [...navItems].sort((a, b) => b.to.length - a.to.length)
     const hit = sorted.find((item) =>
       item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to),
@@ -109,6 +111,32 @@ export function Layout() {
         >
           <X className="h-5 w-5" />
         </button>
+      </div>
+
+      <div className="shrink-0 px-3 pt-3">
+        <NavLink
+          to="/huong-dan"
+          title="Hướng dẫn sử dụng hệ thống"
+          className={({ isActive }) =>
+            [
+              'flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition',
+              isActive
+                ? 'border-amber-400/40 bg-amber-500/25 text-amber-50 shadow-sm'
+                : 'border-white/10 bg-white/[0.06] text-amber-100/95 hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-50',
+            ].join(' ')
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <BookOpen
+                className={`h-[1.15rem] w-[1.15rem] shrink-0 ${isActive ? 'text-amber-300' : 'text-amber-200/70'}`}
+                strokeWidth={2}
+                aria-hidden
+              />
+              <span className="truncate">Hướng dẫn sử dụng</span>
+            </>
+          )}
+        </NavLink>
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-3 py-4" aria-label="Điều hướng chính">

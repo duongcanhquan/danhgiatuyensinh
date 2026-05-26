@@ -48,6 +48,8 @@ export type OmicallActiveCall = {
   outbound?: string
   durationSec: number
   durationLabel?: string
+  /** Gọi micro (SDK) — dập được từ web; máy bàn (click2call) — cắt trên thiết bị. */
+  source: 'sdk' | 'click2call'
 }
 
 type OmicallContextValue = {
@@ -112,6 +114,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
   const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
   const pendingCallDisplayRef = useRef<{ leadId: string; leadName: string; target: OmicallCallTarget } | null>(null)
+  const activeCallUidRef = useRef<string | null>(null)
   const sipReadyRef = useRef(false)
   const connectionStatusRef = useRef<OmicallConnectionStatus>('off')
   const sipCredsRef = useRef<ReturnType<typeof resolveOmicallSipCredentials>>(null)
@@ -267,9 +270,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const call = raw as OmicallCallData
       if (!call?.uid) return
       if (call.state === 'ended') {
+        activeCallUidRef.current = null
         setActiveCall(null)
         return
       }
+      activeCallUidRef.current = call.uid
       const pending = pendingCallMetaRef.current
       const display = pendingCallDisplayRef.current
       let leadId = display?.leadId
@@ -298,6 +303,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         outbound: call.sipNumber?.number || resolvedOutbound || availableHotlines[0],
         durationSec,
         durationLabel: call.callingDuration?.text,
+        source: 'sdk',
       })
     },
     [availableHotlines, resolvedOutbound],
@@ -524,6 +530,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       sdk?.off('incall', incallHandler)
       sdk?.unregister()
       sdkRef.current = null
+      activeCallUidRef.current = null
       setSipReady(false)
       setActiveCall(null)
     }
@@ -610,6 +617,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         leadName: input.leadName,
         target: input.target,
       }
+      activeCallUidRef.current = null
       setActiveCall({
         uid: `c2c-${Date.now()}`,
         state: 'connecting',
@@ -620,18 +628,21 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
         outbound,
         durationSec: 0,
+        source: 'click2call',
       })
       const res = await invokeOmicallClick2Call({
         leadId: input.leadId,
         phone: normalized,
         target: input.target,
       })
+      activeCallUidRef.current = res.callUuid
       setActiveCall((prev) =>
         prev
           ? {
               ...prev,
               uid: res.callUuid,
               state: 'ringing',
+              source: 'click2call',
             }
           : null,
       )
@@ -690,6 +701,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       }
       const outbound =
         resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
+      activeCallUidRef.current = null
       setActiveCall({
         uid: `pending-${Date.now()}`,
         state: 'connecting',
@@ -700,6 +712,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
         outbound,
         durationSec: 0,
+        source: 'sdk',
       })
       const userDataStr = JSON.stringify(userData)
 

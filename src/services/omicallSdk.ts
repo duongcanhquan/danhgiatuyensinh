@@ -36,32 +36,54 @@ export type OmicallSdkGlobal = {
   /** Click-to-call — máy bàn / IP phone đổ chuông, không dùng micro trình duyệt. */
   remoteCall?: (remoteNumber: string, sipNumber?: string) => void
   /** Kết thúc cuộc gọi (tên method khác nhau theo phiên bản SDK). */
-  hangup?: () => void
-  stopCall?: () => void
-  endCall?: () => void
+  hangup?: (callUid?: string) => void
+  stopCall?: (callUid?: string) => void
+  endCall?: (callUid?: string) => void
+  rejectCall?: (callUid?: string) => void
   acceptCall?: () => void
   on: (event: string, cb: (data: unknown) => void) => void
   off: (event: string, cb: (data: unknown) => void) => void
 }
 
-/** Gọi method kết thúc cuộc gọi có sẵn trên SDK. */
-export function hangUpOmicallCall(sdk: OmicallSdkGlobal): boolean {
-  if (typeof sdk.hangup === 'function') {
-    sdk.hangup()
+type HangupFn = ((callUid?: string) => void) | (() => void)
+
+function tryInvokeHangup(fn: HangupFn, callUid?: string): boolean {
+  try {
+    if (callUid) {
+      ;(fn as (uid: string) => void)(callUid)
+    } else {
+      ;(fn as () => void)()
+    }
     return true
+  } catch {
+    try {
+      ;(fn as () => void)()
+      return true
+    } catch {
+      return false
+    }
   }
-  if (typeof sdk.stopCall === 'function') {
-    sdk.stopCall()
-    return true
+}
+
+/** Gọi method kết thúc cuộc gọi có sẵn trên SDK (ưu tiên `stopCall` theo tài liệu OMICall v2/v3). */
+export function hangUpOmicallCall(sdk: OmicallSdkGlobal, callUid?: string): boolean {
+  const candidates: HangupFn[] = []
+  if (typeof sdk.stopCall === 'function') candidates.push(sdk.stopCall.bind(sdk))
+  if (typeof sdk.hangup === 'function') candidates.push(sdk.hangup.bind(sdk))
+  if (typeof sdk.endCall === 'function') candidates.push(sdk.endCall.bind(sdk))
+  if (typeof sdk.rejectCall === 'function') candidates.push(sdk.rejectCall.bind(sdk))
+
+  const extra = sdk as OmicallSdkGlobal & {
+    hangUp?: HangupFn
+    terminate?: HangupFn
+    terminateCall?: HangupFn
   }
-  if (typeof sdk.endCall === 'function') {
-    sdk.endCall()
-    return true
-  }
-  const extra = sdk as OmicallSdkGlobal & { hangUp?: () => void }
-  if (typeof extra.hangUp === 'function') {
-    extra.hangUp()
-    return true
+  if (typeof extra.hangUp === 'function') candidates.push(extra.hangUp.bind(extra))
+  if (typeof extra.terminate === 'function') candidates.push(extra.terminate.bind(extra))
+  if (typeof extra.terminateCall === 'function') candidates.push(extra.terminateCall.bind(extra))
+
+  for (const fn of candidates) {
+    if (tryInvokeHangup(fn, callUid)) return true
   }
   return false
 }
