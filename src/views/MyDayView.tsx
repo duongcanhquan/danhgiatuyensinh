@@ -3,9 +3,7 @@ import { Activity, PhoneCall, Target, TrendingUp, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
-import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
 import { fmtKpiNum, fmtKpiPct, fmtKpiVnd, todayDateKey } from '../utils/kpiDisplay'
-import { validCallRuleHint } from '../utils/kpiEvaluationRules'
 
 function DayStat({
   icon: Icon,
@@ -39,8 +37,7 @@ function DayStat({
 }
 
 export function MyDayView() {
-  const { profile, firebaseUser } = useAuth()
-  const { runtime } = useKpiEvaluationRules()
+  const { firebaseUser } = useAuth()
   const today = todayDateKey()
   const { summaries, totals, loading, error } = useCounselorKpi('today', today)
   const mine = summaries.find((s) => s.counselorUid === firebaseUser?.uid) ?? summaries[0]
@@ -53,9 +50,7 @@ export function MyDayView() {
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Ngày của tôi
         </VietMyAccentHeading>
-        <p className="mt-1 text-sm text-slate-600">
-          {profile?.displayName || 'TVV'} · {today} · {validCallRuleHint(runtime)}
-        </p>
+        <p className="mt-1 text-sm text-slate-600">{today}</p>
       </header>
 
       {error ? (

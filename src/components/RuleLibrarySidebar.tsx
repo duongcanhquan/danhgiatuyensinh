@@ -57,10 +57,6 @@ export function RuleLibrarySidebar({
       <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200/90 pb-2">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Thư viện quy tắc</p>
-          <p className="mt-0.5 text-xs leading-snug text-slate-600">
-            Mẫu trường tự thêm hoặc <strong>chỉnh mẫu có sẵn</strong> (ở màn <strong>Quy tắc mẫu</strong>) nằm <strong>trên</strong>{' '}
-            mẫu gốc còn lại. Kéo sang ô bên phải, chỉnh xong thì <strong>Lưu bộ chấm điểm</strong>.
-          </p>
         </div>
         {showCollapseButton && onCollapseRequest ? (
           <button

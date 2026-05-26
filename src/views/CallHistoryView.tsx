@@ -6,7 +6,6 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useLeadCallOutcomes } from '../hooks/useLeadCallOutcomes'
 import { useOmicallCalls, type OmicallCallsScope } from '../hooks/useOmicallCalls'
-import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { aggregateOmicallCalls, formatCallDuration } from '../utils/omicallCallMap'
 import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
 import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
@@ -125,7 +124,7 @@ function CallRow({
   )
 }
 
-export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
+export function CallHistoryView({ embedded: _embedded = false }: { embedded?: boolean }) {
   const { can, profile, firebaseUser } = useAuth()
   const [searchParams] = useSearchParams()
   const { users, counselors } = useCounselorDirectory()
@@ -256,23 +255,6 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          {!embedded ? (
-            <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
-              Lịch sử cuộc gọi OMICall
-            </VietMyAccentHeading>
-          ) : (
-            <p className="text-sm font-semibold text-slate-800">Lịch sử cuộc gọi</p>
-          )}
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Dữ liệu từ webhook + đồng bộ API{' '}
-            <code className="rounded bg-slate-100 px-1 text-xs">/api/v3/call-transaction/search</code> — gắn TVV qua
-            SIP / Agent ID, gắn hồ sơ qua SĐT hoặc userData.leadId.
-          </p>
-        </div>
-      </header>
-
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm font-medium text-slate-700">
           Từ ngày
@@ -414,10 +396,6 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
                 <TrendingUp className="h-4 w-4" aria-hidden />
                 Phễu chuyển đổi hồ sơ đã gọi
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Trạng thái CRM hiện tại của các hồ sơ có <code className="rounded bg-slate-100 px-1">leadId</code> trong
-                lịch sử gọi kỳ này — admin theo dõi cọc → NE.
-              </p>
             </div>
             <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard

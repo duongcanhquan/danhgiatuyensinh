@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Phone, PhoneOff, User } from 'lucide-react'
 import { useOmicallOptional } from '../contexts/OmicallProvider'
@@ -13,6 +13,10 @@ const STATE_LABEL: Record<string, string> = {
 export function OmicallActiveCallPanel() {
   const omicall = useOmicallOptional()
   const [expanded, setExpanded] = useState(true)
+  const [position, setPosition] = useState({ left: 16, bottom: 16 })
+  const [dragging, setDragging] = useState(false)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
 
   if (!omicall?.activeCall) return null
 
@@ -22,14 +26,53 @@ export function OmicallActiveCallPanel() {
     call.durationLabel ||
     (call.durationSec > 0 ? formatCallDuration(call.durationSec) : call.state === 'accepted' ? '0:00' : '—')
 
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return
+      const panel = panelRef.current
+      const panelW = panel?.offsetWidth ?? 448
+      const panelH = panel?.offsetHeight ?? 220
+      const maxLeft = Math.max(8, window.innerWidth - panelW - 8)
+      const nextLeft = Math.max(8, Math.min(e.clientX - dragOffsetRef.current.x, maxLeft))
+      const nextBottomRaw = window.innerHeight - e.clientY - panelH + dragOffsetRef.current.y
+      const maxBottom = Math.max(8, window.innerHeight - panelH - 8)
+      const nextBottom = Math.max(8, Math.min(nextBottomRaw, maxBottom))
+      setPosition({ left: nextLeft, bottom: nextBottom })
+    }
+    const onPointerUp = () => setDragging(false)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+  }, [dragging])
+
+  const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const panel = panelRef.current
+    if (!panel) return
+    const rect = panel.getBoundingClientRect()
+    dragOffsetRef.current = {
+      x: e.clientX - rect.left,
+      y: rect.bottom - e.clientY,
+    }
+    setDragging(true)
+  }
+
   return (
     <div
-      className="fixed bottom-4 left-1/2 z-[200] w-[min(100vw-1.5rem,28rem)] -translate-x-1/2"
+      ref={panelRef}
+      className="fixed z-[200] w-[min(100vw-1.5rem,28rem)]"
+      style={{ left: `${position.left}px`, bottom: `${position.bottom}px` }}
       role="region"
       aria-label="Cuộc gọi đang diễn ra"
     >
       <div className="overflow-hidden rounded-2xl border border-violet-300/80 bg-gradient-to-br from-violet-950 to-slate-900 text-white shadow-2xl shadow-violet-900/40">
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div
+          className={`flex items-center gap-3 px-4 py-3 ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          onPointerDown={startDrag}
+          title="Kéo để đổi vị trí cửa sổ gọi"
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 ring-2 ring-emerald-400/50">
             <Phone className="h-5 w-5 text-emerald-300" aria-hidden />
           </div>

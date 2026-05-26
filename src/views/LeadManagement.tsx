@@ -172,7 +172,7 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
-const LEAD_TABLE_COL_COUNT = 13
+const LEAD_TABLE_COL_COUNT = 11
 
 /** Ghi chú bổ sung (các trường Excel / hồ sơ ngoài cột mô tả chính). */
 function leadSupplementaryNotesText(lead: Lead): string {
@@ -437,12 +437,6 @@ export function LeadManagement() {
   }, [selected?.id])
 
   const closeLeadDetailPanel = useCallback(() => {
-    if (leadDetailUnsavedRef.current) {
-      const ok = window.confirm(
-        'Có thay đổi chưa lưu (funnel, ghi chú hoặc tình trạng TVV nếu chỉnh ở cột trái). Đóng chi tiết và bỏ các thay đổi?',
-      )
-      if (!ok) return
-    }
     leadDetailUnsavedRef.current = false
     setSelected(null)
   }, [])
@@ -1662,7 +1656,7 @@ export function LeadManagement() {
           </div>
         ) : null}
         <div className="scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain">
-          <table className="min-w-[1280px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/85 backdrop-blur-xl">
               <tr className="text-xs font-medium uppercase tracking-wide text-slate-600 sm:text-sm">
                 <th className="w-10 px-2 py-3">
@@ -1688,17 +1682,6 @@ export function LeadManagement() {
                   </button>
                 </th>
                 <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">Mã KH</th>
-                <th className="px-4 py-3 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('phone')}
-                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
-                  >
-                    SĐT
-                    {sortKey === 'phone' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
-                  </button>
-                </th>
-                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">SĐT PH</th>
                 <th className="px-4 py-3 font-medium">
                   <button
                     type="button"
@@ -1846,10 +1829,6 @@ export function LeadManagement() {
                   </td>
                   <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.customerId || undefined}>
                     {l.customerId || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{l.phone || '—'}</td>
-                  <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.parentPhone || undefined}>
-                    {l.parentPhone || '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{l.educationLevel || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
@@ -2876,6 +2855,7 @@ function LeadDetailPanel({
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
   const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
+  const [closeDetailConfirmOpen, setCloseDetailConfirmOpen] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
@@ -2980,6 +2960,14 @@ function LeadDetailPanel({
       onUnsavedChange?.(false)
     }
   }, [hasUnsavedProgress, onUnsavedChange])
+
+  const requestClosePanel = useCallback(() => {
+    if (hasUnsavedProgress) {
+      setCloseDetailConfirmOpen(true)
+      return
+    }
+    onClose()
+  }, [hasUnsavedProgress, onClose])
 
   useEffect(() => {
     if (!hasUnsavedProgress || saving) return
@@ -3536,7 +3524,7 @@ function LeadDetailPanel({
           ) : null}
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClosePanel}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
@@ -3945,6 +3933,49 @@ function LeadDetailPanel({
             </div>
         </div>
       </div>
+
+      {closeDetailConfirmOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[130] bg-slate-900/50 backdrop-blur-[2px]"
+            aria-label="Đóng xác nhận"
+            onClick={() => setCloseDetailConfirmOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="close-detail-confirm-title"
+            className="fixed left-1/2 top-1/2 z-[140] w-[min(calc(100vw-1.5rem),38rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-amber-200/90 bg-white p-5 shadow-2xl sm:p-6"
+          >
+            <h2 id="close-detail-confirm-title" className="text-lg font-bold text-slate-900">
+              Có thay đổi chưa lưu
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Bạn đang chỉnh funnel, ghi chú hoặc tình trạng TVV. Đóng chi tiết bây giờ sẽ bỏ các thay đổi chưa lưu.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCloseDetailConfirmOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Tiếp tục chỉnh
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCloseDetailConfirmOpen(false)
+                  onClose()
+                }}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700"
+              >
+                Đóng và bỏ thay đổi
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {playbookPopupOpen ? (
         <>

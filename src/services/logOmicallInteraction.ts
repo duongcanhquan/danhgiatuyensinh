@@ -54,8 +54,6 @@ export async function logOmicallInteraction(
   if (ringingSeconds > 0) noteParts.push(`Đổ chuông: ${durationText(ringingSeconds)}`)
   if (hotline) noteParts.push(`Đầu số gọi ra: ${hotline}`)
   if (call.rejectCode) noteParts.push(`Mã kết thúc: ${call.rejectCode}`)
-  if (call.uuid) noteParts.push(`UUID tổng đài: ${call.uuid}`)
-  if (call.uid) noteParts.push(`Mã cuộc gọi: ${call.uid}`)
 
   await addDoc(sub, {
     leadId: meta.leadId,

@@ -686,11 +686,6 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
             <strong>nhóm</strong> do bạn tạo: TVV trong nhóm được chọn khi chấm điểm hồ sơ.
           </p>
         ) : null}
-        {canManageAll ? (
-          <p className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-snug text-emerald-950">
-            Profile admin lưu ở phạm vi <strong>toàn hệ thống</strong> — mọi TVV và trưởng nhóm đều xem và áp dụng được.
-          </p>
-        ) : null}
         {error ? (
           <p className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">
             {error}

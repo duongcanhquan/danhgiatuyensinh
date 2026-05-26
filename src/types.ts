@@ -1451,6 +1451,8 @@ export interface OmicallCallUserData {
   leadId: string
   target: OmicallCallTarget
   phone: string
+  /** UID TVV khởi tạo cuộc gọi — giúp map KPI khi webhook thiếu sip_user/agent_id. */
+  counselorUid?: string
 }
 
 /** Lưu Firestore — `scoringAux/omicallIntegration` */

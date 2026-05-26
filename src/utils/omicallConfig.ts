@@ -160,7 +160,8 @@ export function parseOmicallUserData(raw: string | undefined): import('../types'
     const phone = String(o.phone ?? '').trim()
     if (!leadId || !phone) return null
     if (target !== 'student' && target !== 'parent' && target !== 'father' && target !== 'mother') return null
-    return { leadId, target, phone }
+    const counselorUid = String(o.counselorUid ?? o.counselor_uid ?? '').trim() || undefined
+    return { leadId, target, phone, counselorUid }
   } catch {
     return null
   }

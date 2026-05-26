@@ -157,6 +157,30 @@ export function parseOmicallUserDataLeadId(raw: Record<string, unknown>): string
   return undefined
 }
 
+/** Parse `user_data_str` / userData từ SDK — chứa counselorUid CRM nếu có. */
+export function parseOmicallUserDataCounselorUid(raw: Record<string, unknown>): string | undefined {
+  const candidates = [raw.user_data_str, raw.userData, raw.user_data, raw.userDataStr]
+  for (const c of candidates) {
+    if (!c) continue
+    if (typeof c === 'object') {
+      const o = c as Record<string, unknown>
+      const uid = str(o.counselorUid ?? o.counselor_uid)
+      if (uid) return uid
+      continue
+    }
+    const s = str(c)
+    if (!s) continue
+    try {
+      const o = JSON.parse(s) as Record<string, unknown>
+      const uid = str(o.counselorUid ?? o.counselor_uid)
+      if (uid) return uid
+    } catch {
+      /* ignore */
+    }
+  }
+  return undefined
+}
+
 export function extractAgentFromCall(raw: Record<string, unknown>): {
   agentId?: string
   agentName?: string

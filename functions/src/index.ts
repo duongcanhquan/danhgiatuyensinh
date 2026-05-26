@@ -22,6 +22,7 @@ import {
 import {
   fetchOmicallHistoryPage,
   parseOmicallUserDataLeadId,
+  parseOmicallUserDataCounselorUid,
   extractAgentFromCall,
   extractCustomerName,
   type OmicallHistoryApiVersion,
@@ -98,6 +99,7 @@ type NormalizedOmicallCall = {
   customerName?: string
   callNote?: string
   userDataLeadId?: string
+  userDataCounselorUid?: string
   isAutoCall?: boolean
   evaluationScore?: number
   raw: Record<string, unknown>
@@ -260,6 +262,7 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
     customerName: extractCustomerName(raw),
     callNote: str(raw.note) || undefined,
     userDataLeadId: parseOmicallUserDataLeadId(raw),
+    userDataCounselorUid: parseOmicallUserDataCounselorUid(raw),
     isAutoCall: raw.is_auto_call === true,
     evaluationScore: num(totalEval.point) || undefined,
     raw: rawInput,
@@ -294,9 +297,11 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
     }
   })
   const teamLeadMap = buildTeamLeadMap(users, usersSnap)
+  const byUserData =
+    call.userDataCounselorUid ? users.find((u) => u.uid === call.userDataCounselorUid) : undefined
   const bySip = call.sipUser ? users.find((u) => u.omicallSipUser === call.sipUser) : undefined
   const byAgent = call.agentId ? users.find((u) => u.omicallAgentId === call.agentId) : undefined
-  const counselorUid = bySip?.uid || byAgent?.uid
+  const counselorUid = byUserData?.uid || bySip?.uid || byAgent?.uid
 
   let leadId: string | undefined = call.userDataLeadId
   if (!leadId) {
@@ -362,7 +367,6 @@ function interactionNote(call: NormalizedOmicallCall): string {
     `Thời lượng nói chuyện: ${durationText}`,
     call.hotline ? `Đầu số: ${call.hotline}` : '',
     call.recordingFileUrl ? 'Có ghi âm' : '',
-    `Mã cuộc gọi: ${call.transactionId}`,
   ]
     .filter(Boolean)
     .join(' · ')

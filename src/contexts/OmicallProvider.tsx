@@ -514,6 +514,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         leadId: input.leadId,
         target: input.target,
         phone: normalized,
+        counselorUid: profile?.id,
       }
       pendingCallMetaRef.current = userData
       pendingCallDisplayRef.current = {

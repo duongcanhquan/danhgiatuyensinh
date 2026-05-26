@@ -6,7 +6,6 @@ import {
   getDefaultKpiEvaluationRules,
   KPI_SCORE_BREAKDOWN_LABELS,
   mergeKpiEvaluationRules,
-  validCallRuleHint,
 } from '../utils/kpiEvaluationRules'
 import { computeCompositeKpiScore } from '../utils/kpiCompositeScore'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
@@ -74,8 +73,7 @@ function TextField({
 }
 
 export function KpiEvaluationRulesPanel({ canEdit }: { canEdit: boolean }) {
-  const { merged, runtime, docExists, rulesFromRemote, loading, error, saveRules, resetToBuiltin } =
-    useKpiEvaluationRules()
+  const { merged, runtime, loading, error, saveRules, resetToBuiltin } = useKpiEvaluationRules()
   const [draft, setDraft] = useState<KpiEvaluationConfigPersisted>(() => merged)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -178,16 +176,6 @@ export function KpiEvaluationRulesPanel({ canEdit }: { canEdit: boolean }) {
         <VietMyAccentHeading as="h2" tone="onLight" size="lg" className="block">
           KPI Sale &amp; đánh giá TVV
         </VietMyAccentHeading>
-        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
-          Quy tắc gọi hợp lệ, cảnh báo điều hành, điểm tháng và hạng thưởng. Lưu tại{' '}
-          <code className="rounded bg-slate-100 px-1 text-xs">scoringAux/kpiEvaluationConfig</code> — Cloud Functions
-          đọc mỗi ~15 phút (cache 1 phút).
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          {rulesFromRemote ? 'Đang dùng cấu hình server.' : docExists ? 'Doc có nhưng schema lỗi — đang merge mặc định.' : 'Chưa có trên server — mặc định app.'}
-          {' · '}
-          {validCallRuleHint(runtime)}
-        </p>
       </div>
 
       {error ? (
