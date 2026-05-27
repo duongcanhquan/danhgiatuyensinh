@@ -194,6 +194,49 @@ export function extractAgentFromCall(raw: Record<string, unknown>): {
   }
 }
 
+/** Bóc lớp payload/data/body OMICall gửi vào webhook. */
+export function unwrapOmicallWebhookBody(input: Record<string, unknown>): Record<string, unknown> {
+  const payload = asObject(input.payload)
+  if (Object.keys(payload).length > 0) return payload
+  const data = asObject(input.data)
+  if (Object.keys(data).length > 0) return data
+  const body = asObject(input.body)
+  if (Object.keys(body).length > 0) return body
+  const record = asObject(input.record)
+  if (Object.keys(record).length > 0) return record
+  return input
+}
+
+/** Id cuộc gọi — không dùng `unique_id` (đó là id sự kiện, không phải cuộc gọi). */
+export function omicallTransactionIdFromRaw(raw: Record<string, unknown>): string {
+  return str(raw.transaction_id) || str(raw.transactionId) || str(raw.call_uuid) || str(raw.callUuid)
+}
+
+/** SĐT khách theo hướng gọi (theo tài liệu OMICall). */
+export function omicallCustomerPhoneRaw(raw: Record<string, unknown>): string {
+  const phoneNumber = str(raw.phone_number)
+  if (phoneNumber) return phoneNumber
+  const direction = str(raw.direction).toLowerCase()
+  if (direction === 'inbound') {
+    return str(raw.from_number) || str(raw.destination_number) || str(raw.to_number)
+  }
+  return str(raw.to_number) || str(raw.destination_number) || str(raw.from_number)
+}
+
+/** Máy lẻ / sip_user nhân viên — kể cả trong `users_status`. */
+export function omicallSipUserFromRaw(raw: Record<string, unknown>): string | undefined {
+  const direct = str(raw.sip_user) || str(raw.sipUser) || str(raw.extension)
+  if (direct) return direct
+  const statusList = raw.users_status ?? raw.user_status
+  if (Array.isArray(statusList)) {
+    for (const item of statusList) {
+      const ext = str(asObject(item).extension)
+      if (ext) return ext
+    }
+  }
+  return undefined
+}
+
 export function extractCustomerName(raw: Record<string, unknown>): string | undefined {
   const customer = asObject(raw.customer)
   return str(customer.full_name ?? customer.fullName) || undefined

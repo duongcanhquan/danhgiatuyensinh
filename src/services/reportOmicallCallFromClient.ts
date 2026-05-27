@@ -28,7 +28,7 @@ export async function reportOmicallCallFromClient(
   if (!isFirebaseConfigured()) return
   const app = getFirebaseApp()
   if (!app) return
-  const transactionId = call.uid?.trim()
+  const transactionId = (call.uuid || call.uid)?.trim()
   if (!transactionId || !meta.leadId) return
 
   const billSeconds = durationFromSdk(call)

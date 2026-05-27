@@ -23,7 +23,8 @@ export async function registerOmicallCallWebhook(
       webhook: {
         type: 'call',
         url: webhookUrl,
-        events: ['ringing', 'answered', 'hangup'],
+        // Sự kiện realtime (ringing/answered/hangup) + bản ghi CDR (state: cdr) khi cuộc gọi kết thúc.
+        events: ['ringing', 'answered', 'hangup', 'cdr'],
       },
     }),
   })

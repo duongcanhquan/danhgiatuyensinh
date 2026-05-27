@@ -25,6 +25,10 @@ import {
   parseOmicallUserDataCounselorUid,
   extractAgentFromCall,
   extractCustomerName,
+  unwrapOmicallWebhookBody,
+  omicallTransactionIdFromRaw,
+  omicallCustomerPhoneRaw,
+  omicallSipUserFromRaw,
   type OmicallHistoryApiVersion,
 } from './omicallHistoryApi.js'
 import {
@@ -203,25 +207,27 @@ function callOutcome(answerSeconds: number, billSeconds: number, hangupCause: st
   return 'OTHER'
 }
 
-function isFinalCallState(call: Pick<NormalizedOmicallCall, 'state' | 'endedAt'>, source: 'webhook' | 'history_sync'): boolean {
+function isFinalCallState(
+  call: Pick<NormalizedOmicallCall, 'state' | 'endedAt' | 'billSeconds' | 'answerSeconds' | 'recordSeconds'>,
+  source: 'webhook' | 'history_sync',
+): boolean {
   if (source === 'history_sync') return true
   const state = str(call.state).toLowerCase()
-  return state === 'hangup' || state === 'cdr' || state === 'completed' || state === 'ended' || Boolean(call.endedAt)
+  if (state === 'cdr' || state === 'completed' || state === 'ended') return true
+  if (state === 'hangup' && call.endedAt) return true
+  if (call.endedAt && (call.billSeconds > 0 || call.answerSeconds > 0 || call.recordSeconds > 0)) return true
+  return false
 }
 
 function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall | null {
-  const payload = asObject(rawInput.payload)
-  const raw = Object.keys(payload).length ? payload : rawInput
-  const transactionId =
-    str(raw.transaction_id) ||
-    str(raw.transactionId) ||
-    str(raw.call_uuid) ||
-    str(raw.callUuid) ||
-    str(raw.unique_id)
+  const raw = unwrapOmicallWebhookBody(rawInput)
+  const transactionId = omicallTransactionIdFromRaw(raw)
   if (!transactionId) return null
 
-  const phoneNumber = normalizePhone(raw.phone_number || raw.destination_number || raw.to_number || raw.from_number)
-  const displayNumber = str(raw.displayNumber) || str(raw.phone_number) || str(raw.destination_number) || phoneNumber
+  const agent = extractAgentFromCall(raw)
+  const phoneRaw = omicallCustomerPhoneRaw(raw)
+  const phoneNumber = normalizePhone(phoneRaw)
+  const displayNumber = str(raw.displayNumber) || str(raw.phone_number) || phoneRaw || phoneNumber
   const answerSeconds = num(raw.answer_sec)
   const billSeconds = num(raw.bill_sec)
   const durationSeconds = num(raw.duration)
@@ -232,17 +238,16 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
   const state = str(raw.state) || undefined
   const stateLower = str(state).toLowerCase()
   const eventTime = raw.date_time || raw.last_updated_date || raw.created_time || raw.created_date
-  const agent = extractAgentFromCall(raw)
   const totalEval = asObject(raw.total_evaluate ?? raw.totalEvaluate)
   return {
     transactionId,
-    callUuid: str(raw.call_uuid) || undefined,
+    callUuid: str(raw.call_uuid) || str(raw.callUuid) || transactionId,
     state,
     direction: str(raw.direction) || 'outbound',
     phoneNumber,
     displayNumber,
     hotline: str(raw.hotline) || str(raw.sip_number) || undefined,
-    sipUser: str(raw.sip_user) || str(raw.extension) || agent.agentContactId || undefined,
+    sipUser: omicallSipUserFromRaw(raw),
     startedAt: toTs(raw.time_start_call || raw.created_date || raw.created_time || raw.date_time),
     answeredAt: toTs(raw.time_answer_start || raw.time_start_to_answer || (stateLower === 'answered' ? eventTime : undefined)),
     endedAt: toTs(raw.time_end_call || (stateLower === 'hangup' || stateLower === 'cdr' ? eventTime : undefined)),
@@ -378,59 +383,75 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   const callRef = db.collection(COLLECTIONS.omicallCalls).doc(call.transactionId)
   const now = Timestamp.now()
   const existing = await callRef.get()
-  const existingData = existing.data()
-  const isFinal = isFinalCallState(call, source)
-  const validity = evaluateValidCall(call, match, kpiCfg)
-  const { raw: _raw, ...callFields } = call
+  const existingData = existing.data() as Record<string, unknown> | undefined
+  const mergedCall: NormalizedOmicallCall = {
+    ...call,
+    answerSeconds: Math.max(call.answerSeconds, num(existingData?.answerSeconds)),
+    billSeconds: Math.max(call.billSeconds, num(existingData?.billSeconds)),
+    recordSeconds: Math.max(call.recordSeconds, num(existingData?.recordSeconds)),
+    durationSeconds: Math.max(call.durationSeconds, num(existingData?.durationSeconds)),
+    endedAt: call.endedAt ?? (existingData?.endedAt as Timestamp | undefined),
+    answeredAt: call.answeredAt ?? (existingData?.answeredAt as Timestamp | undefined),
+    startedAt: call.startedAt ?? (existingData?.startedAt as Timestamp | undefined),
+    recordingFileUrl: call.recordingFileUrl || str(existingData?.recordingFileUrl) || undefined,
+    outcome:
+      call.outcome === 'CONNECTED' || str(existingData?.outcome) === 'CONNECTED'
+        ? 'CONNECTED'
+        : call.outcome,
+  }
+  const isFinal = isFinalCallState(mergedCall, source) || existingData?.isFinal === true
+  const validity = evaluateValidCall(mergedCall, match, kpiCfg)
+  const { raw: _raw, ...callFields } = mergedCall
   const payload = {
     ...callFields,
-    leadId: match.leadId ?? null,
-    counselorUid: match.counselorUid ?? null,
-    teamLeadUid: match.teamLeadUid ?? null,
-    disposition: call.disposition ?? null,
-    agentId: call.agentId ?? null,
-    agentName: call.agentName ?? null,
-    customerName: call.customerName ?? null,
-    callNote: call.callNote ?? null,
-    isAutoCall: call.isAutoCall ?? false,
-    evaluationScore: call.evaluationScore ?? null,
+    leadId: match.leadId ?? str(existingData?.leadId) ?? null,
+    counselorUid: match.counselorUid ?? str(existingData?.counselorUid) ?? null,
+    teamLeadUid: match.teamLeadUid ?? str(existingData?.teamLeadUid) ?? null,
+    disposition: mergedCall.disposition ?? null,
+    agentId: mergedCall.agentId ?? null,
+    agentName: mergedCall.agentName ?? null,
+    customerName: mergedCall.customerName ?? null,
+    callNote: mergedCall.callNote ?? null,
+    isAutoCall: mergedCall.isAutoCall ?? false,
+    evaluationScore: mergedCall.evaluationScore ?? null,
     isValidCall: validity.isValid,
     invalidReason: validity.invalidReason ?? null,
     isFinal,
     syncSource: source,
     syncedAt: now,
     updatedAt: now,
-    createdAt: call.createdAt ?? call.startedAt ?? now,
+    createdAt: mergedCall.createdAt ?? mergedCall.startedAt ?? (existingData?.createdAt as Timestamp) ?? now,
   }
   await callRef.set(payload, { merge: true })
 
   if (!isFinal) return
 
-    if (match.leadId && !existingData?.interactionId) {
-      const interactionsCol = db.collection(COLLECTIONS.leads).doc(match.leadId).collection(COLLECTIONS.interactions)
-      const dupSnap = await interactionsCol.where('providerCallId', '==', call.transactionId).limit(1).get()
+    const effectiveLeadId = match.leadId ?? (str(existingData?.leadId) || undefined)
+    if (effectiveLeadId && !existingData?.interactionId) {
+      const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
+      const dupSnap = await interactionsCol.where('providerCallId', '==', mergedCall.transactionId).limit(1).get()
       if (!dupSnap.empty) {
         await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
       } else {
       const interactionRef = await interactionsCol.add({
-        leadId: match.leadId,
+        leadId: effectiveLeadId,
         channel: 'CALL',
-        authorUid: match.counselorUid || 'omicall',
+        authorUid: match.counselorUid || str(existingData?.counselorUid) || 'omicall',
         authorRole: 'counselor',
-        counselorNote: interactionNote(call),
-        callOutcome: call.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER',
-        durationSeconds: call.billSeconds || call.answerSeconds || undefined,
+        counselorNote: interactionNote(mergedCall),
+        callOutcome: mergedCall.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER',
+        durationSeconds: mergedCall.billSeconds || mergedCall.answerSeconds || undefined,
         provider: 'OMICALL',
-        providerCallId: call.transactionId,
-        providerUuid: call.callUuid ?? null,
-        recordingUrl: call.recordingFileUrl ?? null,
-        recordSeconds: call.recordSeconds || null,
-        billSeconds: call.billSeconds || null,
-        answerSeconds: call.answerSeconds || null,
-        hotline: call.hotline ?? null,
-        sipUser: call.sipUser ?? null,
+        providerCallId: mergedCall.transactionId,
+        providerUuid: mergedCall.callUuid ?? null,
+        recordingUrl: mergedCall.recordingFileUrl ?? null,
+        recordSeconds: mergedCall.recordSeconds || null,
+        billSeconds: mergedCall.billSeconds || null,
+        answerSeconds: mergedCall.answerSeconds || null,
+        hotline: mergedCall.hotline ?? null,
+        sipUser: mergedCall.sipUser ?? null,
         syncedFrom: source,
-        timestamp: call.endedAt ?? call.startedAt ?? now,
+        timestamp: mergedCall.endedAt ?? mergedCall.startedAt ?? now,
       })
       await callRef.set({ interactionId: interactionRef.id }, { merge: true })
       }
@@ -440,7 +461,7 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     !existingData?.kpiAppliedAt || (existingData?.kpiPending === true && match.counselorUid)
   if (shouldApplyKpi) {
     if (match.counselorUid) {
-      await updateDailyKpi(call, match, validity.isValid, kpiCfg)
+      await updateDailyKpi(mergedCall, match, validity.isValid, kpiCfg)
       await callRef.set(
         { kpiAppliedAt: now, kpiPending: FieldValue.delete(), kpiPendingReason: FieldValue.delete() },
         { merge: true },
