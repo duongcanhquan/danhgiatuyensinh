@@ -1,7 +1,7 @@
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp, isFirebaseConfigured } from './firebase'
 
-export type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete'
+export type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete' | 'set_password'
 
 export type AdminStaffAccountResult = {
   ok: boolean
@@ -19,13 +19,18 @@ function mapCallableError(err: unknown): Error {
 export async function adminStaffAccountAction(
   targetUserId: string,
   action: StaffAccountAction,
-  opts?: { accountantPortalOnly?: boolean },
+  opts?: { accountantPortalOnly?: boolean; newPassword?: string },
 ): Promise<AdminStaffAccountResult> {
   if (!isFirebaseConfigured()) throw new Error('Chưa cấu hình Firebase.')
   const app = getFirebaseApp()
   if (!app) throw new Error('Firebase app chưa khởi tạo.')
   const fn = httpsCallable<
-    { targetUserId: string; action: StaffAccountAction; accountantPortalOnly?: boolean },
+    {
+      targetUserId: string
+      action: StaffAccountAction
+      accountantPortalOnly?: boolean
+      newPassword?: string
+    },
     AdminStaffAccountResult
   >(getFunctions(app, 'asia-southeast1'), 'adminStaffAccountAction')
   try {
@@ -33,6 +38,7 @@ export async function adminStaffAccountAction(
       targetUserId,
       action,
       accountantPortalOnly: opts?.accountantPortalOnly,
+      ...(opts?.newPassword ? { newPassword: opts.newPassword } : {}),
     })
     return res.data
   } catch (e) {

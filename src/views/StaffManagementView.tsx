@@ -25,9 +25,19 @@ export function StaffManagementView({
   embedded?: boolean
   teamScopeOnly?: boolean
 }) {
-  const { can, createStaffAccount, updateStaffProfile, sendStaffPasswordResetEmail, disableStaffLogin, enableStaffLogin, deleteStaffAccount, profile, firebaseUser } = useAuth()
+  const {
+    can,
+    createStaffAccount,
+    updateStaffProfile,
+    setStaffPassword,
+    sendStaffPasswordResetEmail,
+    disableStaffLogin,
+    enableStaffLogin,
+    deleteStaffAccount,
+    profile,
+    firebaseUser,
+  } = useAuth()
   const canStaffAll = can('config:users')
-  const canStaffTeam = can('config:users:team')
   const canOmicallConfig = can('config:omicall')
   const assignableRoles = useMemo((): UserRole[] => {
     if (teamScopeOnly) return ['counselor']
@@ -63,6 +73,7 @@ export function StaffManagementView({
   /** Trưởng nhóm phụ trách (khi sửa TVV — admin). */
   const [editTeamLeadId, setEditTeamLeadId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
+  const [editNewPassword, setEditNewPassword] = useState('')
   const [resetPwdBusy, setResetPwdBusy] = useState(false)
   const [editMsg, setEditMsg] = useState<string | null>(null)
   const [editErr, setEditErr] = useState<string | null>(null)
@@ -112,10 +123,10 @@ export function StaffManagementView({
 
   const selfUid = firebaseUser?.uid ?? profile?.id ?? null
 
-  if (!canStaffAll && !canStaffTeam) {
+  if (!canStaffAll) {
     return (
       <div className="rounded-2xl border border-amber-300/60 bg-amber-50/90 p-6 text-sm text-amber-900">
-        Bạn không có quyền quản lý nhân sự.
+        Chỉ <strong>Quản trị / Siêu quản trị</strong> mới vào được mục thêm · sửa · xóa nhân sự trong Cài đặt.
       </div>
     )
   }
@@ -243,6 +254,7 @@ export function StaffManagementView({
     setEditTeamLeadId(primaryLead?.id ?? '')
     setEditMsg(null)
     setEditErr(null)
+    setEditNewPassword('')
   }
 
   const saveEdit = async (e: FormEvent) => {
@@ -286,7 +298,15 @@ export function StaffManagementView({
           })
         }
       }
-      setEditMsg('Đã lưu thay đổi.')
+      const pwd = editNewPassword.trim()
+      if (pwd) {
+        if (pwd.length < 6) throw new Error('Mật khẩu mới cần ít nhất 6 ký tự.')
+        await setStaffPassword(editing.id, pwd)
+        setEditNewPassword('')
+        setEditMsg('Đã lưu thay đổi và đặt mật khẩu mới.')
+      } else {
+        setEditMsg('Đã lưu thay đổi.')
+      }
       setEditing(null)
     } catch (e: unknown) {
       setEditErr(e instanceof Error ? e.message : 'Không lưu được')
@@ -761,18 +781,35 @@ export function StaffManagementView({
                   </span>
                 </label>
               ) : null}
-              <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 px-3 py-2.5">
-                <p className="text-xs font-medium text-violet-950">Mật khẩu</p>
-                <p className="mt-0.5 text-xs leading-snug text-violet-900/90">
-                  Gửi link đặt lại tới email trên (Firebase).
-                </p>
+              <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 px-3 py-2.5 space-y-2">
+                <p className="text-xs font-medium text-violet-950">Mật khẩu đăng nhập</p>
+                <label className="block text-sm font-medium text-slate-700">
+                  Mật khẩu mới (tuỳ chọn)
+                  <input
+                    type="password"
+                    value={editNewPassword}
+                    onChange={(e) => setEditNewPassword(e.target.value)}
+                    minLength={6}
+                    autoComplete="new-password"
+                    placeholder="Để trống nếu không đổi"
+                    disabled={selfUid === editing.id}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                  />
+                </label>
+                {selfUid === editing.id ? (
+                  <p className="text-xs text-amber-800">Không đổi mật khẩu chính bạn từ đây.</p>
+                ) : (
+                  <p className="text-xs leading-snug text-violet-900/90">
+                    Lưu form sẽ áp dụng mật khẩu ngay — không cần email.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={resetPwdBusy || editBusy || !editing.email?.trim()}
                   onClick={sendPasswordResetForEditing}
-                  className="mt-2 w-full rounded-lg border border-violet-400 bg-white px-3 py-2 text-xs font-semibold text-violet-950 shadow-sm hover:bg-violet-50 disabled:opacity-50"
+                  className="w-full rounded-lg border border-violet-300/80 bg-white px-3 py-2 text-xs font-medium text-violet-900 hover:bg-violet-50 disabled:opacity-50"
                 >
-                  {resetPwdBusy ? 'Đang gửi…' : 'Gửi email đặt lại mật khẩu'}
+                  {resetPwdBusy ? 'Đang gửi…' : 'Hoặc gửi email đặt lại (tuỳ chọn)'}
                 </button>
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-800">

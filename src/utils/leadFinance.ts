@@ -17,6 +17,7 @@ export interface LeadPaymentLineDraft {
   collectedAt: string
   receiptUrl: string
   approvalStatus: LeadPaymentApprovalStatus
+  approvalNote: string
   pendingFile: File | null
 }
 
@@ -28,7 +29,7 @@ export interface LeadFinanceDraft {
 }
 
 function emptyLine(): LeadPaymentLineDraft {
-  return { amount: '', collectedAt: '', receiptUrl: '', approvalStatus: '', pendingFile: null }
+  return { amount: '', collectedAt: '', receiptUrl: '', approvalStatus: '', approvalNote: '', pendingFile: null }
 }
 
 export function emptyFinanceDraft(): LeadFinanceDraft {
@@ -61,6 +62,7 @@ function lineFromStored(line?: LeadPaymentLine): LeadPaymentLineDraft {
     collectedAt: isoToDateInput(line?.collectedAt),
     receiptUrl: line?.receiptUrl ?? '',
     approvalStatus: (line?.approvalStatus ?? '') as LeadPaymentApprovalStatus,
+    approvalNote: line?.approvalNote ?? '',
     pendingFile: null,
   }
 }
@@ -111,12 +113,14 @@ function lineToStored(d: LeadPaymentLineDraft): LeadPaymentLine | undefined {
   const collectedAt = dateInputToStored(d.collectedAt)
   const receiptUrl = d.receiptUrl.trim()
   const approvalStatus = d.approvalStatus
-  if (!amountVnd && !collectedAt && !receiptUrl && !approvalStatus) return undefined
+  const approvalNote = d.approvalNote.trim()
+  if (!amountVnd && !collectedAt && !receiptUrl && !approvalStatus && !approvalNote) return undefined
   return {
     amountVnd: amountVnd || undefined,
     collectedAt: collectedAt || undefined,
     receiptUrl: receiptUrl || undefined,
     approvalStatus: approvalStatus || undefined,
+    approvalNote: approvalNote || undefined,
   }
 }
 
@@ -185,8 +189,10 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
     if (row) {
       if (resetApprovalSlots.includes(key)) {
         row.approvalStatus = ''
+        row.approvalNote = undefined
       } else if (prev?.approvalStatus && !changed) {
         row.approvalStatus = prev.approvalStatus
+        row.approvalNote = prev.approvalNote
       }
       nextPayments[key] = row
     }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp, GripVertical, Phone, PhoneOff, User } from 'lucide-react'
+import { ChevronDown, ChevronUp, GripVertical, Phone, PhoneOff, User, X } from 'lucide-react'
 import { useOmicallOptional } from '../contexts/OmicallProvider'
 import { formatCallDuration } from '../utils/omicallCallMap'
 
@@ -50,10 +50,7 @@ export function OmicallActiveCallPanel() {
     call.durationLabel ||
     (call.durationSec > 0 ? formatCallDuration(call.durationSec) : call.state === 'accepted' ? '0:00' : '—')
   const isDeskCall = call.source === 'click2call'
-  const endLabel = isDeskCall ? 'Đóng' : 'Dập máy'
-  const endTitle = isDeskCall
-    ? 'Đóng cửa sổ — cuộc gọi máy bàn cần cắt trên điện thoại / máy IP'
-    : 'Kết thúc cuộc gọi trên trình duyệt'
+  const isStuck = call.state === 'connecting' || call.state === 'ringing'
 
   const startDrag = (e: ReactPointerEvent<HTMLButtonElement>) => {
     e.stopPropagation()
@@ -67,10 +64,12 @@ export function OmicallActiveCallPanel() {
     setDragging(true)
   }
 
-  const onEndCall = (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    e.preventDefault()
+  const onHangUp = () => {
     omicall.hangUpCall()
+  }
+
+  const onDismiss = () => {
+    omicall.dismissActiveCall()
   }
 
   const panel = (
@@ -110,7 +109,12 @@ export function OmicallActiveCallPanel() {
           <div className="border-t border-white/10 px-4 py-3 text-sm">
             {isDeskCall ? (
               <p className="mb-2 text-xs text-amber-200/95">
-                Gọi qua <strong>máy bàn</strong> — nút «Đóng» chỉ ẩn cửa sổ; hãy cắt cuộc gọi trên điện thoại / máy IP.
+                Gọi <strong>máy bàn</strong> — cắt cuộc gọi trên điện thoại / máy IP. «Huỷ trên CRM» chỉ đóng cửa sổ
+                để tiếp tục làm việc.
+              </p>
+            ) : isStuck ? (
+              <p className="mb-2 text-xs text-amber-200/95">
+                Treo lâu? Bấm <strong>Dập máy</strong> hoặc <strong>Huỷ trên CRM</strong> — không cần chờ hệ thống.
               </p>
             ) : null}
             {call.leadId ? (
@@ -135,33 +139,45 @@ export function OmicallActiveCallPanel() {
           </div>
         ) : null}
 
-        <div className="relative z-10 flex border-t border-white/10 bg-slate-900/40">
+        <div className="relative z-10 flex flex-col border-t border-white/10 bg-slate-900/40">
+          <div className="flex">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex flex-1 items-center justify-center gap-1 py-2.5 text-xs font-semibold text-violet-200 hover:bg-white/5"
+            >
+              {expanded ? (
+                <>
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                  Thu gọn
+                </>
+              ) : (
+                <>
+                  <ChevronUp className="h-4 w-4" aria-hidden />
+                  Chi tiết
+                </>
+              )}
+            </button>
+            {!isDeskCall ? (
+              <button
+                type="button"
+                title="Gửi lệnh dập máy qua OMICall (micro trình duyệt)"
+                onClick={onHangUp}
+                className="relative z-20 flex flex-1 cursor-pointer items-center justify-center gap-2 border-l border-white/10 bg-rose-600 py-2.5 text-sm font-bold text-white hover:bg-rose-500 active:bg-rose-700"
+              >
+                <PhoneOff className="h-4 w-4 shrink-0 pointer-events-none" aria-hidden />
+                Dập máy
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="flex flex-1 items-center justify-center gap-1 py-2.5 text-xs font-semibold text-violet-200 hover:bg-white/5"
+            title="Đóng panel — tiếp tục làm việc trên CRM ngay"
+            onClick={onDismiss}
+            className="flex w-full cursor-pointer items-center justify-center gap-2 border-t border-white/10 bg-slate-700 py-2.5 text-xs font-bold text-white hover:bg-slate-600"
           >
-            {expanded ? (
-              <>
-                <ChevronDown className="h-4 w-4" aria-hidden />
-                Thu gọn
-              </>
-            ) : (
-              <>
-                <ChevronUp className="h-4 w-4" aria-hidden />
-                Chi tiết
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            title={endTitle}
-            onPointerDown={onEndCall}
-            onClick={onEndCall}
-            className="relative z-20 flex flex-1 cursor-pointer items-center justify-center gap-2 border-l border-white/10 bg-rose-600 py-2.5 text-sm font-bold text-white hover:bg-rose-500 active:bg-rose-700"
-          >
-            <PhoneOff className="h-4 w-4 shrink-0 pointer-events-none" aria-hidden />
-            {endLabel}
+            <X className="h-4 w-4 shrink-0 pointer-events-none" aria-hidden />
+            Huỷ trên CRM {isDeskCall ? '(đóng cửa sổ)' : ''}
           </button>
         </div>
       </div>

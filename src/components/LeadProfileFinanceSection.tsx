@@ -5,17 +5,22 @@ import type { LeadPaymentApprovalStatus, LeadPaymentSlotKey } from '../types'
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50'
 
-function ApprovalBadge({ status }: { status: LeadPaymentApprovalStatus }) {
-  if (!status) return <span className="text-xs text-slate-400">Chờ duyệt</span>
+function ApprovalBadge({ status, note }: { status: LeadPaymentApprovalStatus; note?: string }) {
+  if (!status) return <span className="text-xs text-slate-400">Chờ duyệt kế toán</span>
   const ok = status === 'ĐỒNG Ý'
   return (
-    <span
-      className={[
-        'inline-block rounded-full px-2 py-0.5 text-xs font-bold',
-        ok ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900',
-      ].join(' ')}
-    >
-      {status}
+    <span className="block text-end">
+      <span
+        className={[
+          'inline-block rounded-full px-2 py-0.5 text-xs font-bold',
+          ok ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900',
+        ].join(' ')}
+      >
+        {status}
+      </span>
+      {note && status === 'TỪ CHỐI' ? (
+        <span className="mt-1 block text-[11px] leading-snug text-rose-800">Lý do: {note}</span>
+      ) : null}
     </span>
   )
 }
@@ -101,7 +106,7 @@ export function LeadProfileFinanceSection({
                 ) : null}
               </label>
               <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
-                <ApprovalBadge status={row.approvalStatus} />
+                <ApprovalBadge status={row.approvalStatus} note={row.approvalNote} />
               </div>
             </div>
           </div>

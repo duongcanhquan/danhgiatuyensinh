@@ -1,4 +1,11 @@
 import type { InviteDocumentType, Lead, LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
+import type { AccountantDecisionN8nContext } from './accountantN8nPayload'
+import {
+  buildAccountantDecisionWebhookBody,
+  buildAccountantFullNeWebhookBody,
+  type CounselorContact,
+} from './accountantN8nPayload'
+import { PAYMENT_SLOT_DEFS } from './leadFinance'
 const DEFAULT_WEBHOOK = 'https://apchn-host.lapage.vn/webhook/giaymoits'
 const DEFAULT_WEBHOOK_CTSV = 'https://apchn-host.lapage.vn/webhook/testctsv'
 const DEFAULT_WEBHOOK_DAILY = 'https://apchn-host.lapage.vn/webhook/baocao-ngay'
@@ -83,6 +90,14 @@ export function buildN8nFullData(
     date4: slot('supplementL3')?.collectedAt ?? '',
     date5: slot('supplementL4')?.collectedAt ?? '',
     total_money: String(f?.declaredTotalVnd ?? ''),
+    total_approved_money: String(
+      PAYMENT_SLOT_DEFS.reduce((acc, { key }) => {
+        const line = pay[key]
+        return line?.approvalStatus === 'ĐỒNG Ý' ? acc + (line?.amountVnd ?? 0) : acc
+      }, 0),
+    ),
+    reject_reason_deposit: slot('deposit')?.approvalNote ?? '',
+    reject_reason_l1: slot('supplementL1')?.approvalNote ?? '',
     status: f?.enrollmentStatus ?? lead.status,
     note: lead.description ?? '',
     situation: '',
@@ -124,24 +139,15 @@ export async function triggerProfileFinanceN8n(opts: {
   }
 }
 
-/** Kế toán duyệt / từ chối một đợt — `accountant_decision` */
-export async function triggerAccountantDecisionN8n(opts: {
-  lead: Lead
-  finance: LeadFinanceRecord
-  decision: 'ĐỒNG Ý' | 'TỪ CHỐI'
-  amount: number
-  batch: number
-  scholarship1Label?: string
-  scholarship2Label?: string
-}): Promise<void> {
-  const { lead, finance, decision, amount, batch, scholarship1Label, scholarship2Label } = opts
-  const pl = {
-    event: 'accountant_decision',
-    decision,
-    amount: String(amount),
-    batch,
-    full_data: buildN8nFullData(lead, finance, { scholarship1Label, scholarship2Label }),
-  }
+/** Kế toán duyệt / từ chối một đợt — `accountant_decision` (webhook n8n / Chat). */
+export async function triggerAccountantDecisionN8n(opts: AccountantDecisionN8nContext): Promise<void> {
+  const { lead, finance, counselor, scholarship1Label, scholarship2Label } = opts
+  const fullData = buildN8nFullData(lead, finance, {
+    counselorName: counselor.name,
+    scholarship1Label,
+    scholarship2Label,
+  })
+  const pl = buildAccountantDecisionWebhookBody(opts, fullData)
   const res = await postJson(webhookCtsv(), pl)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -153,18 +159,28 @@ export async function triggerAccountantFullNeN8n(opts: {
   lead: Lead
   finance: LeadFinanceRecord
   autoApprovedAmount?: number
+  counselor: CounselorContact
   scholarship1Label?: string
   scholarship2Label?: string
+  accountantName?: string
 }): Promise<void> {
-  const pl = {
-    event: 'accountant_full_ne',
-    decision: 'FULL NE',
-    auto_approved_amount: opts.autoApprovedAmount ?? 0,
-    full_data: buildN8nFullData(opts.lead, opts.finance, {
+  const fullData = buildN8nFullData(opts.lead, opts.finance, {
+    counselorName: opts.counselor.name,
+    scholarship1Label: opts.scholarship1Label,
+    scholarship2Label: opts.scholarship2Label,
+  })
+  const pl = buildAccountantFullNeWebhookBody(
+    {
+      lead: opts.lead,
+      finance: opts.finance,
+      autoApprovedAmount: opts.autoApprovedAmount ?? 0,
+      counselor: opts.counselor,
       scholarship1Label: opts.scholarship1Label,
       scholarship2Label: opts.scholarship2Label,
-    }),
-  }
+      accountantName: opts.accountantName,
+    },
+    fullData,
+  )
   const res = await postJson(webhookCtsv(), pl)
   if (!res.ok) {
     const text = await res.text().catch(() => '')

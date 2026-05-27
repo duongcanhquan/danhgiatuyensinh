@@ -261,6 +261,8 @@ export interface LeadPaymentLine {
   collectedAt?: string
   receiptUrl?: string
   approvalStatus?: LeadPaymentApprovalStatus
+  /** Lý do từ chối / ghi chú kế toán (hiển thị cho TVV). */
+  approvalNote?: string
 }
 
 export interface LeadFinanceRecord {

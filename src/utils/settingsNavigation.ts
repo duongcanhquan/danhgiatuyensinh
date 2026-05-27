@@ -104,7 +104,7 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
     case 'omicall':
       return ctx.canOmicall
     case 'staff':
-      return ctx.canStaff || ctx.canStaffTeam
+      return ctx.canStaff
     case 'permissions':
       return ctx.canPermMatrix
     default:

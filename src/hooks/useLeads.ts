@@ -56,12 +56,14 @@ function parsePaymentLine(raw: unknown): LeadPaymentLine | undefined {
   const collectedAt = String(o.collectedAt ?? '').trim() || undefined
   const receiptUrl = String(o.receiptUrl ?? '').trim() || undefined
   const approvalStatus = String(o.approvalStatus ?? '').trim() as LeadPaymentApprovalStatus
-  if (!amountVnd && !collectedAt && !receiptUrl && !approvalStatus) return undefined
+  const approvalNote = String(o.approvalNote ?? '').trim() || undefined
+  if (!amountVnd && !collectedAt && !receiptUrl && !approvalStatus && !approvalNote) return undefined
   return {
     amountVnd: amountVnd && !Number.isNaN(amountVnd) ? amountVnd : undefined,
     collectedAt,
     receiptUrl,
     approvalStatus: approvalStatus || undefined,
+    approvalNote,
   }
 }
 

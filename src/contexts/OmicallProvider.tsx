@@ -65,7 +65,10 @@ type OmicallContextValue = {
   lastCallHint: string | null
   /** Cuộc gọi đang diễn ra (panel dập máy + thông tin). */
   activeCall: OmicallActiveCall | null
+  /** Dập máy qua SDK (nếu có); luôn xóa panel CRM. */
   hangUpCall: () => void
+  /** Đóng panel / huỷ trạng thái treo — TVV chủ động, không cần đợi webhook. */
+  dismissActiveCall: () => void
   canCall: boolean
   /** Gọi qua API click-to-call (máy bàn / app — không cần SIP sẵn sàng trên trình duyệt). */
   canClick2Call: boolean
@@ -588,16 +591,59 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
   }, [authStatus, config.enabled, sipCreds?.sipUser, sipCreds?.sipRealm])
 
+  const clearActiveCallUi = useCallback(() => {
+    activeCallUidRef.current = null
+    pendingCallMetaRef.current = null
+    pendingCallDisplayRef.current = null
+    setActiveCall(null)
+  }, [])
+
+  const dismissActiveCall = useCallback(() => {
+    clearActiveCallUi()
+    setLastCallHint(
+      'Đã đóng trạng thái cuộc gọi trên CRM. Nếu máy bàn / điện thoại vẫn đổ chuông, hãy cắt trên thiết bị.',
+    )
+  }, [clearActiveCallUi])
+
   const hangUpCall = useCallback(() => {
     const sdk = sdkRef.current
-    if (!sdk) {
-      setLastCallHint('SDK chưa sẵn sàng — không thể dập máy từ trình duyệt.')
-      return
+    const uid = activeCallUidRef.current
+    const isSyntheticUid =
+      !uid || uid.startsWith('c2c-') || uid.startsWith('pending-')
+    let sdkOk = false
+    if (sdk && uid && !isSyntheticUid) {
+      sdkOk = hangUpOmicallCall(sdk, uid)
+      if (!sdkOk) sdkOk = hangUpOmicallCall(sdk)
+    } else if (sdk) {
+      sdkOk = hangUpOmicallCall(sdk)
     }
-    if (!hangUpOmicallCall(sdk)) {
-      setLastCallHint('SDK không hỗ trợ dập máy từ web — hãy cắt trên máy bàn / IP phone hoặc cập nhật phiên bản OMICall.')
+    clearActiveCallUi()
+    if (sdkOk) {
+      setLastCallHint('Đã gửi lệnh dập máy — nếu vẫn nghe thấy tiếng, cắt thêm trên máy bàn.')
+    } else if (isSyntheticUid) {
+      setLastCallHint(
+        'Đã đóng panel CRM. Cuộc gọi máy bàn / click-to-call cần cắt trên điện thoại hoặc máy IP.',
+      )
+    } else {
+      setLastCallHint(
+        'Đã đóng panel CRM. SDK không phản hồi dập máy — thử cắt trên máy bàn hoặc bấm «Huỷ trên CRM».',
+      )
     }
-  }, [])
+  }, [clearActiveCallUi])
+
+  /** Tự đóng panel nếu kẹt ở «đang kết nối / đổ chuông» quá lâu. */
+  useEffect(() => {
+    if (!activeCall) return
+    if (activeCall.state === 'accepted' || activeCall.state === 'ended') return
+    const stuckMs = activeCall.source === 'click2call' ? 120_000 : 180_000
+    const timer = window.setTimeout(() => {
+      setLastCallHint((prev) =>
+        prev ??
+        'Cuộc gọi treo quá lâu — đã có thể bấm «Huỷ trên CRM» hoặc «Dập máy» để tiếp tục làm việc.',
+      )
+    }, stuckMs)
+    return () => window.clearTimeout(timer)
+  }, [activeCall?.uid, activeCall?.state, activeCall?.source])
 
   const canCall = config.enabled && sipReady && Boolean(sipCreds)
   const canClick2Call = useMemo(
@@ -809,6 +855,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       lastCallHint,
       activeCall,
       hangUpCall,
+      dismissActiveCall,
       canCall,
       canClick2Call,
       saveConfig,
@@ -827,6 +874,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       lastCallHint,
       activeCall,
       hangUpCall,
+      dismissActiveCall,
       canCall,
       canClick2Call,
       saveConfig,

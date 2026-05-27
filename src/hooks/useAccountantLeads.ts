@@ -4,8 +4,10 @@ import type { Lead } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb } from '../services/firebase'
 import { mapDoc } from './useLeads'
+import { leadHasFinanceActivity } from '../utils/accountantFinanceFilter'
 
-const ACCOUNTANT_LEAD_LIMIT = 600
+/** Quét hồ sơ mới cập nhật — chỉ giữ bản ghi có phát sinh thu (lọc client). */
+const ACCOUNTANT_LEAD_LIMIT = 1500
 
 export function useAccountantLeads(enabled: boolean) {
   const [leads, setLeads] = useState<Lead[]>([])
@@ -29,7 +31,7 @@ export function useAccountantLeads(enabled: boolean) {
         const lead = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (lead) rows.push(lead)
       }
-      setLeads(rows)
+      setLeads(rows.filter(leadHasFinanceActivity))
     } catch (e) {
       console.error(e)
       setError(e instanceof Error ? e.message : 'Không tải được danh sách hồ sơ.')

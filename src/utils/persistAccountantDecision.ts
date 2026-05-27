@@ -6,6 +6,7 @@ import { uploadLeadReceiptFile } from '../services/leadReceiptStorage'
 import { PAYMENT_SLOT_DEFS, dateInputToStored } from './leadFinance'
 import { computeEnrollmentStatusAfterDecision } from './financeEnrollmentStatus'
 import { triggerAccountantDecisionN8n, triggerAccountantFullNeN8n } from './n8nIntegration'
+import { resolveCounselorForLead } from './accountantN8nPayload'
 import { resolveScholarshipLabels } from './scholarshipLabelResolver'
 import { leadTouchPatch } from './leadTouch'
 
@@ -27,8 +28,10 @@ export async function persistAccountantPaymentDecision(opts: {
   amountVnd: number
   collectedAtIso: string
   newFile?: File | null
+  approvalNote?: string
+  accountantName?: string
 }): Promise<{ lead: Lead; finance: LeadFinanceRecord }> {
-  const { db, lead, batch, decision, amountVnd, collectedAtIso, newFile } = opts
+  const { db, lead, batch, decision, amountVnd, collectedAtIso, newFile, approvalNote, accountantName } = opts
   const slotKey = SLOT_BY_BATCH[batch - 1]
   if (!slotKey) throw new Error('Đợt thu không hợp lệ (1–5).')
 
@@ -44,6 +47,10 @@ export async function persistAccountantPaymentDecision(opts: {
     collectedAt: dateInputToStored(collectedAtIso) || undefined,
     receiptUrl: receiptUrl || undefined,
     approvalStatus: decision,
+    approvalNote:
+      decision === 'TỪ CHỐI'
+        ? String(approvalNote ?? '').trim() || 'Kế toán từ chối — chưa ghi lý do.'
+        : undefined,
   }
 
   const financeBase: LeadFinanceRecord = {
@@ -60,16 +67,23 @@ export async function persistAccountantPaymentDecision(opts: {
     finance,
   })
 
-  const scholarshipLabels = await resolveScholarshipLabels(db, lead)
+  const [scholarshipLabels, counselor] = await Promise.all([
+    resolveScholarshipLabels(db, lead),
+    resolveCounselorForLead(db, lead),
+  ])
 
   await triggerAccountantDecisionN8n({
     lead: { ...lead, finance },
     finance,
     decision,
-    amount: amountVnd,
     batch,
+    slotKey,
+    amountVnd,
+    approvalNote: payments[slotKey]?.approvalNote,
+    counselor,
     scholarship1Label: scholarshipLabels.scholarship1Label,
     scholarship2Label: scholarshipLabels.scholarship2Label,
+    accountantName,
   })
 
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
@@ -78,8 +92,9 @@ export async function persistAccountantPaymentDecision(opts: {
 export async function persistAccountantFullNe(opts: {
   db: Firestore
   lead: Lead
+  accountantName?: string
 }): Promise<{ lead: Lead; finance: LeadFinanceRecord }> {
-  const { db, lead } = opts
+  const { db, lead, accountantName } = opts
   const prev = lead.finance ?? { payments: {} }
   const payments = { ...(prev.payments ?? {}) }
   let autoApproved = 0
@@ -107,13 +122,18 @@ export async function persistAccountantFullNe(opts: {
     finance,
   })
 
-  const scholarshipLabels = await resolveScholarshipLabels(db, lead)
+  const [scholarshipLabels, counselor] = await Promise.all([
+    resolveScholarshipLabels(db, lead),
+    resolveCounselorForLead(db, lead),
+  ])
   await triggerAccountantFullNeN8n({
     lead: { ...lead, finance },
     finance,
     autoApprovedAmount: autoApproved,
+    counselor,
     scholarship1Label: scholarshipLabels.scholarship1Label,
     scholarship2Label: scholarshipLabels.scholarship2Label,
+    accountantName,
   })
 
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }

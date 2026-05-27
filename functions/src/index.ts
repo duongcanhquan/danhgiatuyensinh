@@ -1686,16 +1686,17 @@ async function removeCounselorFromTeamRosters(counselorId: string): Promise<void
   if (writes > 0) await batch.commit()
 }
 
-type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete'
+type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete' | 'set_password'
 
-/** Khóa / mở / xóa tài khoản nhân sự (Firebase Auth + Firestore). */
+/** Khóa / mở / xóa / đặt mật khẩu tài khoản nhân sự (Firebase Auth + Firestore). */
 export const adminStaffAccountAction = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
   const targetUserId = str(request.data?.targetUserId).trim()
   const action = str(request.data?.action).trim() as StaffAccountAction
   const accountantPortalOnly = request.data?.accountantPortalOnly === true
+  const newPassword = str(request.data?.newPassword)
   if (!targetUserId) throw new HttpsError('invalid-argument', 'Thiếu targetUserId.')
-  if (!['disable_login', 'enable_login', 'delete'].includes(action)) {
+  if (!['disable_login', 'enable_login', 'delete', 'set_password'].includes(action)) {
     throw new HttpsError('invalid-argument', 'action không hợp lệ.')
   }
 
@@ -1705,6 +1706,32 @@ export const adminStaffAccountAction = onCall(async (request) => {
   await assertStaffManagementPermission(request.auth.uid, target, { accountantPortalOnly })
 
   const auth = getAuth()
+
+  if (action === 'set_password') {
+    if (accountantPortalOnly) {
+      throw new HttpsError('permission-denied', 'Cổng kế toán không đặt mật khẩu trực tiếp.')
+    }
+    const caller = await loadStaffUser(request.auth.uid)
+    if (!caller || !isAdminLikeRole(caller.role)) {
+      throw new HttpsError('permission-denied', 'Chỉ quản trị mới được đặt mật khẩu trực tiếp.')
+    }
+    if (newPassword.length < 6) {
+      throw new HttpsError('invalid-argument', 'Mật khẩu cần ít nhất 6 ký tự.')
+    }
+    if (target.role === 'super_admin' && caller.role !== 'super_admin') {
+      throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới đổi mật khẩu Siêu quản trị khác.')
+    }
+    try {
+      await auth.updateUser(targetUserId, { password: newPassword })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('user-not-found')) {
+        throw new HttpsError('not-found', 'Firebase Auth không có user này.')
+      }
+      throw new HttpsError('internal', msg)
+    }
+    return { ok: true, action, targetUserId }
+  }
 
   if (action === 'disable_login') {
     await db.collection(COLLECTIONS.users).doc(targetUserId).update({

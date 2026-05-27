@@ -1210,12 +1210,12 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeSubTab === 'staff' && (canStaff || canStaffTeam) ? (
+      {db && activeSubTab === 'staff' && canStaff ? (
         <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-3">
           <h2 id="tab-staff" className="sr-only">
-            {canStaff ? 'Quản lý nhân sự' : 'Nhóm tư vấn'}
+            Quản lý nhân sự
           </h2>
-          <StaffManagementView embedded teamScopeOnly={!canStaff && canStaffTeam} />
+          <StaffManagementView embedded />
         </div>
       ) : null}
 

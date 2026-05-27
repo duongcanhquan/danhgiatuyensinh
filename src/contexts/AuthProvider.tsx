@@ -237,19 +237,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       omicallOutboundNumber?: string
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
-      const canTeam = hasPermission(permissions, 'config:users:team')
       const canAcctStaff = hasPermission(permissions, 'finance:manage_accountants')
-      if (!canAll && !canTeam && !canAcctStaff) {
-        throw new Error('Bạn không có quyền thêm nhân sự.')
+      if (!canAll && !canAcctStaff) {
+        throw new Error('Chỉ quản trị (hoặc quản lý kế toán trên cổng kế toán) mới được tạo tài khoản.')
       }
-      if (canAcctStaff && !canAll && !canTeam) {
+      if (canAcctStaff && !canAll) {
         if (input.role !== 'accountant') {
           throw new Error('Cổng kế toán chỉ được tạo tài khoản vai trò Kế toán.')
-        }
-      }
-      if (canTeam && !canAll && !canAcctStaff) {
-        if (input.role !== 'counselor') {
-          throw new Error('Quản lý nhóm chỉ được tạo tài khoản tư vấn viên.')
         }
       }
       if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
@@ -262,13 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cred = await createUserWithEmailAndPassword(secondary.auth, email, input.password)
       await secondary.signOutSecondary()
       const now = Timestamp.now()
-      const teamMeta =
-        canTeam && !canAll && profile
-          ? {
-              ...(profile.departmentId ? { departmentId: profile.departmentId } : {}),
-              ...(profile.professionUnitId ? { professionUnitId: profile.professionUnitId } : {}),
-            }
-          : {}
+      const teamMeta = {}
       const normalizedRole = normalizeUserRole(input.role)
       const omicallSipUser = input.omicallSipUser?.trim()
       const omicallSipPassword = input.omicallSipPassword?.trim()
@@ -434,6 +422,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [firebaseUser?.uid],
   )
 
+  const setStaffPassword = useCallback(
+    async (userId: string, newPassword: string) => {
+      if (!hasPermission(permissions, 'config:users')) {
+        throw new Error('Chỉ quản trị mới được đặt mật khẩu trực tiếp.')
+      }
+      const uid = userId.trim()
+      const pwd = newPassword.trim()
+      if (!uid) throw new Error('Thiếu user.')
+      if (pwd.length < 6) throw new Error('Mật khẩu mới cần ít nhất 6 ký tự.')
+      if (firebaseUser?.uid === uid) {
+        throw new Error('Đổi mật khẩu của chính bạn qua menu tài khoản / Firebase, không qua đây.')
+      }
+      await adminStaffAccountAction(uid, 'set_password', { newPassword: pwd })
+    },
+    [permissions, firebaseUser?.uid],
+  )
+
   const sendStaffPasswordResetEmail = useCallback(
     async (email: string) => {
       const canUsers = hasPermission(permissions, 'config:users')
@@ -501,6 +506,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithEmail,
       createStaffAccount,
       updateStaffProfile,
+      setStaffPassword,
       sendStaffPasswordResetEmail,
       createAccountantStaff,
       updateAccountantStaff,
@@ -519,6 +525,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithEmail,
       createStaffAccount,
       updateStaffProfile,
+      setStaffPassword,
       sendStaffPasswordResetEmail,
       createAccountantStaff,
       updateAccountantStaff,

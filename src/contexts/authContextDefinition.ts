@@ -38,10 +38,9 @@ export type AuthContextValue = AuthState & {
     omicallAgentId?: string
     omicallOutboundNumber?: string
   }) => Promise<void>
-  /**
-   * Admin: gửi email «đặt lại mật khẩu» (Firebase Auth) tới địa chỉ đã đăng ký.
-   * Không đặt mật khẩu thủ công được từ client — cần Admin SDK / Cloud Function nếu muốn gán pass trực tiếp.
-   */
+  /** Admin: đặt mật khẩu mới trực tiếp (Cloud Function + Admin SDK). */
+  setStaffPassword: (userId: string, newPassword: string) => Promise<void>
+  /** Admin: gửi email đặt lại mật khẩu (tuỳ chọn, không bắt buộc). */
   sendStaffPasswordResetEmail: (email: string) => Promise<void>
   /** Cổng kế toán: tạo tài khoản role accountant. */
   createAccountantStaff: (input: { email: string; password: string; displayName: string }) => Promise<void>
