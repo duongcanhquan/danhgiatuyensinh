@@ -7,6 +7,7 @@ import { type KpiRangePreset, useCounselorKpi } from '../hooks/useCounselorKpi'
 import { sumKpiSummaries } from '../utils/kpiMap'
 import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
 import { validCallRuleHint } from '../utils/kpiEvaluationRules'
+import { KpiCallHint } from '../components/KpiCallHint'
 import { KpiCounselorTable } from '../components/KpiCounselorTable'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
@@ -58,7 +59,8 @@ export function CounselorKpiView({ embedded = false }: { embedded?: boolean }) {
   const [selectedTeamLeadUid, setSelectedTeamLeadUid] = useState('all')
   const [selectedCounselorUid, setSelectedCounselorUid] = useState('all')
   const { users } = useCounselorDirectory()
-  const { dates, summaries, loading, error } = useCounselorKpi(range)
+  const { dates, summaries, loading, error, kpiCallSource } = useCounselorKpi(range)
+  const showKpiAdminLink = can('config:omicall') || can('config:scoring_rules')
 
   const labels = useMemo(() => {
     const m = new Map<string, string>()
@@ -105,8 +107,7 @@ export function CounselorKpiView({ embedded = false }: { embedded?: boolean }) {
             <p className="text-sm font-semibold text-slate-800">KPI &amp; nhân sự theo kỳ</p>
           )}
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
-            Tổng hợp từ OMICall webhook/API và thao tác trên CRM. Dữ liệu cuộc gọi đầy đủ sẽ xuất hiện sau khi Cloud
-            Functions đồng bộ `omicallCalls` và `kpiDaily`. {validCallRuleHint(runtime)}.
+            Cuộc gọi, cọc, NE và doanh thu theo kỳ — dùng cho theo dõi TVV và họp nhanh. {validCallRuleHint(runtime)}.
             {can('config:scoring_rules') ? (
               <>
                 {' '}
@@ -116,6 +117,7 @@ export function CounselorKpiView({ embedded = false }: { embedded?: boolean }) {
               </>
             ) : null}
           </p>
+          <KpiCallHint source={kpiCallSource} showAdminLink={showKpiAdminLink} className="mt-2 max-w-3xl" />
         </div>
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="block text-sm font-medium text-slate-700">

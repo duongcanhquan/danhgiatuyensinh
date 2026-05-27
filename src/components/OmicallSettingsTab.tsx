@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useOmicall } from '../contexts/OmicallProvider'
 import { useOmicallSyncRuns } from '../hooks/useOmicallSyncRuns'
 import { DEFAULT_OMICALL_SDK_VERSION } from '../utils/omicallConfig'
+import { reconcileOmicallKpi } from '../services/reconcileOmicallKpi'
 import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
 import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import { probeOmicallInternalPhones } from '../services/omicallCallCenterProbe'
@@ -56,6 +57,7 @@ export function OmicallSettingsTab() {
   const [quickBusy, setQuickBusy] = useState(false)
   const [webhookBusy, setWebhookBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
+  const [kpiReconcileBusy, setKpiReconcileBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const { lastRun } = useOmicallSyncRuns(3)
@@ -422,7 +424,11 @@ export function OmicallSettingsTab() {
               onClick={() => {
                 setSyncBusy(true)
                 void triggerOmicallHistorySync(draft.historyLookbackMinutes)
-                  .then((r) => setMsg(`Đồng bộ lịch sử: ${r.processed} cuộc.`))
+                  .then((r) =>
+                    setMsg(
+                      `Xong: ${r.processed} cuộc đồng bộ · ${r.kpiReconcileApplied ?? 0} KPI từ lịch sử · ${r.interactionsApplied ?? 0} từ tiến trình hồ sơ.`,
+                    ),
+                  )
                   .catch((e) => setMsg(e instanceof Error ? e.message : 'Lỗi'))
                   .finally(() => setSyncBusy(false))
               }}
@@ -430,6 +436,24 @@ export function OmicallSettingsTab() {
             >
               <Zap className="h-3.5 w-3.5" aria-hidden />
               {syncBusy ? 'Đang chạy…' : 'Đồng bộ lịch sử ngay'}
+            </button>
+            <button
+              type="button"
+              disabled={kpiReconcileBusy || syncBusy}
+              onClick={() => {
+                setKpiReconcileBusy(true)
+                void reconcileOmicallKpi(21)
+                  .then((r) =>
+                    setMsg(
+                      `Bù KPI: ${r.applied} cuộc từ lịch sử gọi · ${r.interactionsApplied} từ tiến trình hồ sơ (đã quét ${r.scanned}).`,
+                    ),
+                  )
+                  .catch((e) => setMsg(e instanceof Error ? e.message : 'Lỗi bù KPI'))
+                  .finally(() => setKpiReconcileBusy(false))
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-900 hover:bg-violet-50 disabled:opacity-50"
+            >
+              {kpiReconcileBusy ? 'Đang bù…' : 'Bù KPI 21 ngày'}
             </button>
             <button
               type="button"

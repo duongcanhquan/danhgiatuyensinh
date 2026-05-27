@@ -6,6 +6,7 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useLeadCallOutcomes } from '../hooks/useLeadCallOutcomes'
 import { useOmicallCalls, type OmicallCallsScope } from '../hooks/useOmicallCalls'
+import { KpiCallHint } from '../components/KpiCallHint'
 import { aggregateOmicallCalls, formatCallDuration } from '../utils/omicallCallMap'
 import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
 import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
@@ -176,11 +177,12 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
 
   const showAdminInsights = canTeam || canGlobal
   const kpiCounselorFilter = counselorFilter || (viewMode === 'self' ? profile?.id : undefined)
-  const { totals: kpiTotals, loading: kpiLoading, error: kpiError } = useCounselorKpiDateRange(
-    range.from,
-    range.to,
-    kpiCounselorFilter,
-  )
+  const {
+    totals: kpiTotals,
+    loading: kpiLoading,
+    error: kpiError,
+    kpiCallSource,
+  } = useCounselorKpiDateRange(range.from, range.to, kpiCounselorFilter)
 
   const uniqueLeadIds = useMemo(() => {
     const ids = new Set<string>()
@@ -342,8 +344,18 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
         </div>
       ) : null}
 
+      <KpiCallHint
+        source={kpiCallSource}
+        showAdminLink={canGlobal && can('config:omicall')}
+        className="max-w-3xl"
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Tổng cuộc gọi" value={loading ? '…' : stats.total} />
+        <StatCard
+          label="Tổng cuộc gọi"
+          value={loading ? '…' : stats.total}
+          hint={kpiCallSource === 'calls_live' && stats.total > 0 ? 'Theo lịch sử gọi trong kỳ' : undefined}
+        />
         <StatCard
           label="Bắt máy"
           value={loading ? '…' : `${stats.connected} (${stats.connectRate}%)`}
@@ -370,7 +382,7 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
                 KPI tổng hợp theo kỳ ({range.from} → {range.to})
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Gộp từ <code className="rounded bg-slate-100 px-1">kpiDaily</code> — đồng bộ OMICall + CRM (cọc, NE, doanh thu).
+                Cọc, NE, doanh thu — báo cáo ngày; số gọi ở lưới phía trên cùng kỳ.
               </p>
             </div>
             <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">

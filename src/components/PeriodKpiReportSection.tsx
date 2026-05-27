@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
+import { KpiCallHint } from './KpiCallHint'
 import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
 import { aggregateKpiSummariesByTeam } from '../utils/kpiTeamAggregate'
 
@@ -30,7 +31,7 @@ export function PeriodKpiReportSection() {
   const { can, profile } = useAuth()
   const [range, setRange] = useState(defaultDateRange)
   const [counselorFilter, setCounselorFilter] = useState('')
-  const { summaries, totals, loading, error, dayCount } = useCounselorKpiDateRange(
+  const { summaries, totals, loading, error, dayCount, kpiCallSource } = useCounselorKpiDateRange(
     range.from,
     range.to,
     counselorFilter || undefined,
@@ -95,6 +96,8 @@ export function PeriodKpiReportSection() {
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
       ) : null}
 
+      <KpiCallHint source={kpiCallSource} showAdminLink={can('config:omicall')} />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatTile label="Phạm vi" value={selectedName ?? scopeLabel} hint={`${range.from} → ${range.to} · ${dayCount} ngày`} />
         <StatTile
@@ -107,7 +110,7 @@ export function PeriodKpiReportSection() {
         <StatTile
           label="NE / Full NE"
           value={loading ? '…' : `${fmtKpiNum(totals.toEnrolled)} / ${fmtKpiNum(totals.fullNeCount)}`}
-          hint="Từ kpiDaily"
+          hint="Nhập học / full NE"
         />
         <StatTile label="Doanh thu duyệt" value={loading ? '…' : fmtKpiVnd(totals.approvedRevenueVnd)} hint={fmtKpiMinutes(totals.talkSeconds)} />
       </div>

@@ -4,6 +4,7 @@ import { BarChart3, PhoneCall, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpi } from '../hooks/useCounselorKpi'
+import { KpiCallHint } from '../components/KpiCallHint'
 import { KpiCounselorTable } from '../components/KpiCounselorTable'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useKpiEvaluationRules } from '../contexts/KpiEvaluationRulesContext'
@@ -35,7 +36,7 @@ export function CommandCenterView({ embedded = false }: { embedded?: boolean }) 
   const allowed = canAccessCommandCenter(can)
   const [selectedDate, setSelectedDate] = useState(todayDateKey())
   const { users } = useCounselorDirectory()
-  const { summaries, totals, loading, error } = useCounselorKpi('today', selectedDate)
+  const { summaries, totals, loading, error, kpiCallSource } = useCounselorKpi('today', selectedDate)
 
   const labels = useMemo(() => {
     const m = new Map<string, string>()
@@ -79,9 +80,13 @@ export function CommandCenterView({ embedded = false }: { embedded?: boolean }) 
             <p className="text-sm font-semibold text-slate-800">Vận hành &amp; KPI trong ngày</p>
           )}
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
-            Báo cáo theo ngày từ OMICall và CRM — dùng cho họp sáng/chiều. Dữ liệu lấy từ{' '}
-            <code className="rounded bg-slate-100 px-1 text-xs">kpiDaily</code> (Cloud Functions đồng bộ).
+            Báo cáo trong ngày — cuộc gọi OMICall và thao tác CRM (cọc, chuyển trạng thái).
           </p>
+          <KpiCallHint
+            source={kpiCallSource}
+            showAdminLink={can('config:omicall')}
+            className="mt-2 max-w-2xl"
+          />
         </div>
         <label className="block text-sm font-medium text-slate-700">
           Ngày báo cáo

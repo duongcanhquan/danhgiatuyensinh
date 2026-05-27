@@ -5,6 +5,9 @@ import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { foldKpiRows, mapKpiDoc, sumKpiSummaries } from '../utils/kpiMap'
+import { foldOmicallCallsToKpiSummaries, kpiDayKeyFromDate, mergeCallKpiFromOmicall } from '../utils/kpiFromOmicallCalls'
+import { resolveKpiCallDataSource, type KpiCallDataSource } from '../utils/kpiDisplaySource'
+import { useOmicallCallsForKpi } from './useOmicallCallsForKpi'
 
 function dateKeysBetween(from: string, to: string): string[] {
   const start = new Date(`${from}T00:00:00`)
@@ -13,7 +16,7 @@ function dateKeysBetween(from: string, to: string): string[] {
   const out: string[] = []
   const cur = new Date(start)
   while (cur <= end) {
-    out.push(cur.toISOString().slice(0, 10))
+    out.push(kpiDayKeyFromDate(cur))
     cur.setDate(cur.getDate() + 1)
   }
   return out
@@ -69,12 +72,32 @@ export function useCounselorKpiDateRange(from: string, to: string, counselorUidF
     }
   }, [canGlobal, canTeam, dates, firebaseUser, profile?.id])
 
-  const summaries = useMemo(() => {
-    const all = foldKpiRows(rows, '30d')
-    if (!counselorUidFilter) return all
-    return all.filter((s) => s.counselorUid === counselorUidFilter)
-  }, [rows, counselorUidFilter])
-  const totals = useMemo(() => sumKpiSummaries(summaries), [summaries])
+  const { calls: omicallCalls, loading: callsLoading } = useOmicallCallsForKpi(from, to, counselorUidFilter)
 
-  return { rows, summaries, totals, loading, error, dayCount: dates.length }
+  const rawKpiSummaries = useMemo(() => foldKpiRows(rows, '30d'), [rows])
+  const callSummaries = useMemo(
+    () => foldOmicallCallsToKpiSummaries(omicallCalls, dates),
+    [omicallCalls, dates],
+  )
+  const summaries = useMemo(() => {
+    const merged = mergeCallKpiFromOmicall(rawKpiSummaries, callSummaries)
+    if (!counselorUidFilter) return merged
+    return merged.filter((s) => s.counselorUid === counselorUidFilter)
+  }, [rawKpiSummaries, callSummaries, counselorUidFilter])
+  const totals = useMemo(() => sumKpiSummaries(summaries), [summaries])
+  const kpiCallSource = useMemo((): KpiCallDataSource => {
+    const kpiCalls = sumKpiSummaries(rawKpiSummaries).totalCalls
+    const liveCalls = sumKpiSummaries(callSummaries).totalCalls
+    return resolveKpiCallDataSource(kpiCalls, liveCalls)
+  }, [rawKpiSummaries, callSummaries])
+
+  return {
+    rows,
+    summaries,
+    totals,
+    kpiCallSource,
+    loading: loading || callsLoading,
+    error,
+    dayCount: dates.length,
+  }
 }

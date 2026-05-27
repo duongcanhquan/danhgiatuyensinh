@@ -193,6 +193,14 @@
       ]
     },
     {
+      "collectionGroup": "interactions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "counselors",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

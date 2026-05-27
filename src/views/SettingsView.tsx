@@ -101,20 +101,19 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'lead_profile':
       return (
         <>
-          <p className="font-semibold text-slate-900">Hồ sơ &amp; danh mục tuyển sinh</p>
+          <p className="font-semibold text-slate-900">Danh mục trên form hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Tab con: <strong>Nguồn</strong>, <strong>Học bổng</strong>, <strong>Hệ đào tạo</strong>,{' '}
-            <strong>Chuyên ngành</strong>, <strong>Địa lý &amp; THPT</strong>, <strong>Học tập khác</strong>. OMICall
-            Gọi điện OMICall: tab <strong>Gọi điện</strong> trong nhóm <strong>Tích hợp</strong>.
+            Chỉnh nguồn, ngành, tỉnh… theo tab dễ đọc. <strong>Cùng dữ liệu</strong> với «Danh mục (nâng cao)» — chỉ khác
+            cách hiển thị. TVV hàng ngày dùng tab này; admin kỹ thuật có thể mở tab nâng cao.
           </p>
         </>
       )
     case 'master':
       return (
         <>
-          <p className="font-semibold text-slate-900">Cài đặt danh mục</p>
+          <p className="font-semibold text-slate-900">Danh mục (nâng cao)</p>
           <p className="mt-1.5">
-            Đây là <strong>thư viện giá trị chung</strong> (mỗi loại = một nhóm mục + synonym / cách khớp). Khi chấm điểm,
+            Cùng kho dữ liệu với <strong>Danh mục hồ sơ</strong>, xem theo từng loại catalog (kỹ thuật). Khi chấm điểm,
             điều kiện <strong>IN_LIST</strong> trên trường trùng id catalog (vd. <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">province</code>,{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">financialStatus</code>) sẽ{' '}
             <strong>đối chiếu lead với danh sách mục ở đây</strong> — profile không “sao chép” cả catalog, mà chọn những
@@ -998,7 +997,10 @@ export function SettingsView() {
           ) : null}
           <div className="mt-5 min-h-[320px]">
             <RuleTemplateLibraryPanel db={db} canEdit={canScoringRules} />
-            {db ? <TvvSignalDefinitionsPanel db={db} canEdit={canScoringRules} /> : null}
+            <p className={`mt-4 rounded-lg border border-slate-200/80 bg-slate-50/90 px-3 py-2 ${settingsCopyMuted}`}>
+              Tín hiệu TVV (hành vi &amp; rủi ro khi chấm điểm): chỉnh tại{' '}
+              <strong>Chấm điểm → Profile chấm điểm</strong> (cuối trang).
+            </p>
           </div>
         </section>
       ) : null}
@@ -1019,12 +1021,17 @@ export function SettingsView() {
       {db && activeSubTab === 'scoring_profiles' ? (
         <div role="tabpanel" aria-label="Cài đặt Profile" className="min-w-0 max-w-full space-y-4">
           <ProfileManagerTab db={db} />
+          {db ? (
+            <section className="border-t border-slate-200 pt-4">
+              <TvvSignalDefinitionsPanel db={db} canEdit={canScoringRules} />
+            </section>
+          ) : null}
           <section className="border-t border-slate-200 pt-4">
             <h3 className={settingsHeading}>Thử nghiệm chấm điểm (JSON)</h3>
             <p className={`mt-2 text-slate-600 ${settingsCopy}`}>
-              Dán JSON mẫu — dùng <strong>profile đầu tiên</strong> trong danh sách. Các khóa nên khớp{' '}
-              <code className={`rounded bg-slate-200/80 px-1 font-mono ${settingsCopy}`}>targetField</code> trong quy tắc
-              của profile đó.
+              Dán JSON mẫu — dùng profile <strong>có quy tắc</strong> (ưu tiên bộ đang có khối điều kiện). Khóa JSON khớp{' '}
+              <code className={`rounded bg-slate-200/80 px-1 font-mono ${settingsCopy}`}>targetField</code> trong profile
+              đó.
             </p>
             <textarea
               value={demoJson}

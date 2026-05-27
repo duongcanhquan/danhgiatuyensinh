@@ -19,6 +19,7 @@ import {
   ensureMicrophoneForCall,
   normalizePhoneForDial,
   parseOmicallConfigDoc,
+  parseOmicallUserData,
   resolveOmicallSipCredentials,
   resolveOmicallOutboundNumber,
   canUseOmicallClick2Call,
@@ -34,6 +35,7 @@ import {
 } from '../services/omicallSdk'
 import { OmicallActiveCallPanel } from '../components/OmicallActiveCallPanel'
 import { logOmicallInteraction } from '../services/logOmicallInteraction'
+import { reportOmicallCallFromClient } from '../services/reportOmicallCallFromClient'
 
 export type OmicallConnectionStatus = 'off' | 'loading' | 'ready' | 'registering' | 'connected' | 'error'
 
@@ -223,6 +225,18 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
                 remoteNumber: call.remoteNumber || pendingMeta.phone,
               }
         await logOmicallInteraction(db, callWithMeta, profile)
+        const meta = pendingMeta ?? (callWithMeta.userData ? parseOmicallUserData(callWithMeta.userData) : null)
+        if (meta?.leadId) {
+          try {
+            await reportOmicallCallFromClient(callWithMeta, {
+              leadId: meta.leadId,
+              phone: meta.phone || callWithMeta.displayNumber || '',
+              target: meta.target,
+            })
+          } catch (reportErr) {
+            console.warn('[OMICall] report KPI', reportErr)
+          }
+        }
       } catch (e) {
         console.error('[OMICall] log interaction', e)
       } finally {

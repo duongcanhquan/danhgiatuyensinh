@@ -5,12 +5,15 @@ import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { foldKpiRows, mapKpiDoc, sumKpiSummaries, type CounselorKpiSummary } from '../utils/kpiMap'
+import { foldOmicallCallsToKpiSummaries, kpiDayKeyFromDate, mergeCallKpiFromOmicall } from '../utils/kpiFromOmicallCalls'
+import { resolveKpiCallDataSource, type KpiCallDataSource } from '../utils/kpiDisplaySource'
+import { useOmicallCallsForKpi } from './useOmicallCallsForKpi'
 
 export type KpiRangePreset = 'today' | '7d' | '30d'
-export type { CounselorKpiSummary }
+export type { CounselorKpiSummary, KpiCallDataSource }
 
 function dateKey(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return kpiDayKeyFromDate(d)
 }
 
 export function kpiDateKeys(preset: KpiRangePreset, singleDate?: string): string[] {
@@ -75,8 +78,33 @@ export function useCounselorKpi(range: KpiRangePreset, singleDate?: string) {
     }
   }, [canGlobal, canTeam, dates, firebaseUser, profile?.id])
 
-  const summaries = useMemo(() => foldKpiRows(rows, range), [rows, range])
-  const totals = useMemo(() => sumKpiSummaries(summaries), [summaries])
+  const from = dates[0] ?? dateKey(new Date())
+  const to = dates[dates.length - 1] ?? from
+  const { calls: omicallCalls, loading: callsLoading } = useOmicallCallsForKpi(from, to)
 
-  return { dates, rows, summaries, totals, loading, error }
+  const rawKpiSummaries = useMemo(() => foldKpiRows(rows, range), [rows, range])
+  const callSummaries = useMemo(
+    () => foldOmicallCallsToKpiSummaries(omicallCalls, dates),
+    [omicallCalls, dates],
+  )
+  const summaries = useMemo(
+    () => mergeCallKpiFromOmicall(rawKpiSummaries, callSummaries),
+    [rawKpiSummaries, callSummaries],
+  )
+  const totals = useMemo(() => sumKpiSummaries(summaries), [summaries])
+  const kpiCallSource = useMemo((): KpiCallDataSource => {
+    const kpiCalls = sumKpiSummaries(rawKpiSummaries).totalCalls
+    const liveCalls = sumKpiSummaries(callSummaries).totalCalls
+    return resolveKpiCallDataSource(kpiCalls, liveCalls)
+  }, [rawKpiSummaries, callSummaries])
+
+  return {
+    dates,
+    rows,
+    summaries,
+    totals,
+    kpiCallSource,
+    loading: loading || callsLoading,
+    error,
+  }
 }

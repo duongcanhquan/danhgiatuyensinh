@@ -26,8 +26,8 @@ export const SETTINGS_MAIN_LABELS: Record<SettingsMainTabId, string> = {
 
 export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   intake: 'Nhập liệu',
-  master: 'Danh mục chung',
-  lead_profile: 'Hồ sơ tuyển sinh',
+  master: 'Danh mục (nâng cao)',
+  lead_profile: 'Danh mục hồ sơ',
   scoring_profiles: 'Profile chấm điểm',
   scoring: 'Điểm thông tin',
   rule_templates: 'Quy tắc mẫu',

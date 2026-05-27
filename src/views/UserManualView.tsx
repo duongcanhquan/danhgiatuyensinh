@@ -179,6 +179,10 @@ function sectionsData(): Section[] {
               (tùy quyền, có thể không hiện hết).
             </li>
             <li>
+              <strong>Bộ chấm điểm</strong> (đầu trang) — chọn profile để xem điểm / nhãn HOT·WARM trên bảng; nhãn{' '}
+              <em>lưu trên hồ sơ</em> chỉ đổi khi bạn sửa và lưu hồ sơ.
+            </li>
+            <li>
               <strong>Bảng</strong> — mỗi dòng là một hồ sơ; bấm vào dòng để mở chi tiết.
             </li>
             <li>
@@ -218,10 +222,13 @@ function sectionsData(): Section[] {
             <li>Mọi thay đổi quan trọng: đợi thông báo thành công (toast) rồi hãy đóng trang nếu vừa lưu xong.</li>
             <li>Panel tư vấn (nếu có): hiển thị gợi ý kịch bản do nhà trường soạn — khác với nút phân tích AI.</li>
             <li>
-              Tab <strong>Dòng thời gian</strong>: cuộc gọi OMICall (có/không HL), ghi chú CRM, nhật ký thao tác — đối chiếu
-              KPI.
+              Tab <strong>Dòng thời gian</strong>: cuộc gọi và ghi chú — hiện ngay sau khi gọi; số tổng hợp lên{' '}
+              <strong>Tổng kết → KPI / Lịch gọi</strong> sau khi hệ thống đồng bộ.
             </li>
-            <li>Gọi điện: dùng nút <strong>OMICall</strong> trên hồ sơ để KPI gắn đúng lead.</li>
+            <li>
+              Gọi điện: luôn dùng nút <strong>OMICall</strong> trên hồ sơ (không gọi tay ngoài) để báo cáo đúng TVV và
+              lead.
+            </li>
           </ul>
         </div>
       ),

@@ -44,8 +44,8 @@ export function SummaryHubView() {
           Tổng kết
         </VietMyAccentHeading>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
-          Một nơi xem <strong>tổng quan trường / nhóm</strong>, <strong>KPI &amp; nhân sự</strong>,{' '}
-          <strong>bảng điểm tháng</strong> và cuộc gọi — không cần chuyển nhiều mục menu.
+          Một nơi xem <strong>tổng quan</strong>, <strong>KPI &amp; cuộc gọi</strong>, <strong>bảng điểm tháng</strong>{' '}
+          và vận hành ngày — mỗi tab một việc, không trùng menu Hồ sơ.
         </p>
         {tabs.length > 1 ? (
           <nav

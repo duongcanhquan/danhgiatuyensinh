@@ -6,6 +6,8 @@ export type TriggerOmicallSyncResult = {
   processed: number
   analysesProcessed: number
   lookbackMinutes: number
+  kpiReconcileApplied?: number
+  interactionsApplied?: number
 }
 
 export async function triggerOmicallHistorySync(lookbackMinutes?: number): Promise<TriggerOmicallSyncResult> {

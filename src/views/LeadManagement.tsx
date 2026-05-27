@@ -76,6 +76,7 @@ import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
 import { InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
 import { SearchableFilterSelect } from '../components/SearchableFilterSelect'
+import { ScoringViewModeHint } from '../components/ScoringViewModeHint'
 import { profileHasActiveRules } from '../utils/scoringProfileUtils'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
@@ -1306,11 +1307,11 @@ export function LeadManagement() {
               </div>
             </div>
             <div className="mt-2 flex flex-col gap-1.5 border-t border-amber-100/90 pt-2">
-              {profileScoringActive && !profileScoringLive ? (
-                <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950">
-                  Profile «{activeScoringProfile?.profileName}» chưa có quy tắc — thêm khối quy tắc trong{' '}
-                  <strong>Cài đặt → Cài đặt Profile</strong>. Cột điểm hiện theo dữ liệu đã lưu hoặc 0.
-                </p>
+              {activeScoringProfile ? (
+                <ScoringViewModeHint
+                  profileName={activeScoringProfile.profileName}
+                  liveRules={profileScoringLive}
+                />
               ) : null}
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc nhanh nhãn chấm điểm">
                 <button

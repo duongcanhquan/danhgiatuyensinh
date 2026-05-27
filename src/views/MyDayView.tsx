@@ -3,6 +3,7 @@ import { Activity, PhoneCall, Target, TrendingUp, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { KpiCallHint } from '../components/KpiCallHint'
 import { fmtKpiNum, fmtKpiPct, fmtKpiVnd, todayDateKey } from '../utils/kpiDisplay'
 
 function DayStat({
@@ -39,7 +40,7 @@ function DayStat({
 export function MyDayView() {
   const { firebaseUser } = useAuth()
   const today = todayDateKey()
-  const { summaries, totals, loading, error } = useCounselorKpi('today', today)
+  const { summaries, loading, error, kpiCallSource } = useCounselorKpi('today', today)
   const mine = summaries.find((s) => s.counselorUid === firebaseUser?.uid) ?? summaries[0]
 
   const connectRate = fmtKpiPct(mine?.connectedCalls ?? 0, mine?.totalCalls ?? 0)
@@ -56,6 +57,8 @@ export function MyDayView() {
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
       ) : null}
+
+      <KpiCallHint source={kpiCallSource} className="max-w-2xl" />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <DayStat
@@ -120,9 +123,9 @@ export function MyDayView() {
         </div>
       </section>
 
-      {totals.totalCalls > 0 && !mine?.totalCalls ? (
-        <p className="text-xs text-amber-800">
-          Chưa thấy KPI cá nhân hôm nay — kiểm tra SIP/extension OMICall đã gắn đúng tài khoản.
+      {kpiCallSource === 'empty' ? (
+        <p className="text-xs text-slate-600">
+          Mẹo: gọi từ nút OMICall trên từng hồ sơ — số cuộc gọi sẽ lên đây và tab Tổng kết.
         </p>
       ) : null}
     </div>

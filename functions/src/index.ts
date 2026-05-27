@@ -191,7 +191,7 @@ function parseDateStringToTs(raw: unknown): Timestamp | undefined {
 
 function dayKeyFromTs(ts?: Timestamp): string {
   const d = (ts ?? Timestamp.now()).toDate()
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' })
 }
 
 function callOutcome(answerSeconds: number, billSeconds: number, hangupCause: string, disposition: string): CallOutcome {
@@ -436,10 +436,166 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
       }
     }
 
-  if (!existingData?.kpiAppliedAt) {
-    await updateDailyKpi(call, match, validity.isValid, kpiCfg)
-    await callRef.set({ kpiAppliedAt: now }, { merge: true })
+  const shouldApplyKpi =
+    !existingData?.kpiAppliedAt || (existingData?.kpiPending === true && match.counselorUid)
+  if (shouldApplyKpi) {
+    if (match.counselorUid) {
+      await updateDailyKpi(call, match, validity.isValid, kpiCfg)
+      await callRef.set(
+        { kpiAppliedAt: now, kpiPending: FieldValue.delete(), kpiPendingReason: FieldValue.delete() },
+        { merge: true },
+      )
+    } else if (!existingData?.kpiAppliedAt) {
+      await callRef.set(
+        { kpiPending: true, kpiPendingReason: 'no_counselor', updatedAt: now },
+        { merge: true },
+      )
+    }
   }
+}
+
+function normalizedCallFromStored(id: string, data: Record<string, unknown>): NormalizedOmicallCall {
+  const answerSeconds = num(data.answerSeconds)
+  const billSeconds = num(data.billSeconds)
+  const outcomeRaw = str(data.outcome)
+  const outcome: CallOutcome =
+    outcomeRaw === 'CONNECTED' || outcomeRaw === 'NO_ANSWER' ? outcomeRaw : callOutcome(answerSeconds, billSeconds, '', '')
+  return {
+    transactionId: str(data.transactionId) || id,
+    callUuid: str(data.callUuid) || undefined,
+    state: str(data.state) || 'ended',
+    direction: str(data.direction) || 'outbound',
+    phoneNumber: str(data.phoneNumber),
+    displayNumber: str(data.displayNumber) || str(data.phoneNumber),
+    hotline: str(data.hotline) || undefined,
+    sipUser: str(data.sipUser) || undefined,
+    startedAt: data.startedAt as Timestamp | undefined,
+    answeredAt: data.answeredAt as Timestamp | undefined,
+    endedAt: data.endedAt as Timestamp | undefined,
+    createdAt: data.createdAt as Timestamp | undefined,
+    answerSeconds,
+    billSeconds,
+    durationSeconds: num(data.durationSeconds),
+    recordSeconds: num(data.recordSeconds),
+    recordingFileUrl: str(data.recordingFileUrl) || undefined,
+    hangupCause: str(data.hangupCause) || undefined,
+    userDataLeadId: str(data.leadId) || undefined,
+    userDataCounselorUid: str(data.counselorUid) || undefined,
+    outcome,
+    disposition: str(data.disposition) || undefined,
+    agentId: str(data.agentId) || undefined,
+    agentName: str(data.agentName) || undefined,
+    customerName: str(data.customerName) || undefined,
+    callNote: str(data.callNote) || undefined,
+    raw: {},
+  }
+}
+
+/** Bù KPI cho cuộc gọi đã lưu omicallCalls nhưng chưa ghi kpiDaily. */
+async function reconcileKpiFromStoredCalls(lookbackDays = 21): Promise<{ scanned: number; applied: number }> {
+  const since = Timestamp.fromMillis(Date.now() - lookbackDays * 86400000)
+  const snap = await db
+    .collection(COLLECTIONS.omicallCalls)
+    .where('endedAt', '>=', since)
+    .orderBy('endedAt', 'desc')
+    .limit(800)
+    .get()
+  const kpiCfg = await loadKpiEvalConfig(db)
+  let applied = 0
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data()
+    const pending = data.kpiPending === true
+    const appliedAt = data.kpiAppliedAt
+    const hadCounselorWhenApplied = Boolean(str(data.counselorUid))
+    if (appliedAt && !pending && hadCounselorWhenApplied) continue
+    if (data.isFinal === false) continue
+
+    const call = normalizedCallFromStored(docSnap.id, data as Record<string, unknown>)
+    const storedMatch: LeadMatch = {
+      leadId: str(data.leadId) || undefined,
+      counselorUid: str(data.counselorUid) || undefined,
+      teamLeadUid: str(data.teamLeadUid) || undefined,
+    }
+    const match =
+      storedMatch.counselorUid && storedMatch.leadId
+        ? storedMatch
+        : await resolveCounselorAndLead(db, call)
+    if (!match.counselorUid) continue
+
+    const validity = evaluateValidCall(call, match, kpiCfg)
+    await updateDailyKpi(call, match, validity.isValid, kpiCfg)
+    await docSnap.ref.set(
+      {
+        leadId: match.leadId ?? data.leadId ?? null,
+        counselorUid: match.counselorUid,
+        teamLeadUid: match.teamLeadUid ?? null,
+        kpiAppliedAt: Timestamp.now(),
+        kpiPending: FieldValue.delete(),
+        kpiPendingReason: FieldValue.delete(),
+      },
+      { merge: true },
+    )
+    applied++
+  }
+  return { scanned: snap.size, applied }
+}
+
+/** Bù từ interaction client (provider OMICALL) khi chưa có omicallCalls / KPI. */
+async function reconcileKpiFromClientInteractions(lookbackDays = 14): Promise<number> {
+  const since = Timestamp.fromMillis(Date.now() - lookbackDays * 86400000)
+  let snap
+  try {
+    snap = await db
+      .collectionGroup(COLLECTIONS.interactions)
+      .where('provider', '==', 'OMICALL')
+      .where('timestamp', '>=', since)
+      .orderBy('timestamp', 'desc')
+      .limit(400)
+      .get()
+  } catch {
+    return 0
+  }
+
+  let applied = 0
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data()
+    const transactionId = str(data.providerCallId)
+    if (!transactionId) continue
+    const callRef = db.collection(COLLECTIONS.omicallCalls).doc(transactionId)
+    const existing = await callRef.get()
+    if (existing.exists && existing.data()?.kpiAppliedAt && !existing.data()?.kpiPending) continue
+
+    const leadId = str(data.leadId) || docSnap.ref.parent.parent?.id || ''
+    if (!leadId) continue
+    const billSeconds = num(data.billSeconds) || num(data.durationSeconds)
+    const answerSeconds = num(data.answerSeconds) || billSeconds
+    const outcome: CallOutcome = answerSeconds > 0 || billSeconds > 0 ? 'CONNECTED' : 'NO_ANSWER'
+    const ts = (data.timestamp as Timestamp | undefined) ?? Timestamp.now()
+    const call: NormalizedOmicallCall = {
+      transactionId,
+      callUuid: str(data.providerUuid) || transactionId,
+      state: 'ended',
+      direction: 'outbound',
+      phoneNumber: '',
+      displayNumber: '',
+      endedAt: ts,
+      createdAt: ts,
+      answerSeconds,
+      billSeconds,
+      durationSeconds: billSeconds,
+      recordSeconds: 0,
+      outcome,
+      userDataLeadId: leadId,
+      userDataCounselorUid: str(data.authorUid) || undefined,
+      recordingFileUrl: str(data.recordingUrl) || undefined,
+      hotline: str(data.hotline) || undefined,
+      sipUser: str(data.sipUser) || undefined,
+      raw: {},
+    }
+    await upsertCallAndInteraction(call, 'history_sync')
+    applied++
+  }
+  return applied
 }
 
 async function updateDailyKpi(
@@ -928,6 +1084,8 @@ export const syncOmicallCallHistory = onSchedule(
       analysesProcessed = syncResult.analysesProcessed
       analysisError = syncResult.analysisError
       const kpiCfg = await loadKpiEvalConfig(db)
+      await reconcileKpiFromStoredCalls(21)
+      await reconcileKpiFromClientInteractions(14)
       await updateDailyCrmKpiFromAuditLogs()
       await updateDailyFinanceKpiFromLeads(kpiCfg)
       await processRecentLeadEvents(db, COLLECTIONS.kpiDaily)
@@ -983,11 +1141,15 @@ export const triggerOmicallHistorySync = onCall(
         maxPages: serverConfig.historyMaxPages,
         apiVersion: serverConfig.historyApiVersion,
       })
+      const kpiReconcile = await reconcileKpiFromStoredCalls(Math.max(1, Math.ceil(lookbackMinutes / 1440) + 3))
+      const interactionsApplied = await reconcileKpiFromClientInteractions(21)
       await runRef.set({
         startedAt,
         finishedAt: Timestamp.now(),
         processed: result.processed,
         analysesProcessed: result.analysesProcessed,
+        kpiReconcileApplied: kpiReconcile.applied,
+        interactionsKpiApplied: interactionsApplied,
         lookbackMinutes,
         apiVersion: serverConfig.historyApiVersion,
         triggeredBy: request.auth.uid,
@@ -999,6 +1161,8 @@ export const triggerOmicallHistorySync = onCall(
         ok: true,
         processed: result.processed,
         analysesProcessed: result.analysesProcessed,
+        kpiReconcileApplied: kpiReconcile.applied,
+        interactionsApplied,
         lookbackMinutes,
       }
     } catch (e) {
@@ -1270,6 +1434,59 @@ async function resolveTvExtensionAndHotline(
   }
   return { extension, hotline }
 }
+
+/** TVV báo cuộc gọi kết thúc từ SDK — ghi omicallCalls + kpiDaily (bổ sung webhook/đồng bộ). */
+export const reportOmicallCallFromClient = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+  const uid = request.auth.uid
+  const transactionId = str(request.data?.transactionId) || str(request.data?.providerCallId)
+  const leadId = str(request.data?.leadId)
+  if (!transactionId) throw new HttpsError('invalid-argument', 'Thiếu mã cuộc gọi.')
+  if (!leadId) throw new HttpsError('invalid-argument', 'Thiếu leadId.')
+
+  const billSeconds = Math.max(0, num(request.data?.billSeconds) || num(request.data?.durationSeconds))
+  const answerSeconds = Math.max(0, num(request.data?.answerSeconds) || billSeconds)
+  const outcome: CallOutcome = answerSeconds > 0 || billSeconds > 0 ? 'CONNECTED' : 'NO_ANSWER'
+  const now = Timestamp.now()
+  const phone = str(request.data?.phone) || str(request.data?.displayNumber)
+
+  const call: NormalizedOmicallCall = {
+    transactionId,
+    callUuid: str(request.data?.callUuid) || transactionId,
+    state: 'ended',
+    direction: str(request.data?.direction) === 'inbound' ? 'inbound' : 'outbound',
+    phoneNumber: phone,
+    displayNumber: str(request.data?.displayNumber) || phone,
+    sipUser: str(request.data?.sipUser) || undefined,
+    endedAt: now,
+    createdAt: now,
+    answerSeconds,
+    billSeconds,
+    durationSeconds: billSeconds,
+    recordSeconds: 0,
+    outcome,
+    userDataLeadId: leadId,
+    userDataCounselorUid: uid,
+    raw: {},
+  }
+
+  await upsertCallAndInteraction(call, 'history_sync')
+  return { ok: true, transactionId }
+})
+
+/** Quản trị: bù KPI từ omicallCalls + interaction OMICall (sau khi sửa lỗi đồng bộ). */
+export const reconcileOmicallKpi = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+  const userSnap = await db.collection(COLLECTIONS.users).doc(request.auth.uid).get()
+  const role = str(userSnap.data()?.role)
+  if (role !== 'admin' && role !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Chỉ quản trị mới chạy bù KPI.')
+  }
+  const lookbackDays = Math.max(1, Math.min(60, Math.round(num(request.data?.lookbackDays) || 21)))
+  const stored = await reconcileKpiFromStoredCalls(lookbackDays)
+  const interactions = await reconcileKpiFromClientInteractions(Math.min(lookbackDays, 30))
+  return { ok: true, ...stored, interactionsApplied: interactions }
+})
 
 /** Click-to-call: đổ chuông số nội bộ TVV → nhấc máy → gọi ra SĐT khách (không cần SIP trên trình duyệt). */
 export const omicallClick2Call = onCall(
