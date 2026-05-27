@@ -165,7 +165,13 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
   const toDate = useMemo(() => new Date(`${range.to}T23:59:59`), [range.to])
   const maxRows = viewMode === 'global' && !counselorFilter ? 2000 : 1000
 
-  const { calls, loading, error, indexUrl } = useOmicallCalls({ scope, from: fromDate, to: toDate, maxRows })
+  const { calls, loading, error, notice } = useOmicallCalls({
+    scope,
+    from: fromDate,
+    to: toDate,
+    maxRows,
+    viewerSipUser: profile?.omicallSipUser ?? undefined,
+  })
 
   const filteredCalls = useMemo(() => {
     if (scope.mode === 'counselor') return calls
@@ -328,19 +334,23 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
 
       {error ? (
         <div
-          className={`rounded-xl border px-4 py-3 text-sm ${
-            indexUrl && calls.length > 0
-              ? 'border-amber-200 bg-amber-50 text-amber-950'
-              : 'border-rose-200 bg-rose-50 text-rose-900'
-          }`}
-          role={indexUrl && calls.length > 0 ? 'status' : 'alert'}
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+          role="alert"
         >
           <p className="whitespace-pre-wrap">{error}</p>
-          {indexUrl ? (
-            <a href={indexUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline">
-              Tạo index Firestore (warmlist)
-            </a>
-          ) : null}
+        </div>
+      ) : null}
+
+      {notice && !error ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+          {notice}
+        </div>
+      ) : null}
+
+      {!loading && !error && calls.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          Chưa có cuộc gọi trong kỳ đã chọn. Gọi từ <strong>Hồ sơ</strong> (nút OMICall) để hệ thống ghi nhận; quản trị có
+          thể đồng bộ lịch sử trong <Link to="/settings?main=connect&sub=omicall" className="font-semibold text-sky-800 underline">Cài đặt → Gọi điện</Link>.
         </div>
       ) : null}
 

@@ -24,29 +24,54 @@ export type UseOmicallCallsOpts = {
   from: Date
   to: Date
   maxRows?: number
+  /** Máy lẻ OMICall của người xem — bù khi doc chưa có counselorUid. */
+  viewerSipUser?: string
 }
+
+const CHUNK_DAYS = 7
+const CHUNK_QUERY_LIMIT = 1200
 
 function isMissingIndexError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   return e.message.includes('requires an index') || e.message.includes('FAILED_PRECONDITION')
 }
 
-export function extractFirestoreIndexUrl(message: string): string | null {
-  const m = message.match(/https:\/\/console\.firebase\.google\.com[^\s)]+/)
-  return m?.[0] ?? null
+function isPermissionError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  const m = e.message.toLowerCase()
+  return m.includes('permission') || m.includes('insufficient')
 }
 
-function filterCallsByScope(calls: OmicallCallRecord[], scope: OmicallCallsScope): OmicallCallRecord[] {
+function userFacingLoadError(e: unknown): string {
+  if (isPermissionError(e)) {
+    return 'Bạn chưa có quyền xem lịch sử gọi toàn hệ thống. Liên hệ quản trị nếu cần xem nhóm hoặc toàn trường.'
+  }
+  if (isMissingIndexError(e)) {
+    return 'Hệ thống chưa sẵn sàng hiển thị lịch sử gọi theo kỳ. Vui lòng báo quản trị viên (không cần thao tác trên Firebase).'
+  }
+  if (e instanceof Error) return e.message || 'Không đọc được lịch sử cuộc gọi.'
+  return 'Không đọc được lịch sử cuộc gọi.'
+}
+
+function filterCallsByScope(
+  calls: OmicallCallRecord[],
+  scope: OmicallCallsScope,
+  viewerSipUser?: string,
+): OmicallCallRecord[] {
+  if (scope.mode === 'global') return calls
+
   if (scope.mode === 'counselor') {
-    return calls.filter((c) => c.counselorUid === scope.counselorUid)
+    const sip = viewerSipUser?.trim()
+    return calls.filter((c) => {
+      if (c.counselorUid === scope.counselorUid) return true
+      if (!c.counselorUid && sip && c.sipUser?.trim() === sip) return true
+      return false
+    })
   }
-  if (scope.mode === 'team') {
-    return calls.filter((c) => c.teamLeadUid === scope.teamLeadUid)
-  }
-  return calls
+
+  return calls.filter((c) => c.teamLeadUid === scope.teamLeadUid)
 }
 
-/** Truy vấn theo khoảng ngày — không cần index ghép counselorUid/teamLeadUid. */
 function dateRangeConstraints(fromTs: Timestamp, toTs: Timestamp, limitN: number): QueryConstraint[] {
   return [
     where('endedAt', '>=', fromTs),
@@ -67,21 +92,65 @@ async function runOmicallQuery(
   return rows
 }
 
-export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCallsOpts) {
+/** Tải theo từng đoạn ngày — chỉ cần index `endedAt`, không phụ thuộc counselorUid/teamLeadUid. */
+async function fetchCallsByDateChunks(
+  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
+  fromTs: Timestamp,
+  toTs: Timestamp,
+  cap: number,
+): Promise<{ rows: OmicallCallRecord[]; truncated: boolean }> {
+  const fromMs = fromTs.toMillis()
+  const toMs = toTs.toMillis()
+  if (fromMs > toMs) return { rows: [], truncated: false }
+
+  const chunkMs = CHUNK_DAYS * 86400000
+  const merged = new Map<string, OmicallCallRecord>()
+  let truncated = false
+
+  for (let start = fromMs; start <= toMs && merged.size < cap; start += chunkMs) {
+    const end = Math.min(start + chunkMs - 1, toMs)
+    const batch = await runOmicallQuery(
+      db,
+      dateRangeConstraints(Timestamp.fromMillis(start), Timestamp.fromMillis(end), CHUNK_QUERY_LIMIT),
+    )
+    for (const row of batch) {
+      merged.set(row.id, row)
+      if (merged.size >= cap) {
+        truncated = true
+        break
+      }
+    }
+    if (batch.length >= CHUNK_QUERY_LIMIT) truncated = true
+  }
+
+  const rows = [...merged.values()].sort(
+    (a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt),
+  )
+  return { rows: rows.slice(0, cap), truncated }
+}
+
+export function useOmicallCalls({
+  scope,
+  from,
+  to,
+  maxRows = 500,
+  viewerSipUser,
+}: UseOmicallCallsOpts) {
   const [calls, setCalls] = useState<OmicallCallRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [indexUrl, setIndexUrl] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const fromTs = useMemo(() => Timestamp.fromDate(from), [from.getTime()])
   const toTs = useMemo(() => Timestamp.fromDate(to), [to.getTime()])
+
   useEffect(() => {
     const db = getFirestoreDb()
     if (!db || !isFirebaseConfigured()) {
       setCalls([])
       setLoading(false)
       setError('Chưa cấu hình Firebase.')
-      setIndexUrl(null)
+      setNotice(null)
       return
     }
 
@@ -89,7 +158,7 @@ export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCa
       setCalls([])
       setLoading(false)
       setError('Chưa chọn tư vấn viên.')
-      setIndexUrl(null)
+      setNotice(null)
       return
     }
 
@@ -97,74 +166,54 @@ export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCa
       setCalls([])
       setLoading(false)
       setError('Chưa xác định trưởng nhóm.')
-      setIndexUrl(null)
+      setNotice(null)
       return
     }
 
     let cancelled = false
     setLoading(true)
     setError(null)
-    setIndexUrl(null)
+    setNotice(null)
 
-    const scopedConstraints: QueryConstraint[] = []
-    if (scope.mode === 'counselor') {
-      scopedConstraints.push(where('counselorUid', '==', scope.counselorUid))
-    } else if (scope.mode === 'team') {
-      scopedConstraints.push(where('teamLeadUid', '==', scope.teamLeadUid))
-    }
-    scopedConstraints.push(where('endedAt', '>=', fromTs), where('endedAt', '<=', toTs))
-    scopedConstraints.push(orderBy('endedAt', 'desc'), limit(maxRows))
-
-    const globalConstraints = dateRangeConstraints(fromTs, toTs, maxRows)
+    const fetchCap =
+      scope.mode === 'global'
+        ? Math.min(Math.max(maxRows * 3, 3000), 8000)
+        : Math.min(Math.max(maxRows * 4, 2000), 6000)
 
     ;(async () => {
-      const finish = (rows: OmicallCallRecord[], err: string | null, url: string | null) => {
-        if (cancelled) return
-        rows.sort((a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt))
-        setCalls(rows.slice(0, maxRows))
-        setError(err)
-        setIndexUrl(url)
-      }
-
       try {
-        const constraints = scope.mode === 'global' ? globalConstraints : scopedConstraints
-        const rows = await runOmicallQuery(db, constraints)
-        finish(rows, null, null)
-        return
+        const { rows: raw, truncated } = await fetchCallsByDateChunks(db, fromTs, toTs, fetchCap)
+        if (cancelled) return
+
+        const scoped = filterCallsByScope(raw, scope, viewerSipUser)
+        scoped.sort((a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt))
+        const visible = scoped.slice(0, maxRows)
+
+        setCalls(visible)
+
+        const notices: string[] = []
+        if (truncated) {
+          notices.push(
+            `Đã tải tối đa ${fetchCap.toLocaleString('vi-VN')} cuộc trong kỳ — thu hẹp khoảng ngày nếu thiếu cuộc cũ.`,
+          )
+        }
+        if (scope.mode !== 'global' && raw.length > 0 && scoped.length === 0) {
+          notices.push(
+            'Có cuộc gọi trong kỳ nhưng chưa gắn đúng TVV/nhóm — hãy gọi từ nút OMICall trên hồ sơ; quản trị có thể «Đồng bộ lịch sử» / «Bù KPI» trong Cài đặt.',
+          )
+        }
+        if (scope.mode !== 'global' && scoped.length < raw.length && scoped.length > 0) {
+          notices.push(
+            `Hiển thị ${visible.length.toLocaleString('vi-VN')} cuộc thuộc phạm vi đã chọn (đã lọc từ ${raw.length.toLocaleString('vi-VN')} cuộc trong kỳ).`,
+          )
+        }
+        setNotice(notices.length ? notices.join(' ') : null)
+        setError(null)
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Không đọc lịch sử cuộc gọi.'
-        const url = extractFirestoreIndexUrl(msg)
-
-        if (isMissingIndexError(e) && scope.mode !== 'global') {
-          try {
-            const fetchLimit = Math.min(Math.max(maxRows * 8, 2000), 5000)
-            let rows = filterCallsByScope(await runOmicallQuery(db, dateRangeConstraints(fromTs, toTs, fetchLimit)), scope)
-            rows = rows.slice(0, maxRows)
-            finish(
-              rows,
-              url
-                ? 'Đang hiển thị theo cách dự phòng (lọc sau khi tải). Nên tạo index Firestore (warmlist) để nhanh và đủ dữ liệu khi kỳ dài.'
-                : 'Đang hiển thị theo cách dự phòng — chạy npm run deploy:firestore-indexes (database warmlist).',
-              url,
-            )
-            return
-          } catch (fallbackErr) {
-            const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : msg
-            const fallbackUrl = extractFirestoreIndexUrl(fallbackMsg) ?? url
-            if (!cancelled) {
-              setError(fallbackUrl ? `${fallbackMsg}\n\nTạo index: ${fallbackUrl}` : fallbackMsg)
-              setIndexUrl(fallbackUrl)
-              setCalls([])
-            }
-            return
-          }
-        }
-
-        if (!cancelled) {
-          setError(url ? `${msg}\n\nTạo index: ${url}` : msg)
-          setIndexUrl(url)
-          setCalls([])
-        }
+        if (cancelled) return
+        setCalls([])
+        setNotice(null)
+        setError(userFacingLoadError(e))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -173,7 +222,7 @@ export function useOmicallCalls({ scope, from, to, maxRows = 500 }: UseOmicallCa
     return () => {
       cancelled = true
     }
-  }, [scope, fromTs, toTs, maxRows])
+  }, [scope, fromTs, toTs, maxRows, viewerSipUser])
 
-  return { calls, loading, error, indexUrl }
+  return { calls, loading, error, notice }
 }

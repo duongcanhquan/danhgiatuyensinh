@@ -5,6 +5,7 @@ import { useOmicallCalls, type OmicallCallsScope } from './useOmicallCalls'
 /** Tải omicallCalls trong khoảng ngày để bù KPI khi kpiDaily chưa đồng bộ. */
 export function useOmicallCallsForKpi(from: string, to: string, counselorUidFilter?: string) {
   const { firebaseUser, profile, can } = useAuth()
+  const viewerSip = profile?.omicallSipUser ?? undefined
   const [fromDate, toDate] = useMemo(() => {
     return [new Date(`${from}T00:00:00`), new Date(`${to}T23:59:59`)] as const
   }, [from, to])
@@ -21,5 +22,5 @@ export function useOmicallCallsForKpi(from: string, to: string, counselorUidFilt
   }, [canGlobal, canTeam, counselorUidFilter, profile?.id, firebaseUser?.uid])
 
   const maxRows = scope.mode === 'global' ? 3000 : 1500
-  return useOmicallCalls({ scope, from: fromDate, to: toDate, maxRows })
+  return useOmicallCalls({ scope, from: fromDate, to: toDate, maxRows, viewerSipUser: viewerSip })
 }
