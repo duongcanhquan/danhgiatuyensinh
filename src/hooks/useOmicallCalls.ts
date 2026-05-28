@@ -13,6 +13,7 @@ import {
 import type { OmicallCallRecord } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { fetchOmicallCallsViaFunction } from '../services/fetchOmicallCallsViaFunction'
 import { mapOmicallCallDoc, tsMsCall } from '../utils/omicallCallMap'
 import { firestoreDatabaseMismatchHint } from '../utils/firestoreDatabaseHint'
 
@@ -345,6 +346,7 @@ export function useOmicallCalls({
         let raw = rawPrimary
         let fallbackSource: FallbackSource = 'none'
         let fallbackError = false
+        let serverFallbackUsed = false
         if (raw.length === 0) {
           try {
             const fallbackRows = await fetchCallsFromInteractionsFallback(db, fromTs, toTs, fetchCap)
@@ -355,6 +357,27 @@ export function useOmicallCalls({
           } catch {
             // Fallback chỉ hỗ trợ hiển thị; nếu truy vấn lỗi thì giữ nguyên luồng chính.
             fallbackError = true
+          }
+        }
+        if (raw.length === 0 && fallbackError) {
+          try {
+            const serverRes = await fetchOmicallCallsViaFunction({
+              fromMs: fromTs.toMillis(),
+              toMs: toTs.toMillis(),
+              maxRows: fetchCap,
+              scope:
+                scope.mode === 'global'
+                  ? { mode: 'global' }
+                  : scope.mode === 'team'
+                    ? { mode: 'team', teamLeadUid: scope.teamLeadUid }
+                    : { mode: 'counselor', counselorUid: scope.counselorUid },
+            })
+            if (serverRes.calls.length > 0) {
+              raw = serverRes.calls
+              serverFallbackUsed = true
+            }
+          } catch {
+            // Nếu server fallback cũng lỗi thì giữ thông báo hiện có.
           }
         }
 
@@ -392,6 +415,8 @@ export function useOmicallCalls({
           notices.push(
             'Đang hiển thị dữ liệu cuộc gọi từ tương tác hồ sơ (fallback) do lịch sử OMICall chưa đồng bộ đầy đủ.',
           )
+        } else if (serverFallbackUsed) {
+          notices.push('Đang hiển thị dữ liệu cuộc gọi qua Cloud Function fallback.')
         } else if (fallbackError) {
           notices.push(
             'Không đọc được dữ liệu fallback từ tương tác OMICALL (có thể do quyền hoặc index Firestore).',
