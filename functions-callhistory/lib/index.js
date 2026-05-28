@@ -144,80 +144,187 @@ function scopeAllowsWireCall(call, caller, teamSet, requestedScope) {
     }
     return call.counselorUid === caller.id;
 }
-function firestoreErrHint(err) {
+function isIndexError(err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/index|FAILED_PRECONDITION/i.test(msg)) {
-        return `${msg.slice(0, 280)} — chạy: npm run deploy:firestore-indexes`;
+    return /index|FAILED_PRECONDITION/i.test(msg);
+}
+async function queryOmicallByDateField(field, fromTs, toTs, limit, counselorUid) {
+    let q = db.collection(COLLECTIONS.omicallCalls);
+    if (counselorUid)
+        q = q.where('counselorUid', '==', counselorUid);
+    const snap = await q
+        .where(field, '>=', fromTs)
+        .where(field, '<=', toTs)
+        .limit(limit)
+        .get();
+    return snap.docs.map((d) => toCallWireFromOmicallDoc(d.id, d.data()));
+}
+async function fetchOmicallCallsRows(fromTs, toTs, fetchCap, counselorUids) {
+    const merged = new Map();
+    const tryCounselors = counselorUids.length > 0 ? counselorUids.slice(0, 12) : [undefined];
+    for (const uid of tryCounselors) {
+        for (const field of ['endedAt', 'startedAt']) {
+            try {
+                const batch = await queryOmicallByDateField(field, fromTs, toTs, fetchCap, uid);
+                for (const row of batch)
+                    merged.set(row.id, row);
+                if (merged.size >= fetchCap)
+                    break;
+            }
+            catch (e) {
+                if (!isIndexError(e))
+                    console.warn(`[fetchOmicallCalls] omicallCalls.${field}`, e);
+            }
+        }
+        if (merged.size >= fetchCap)
+            break;
     }
-    return msg.slice(0, 400);
+    if (merged.size > 0) {
+        return { rows: [...merged.values()], source: 'omicallCalls' };
+    }
+    const interactionRows = await fetchInteractionsFallback(fromTs, toTs, fetchCap, counselorUids);
+    return { rows: interactionRows, source: 'interactions_fallback' };
+}
+async function fetchInteractionsForLead(leadId, fromTs, toTs, perLeadCap) {
+    const snap = await db
+        .collection(COLLECTIONS.leads)
+        .doc(leadId)
+        .collection(COLLECTIONS.interactions)
+        .where('provider', '==', 'OMICALL')
+        .where('timestamp', '>=', fromTs)
+        .where('timestamp', '<=', toTs)
+        .limit(perLeadCap)
+        .get();
+    const rows = [];
+    for (const d of snap.docs) {
+        const wire = toCallWireFromInteractionDoc(d.id, d.data());
+        if (!wire)
+            continue;
+        rows.push({ ...wire, leadId });
+    }
+    return rows;
+}
+async function fetchInteractionsViaLeads(fromTs, toTs, cap, counselorUids) {
+    const merged = new Map();
+    const targets = [...new Set(counselorUids.filter(Boolean))].slice(0, 15);
+    if (targets.length === 0)
+        return [];
+    for (const counselorUid of targets) {
+        if (merged.size >= cap)
+            break;
+        let leadsSnap = await db
+            .collection(COLLECTIONS.leads)
+            .where('assignedCounselorId', '==', counselorUid)
+            .limit(120)
+            .get();
+        if (leadsSnap.empty) {
+            leadsSnap = await db
+                .collection(COLLECTIONS.leads)
+                .where('assignedTo', '==', counselorUid)
+                .limit(120)
+                .get();
+        }
+        for (const leadDoc of leadsSnap.docs) {
+            if (merged.size >= cap)
+                break;
+            try {
+                const batch = await fetchInteractionsForLead(leadDoc.id, fromTs, toTs, 40);
+                for (const row of batch)
+                    merged.set(row.id, row);
+            }
+            catch (e) {
+                console.warn('[fetchOmicallCalls] lead interactions', leadDoc.id, e);
+            }
+        }
+    }
+    return [...merged.values()];
+}
+async function fetchInteractionsCollectionGroup(fromTs, toTs, cap, withProvider) {
+    let q = db.collectionGroup(COLLECTIONS.interactions);
+    if (withProvider)
+        q = q.where('provider', '==', 'OMICALL');
+    const snap = await q
+        .where('timestamp', '>=', fromTs)
+        .where('timestamp', '<=', toTs)
+        .limit(cap)
+        .get();
+    return snap.docs
+        .map((d) => {
+        const wire = toCallWireFromInteractionDoc(d.id, d.data());
+        if (!wire)
+            return null;
+        const leadId = d.ref.parent.parent?.id;
+        return leadId ? { ...wire, leadId: wire.leadId || leadId } : wire;
+    })
+        .filter((v) => Boolean(v));
+}
+async function fetchInteractionsFallback(fromTs, toTs, cap, counselorUids) {
+    for (const withProvider of [true, false]) {
+        try {
+            const rows = await fetchInteractionsCollectionGroup(fromTs, toTs, cap, withProvider);
+            if (rows.length > 0)
+                return rows;
+        }
+        catch (e) {
+            console.warn('[fetchOmicallCalls] collectionGroup interactions', e);
+        }
+    }
+    if (counselorUids.length > 0) {
+        try {
+            const viaLeads = await fetchInteractionsViaLeads(fromTs, toTs, cap, counselorUids);
+            if (viaLeads.length > 0)
+                return viaLeads;
+        }
+        catch (e) {
+            console.warn('[fetchOmicallCalls] interactions via leads', e);
+        }
+    }
+    return [];
+}
+function counselorUidsForScope(caller, teamSet, requestedScope) {
+    if (requestedScope.mode === 'counselor' && requestedScope.counselorUid) {
+        return [requestedScope.counselorUid];
+    }
+    if (requestedScope.mode === 'team') {
+        return [...teamSet];
+    }
+    if (caller.role === 'counselor')
+        return [caller.id];
+    return [];
 }
 /** Đọc cuộc gọi qua Admin SDK — không cần Secret Manager / OMICall API key. */
 export const fetchOmicallCallsForClient = onCall(async (request) => {
-    try {
-        if (!request.auth?.uid)
-            throw new HttpsError('unauthenticated', 'Cần đăng nhập.');
-        const caller = await loadStaffUser(request.auth.uid);
-        if (!caller || !caller.isActive)
-            throw new HttpsError('permission-denied', 'Không có quyền truy cập.');
-        const fromMs = Math.max(0, Math.round(num(request.data?.fromMs)));
-        const toMs = Math.max(fromMs, Math.round(num(request.data?.toMs)));
-        const maxRows = Math.min(Math.max(Math.round(num(request.data?.maxRows) || 500), 50), 4000);
-        const rawScope = (request.data?.scope ?? {});
-        const requestedScope = str(rawScope.mode) === 'counselor'
-            ? { mode: 'counselor', counselorUid: str(rawScope.counselorUid) || undefined }
-            : str(rawScope.mode) === 'team'
-                ? { mode: 'team', teamLeadUid: str(rawScope.teamLeadUid) || undefined }
-                : { mode: 'global' };
-        const teamSet = new Set(caller.managedCounselorIds);
-        if (caller.role === 'team_lead')
-            teamSet.add(caller.id);
-        const fromTs = Timestamp.fromMillis(fromMs);
-        const toTs = Timestamp.fromMillis(toMs);
-        const fetchCap = Math.min(Math.max(maxRows * 3, 1200), 6000);
-        let rows = [];
-        let source = 'omicallCalls';
-        try {
-            const callSnap = await db
-                .collection(COLLECTIONS.omicallCalls)
-                .where('endedAt', '>=', fromTs)
-                .where('endedAt', '<=', toTs)
-                .limit(fetchCap)
-                .get();
-            rows = callSnap.docs.map((d) => toCallWireFromOmicallDoc(d.id, d.data()));
-        }
-        catch (e) {
-            console.warn('[fetchOmicallCallsForClient] omicallCalls query failed', e);
-        }
-        if (rows.length === 0) {
-            try {
-                const interactionSnap = await db
-                    .collectionGroup(COLLECTIONS.interactions)
-                    .where('provider', '==', 'OMICALL')
-                    .where('timestamp', '>=', fromTs)
-                    .where('timestamp', '<=', toTs)
-                    .limit(Math.min(Math.max(maxRows * 4, 1500), 8000))
-                    .get();
-                rows = interactionSnap.docs
-                    .map((d) => toCallWireFromInteractionDoc(d.id, d.data()))
-                    .filter((v) => Boolean(v));
-                source = 'interactions_fallback';
-            }
-            catch (e) {
-                console.error('[fetchOmicallCallsForClient] interactions fallback failed', e);
-                throw new HttpsError('failed-precondition', firestoreErrHint(e));
-            }
-        }
-        const scoped = rows
-            .filter((c) => scopeAllowsWireCall(c, caller, teamSet, requestedScope))
-            .sort((a, b) => (b.endedAtMs || b.startedAtMs || b.createdAtMs || 0) -
-            (a.endedAtMs || a.startedAtMs || a.createdAtMs || 0))
-            .slice(0, maxRows);
-        return { ok: true, source, calls: scoped };
-    }
-    catch (e) {
-        if (e instanceof HttpsError)
-            throw e;
-        console.error('[fetchOmicallCallsForClient]', e);
-        throw new HttpsError('internal', firestoreErrHint(e));
-    }
+    if (!request.auth?.uid)
+        throw new HttpsError('unauthenticated', 'Cần đăng nhập.');
+    const caller = await loadStaffUser(request.auth.uid);
+    if (!caller || !caller.isActive)
+        throw new HttpsError('permission-denied', 'Không có quyền truy cập.');
+    const fromMs = Math.max(0, Math.round(num(request.data?.fromMs)));
+    const toMs = Math.max(fromMs, Math.round(num(request.data?.toMs)));
+    const maxRows = Math.min(Math.max(Math.round(num(request.data?.maxRows) || 500), 50), 4000);
+    const rawScope = (request.data?.scope ?? {});
+    const requestedScope = str(rawScope.mode) === 'counselor'
+        ? { mode: 'counselor', counselorUid: str(rawScope.counselorUid) || undefined }
+        : str(rawScope.mode) === 'team'
+            ? { mode: 'team', teamLeadUid: str(rawScope.teamLeadUid) || undefined }
+            : { mode: 'global' };
+    const teamSet = new Set(caller.managedCounselorIds);
+    if (caller.role === 'team_lead')
+        teamSet.add(caller.id);
+    const fromTs = Timestamp.fromMillis(fromMs);
+    const toTs = Timestamp.fromMillis(toMs);
+    const fetchCap = Math.min(Math.max(maxRows * 3, 1200), 6000);
+    const counselorUids = counselorUidsForScope(caller, teamSet, requestedScope);
+    const { rows, source } = await fetchOmicallCallsRows(fromTs, toTs, fetchCap, counselorUids);
+    const scoped = rows
+        .filter((c) => scopeAllowsWireCall(c, caller, teamSet, requestedScope))
+        .sort((a, b) => (b.endedAtMs || b.startedAtMs || b.createdAtMs || 0) -
+        (a.endedAtMs || a.startedAtMs || a.createdAtMs || 0))
+        .slice(0, maxRows);
+    return {
+        ok: true,
+        source,
+        calls: scoped,
+        warning: scoped.length === 0 && rows.length === 0 ? 'Chưa có cuộc gọi OMICall trong kỳ đã chọn.' : undefined,
+    };
 });

@@ -44,12 +44,14 @@ type FetchOmicallCallsResult = {
   ok: boolean
   source: 'omicallCalls' | 'interactions_fallback'
   calls: OmicallCallWire[]
+  warning?: string
 }
 
 export type FetchOmicallCallsMappedResult = {
   ok: boolean
   source: 'omicallCalls' | 'interactions_fallback'
   calls: OmicallCallRecord[]
+  warning?: string
 }
 
 function tsFromMs(ms?: number): Timestamp | undefined {
@@ -86,20 +88,14 @@ function mapWireToCall(row: OmicallCallWire): OmicallCallRecord {
 
 function callableErrorMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'code' in err) {
-    const fe = err as { code?: string; message?: string; details?: unknown }
-    const code = String(fe.code ?? '')
+    const fe = err as { code?: string; message?: string }
     const msg = String(fe.message ?? '').trim()
-    if (code === 'functions/internal' || code === 'internal') {
-      return (
-        msg && msg !== 'internal'
-          ? msg
-          : 'Lỗi server khi đọc cuộc gọi (thường do thiếu index Firestore warmlist). Chạy deploy:firestore-indexes và deploy:fetch-calls.'
-      )
-    }
-    if (msg) return msg
-    if (code) return code.replace(/^functions\//, '')
+    if (msg && msg !== 'internal') return msg
+    const code = String(fe.code ?? '').replace(/^functions\//, '')
+    if (code === 'unauthenticated') return 'Phiên đăng nhập hết hạn — đăng nhập lại.'
+    if (code === 'permission-denied') return 'Không có quyền xem lịch sử gọi.'
   }
-  return err instanceof Error ? err.message : 'Không gọi được Cloud Function fetchOmicallCallsForClient.'
+  return err instanceof Error ? err.message : 'Không đọc được lịch sử gọi từ server.'
 }
 
 export async function fetchOmicallCallsViaFunction(input: FetchOmicallCallsInput): Promise<FetchOmicallCallsMappedResult> {

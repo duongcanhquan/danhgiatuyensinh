@@ -347,6 +347,7 @@ export function useOmicallCalls({
         let fallbackSource: FallbackSource = 'none'
         let interactionFallbackError = false
         let serverFallbackError: string | null = null
+        let serverFallbackWarning: string | null = null
         let serverFallbackUsed = false
 
         const serverScope =
@@ -369,6 +370,8 @@ export function useOmicallCalls({
               raw = serverRes.calls
               serverFallbackUsed = true
               fallbackSource = serverRes.source === 'interactions_fallback' ? 'interactions' : 'none'
+            } else if (serverRes.warning) {
+              serverFallbackWarning = serverRes.warning
             }
           } catch (e) {
             serverFallbackError =
@@ -425,15 +428,13 @@ export function useOmicallCalls({
         } else if (serverFallbackUsed) {
           notices.push('Đang hiển thị dữ liệu cuộc gọi qua Cloud Function (đồng bộ từ Firestore warmlist).')
         } else if (serverFallbackError) {
-          notices.push(
-            `Cloud Function fallback không khả dụng: ${serverFallbackError} Kiểm tra đã deploy fetchOmicallCallsForClient và đăng nhập còn hiệu lực.`,
-          )
-        } else if (interactionFallbackError) {
-          notices.push(
-            'Không đọc được tương tác OMICALL trên trình duyệt (quyền hoặc index Firestore). Đã thử Cloud Function nhưng chưa có cuộc trong kỳ.',
-          )
+          notices.push(`Không tải được lịch sử gọi từ server: ${serverFallbackError}`)
+        } else if (serverFallbackWarning) {
+          notices.push(serverFallbackWarning)
+        } else if (interactionFallbackError && raw.length === 0) {
+          notices.push('Chưa đọc được tương tác OMICall trên trình duyệt — thử thu hẹp khoảng ngày hoặc gọi từ nút OMICall trên hồ sơ.')
         }
-        if (raw.length === 0 && !dbHint && !serverFallbackError) {
+        if (raw.length === 0 && !dbHint && !serverFallbackError && !serverFallbackWarning) {
           notices.push(
             'Nếu vừa gọi xong, hệ thống sẽ tự cập nhật sau ít phút. Bạn chỉ cần đăng nhập và gọi từ nút OMICall trong hồ sơ.',
           )
