@@ -29,10 +29,12 @@ import { invokeOmicallClick2Call } from '../services/omicallClick2Call'
 import {
   hangUpOmicallCall,
   loadOmicallSdk,
+  normalizeOmicallSdkPayload,
   type OmicallCallData,
   type OmicallRegisterData,
   type OmicallSdkGlobal,
 } from '../services/omicallSdk'
+import { formatCallDuration } from '../utils/omicallCallMap'
 import { OmicallActiveCallPanel } from '../components/OmicallActiveCallPanel'
 import { logOmicallInteraction } from '../services/logOmicallInteraction'
 import { reportOmicallCallFromClient } from '../services/reportOmicallCallFromClient'
@@ -120,6 +122,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
   const pendingCallDisplayRef = useRef<{ leadId: string; leadName: string; target: OmicallCallTarget } | null>(null)
   const activeCallUidRef = useRef<string | null>(null)
+  const activeCallStartedMsRef = useRef<number | null>(null)
+  const activeCallTalkStartedMsRef = useRef<number | null>(null)
   const sipReadyRef = useRef(false)
   const connectionStatusRef = useRef<OmicallConnectionStatus>('off')
   const sipCredsRef = useRef<ReturnType<typeof resolveOmicallSipCredentials>>(null)
@@ -208,9 +212,16 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     refreshCallContext()
   }, [authStatus, config.enabled, profile?.id, profile?.omicallSipUser, refreshCallContext])
 
+  const touchCallClock = useCallback((state: OmicallCallData['state']) => {
+    if (!activeCallStartedMsRef.current) activeCallStartedMsRef.current = Date.now()
+    if (state === 'accepted' && !activeCallTalkStartedMsRef.current) {
+      activeCallTalkStartedMsRef.current = Date.now()
+    }
+  }, [])
+
   const onEnded = useCallback(
     async (raw: unknown) => {
-      const call = raw as OmicallCallData
+      const call = normalizeOmicallSdkPayload(raw)
       if (!call?.uid || !config.autoLogCalls || !profile) return
       if (loggedCallUidsRef.current.has(call.uid)) return
       loggedCallUidsRef.current.add(call.uid)
@@ -284,10 +295,13 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
 
   const syncActiveCallFromSdk = useCallback(
     (raw: unknown) => {
-      const call = raw as OmicallCallData
+      const call = normalizeOmicallSdkPayload(raw)
       if (!call?.uid) return
+      touchCallClock(call.state)
       if (call.state === 'ended') {
         activeCallUidRef.current = null
+        activeCallStartedMsRef.current = null
+        activeCallTalkStartedMsRef.current = null
         setActiveCall(null)
         return
       }
@@ -323,12 +337,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         source: 'sdk',
       })
     },
-    [availableHotlines, resolvedOutbound],
+    [availableHotlines, resolvedOutbound, touchCallClock],
   )
 
   const onCallEvent = useCallback(
     (raw: unknown) => {
-      const call = raw as OmicallCallData
+      const call = normalizeOmicallSdkPayload(raw)
       if (!call?.uid) return
       syncActiveCallFromSdk(raw)
       if (call.state === 'connecting') {
@@ -593,10 +607,73 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
 
   const clearActiveCallUi = useCallback(() => {
     activeCallUidRef.current = null
+    activeCallStartedMsRef.current = null
+    activeCallTalkStartedMsRef.current = null
     pendingCallMetaRef.current = null
     pendingCallDisplayRef.current = null
     setActiveCall(null)
   }, [])
+
+  /** Đồng hồ cuộc gọi — bù khi SDK không bắn `incall` (click2call / v3). */
+  useEffect(() => {
+    if (!activeCall || activeCall.state === 'ended') return
+    const tick = () => {
+      const started = activeCallStartedMsRef.current
+      if (!started) return
+      const talkStart = activeCallTalkStartedMsRef.current
+      const elapsedTotal = Math.floor((Date.now() - started) / 1000)
+      const elapsedTalk = talkStart ? Math.floor((Date.now() - talkStart) / 1000) : 0
+      const showTalk = activeCall.state === 'accepted'
+      const sec = showTalk ? Math.max(elapsedTalk, 0) : Math.max(elapsedTotal, 0)
+      const label = sec > 0 ? formatCallDuration(sec) : '0:00'
+      setActiveCall((prev) => {
+        if (!prev) return null
+        if (prev.durationSec === sec && prev.durationLabel === label) return prev
+        return { ...prev, durationSec: sec, durationLabel: label }
+      })
+    }
+    tick()
+    const id = window.setInterval(tick, 1000)
+    return () => window.clearInterval(id)
+  }, [activeCall?.uid, activeCall?.state])
+
+  /** Click2call: đồng bộ trạng thái từ `omicallCalls` khi webhook ghi Firestore. */
+  useEffect(() => {
+    if (!activeCall || activeCall.source !== 'click2call') return
+    const callId = activeCall.uid
+    if (!callId || callId.startsWith('c2c-')) return
+    const db = getFirestoreDb()
+    if (!db) return
+    const ref = doc(db, FS_COLLECTIONS.omicallCalls, callId)
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (!snap.exists()) return
+        const d = snap.data() as Record<string, unknown>
+        const bill = Number(d.billSeconds ?? d.answerSeconds ?? 0)
+        const ended = Boolean(d.endedAt)
+        const answered = bill > 0 || String(d.outcome ?? '') === 'CONNECTED'
+        if (ended) {
+          clearActiveCallUi()
+          return
+        }
+        if (answered) touchCallClock('accepted')
+        setActiveCall((prev) => {
+          if (!prev) return null
+          const nextState = answered ? 'accepted' : prev.state
+          const sec = bill > 0 ? bill : prev.durationSec
+          return {
+            ...prev,
+            state: nextState,
+            durationSec: sec,
+            durationLabel: formatCallDuration(sec),
+          }
+        })
+      },
+      () => {},
+    )
+    return () => unsub()
+  }, [activeCall?.uid, activeCall?.source, clearActiveCallUi, touchCallClock])
 
   const dismissActiveCall = useCallback(() => {
     clearActiveCallUi()
@@ -608,27 +685,24 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const hangUpCall = useCallback(() => {
     const sdk = sdkRef.current
     const uid = activeCallUidRef.current
-    const isSyntheticUid =
-      !uid || uid.startsWith('c2c-') || uid.startsWith('pending-')
+    const realUid =
+      uid && !uid.startsWith('c2c-') && !uid.startsWith('pending-') ? uid : undefined
     let sdkOk = false
-    if (sdk && uid && !isSyntheticUid) {
-      sdkOk = hangUpOmicallCall(sdk, uid)
+    if (sdk) {
+      if (realUid) sdkOk = hangUpOmicallCall(sdk, realUid)
       if (!sdkOk) sdkOk = hangUpOmicallCall(sdk)
-    } else if (sdk) {
-      sdkOk = hangUpOmicallCall(sdk)
+    }
+    if (sdkOk) {
+      setLastCallHint('Đã gửi lệnh dập máy qua tổng đài…')
+      window.setTimeout(() => {
+        if (activeCallUidRef.current) clearActiveCallUi()
+      }, 4000)
+      return
     }
     clearActiveCallUi()
-    if (sdkOk) {
-      setLastCallHint('Đã gửi lệnh dập máy — nếu vẫn nghe thấy tiếng, cắt thêm trên máy bàn.')
-    } else if (isSyntheticUid) {
-      setLastCallHint(
-        'Đã đóng panel CRM. Cuộc gọi máy bàn / click-to-call cần cắt trên điện thoại hoặc máy IP.',
-      )
-    } else {
-      setLastCallHint(
-        'Đã đóng panel CRM. SDK không phản hồi dập máy — thử cắt trên máy bàn hoặc bấm «Huỷ trên CRM».',
-      )
-    }
+    setLastCallHint(
+      'Không gửi được lệnh dập máy qua SDK — cắt trên máy bàn / điện thoại. «Huỷ trên CRM» chỉ đóng cửa sổ.',
+    )
   }, [clearActiveCallUi])
 
   /** Tự đóng panel nếu kẹt ở «đang kết nối / đổ chuông» quá lâu. */
@@ -678,6 +752,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
       }
       activeCallUidRef.current = null
+      activeCallStartedMsRef.current = Date.now()
+      activeCallTalkStartedMsRef.current = null
       setActiveCall({
         uid: `c2c-${Date.now()}`,
         state: 'connecting',
@@ -696,6 +772,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
       })
       activeCallUidRef.current = res.callUuid
+      activeCallStartedMsRef.current = Date.now()
       setActiveCall((prev) =>
         prev
           ? {
@@ -703,6 +780,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
               uid: res.callUuid,
               state: 'ringing',
               source: 'click2call',
+              durationSec: 0,
+              durationLabel: '0:00',
             }
           : null,
       )
@@ -762,6 +841,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const outbound =
         resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
       activeCallUidRef.current = null
+      activeCallStartedMsRef.current = Date.now()
+      activeCallTalkStartedMsRef.current = null
       setActiveCall({
         uid: `pending-${Date.now()}`,
         state: 'connecting',

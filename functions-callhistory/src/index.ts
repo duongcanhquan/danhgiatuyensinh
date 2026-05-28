@@ -194,63 +194,86 @@ function scopeAllowsWireCall(
   return call.counselorUid === caller.id
 }
 
+function firestoreErrHint(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (/index|FAILED_PRECONDITION/i.test(msg)) {
+    return `${msg.slice(0, 280)} — chạy: npm run deploy:firestore-indexes`
+  }
+  return msg.slice(0, 400)
+}
+
 /** Đọc cuộc gọi qua Admin SDK — không cần Secret Manager / OMICall API key. */
 export const fetchOmicallCallsForClient = onCall(async (request) => {
-  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
-  const caller = await loadStaffUser(request.auth.uid)
-  if (!caller || !caller.isActive) throw new HttpsError('permission-denied', 'Không có quyền truy cập.')
+  try {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    const caller = await loadStaffUser(request.auth.uid)
+    if (!caller || !caller.isActive) throw new HttpsError('permission-denied', 'Không có quyền truy cập.')
 
-  const fromMs = Math.max(0, Math.round(num(request.data?.fromMs)))
-  const toMs = Math.max(fromMs, Math.round(num(request.data?.toMs)))
-  const maxRows = Math.min(Math.max(Math.round(num(request.data?.maxRows) || 500), 50), 4000)
-  const rawScope = (request.data?.scope ?? {}) as Record<string, unknown>
-  const requestedScope: OmicallClientScope =
-    str(rawScope.mode) === 'counselor'
-      ? { mode: 'counselor', counselorUid: str(rawScope.counselorUid) || undefined }
-      : str(rawScope.mode) === 'team'
-        ? { mode: 'team', teamLeadUid: str(rawScope.teamLeadUid) || undefined }
-        : { mode: 'global' }
+    const fromMs = Math.max(0, Math.round(num(request.data?.fromMs)))
+    const toMs = Math.max(fromMs, Math.round(num(request.data?.toMs)))
+    const maxRows = Math.min(Math.max(Math.round(num(request.data?.maxRows) || 500), 50), 4000)
+    const rawScope = (request.data?.scope ?? {}) as Record<string, unknown>
+    const requestedScope: OmicallClientScope =
+      str(rawScope.mode) === 'counselor'
+        ? { mode: 'counselor', counselorUid: str(rawScope.counselorUid) || undefined }
+        : str(rawScope.mode) === 'team'
+          ? { mode: 'team', teamLeadUid: str(rawScope.teamLeadUid) || undefined }
+          : { mode: 'global' }
 
-  const teamSet = new Set<string>(caller.managedCounselorIds)
-  if (caller.role === 'team_lead') teamSet.add(caller.id)
+    const teamSet = new Set<string>(caller.managedCounselorIds)
+    if (caller.role === 'team_lead') teamSet.add(caller.id)
 
-  const fromTs = Timestamp.fromMillis(fromMs)
-  const toTs = Timestamp.fromMillis(toMs)
-  const fetchCap = Math.min(Math.max(maxRows * 3, 1200), 6000)
+    const fromTs = Timestamp.fromMillis(fromMs)
+    const toTs = Timestamp.fromMillis(toMs)
+    const fetchCap = Math.min(Math.max(maxRows * 3, 1200), 6000)
 
-  const callSnap = await db
-    .collection(COLLECTIONS.omicallCalls)
-    .where('endedAt', '>=', fromTs)
-    .where('endedAt', '<=', toTs)
-    .limit(fetchCap)
-    .get()
+    let rows: OmicallCallWire[] = []
+    let source: 'omicallCalls' | 'interactions_fallback' = 'omicallCalls'
 
-  let rows: OmicallCallWire[] = callSnap.docs.map((d) =>
-    toCallWireFromOmicallDoc(d.id, d.data() as Record<string, unknown>),
-  )
-  let source: 'omicallCalls' | 'interactions_fallback' = 'omicallCalls'
+    try {
+      const callSnap = await db
+        .collection(COLLECTIONS.omicallCalls)
+        .where('endedAt', '>=', fromTs)
+        .where('endedAt', '<=', toTs)
+        .limit(fetchCap)
+        .get()
+      rows = callSnap.docs.map((d) => toCallWireFromOmicallDoc(d.id, d.data() as Record<string, unknown>))
+    } catch (e) {
+      console.warn('[fetchOmicallCallsForClient] omicallCalls query failed', e)
+    }
 
-  if (rows.length === 0) {
-    const interactionSnap = await db
-      .collectionGroup(COLLECTIONS.interactions)
-      .where('timestamp', '>=', fromTs)
-      .where('timestamp', '<=', toTs)
-      .limit(Math.min(Math.max(maxRows * 4, 1500), 8000))
-      .get()
-    rows = interactionSnap.docs
-      .map((d) => toCallWireFromInteractionDoc(d.id, d.data() as Record<string, unknown>))
-      .filter((v): v is OmicallCallWire => Boolean(v))
-    source = 'interactions_fallback'
+    if (rows.length === 0) {
+      try {
+        const interactionSnap = await db
+          .collectionGroup(COLLECTIONS.interactions)
+          .where('provider', '==', 'OMICALL')
+          .where('timestamp', '>=', fromTs)
+          .where('timestamp', '<=', toTs)
+          .limit(Math.min(Math.max(maxRows * 4, 1500), 8000))
+          .get()
+        rows = interactionSnap.docs
+          .map((d) => toCallWireFromInteractionDoc(d.id, d.data() as Record<string, unknown>))
+          .filter((v): v is OmicallCallWire => Boolean(v))
+        source = 'interactions_fallback'
+      } catch (e) {
+        console.error('[fetchOmicallCallsForClient] interactions fallback failed', e)
+        throw new HttpsError('failed-precondition', firestoreErrHint(e))
+      }
+    }
+
+    const scoped = rows
+      .filter((c) => scopeAllowsWireCall(c, caller, teamSet, requestedScope))
+      .sort(
+        (a, b) =>
+          (b.endedAtMs || b.startedAtMs || b.createdAtMs || 0) -
+          (a.endedAtMs || a.startedAtMs || a.createdAtMs || 0),
+      )
+      .slice(0, maxRows)
+
+    return { ok: true, source, calls: scoped }
+  } catch (e) {
+    if (e instanceof HttpsError) throw e
+    console.error('[fetchOmicallCallsForClient]', e)
+    throw new HttpsError('internal', firestoreErrHint(e))
   }
-
-  const scoped = rows
-    .filter((c) => scopeAllowsWireCall(c, caller, teamSet, requestedScope))
-    .sort(
-      (a, b) =>
-        (b.endedAtMs || b.startedAtMs || b.createdAtMs || 0) -
-        (a.endedAtMs || a.startedAtMs || a.createdAtMs || 0),
-    )
-    .slice(0, maxRows)
-
-  return { ok: true, source, calls: scoped }
 })

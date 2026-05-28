@@ -1,5 +1,7 @@
 /** Kiểu tối thiểu cho OMICall Web SDK (global `window.OMICallSDK`). */
 
+import { formatCallDuration } from '../utils/omicallCallMap'
+
 export type OmicallCallDuration = { value: number; text: string }
 
 export type OmicallCallData = {
@@ -40,9 +42,72 @@ export type OmicallSdkGlobal = {
   stopCall?: (callUid?: string) => void
   endCall?: (callUid?: string) => void
   rejectCall?: (callUid?: string) => void
+  decline?: (callUid?: string) => void
   acceptCall?: () => void
   on: (event: string, cb: (data: unknown) => void) => void
   off: (event: string, cb: (data: unknown) => void) => void
+}
+
+function durationFromUnknown(value: unknown, text?: unknown): OmicallCallDuration | undefined {
+  const n = Number(value ?? 0)
+  if (!Number.isFinite(n) || n < 0) return undefined
+  const sec = Math.floor(n)
+  return { value: sec, text: String(text ?? '').trim() || formatCallDuration(sec) }
+}
+
+/** Chuẩn hoá payload SDK v2/v3 — `status: connected` → `state: accepted`, v.v. */
+export function normalizeOmicallSdkPayload(raw: unknown): OmicallCallData | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const uid = String(r.uid ?? r.uuid ?? r.transactionId ?? r.transaction_id ?? '').trim()
+  if (!uid) return null
+
+  const stateRaw = String(r.state ?? r.status ?? '').toLowerCase()
+  const state: OmicallCallData['state'] =
+    stateRaw === 'connected' || stateRaw === 'accepted'
+      ? 'accepted'
+      : stateRaw === 'ringing' || stateRaw === 'ring'
+        ? 'ringing'
+        : stateRaw === 'ended' || stateRaw === 'disconnect' || stateRaw === 'disconnected'
+          ? 'ended'
+          : stateRaw === 'connecting'
+            ? 'connecting'
+            : 'connecting'
+
+  const directionRaw = String(r.direction ?? '').toLowerCase()
+  const direction: OmicallCallData['direction'] = directionRaw === 'inbound' ? 'inbound' : 'outbound'
+
+  const phone = String(r.displayNumber ?? r.remoteNumber ?? r.phone ?? '').trim()
+  const callingDuration =
+    (r.callingDuration as OmicallCallDuration | undefined) ??
+    durationFromUnknown(r.duration, r.durationTxt)
+  const ringingDuration =
+    (r.ringingDuration as OmicallCallDuration | undefined) ??
+    (state !== 'accepted' ? durationFromUnknown(r.totalDuration, r.totalDurationTxt) : undefined)
+
+  return {
+    uid,
+    uuid: r.uuid ? String(r.uuid) : undefined,
+    state,
+    direction,
+    remoteNumber: String(r.remoteNumber ?? phone),
+    displayNumber: phone || String(r.remoteNumber ?? ''),
+    sipNumber:
+      r.sipNumber && typeof r.sipNumber === 'object'
+        ? { number: String((r.sipNumber as { number?: unknown }).number ?? r.sipNumber ?? '') }
+        : r.sipNumber
+          ? { number: String(r.sipNumber) }
+          : undefined,
+    ringingDuration,
+    callingDuration,
+    userData: r.userData != null ? String(r.userData) : undefined,
+    remoteContact:
+      r.remoteContact && typeof r.remoteContact === 'object'
+        ? { name: String((r.remoteContact as { name?: unknown }).name ?? '') }
+        : undefined,
+    isHangup: r.isHangup === true,
+    rejectCode: r.rejectCode != null ? String(r.rejectCode) : undefined,
+  }
 }
 
 type HangupFn = ((callUid?: string) => void) | (() => void)
@@ -72,6 +137,7 @@ export function hangUpOmicallCall(sdk: OmicallSdkGlobal, callUid?: string): bool
   if (typeof sdk.hangup === 'function') candidates.push(sdk.hangup.bind(sdk))
   if (typeof sdk.endCall === 'function') candidates.push(sdk.endCall.bind(sdk))
   if (typeof sdk.rejectCall === 'function') candidates.push(sdk.rejectCall.bind(sdk))
+  if (typeof sdk.decline === 'function') candidates.push(sdk.decline.bind(sdk))
 
   const extra = sdk as OmicallSdkGlobal & {
     hangUp?: HangupFn

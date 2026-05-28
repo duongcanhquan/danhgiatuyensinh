@@ -84,6 +84,24 @@ function mapWireToCall(row: OmicallCallWire): OmicallCallRecord {
   }
 }
 
+function callableErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const fe = err as { code?: string; message?: string; details?: unknown }
+    const code = String(fe.code ?? '')
+    const msg = String(fe.message ?? '').trim()
+    if (code === 'functions/internal' || code === 'internal') {
+      return (
+        msg && msg !== 'internal'
+          ? msg
+          : 'Lỗi server khi đọc cuộc gọi (thường do thiếu index Firestore warmlist). Chạy deploy:firestore-indexes và deploy:fetch-calls.'
+      )
+    }
+    if (msg) return msg
+    if (code) return code.replace(/^functions\//, '')
+  }
+  return err instanceof Error ? err.message : 'Không gọi được Cloud Function fetchOmicallCallsForClient.'
+}
+
 export async function fetchOmicallCallsViaFunction(input: FetchOmicallCallsInput): Promise<FetchOmicallCallsMappedResult> {
   if (!isFirebaseConfigured()) throw new Error('Chưa cấu hình Firebase.')
   const app = getFirebaseApp()
@@ -92,9 +110,13 @@ export async function fetchOmicallCallsViaFunction(input: FetchOmicallCallsInput
     getFunctions(app, 'asia-southeast1'),
     'fetchOmicallCallsForClient',
   )
-  const res = await fn(input)
-  return {
-    ...res.data,
-    calls: (res.data.calls ?? []).map(mapWireToCall),
+  try {
+    const res = await fn(input)
+    return {
+      ...res.data,
+      calls: (res.data.calls ?? []).map(mapWireToCall),
+    }
+  } catch (e) {
+    throw new Error(callableErrorMessage(e))
   }
 }

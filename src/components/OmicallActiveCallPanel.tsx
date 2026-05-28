@@ -51,6 +51,7 @@ export function OmicallActiveCallPanel() {
     (call.durationSec > 0 ? formatCallDuration(call.durationSec) : call.state === 'accepted' ? '0:00' : '—')
   const isDeskCall = call.source === 'click2call'
   const isStuck = call.state === 'connecting' || call.state === 'ringing'
+  const canSdkHangup = !isDeskCall || omicall.connectionStatus === 'connected'
 
   const startDrag = (e: ReactPointerEvent<HTMLButtonElement>) => {
     e.stopPropagation()
@@ -109,8 +110,8 @@ export function OmicallActiveCallPanel() {
           <div className="border-t border-white/10 px-4 py-3 text-sm">
             {isDeskCall ? (
               <p className="mb-2 text-xs text-amber-200/95">
-                Gọi <strong>máy bàn</strong> — cắt cuộc gọi trên điện thoại / máy IP. «Huỷ trên CRM» chỉ đóng cửa sổ
-                để tiếp tục làm việc.
+                Gọi <strong>máy bàn</strong> — bấm <strong>Dập máy</strong> để gửi lệnh cắt qua tổng đài (nếu đã kết nối
+                SIP). Nếu vẫn nghe máy đổ chuông, cắt trên điện thoại / máy IP.
               </p>
             ) : isStuck ? (
               <p className="mb-2 text-xs text-amber-200/95">
@@ -158,10 +159,14 @@ export function OmicallActiveCallPanel() {
                 </>
               )}
             </button>
-            {!isDeskCall ? (
+            {canSdkHangup ? (
               <button
                 type="button"
-                title="Gửi lệnh dập máy qua OMICall (micro trình duyệt)"
+                title={
+                  isDeskCall
+                    ? 'Gửi stopCall qua SIP đã đăng ký — cắt cuộc gọi trên máy lẻ'
+                    : 'Gửi lệnh dập máy qua OMICall (micro trình duyệt)'
+                }
                 onClick={onHangUp}
                 className="relative z-20 flex flex-1 cursor-pointer items-center justify-center gap-2 border-l border-white/10 bg-rose-600 py-2.5 text-sm font-bold text-white hover:bg-rose-500 active:bg-rose-700"
               >

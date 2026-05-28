@@ -217,6 +217,21 @@
       ]
     },
     {
+      "collectionGroup": "interactions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "omicallCalls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "endedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "counselors",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
