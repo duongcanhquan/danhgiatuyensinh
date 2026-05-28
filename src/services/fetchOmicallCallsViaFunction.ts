@@ -1,3 +1,4 @@
+import { FirebaseError } from 'firebase/app'
 import { Timestamp } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import type { OmicallCallRecord } from '../types'
@@ -87,15 +88,19 @@ function mapWireToCall(row: OmicallCallWire): OmicallCallRecord {
 }
 
 function callableErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'code' in err) {
-    const fe = err as { code?: string; message?: string }
-    const msg = String(fe.message ?? '').trim()
+  if (err instanceof FirebaseError) {
+    const msg = err.message?.trim() ?? ''
     if (msg && msg !== 'internal') return msg
-    const code = String(fe.code ?? '').replace(/^functions\//, '')
+    const code = err.code.replace(/^functions\//, '')
     if (code === 'unauthenticated') return 'Phiên đăng nhập hết hạn — đăng nhập lại.'
     if (code === 'permission-denied') return 'Không có quyền xem lịch sử gọi.'
+    const details = (err as FirebaseError & { details?: unknown }).details
+    if (typeof details === 'string' && details.trim()) return details.trim()
   }
-  return err instanceof Error ? err.message : 'Không đọc được lịch sử gọi từ server.'
+  if (err instanceof Error && err.message.trim() && err.message !== 'internal') {
+    return err.message.trim()
+  }
+  return 'Không đọc được lịch sử gọi từ server — thử đăng nhập lại.'
 }
 
 export async function fetchOmicallCallsViaFunction(input: FetchOmicallCallsInput): Promise<FetchOmicallCallsMappedResult> {

@@ -1931,3 +1931,5 @@ export const adminStaffAccountAction = onCall(async (request) => {
   }
   return { ok: true, action: 'delete', targetUserId }
 })
+
+export { fetchOmicallCallsForClient } from './fetchOmicallCallsForClient.js'
