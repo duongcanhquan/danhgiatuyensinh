@@ -345,8 +345,37 @@ export function useOmicallCalls({
 
         let raw = rawPrimary
         let fallbackSource: FallbackSource = 'none'
-        let fallbackError = false
+        let interactionFallbackError = false
+        let serverFallbackError: string | null = null
         let serverFallbackUsed = false
+
+        const serverScope =
+          scope.mode === 'global'
+            ? ({ mode: 'global' } as const)
+            : scope.mode === 'team'
+              ? ({ mode: 'team', teamLeadUid: scope.teamLeadUid } as const)
+              : ({ mode: 'counselor', counselorUid: scope.counselorUid } as const)
+
+        // Ưu tiên Cloud Function (Admin SDK + database warmlist) khi client không có dữ liệu.
+        if (raw.length === 0) {
+          try {
+            const serverRes = await fetchOmicallCallsViaFunction({
+              fromMs: fromTs.toMillis(),
+              toMs: toTs.toMillis(),
+              maxRows: fetchCap,
+              scope: serverScope,
+            })
+            if (serverRes.calls.length > 0) {
+              raw = serverRes.calls
+              serverFallbackUsed = true
+              fallbackSource = serverRes.source === 'interactions_fallback' ? 'interactions' : 'none'
+            }
+          } catch (e) {
+            serverFallbackError =
+              e instanceof Error ? e.message : 'Không gọi được Cloud Function fetchOmicallCallsForClient.'
+          }
+        }
+
         if (raw.length === 0) {
           try {
             const fallbackRows = await fetchCallsFromInteractionsFallback(db, fromTs, toTs, fetchCap)
@@ -355,29 +384,7 @@ export function useOmicallCalls({
               fallbackSource = 'interactions'
             }
           } catch {
-            // Fallback chỉ hỗ trợ hiển thị; nếu truy vấn lỗi thì giữ nguyên luồng chính.
-            fallbackError = true
-          }
-        }
-        if (raw.length === 0 && fallbackError) {
-          try {
-            const serverRes = await fetchOmicallCallsViaFunction({
-              fromMs: fromTs.toMillis(),
-              toMs: toTs.toMillis(),
-              maxRows: fetchCap,
-              scope:
-                scope.mode === 'global'
-                  ? { mode: 'global' }
-                  : scope.mode === 'team'
-                    ? { mode: 'team', teamLeadUid: scope.teamLeadUid }
-                    : { mode: 'counselor', counselorUid: scope.counselorUid },
-            })
-            if (serverRes.calls.length > 0) {
-              raw = serverRes.calls
-              serverFallbackUsed = true
-            }
-          } catch {
-            // Nếu server fallback cũng lỗi thì giữ thông báo hiện có.
+            interactionFallbackError = true
           }
         }
 
@@ -416,13 +423,17 @@ export function useOmicallCalls({
             'Đang hiển thị dữ liệu cuộc gọi từ tương tác hồ sơ (fallback) do lịch sử OMICall chưa đồng bộ đầy đủ.',
           )
         } else if (serverFallbackUsed) {
-          notices.push('Đang hiển thị dữ liệu cuộc gọi qua Cloud Function fallback.')
-        } else if (fallbackError) {
+          notices.push('Đang hiển thị dữ liệu cuộc gọi qua Cloud Function (đồng bộ từ Firestore warmlist).')
+        } else if (serverFallbackError) {
           notices.push(
-            'Không đọc được dữ liệu fallback từ tương tác OMICALL (có thể do quyền hoặc index Firestore).',
+            `Cloud Function fallback không khả dụng: ${serverFallbackError} Kiểm tra đã deploy fetchOmicallCallsForClient và đăng nhập còn hiệu lực.`,
+          )
+        } else if (interactionFallbackError) {
+          notices.push(
+            'Không đọc được tương tác OMICALL trên trình duyệt (quyền hoặc index Firestore). Đã thử Cloud Function nhưng chưa có cuộc trong kỳ.',
           )
         }
-        if (raw.length === 0 && !dbHint) {
+        if (raw.length === 0 && !dbHint && !serverFallbackError) {
           notices.push(
             'Nếu vừa gọi xong, hệ thống sẽ tự cập nhật sau ít phút. Bạn chỉ cần đăng nhập và gọi từ nút OMICall trong hồ sơ.',
           )
