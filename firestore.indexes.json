@@ -225,13 +225,6 @@
       ]
     },
     {
-      "collectionGroup": "omicallCalls",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "endedAt", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "counselors",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
