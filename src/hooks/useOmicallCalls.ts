@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   collection,
+  collectionGroup,
   getDocs,
   limit,
   orderBy,
@@ -33,6 +34,7 @@ const CHUNK_DAYS = 7
 const CHUNK_QUERY_LIMIT = 1200
 
 type DateField = 'endedAt' | 'startedAt'
+type FallbackSource = 'none' | 'interactions'
 
 function isMissingIndexError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
@@ -186,6 +188,96 @@ async function fetchCallsByDateChunks(
   return { rows: rows.slice(0, cap), truncated, startedAtFallback }
 }
 
+function inferDirectionFromNote(note: string): 'inbound' | 'outbound' {
+  const n = note.toLowerCase()
+  if (n.includes('gọi vào')) return 'inbound'
+  return 'outbound'
+}
+
+function mapInteractionToCallFallback(
+  id: string,
+  data: Record<string, unknown>,
+): OmicallCallRecord | null {
+  const provider = String(data.provider ?? '').toUpperCase()
+  if (provider !== 'OMICALL') return null
+  const ts = data.timestamp as Timestamp | undefined
+  if (!ts) return null
+  const transactionId = String(data.providerCallId ?? id).trim()
+  const note = String(data.counselorNote ?? '')
+  const outcomeRaw = String(data.callOutcome ?? '').toUpperCase()
+  const outcome: OmicallCallRecord['outcome'] =
+    outcomeRaw === 'CONNECTED' ? 'CONNECTED' : outcomeRaw === 'NO_ANSWER' ? 'NO_ANSWER' : 'OTHER'
+  const answerSeconds = Number(data.answerSeconds ?? data.durationSeconds ?? 0) || 0
+  const billSeconds = Number(data.billSeconds ?? data.durationSeconds ?? 0) || 0
+
+  return {
+    id: `int-${id}`,
+    transactionId,
+    direction: inferDirectionFromNote(note),
+    phoneNumber: String(data.phone ?? ''),
+    displayNumber: String(data.displayNumber ?? ''),
+    hotline: String(data.hotline ?? '') || undefined,
+    sipUser: String(data.sipUser ?? '') || undefined,
+    leadId: String(data.leadId ?? '') || undefined,
+    counselorUid: String(data.authorUid ?? '') || undefined,
+    teamLeadUid: undefined,
+    startedAt: ts,
+    answeredAt: undefined,
+    endedAt: ts,
+    createdAt: ts,
+    answerSeconds,
+    billSeconds,
+    durationSeconds: Math.max(answerSeconds, billSeconds),
+    recordSeconds: Number(data.recordSeconds ?? 0) || 0,
+    recordingFileUrl: String(data.recordingUrl ?? '') || undefined,
+    hangupCause: undefined,
+    endByName: undefined,
+    provider: 'OMICALL',
+    outcome,
+    state: 'ended',
+    isFinal: true,
+    syncSource: 'history_sync',
+    syncedAt: undefined,
+    interactionId: id,
+    kpiAppliedAt: undefined,
+    isValidCall: false,
+    invalidReason: 'interaction_fallback',
+    aiAnalysisId: undefined,
+    aiAnalysisSyncedAt: undefined,
+    aiAnalysisSummary: undefined,
+    disposition: undefined,
+    agentId: undefined,
+    agentName: undefined,
+    customerName: undefined,
+    callNote: note || undefined,
+    isAutoCall: false,
+    evaluationScore: undefined,
+  }
+}
+
+async function fetchCallsFromInteractionsFallback(
+  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
+  fromTs: Timestamp,
+  toTs: Timestamp,
+  cap: number,
+): Promise<OmicallCallRecord[]> {
+  const q = query(
+    collectionGroup(db, FS_COLLECTIONS.interactions),
+    where('provider', '==', 'OMICALL'),
+    where('timestamp', '>=', fromTs),
+    where('timestamp', '<=', toTs),
+    orderBy('timestamp', 'desc'),
+    limit(cap),
+  )
+  const snap = await getDocs(q)
+  const rows: OmicallCallRecord[] = []
+  snap.forEach((d) => {
+    const mapped = mapInteractionToCallFallback(d.id, d.data() as Record<string, unknown>)
+    if (mapped) rows.push(mapped)
+  })
+  return rows
+}
+
 export function useOmicallCalls({
   scope,
   from,
@@ -239,13 +331,27 @@ export function useOmicallCalls({
 
     ;(async () => {
       try {
-        const { rows: raw, truncated, startedAtFallback } = await fetchCallsByDateChunks(
+        const { rows: rawPrimary, truncated, startedAtFallback } = await fetchCallsByDateChunks(
           db,
           fromTs,
           toTs,
           fetchCap,
         )
         if (cancelled) return
+
+        let raw = rawPrimary
+        let fallbackSource: FallbackSource = 'none'
+        if (raw.length === 0) {
+          try {
+            const fallbackRows = await fetchCallsFromInteractionsFallback(db, fromTs, toTs, fetchCap)
+            if (fallbackRows.length > 0) {
+              raw = fallbackRows
+              fallbackSource = 'interactions'
+            }
+          } catch {
+            // Fallback chỉ hỗ trợ hiển thị; nếu truy vấn lỗi thì giữ nguyên luồng chính.
+          }
+        }
 
         const scoped = filterCallsByScope(raw, scope, viewerSipUser)
         scoped.sort(
@@ -275,6 +381,11 @@ export function useOmicallCalls({
         if (scope.mode !== 'global' && scoped.length < raw.length && scoped.length > 0) {
           notices.push(
             `Hiển thị ${visible.length.toLocaleString('vi-VN')} cuộc thuộc phạm vi đã chọn (đã lọc từ ${raw.length.toLocaleString('vi-VN')} cuộc trong kỳ).`,
+          )
+        }
+        if (fallbackSource === 'interactions') {
+          notices.push(
+            'Đang hiển thị dữ liệu cuộc gọi từ tương tác hồ sơ (fallback) do lịch sử OMICall chưa đồng bộ đầy đủ.',
           )
         }
         if (raw.length === 0 && !dbHint) {
