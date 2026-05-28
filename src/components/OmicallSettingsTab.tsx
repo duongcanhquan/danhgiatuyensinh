@@ -7,9 +7,9 @@ import { useOmicallSyncRuns } from '../hooks/useOmicallSyncRuns'
 import { DEFAULT_OMICALL_SDK_VERSION } from '../utils/omicallConfig'
 import { reconcileOmicallKpi } from '../services/reconcileOmicallKpi'
 import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
-import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import { probeOmicallInternalPhones } from '../services/omicallCallCenterProbe'
 import { registerOmicallWebhookOnServer } from '../services/omicallRegisterWebhook'
+import { runOmicallAdminBootstrap } from '../services/omicallAutoBootstrap'
 import { getFirebaseApp } from '../services/firebase'
 import {
   buildOmicallWebhookUrl,
@@ -94,7 +94,15 @@ export function OmicallSettingsTab() {
     try {
       await saveConfig(payload)
       setDraft(payload)
-      setMsg('Đã lưu — TVV tải lại trang để áp dụng.')
+      if (canEdit && payload.enabled && payload.apiKey?.trim() && payload.webhookSecret?.trim()) {
+        void runOmicallAdminBootstrap({
+          config: payload,
+          projectId: getFirebaseApp()?.options.projectId ?? '',
+        }).then((b) => {
+          if (b.webhook || b.phones) reconnect()
+        })
+      }
+      setMsg('Đã lưu — hệ thống tự đăng ký webhook & đồng bộ số nội bộ nếu cần.')
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không lưu được')
     } finally {
@@ -129,18 +137,24 @@ export function OmicallSettingsTab() {
       )
       await saveConfig(toSave)
       setDraft(toSave)
-      const sync = await syncOmicallInternalPhones(false)
+      const bootstrap = await runOmicallAdminBootstrap({
+        config: toSave,
+        projectId: getFirebaseApp()?.options.projectId ?? '',
+        force: true,
+      })
       setMsg(
         [
           `Cài đặt nhanh xong.`,
           domainHint ? `Domain tổng đài: ${domainHint}.` : '',
-          `Đồng bộ TVV: ${sync.updated} người cập nhật / ${sync.matched} khớp email.`,
-          sync.skippedNoUser ? `${sync.skippedNoUser} extension chưa có user CRM (email khác).` : '',
-          'Bước tiếp: bấm «Đăng ký webhook».',
+          bootstrap.webhook ? bootstrap.webhook : '',
+          bootstrap.phones ?? '',
+          bootstrap.errors.length ? `Lưu ý: ${bootstrap.errors.join(' · ')}` : '',
+          'Hệ thống sẽ tự duy trì kết nối khi đăng nhập.',
         ]
           .filter(Boolean)
           .join(' '),
       )
+      reconnect()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Cài đặt nhanh thất bại')
     } finally {
@@ -162,11 +176,17 @@ export function OmicallSettingsTab() {
     }
   }
 
+  const webhookOk =
+    Boolean(config.webhookRegisteredUrl?.trim()) &&
+    Boolean(projectId && draft.webhookSecret?.trim()) &&
+    config.webhookRegisteredUrl === buildOmicallWebhookUrl(projectId, draft.webhookSecret!.trim())
+
   const setupSteps = [
     { done: draft.enabled && Boolean(draft.apiKey?.trim()), label: 'API key đã nhập' },
     { done: Boolean(draft.sipRealm?.trim()), label: 'Domain tổng đài' },
     { done: configFromRemote, label: 'Đã lưu trên server' },
-    { done: connectionStatus === 'connected', label: 'TVV: Sẵn sàng gọi (micro)' },
+    { done: webhookOk, label: 'Webhook đã đăng ký (tự động)' },
+    { done: connectionStatus === 'connected', label: 'Tổng đài: Sẵn sàng gọi' },
   ]
 
   return (
@@ -176,12 +196,13 @@ export function OmicallSettingsTab() {
           Gọi điện — OMICall
         </VietMyAccentHeading>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
-          Chỉ cần <strong>3 thông tin từ OMICall</strong>, bấm <strong>Cài đặt nhanh</strong>, rồi{' '}
-          <strong>Đăng ký webhook</strong>. TVV đã có trong «Quản lý nhân sự» — hệ thống tự gán số nội bộ theo email.
+          Nhập <strong>API key + mã webhook</strong> rồi bấm <strong>Cài đặt nhanh</strong> một lần. Sau đó hệ thống{' '}
+          <strong>tự đăng ký webhook</strong>, <strong>tự đồng bộ số nội bộ</strong> và <strong>tự kết nối tổng đài</strong>{' '}
+          mỗi khi TVV / quản trị đăng nhập — không cần bấm lặp lại.
         </p>
       </div>
 
-      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {setupSteps.map((s, i) => (
           <li
             key={s.label}
@@ -279,10 +300,16 @@ export function OmicallSettingsTab() {
       </section>
 
       <section className="rounded-2xl border border-violet-200/90 bg-violet-50/40 p-5 shadow-sm">
-        <h3 className="text-base font-bold text-slate-900">Bước 2 — Webhook (một lần)</h3>
+        <h3 className="text-base font-bold text-slate-900">Webhook — tự đăng ký</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Sau khi lưu cấu hình, deploy Functions rồi bấm nút dưới — app tự đăng ký webhook trên OMICall.
+          Sau khi lưu cấu hình, app <strong>tự gọi OMICall</strong> đăng ký webhook (khi đăng nhập hoặc Cài đặt nhanh).
+          Nút dưới chỉ dùng khi cần đăng ký lại thủ công.
         </p>
+        {webhookOk ? (
+          <p className="mt-2 text-xs font-semibold text-emerald-800">
+            Đã đăng ký: {config.webhookRegisteredAt ? new Date(config.webhookRegisteredAt).toLocaleString('vi-VN') : 'gần đây'}
+          </p>
+        ) : null}
         {webhookPreview ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2">
             <code className="max-w-full flex-1 break-all text-[11px] text-slate-800">{webhookPreview}</code>
@@ -321,8 +348,8 @@ export function OmicallSettingsTab() {
           <div>
             <h3 className="text-base font-bold text-slate-900">Trạng thái & thử gọi</h3>
             <p className="text-xs text-slate-500">
-              TVV mở hồ sơ → Gọi (micro) hoặc Máy bàn. Hệ thống <strong>tự giữ kết nối</strong> — chỉ bấm «Kết nối
-              lại» khi trạng thái đỏ lâu.
+              Mở app là tự kết nối tổng đài. TVV mở hồ sơ → Gọi (micro) hoặc Máy bàn. Lịch sử gọi đồng bộ mỗi 15 phút
+              trên server.
             </p>
           </div>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(connectionStatus)}`}>
@@ -331,23 +358,32 @@ export function OmicallSettingsTab() {
         </div>
         {lastError ? <p className="mt-2 text-xs text-red-700">{lastError}</p> : null}
         {lastCallHint ? <p className="mt-2 text-xs text-slate-700">{lastCallHint}</p> : null}
-        <button
-          type="button"
-          onClick={reconnect}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          Kết nối lại tổng đài
-        </button>
+        {connectionStatus === 'error' ? (
+          <button
+            type="button"
+            onClick={reconnect}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Thử kết nối lại
+          </button>
+        ) : (
+          <p className="mt-2 text-xs text-emerald-800">Đang tự giữ kết nối — không cần thao tác thêm.</p>
+        )}
         {configLoading ? <p className="mt-2 text-xs text-slate-500">Đang đọc cấu hình…</p> : null}
       </section>
 
       <section className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-4">
         <h3 className="text-sm font-bold text-slate-900">TVV mới hoặc đổi số nội bộ</h3>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Tạo số nội bộ trên OMICall <strong>cùng email CRM</strong> → vào{' '}
-          <strong>Quản lý nhân sự</strong> bấm «Đồng bộ số nội bộ» hoặc điền khi thêm TVV.
+          Tạo số nội bộ trên OMICall <strong>cùng email CRM</strong> — khi TVV đăng nhập, hệ thống{' '}
+          <strong>tự gán số nội bộ</strong>. Quản trị vẫn có thể đồng bộ toàn bộ trong «Quản lý nhân sự» nếu cần.
         </p>
+        {config.lastInternalPhonesSyncAt ? (
+          <p className="mt-1 text-xs text-slate-500">
+            Lần đồng bộ số nội bộ gần nhất: {new Date(config.lastInternalPhonesSyncAt).toLocaleString('vi-VN')}
+          </p>
+        ) : null}
       </section>
 
       <details

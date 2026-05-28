@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useFloatingDropdownPosition } from '../hooks/useFloatingDropdownPosition'
@@ -33,7 +33,6 @@ export function CatalogCombobox({
   onChange: (v: string) => void
   onEnsureOption?: (label: string) => void | Promise<void>
 }) {
-  const listId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const [open, setOpen] = useState(false)
@@ -135,8 +134,11 @@ export function CatalogCombobox({
           className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500"
           value={query}
           disabled={disabled || busy}
+          autoComplete="new-password"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
           placeholder={placeholder ?? 'Gõ để tìm hoặc thêm mới…'}
-          list={listId}
           onFocus={() => setOpen(true)}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -169,11 +171,6 @@ export function CatalogCombobox({
           <ChevronDown className={`h-4 w-4 transition ${open ? 'rotate-180' : ''}`} />
         </button>
       </div>
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
       {typeof document !== 'undefined' && listPanel ? createPortal(listPanel, document.body) : null}
     </div>
   )

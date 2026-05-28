@@ -204,7 +204,11 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       description = bits.join('\n---\n').trim()
     }
     const gradeClass = String(data.gradeClass ?? '')
-    const address = String(data.address ?? '')
+    const addressRaw = String(data.address ?? '').trim()
+    const permanentAddressRaw = String(data.permanentAddress ?? '').trim()
+    const address = permanentAddressRaw || addressRaw
+    const ethnicity = String(data.ethnicity ?? '').trim()
+    const currentResidence = String(data.currentResidence ?? '').trim()
     const dateOfBirth = String(data.dateOfBirth ?? '').trim() || undefined
 
     const statusRaw = String(data.status ?? '').trim()
@@ -297,6 +301,9 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       gradeClass,
       province,
       address,
+      ...(ethnicity ? { ethnicity } : {}),
+      ...(permanentAddressRaw || addressRaw ? { permanentAddress: permanentAddressRaw || addressRaw } : {}),
+      ...(currentResidence ? { currentResidence } : {}),
       calculatedScore,
       priorityTag,
       uploadedAt,

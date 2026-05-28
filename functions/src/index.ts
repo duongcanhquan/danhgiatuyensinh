@@ -1417,6 +1417,13 @@ export const omicallSyncInternalPhones = onCall(
       })
     }
 
+    if (!dryRun) {
+      await db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID).set(
+        { lastInternalPhonesSyncAt: new Date().toISOString(), updatedAt: Timestamp.now() },
+        { merge: true },
+      )
+    }
+
     if (!dryRun && domainHint) {
       const realm = domainHint.trim()
       const configRef = db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID)
@@ -1660,7 +1667,81 @@ export const omicallRegisterWebhook = onCall(
     if (!projectId) throw new HttpsError('internal', 'Không xác định được Firebase project ID.')
     const webhookUrl = omicallWebhookUrlForProject(projectId, webhookSecret)
     const result = await registerOmicallCallWebhook(baseUrl, apiKey, webhookUrl)
+    const nowIso = new Date().toISOString()
+    await db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID).set(
+      {
+        webhookRegisteredUrl: webhookUrl,
+        webhookRegisteredAt: nowIso,
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true },
+    )
     return { ok: true, webhookUrl, message: result.message }
+  },
+)
+
+/** TVV tự gán số nội bộ theo email CRM — không cần admin bấm đồng bộ toàn hệ thống. */
+export const omicallSyncMyExtension = onCall(
+  { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
+  async (request) => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    const uid = request.auth.uid
+    const userSnap = await db.collection(COLLECTIONS.users).doc(uid).get()
+    if (!userSnap.exists) throw new HttpsError('not-found', 'Không tìm thấy hồ sơ user.')
+    const user = userSnap.data() ?? {}
+    const email = str(user.email).toLowerCase()
+    if (!email) {
+      throw new HttpsError('failed-precondition', 'Tài khoản chưa có email — không khớp OMICall.')
+    }
+    const existingUser = str(user.omicallSipUser)
+    if (existingUser && str(user.omicallSipPassword)) {
+      return {
+        ok: true,
+        updated: false,
+        sipUser: existingUser,
+        message: `Đã có số nội bộ ${existingUser}.`,
+      }
+    }
+    const { apiKey, baseUrl } = await requireOmicallApiCreds()
+    const detail = await fetchExtensionDetail(baseUrl, apiKey, 'user_email', email)
+    const sipUser = detail?.sipUser || ''
+    if (!sipUser) {
+      throw new HttpsError(
+        'failed-precondition',
+        'OMICall chưa có số nội bộ trùng email — tạo extension trên OMICall cùng email CRM.',
+      )
+    }
+    let outbound = normalizeHotlineNumber(user.omicallOutboundNumber)
+    let sipPassword = str(user.omicallSipPassword) || detail?.sipPassword || ''
+    try {
+      const hotlines = await fetchHotlineListForExtension(baseUrl, apiKey, sipUser)
+      if (hotlines[0]) outbound = normalizeHotlineNumber(hotlines[0]) || outbound
+    } catch {
+      /* optional */
+    }
+    if (!sipPassword) {
+      try {
+        const full = await fetchExtensionDetail(baseUrl, apiKey, 'sip_user', sipUser)
+        if (full?.sipPassword) sipPassword = full.sipPassword
+      } catch {
+        /* optional */
+      }
+    }
+    const patch: Record<string, unknown> = {
+      omicallSipUser: sipUser,
+      omicallAgentId: detail?.agentId || user.omicallAgentId || null,
+      omicallOutboundNumber: outbound || null,
+      omicallSyncedAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    }
+    if (sipPassword) patch.omicallSipPassword = sipPassword
+    await userSnap.ref.set(patch, { merge: true })
+    return {
+      ok: true,
+      updated: true,
+      sipUser,
+      message: `Đã gán số nội bộ ${sipUser} từ OMICall.`,
+    }
   },
 )
 

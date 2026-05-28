@@ -1,4 +1,5 @@
 import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from '../types'
+import { studyFormatFromParts } from './studyFormatMerge'
 
 /** Trường chỉnh trên panel chi tiết — đồng bộ Firestore + chấm điểm qua `leadToEvaluationRecord`. */
 export type LeadCoreDraft = {
@@ -11,6 +12,9 @@ export type LeadCoreDraft = {
   source: string
   province: string
   address: string
+  ethnicity: string
+  permanentAddress: string
+  currentResidence: string
   highSchool: string
   gradeClass: string
   educationLevel: string
@@ -52,6 +56,9 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
     source: '',
     province: '',
     address: '',
+    ethnicity: '',
+    permanentAddress: '',
+    currentResidence: '',
     highSchool: '',
     gradeClass: '',
     educationLevel: '',
@@ -93,13 +100,18 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     parentPhone: lead.parentPhone ?? '',
     source: lead.source ?? '',
     province: lead.province ?? '',
-    address: lead.address ?? '',
+    address: lead.permanentAddress?.trim() || lead.address || '',
+    ethnicity: lead.ethnicity ?? '',
+    permanentAddress: lead.permanentAddress?.trim() || lead.address || '',
+    currentResidence: lead.currentResidence ?? '',
     highSchool: lead.highSchool ?? '',
     gradeClass: lead.gradeClass ?? '',
-    educationLevel: lead.educationLevel ?? '',
+    ...(() => {
+      const fmt = studyFormatFromParts(lead.studyIntention, lead.educationLevel)
+      return { educationLevel: fmt, studyIntention: fmt }
+    })(),
     majorInterest: lead.majorInterest ?? '',
     academicPerformance: lead.academicPerformance ?? '',
-    studyIntention: lead.studyIntention ?? '',
     schoolType: lead.schoolType ?? '',
     financialStatus: lead.financialStatus ?? '',
     hanoiArea: lead.hanoiArea ?? '',
@@ -145,10 +157,13 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
     parentPhone: norm(draft.parentPhone),
     source: norm(draft.source),
     province: norm(draft.province),
-    address: norm(draft.address),
+    address: norm(draft.permanentAddress) || norm(draft.address),
     highSchool: norm(draft.highSchool),
     gradeClass: norm(draft.gradeClass),
-    educationLevel: norm(draft.educationLevel),
+    ...(() => {
+      const fmt = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
+      return { educationLevel: fmt, studyIntention: fmt }
+    })(),
     description: norm(draft.description),
     nationalIdNotAvailable: draft.nationalIdNotAvailable,
     studentEmail: norm(draft.studentEmail),
@@ -173,7 +188,9 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
   }
   opt('majorInterest', 'majorInterest')
   opt('academicPerformance', 'academicPerformance')
-  opt('studyIntention', 'studyIntention')
+  opt('ethnicity', 'ethnicity')
+  opt('permanentAddress', 'permanentAddress')
+  opt('currentResidence', 'currentResidence')
   opt('schoolType', 'schoolType')
   opt('financialStatus', 'financialStatus')
   opt('hanoiArea', 'hanoiArea')
@@ -241,7 +258,17 @@ export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
     nationalIdNotAvailable: draft.nationalIdNotAvailable || undefined,
     majorInterest: norm(draft.majorInterest) || undefined,
     academicPerformance: norm(draft.academicPerformance) || undefined,
-    studyIntention: norm(draft.studyIntention) || undefined,
+    ...(() => {
+      const fmt = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
+      return {
+        educationLevel: fmt || lead.educationLevel,
+        studyIntention: fmt || undefined,
+      }
+    })(),
+    ethnicity: norm(draft.ethnicity) || undefined,
+    permanentAddress: norm(draft.permanentAddress) || norm(draft.address) || undefined,
+    currentResidence: norm(draft.currentResidence) || undefined,
+    address: norm(draft.permanentAddress) || norm(draft.address) || lead.address,
     schoolType: norm(draft.schoolType) || undefined,
     financialStatus: norm(draft.financialStatus) || undefined,
     hanoiArea: norm(draft.hanoiArea) || undefined,

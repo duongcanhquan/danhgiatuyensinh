@@ -1,4 +1,5 @@
 import type { Lead } from '../types'
+import { studyFormatFromParts } from './studyFormatMerge'
 import {
   INFO_SCORE_FIELD_IDS,
   type InfoScoreFieldId,
@@ -37,10 +38,14 @@ const MATCHERS: Record<InfoScoreFieldId, (lead: Lead) => boolean> = {
   profileNote2: (l) => nonEmptyField(l.profileNote2),
   gradeClass: (l) => nonEmptyField(l.gradeClass),
   province: (l) => nonEmptyField(l.province),
-  address: (l) => nonEmptyField(l.address),
+  address: (l) => nonEmptyField(l.permanentAddress || l.address),
+  ethnicity: (l) => nonEmptyField(l.ethnicity),
+  permanentAddress: (l) => nonEmptyField(l.permanentAddress || l.address),
+  currentResidence: (l) => nonEmptyField(l.currentResidence),
   assignedTo: (l) => Boolean(l.assignedTo && String(l.assignedTo).trim()),
   otherAttentionNotes: (l) => nonEmptyField(l.otherAttentionNotes),
-  educationLevel: (l) => nonEmptyField(l.educationLevel),
+  educationLevel: (l) => nonEmptyField(studyFormatFromParts(l.studyIntention, l.educationLevel)),
+  studyIntention: (l) => nonEmptyField(studyFormatFromParts(l.studyIntention, l.educationLevel)),
   description: descriptionMeaningful,
 }
 
@@ -78,7 +83,28 @@ const DEFAULT_FIELD_ROWS: readonly InfoScoreFieldRowPersisted[] = [
   { id: 'profileNote2', label: 'Ghi chú 2', pointsIfMatch: 1, enabled: true },
   { id: 'gradeClass', label: 'Lớp hiện đang học', pointsIfMatch: 2, enabled: true },
   { id: 'province', label: 'Tỉnh / Thành phố', pointsIfMatch: 3, enabled: true },
-  { id: 'address', label: 'Địa chỉ', pointsIfMatch: 3, enabled: true },
+  { id: 'address', label: 'Địa chỉ (thường trú)', pointsIfMatch: 3, enabled: true },
+  {
+    id: 'ethnicity',
+    label: 'Dân tộc',
+    pointsIfMatch: 2,
+    enabled: false,
+    hint: 'Bật nếu thu thập trên form Thông tin chung.',
+  },
+  {
+    id: 'permanentAddress',
+    label: 'Địa chỉ thường trú',
+    pointsIfMatch: 3,
+    enabled: false,
+    hint: 'Trùng cột địa chỉ khi đã nhập trên form mới.',
+  },
+  {
+    id: 'currentResidence',
+    label: 'Nơi ở hiện tại',
+    pointsIfMatch: 2,
+    enabled: false,
+    hint: 'Bật nếu thu thập trên form Thông tin chung.',
+  },
   {
     id: 'assignedTo',
     label: 'Đã phân công TVV',
@@ -89,10 +115,17 @@ const DEFAULT_FIELD_ROWS: readonly InfoScoreFieldRowPersisted[] = [
   { id: 'otherAttentionNotes', label: 'Nội dung lưu ý khác', pointsIfMatch: 2, enabled: true },
   {
     id: 'educationLevel',
-    label: 'Hệ đào tạo (mở rộng, không trong 20 cột)',
+    label: 'Hình thức học quan tâm (educationLevel)',
     pointsIfMatch: 4,
     enabled: false,
-    hint: 'Bật nếu vẫn thu thập cột này ngoài Excel chuẩn.',
+    hint: 'Gộp hệ đào tạo + dự định hình thức trên form Nguyện vọng.',
+  },
+  {
+    id: 'studyIntention',
+    label: 'Hình thức học quan tâm (studyIntention)',
+    pointsIfMatch: 4,
+    enabled: false,
+    hint: 'Cùng giá trị với educationLevel sau khi gộp trên form.',
   },
   {
     id: 'description',
@@ -122,10 +155,14 @@ export const INFO_SCORE_CRITERION_HELP: ReadonlyArray<{ id: InfoScoreFieldId; ru
   { id: 'profileNote2', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'gradeClass', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'province', rule: 'Chuỗi không rỗng sau trim.' },
-  { id: 'address', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'address', rule: 'Địa chỉ thường trú hoặc cột address legacy — không rỗng sau trim.' },
+  { id: 'ethnicity', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'permanentAddress', rule: 'Chuỗi không rỗng sau trim (hoặc address legacy).' },
+  { id: 'currentResidence', rule: 'Chuỗi không rỗng sau trim.' },
   { id: 'assignedTo', rule: 'Trường assignedTo có UID (đã gán tư vấn viên).' },
   { id: 'otherAttentionNotes', rule: 'Chuỗi không rỗng sau trim.' },
-  { id: 'educationLevel', rule: 'Chuỗi không rỗng sau trim.' },
+  { id: 'educationLevel', rule: 'Hình thức học quan tâm — studyIntention hoặc educationLevel không rỗng.' },
+  { id: 'studyIntention', rule: 'Cùng điều kiện với educationLevel sau khi gộp trên form.' },
   { id: 'description', rule: 'Độ dài trim ≥ 15 ký tự (tránh cộng điểm cho ghi chú rỗng / vài ký tự).' },
 ]
 

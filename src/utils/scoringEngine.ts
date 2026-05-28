@@ -503,15 +503,18 @@ export function scoreToPriorityTag(
 }
 
 export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
-  const majorInterest = (lead.majorInterest?.trim() || lead.educationLevel || '').trim()
-  const academicLevel = (lead.academicPerformance?.trim() || lead.educationLevel || '').trim()
+  const studyFormat =
+    lead.studyIntention?.trim() || lead.educationLevel?.trim() || ''
+  const majorInterest = (lead.majorInterest?.trim() || studyFormat || lead.educationLevel || '').trim()
+  const academicLevel = (lead.academicPerformance?.trim() || studyFormat || lead.educationLevel || '').trim()
+  const permanentAddress = (lead.permanentAddress?.trim() || lead.address?.trim() || '').trim()
   return {
     customerId: lead.customerId,
     fullName: lead.fullName,
     phone: lead.phone,
     parentPhone: lead.parentPhone,
     source: lead.source,
-    educationLevel: lead.educationLevel,
+    educationLevel: studyFormat || lead.educationLevel,
     assignedTo: lead.assignedTo,
     status: lead.status,
     description: lead.description,
@@ -525,12 +528,15 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     highSchool: lead.highSchool,
     gradeClass: lead.gradeClass,
     province: lead.province,
-    address: lead.address,
+    address: permanentAddress || lead.address,
+    permanentAddress,
+    ethnicity: lead.ethnicity?.trim() ?? '',
+    currentResidence: lead.currentResidence?.trim() ?? '',
     pipelineStatus: lead.pipelineStatus,
     uniqueHash: lead.uniqueHash,
     calculatedScore: lead.calculatedScore,
     priorityTag: lead.priorityTag,
-    studyIntention: lead.studyIntention?.trim() ?? '',
+    studyIntention: studyFormat,
     financialStatus: lead.financialStatus?.trim() ?? '',
     hanoiArea: lead.hanoiArea?.trim() ?? '',
     schoolType: lead.schoolType?.trim() ?? '',

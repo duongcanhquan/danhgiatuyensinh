@@ -16,6 +16,7 @@ import { computeLeadUniqueHash, normalizePhoneKey } from './leadIdentity'
 import { allocateSystemCodeForNewLead } from './systemLeadCode'
 import { evaluateLead } from './scoring'
 import { leadCoreDraftToFirestoreFields, type LeadCoreDraft } from './leadProfileEdit'
+import { studyFormatFromParts } from './studyFormatMerge'
 import { validateNationalIdInput } from './leadProfileCatalog'
 import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
@@ -25,6 +26,7 @@ function norm(s: string): string {
 }
 
 export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow> {
+  const studyFormat = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
   return {
     customerId: norm(draft.customerId),
     fullName: norm(draft.fullName),
@@ -32,17 +34,17 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
     phone: norm(draft.phone),
     parentPhone: norm(draft.parentPhone),
     source: norm(draft.source),
-    educationLevel: norm(draft.educationLevel),
+    educationLevel: studyFormat,
     majorInterest: norm(draft.majorInterest),
     academicPerformance: norm(draft.academicPerformance),
-    studyIntention: norm(draft.studyIntention),
+    studyIntention: studyFormat,
     schoolType: norm(draft.schoolType),
     financialStatus: norm(draft.financialStatus),
     hanoiArea: norm(draft.hanoiArea),
     highSchool: norm(draft.highSchool),
     gradeClass: norm(draft.gradeClass),
     province: norm(draft.province),
-    address: norm(draft.address),
+    address: norm(draft.permanentAddress) || norm(draft.address),
     description: norm(draft.description),
     aspirations: norm(draft.aspirations),
     hobbies: norm(draft.hobbies),
@@ -55,6 +57,9 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
 }
 
 export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
+  if (!norm(draft.source1)) {
+    return 'Cần chọn Nguồn 1 trước khi lưu hồ sơ mới.'
+  }
   const name = norm(draft.fullName)
   const phoneKey = normalizePhoneKey(draft.phone, draft.parentPhone)
   if (!name && phoneKey.length < 9) {
@@ -116,6 +121,11 @@ export async function createManualLead(
     parentPhone: row.parentPhone,
     source: row.source,
     educationLevel: row.educationLevel,
+    ...(norm(input.draft.ethnicity) ? { ethnicity: norm(input.draft.ethnicity) } : {}),
+    ...(norm(input.draft.permanentAddress) || norm(input.draft.address)
+      ? { permanentAddress: norm(input.draft.permanentAddress) || norm(input.draft.address) }
+      : {}),
+    ...(norm(input.draft.currentResidence) ? { currentResidence: norm(input.draft.currentResidence) } : {}),
     ...(row.majorInterest?.trim() ? { majorInterest: row.majorInterest.trim() } : {}),
     ...(row.academicPerformance?.trim() ? { academicPerformance: row.academicPerformance.trim() } : {}),
     ...(row.schoolType?.trim() ? { schoolType: row.schoolType.trim() } : {}),

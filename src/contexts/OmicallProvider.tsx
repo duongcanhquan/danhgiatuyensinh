@@ -583,7 +583,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
 
     document.addEventListener('visibilitychange', onVisibility)
-    const intervalId = window.setInterval(ensureConnected, 45_000)
+    const intervalId = window.setInterval(ensureConnected, 30_000)
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)

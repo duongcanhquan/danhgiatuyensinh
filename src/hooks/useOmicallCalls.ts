@@ -269,7 +269,7 @@ export function useOmicallCalls({
         }
         if (scope.mode !== 'global' && raw.length > 0 && scoped.length === 0) {
           notices.push(
-            'Có cuộc gọi trong kỳ nhưng chưa gắn đúng TVV/nhóm — hãy gọi từ nút OMICall trên hồ sơ; quản trị có thể «Đồng bộ lịch sử» / «Bù KPI» trong Cài đặt.',
+            'Có cuộc gọi trong kỳ nhưng chưa gắn đúng TVV/nhóm — hãy gọi từ nút OMICall trên hồ sơ để hệ thống tự đồng bộ đúng phạm vi.',
           )
         }
         if (scope.mode !== 'global' && scoped.length < raw.length && scoped.length > 0) {
@@ -279,7 +279,7 @@ export function useOmicallCalls({
         }
         if (raw.length === 0 && !dbHint) {
           notices.push(
-            'Nếu vừa gọi thử: đợi 1–2 phút hoặc nhờ quản trị «Đồng bộ lịch sử» trong Cài đặt → Gọi điện (cần deploy Functions + API key OMICall).',
+            'Nếu vừa gọi xong, hệ thống sẽ tự cập nhật sau ít phút. Bạn chỉ cần đăng nhập và gọi từ nút OMICall trong hồ sơ.',
           )
         }
         setNotice(notices.length ? notices.join(' ') : null)

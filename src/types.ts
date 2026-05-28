@@ -340,8 +340,14 @@ export interface Lead {
   gradeClass: string
   /** Tỉnh / thành phố */
   province: string
-  /** Địa chỉ */
+  /** Địa chỉ — đồng bộ với `permanentAddress` khi lưu từ form mới */
   address: string
+  /** Dân tộc */
+  ethnicity?: string
+  /** Địa chỉ thường trú */
+  permanentAddress?: string
+  /** Nơi ở hiện tại */
+  currentResidence?: string
   /** Ngày sinh (chuỗi theo Excel, vd. dd/MM/yyyy hoặc YYYY-MM-DD) */
   dateOfBirth?: string
   /** Ghi chú 1 — cột Excel quy chuẩn; `targetField` chấm điểm: profileNote1 */
@@ -1503,6 +1509,12 @@ export type OmicallIntegrationConfig = {
   historyLookbackMinutes?: number
   /** Số trang tối đa mỗi lần sync (50 cuộc/trang). */
   historyMaxPages?: number
+  /** URL webhook đã đăng ký trên OMICall (tự cập nhật sau đăng ký). */
+  webhookRegisteredUrl?: string
+  /** ISO — lần đăng ký webhook gần nhất. */
+  webhookRegisteredAt?: string
+  /** ISO — lần đồng bộ số nội bộ toàn hệ thống gần nhất. */
+  lastInternalPhonesSyncAt?: string
 }
 
 /** Các trường hồ sơ dùng trong công thức điểm thông tin — đồng bộ 20 cột Excel + 2 trường mở rộng (legacy). */
@@ -1525,9 +1537,13 @@ export const INFO_SCORE_FIELD_IDS = [
   'gradeClass',
   'province',
   'address',
+  'ethnicity',
+  'permanentAddress',
+  'currentResidence',
   'assignedTo',
   'otherAttentionNotes',
   'educationLevel',
+  'studyIntention',
   'description',
 ] as const
 

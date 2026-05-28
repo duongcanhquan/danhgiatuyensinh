@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AuthProvider } from './contexts/AuthProvider'
 import { OmicallProvider } from './contexts/OmicallProvider'
+import { OmicallAutoBootstrap } from './components/OmicallAutoBootstrap'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { SummaryHubView } from './views/SummaryHubView'
@@ -28,6 +29,7 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter basename={basename}>
           <OmicallProvider>
+          <OmicallAutoBootstrap />
           <Routes>
             <Route path="/ke-toan/login" element={<AccountantLoginView />} />
             <Route element={<AccountantProtectedRoute />}>

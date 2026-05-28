@@ -217,6 +217,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (auth) await auth.signOut()
   }, [])
 
+  const reloadProfile = useCallback(async () => {
+    const auth = getFirebaseAuth()
+    const db = getFirestoreDb()
+    const user = auth?.currentUser
+    if (!user || !db) return
+    try {
+      const p = await syncUserProfileWithRetry(db, user)
+      setProfile(p)
+    } catch (e) {
+      console.warn('[reloadProfile]', e)
+    }
+  }, [])
+
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth()
     if (!auth) throw new Error('Firebase Auth chưa cấu hình.')
@@ -503,6 +516,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       can,
       canRunLlmAnalysis,
       signOut,
+      reloadProfile,
       signInWithEmail,
       createStaffAccount,
       updateStaffProfile,
@@ -522,6 +536,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       can,
       canRunLlmAnalysis,
       signOut,
+      reloadProfile,
       signInWithEmail,
       createStaffAccount,
       updateStaffProfile,

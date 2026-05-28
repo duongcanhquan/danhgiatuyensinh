@@ -52,6 +52,8 @@ export type AuthContextValue = AuthState & {
   enableStaffLogin: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
   /** Xóa hồ sơ Firestore + tài khoản Auth (không thể hoàn tác). */
   deleteStaffAccount: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
+  /** Tải lại `users/{uid}` sau khi server cập nhật (vd. đồng bộ OMICall). */
+  reloadProfile: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

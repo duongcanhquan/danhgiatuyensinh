@@ -26,11 +26,11 @@ export function KpiCallHint({
         className={`rounded-lg border border-sky-200/90 bg-sky-50/90 px-3 py-2 text-xs leading-relaxed text-sky-950 ${className}`}
         role="status"
       >
-        <strong>Đang hiển thị từ lịch sử gọi</strong> — báo cáo ngày chưa cập nhật. Gọi từ nút OMICall trên hồ sơ để tự
-        đồng bộ; quản trị có thể «Bù KPI» trong Cài đặt → Gọi điện.
+        <strong>Đang hiển thị từ lịch sử gọi</strong> — báo cáo ngày chưa cập nhật. Gọi từ nút OMICall trên hồ sơ để hệ
+        thống tự đồng bộ.
         {showAdminLink ? (
           <>
-            {' '}
+            {' '}Nếu cần kiểm tra dữ liệu toàn hệ thống, quản trị có thể mở{' '}
             <Link to="/settings?main=connect&sub=omicall" className="font-semibold underline">
               Mở cài đặt gọi điện
             </Link>

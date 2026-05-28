@@ -350,17 +350,21 @@ export function CallHistoryView({ embedded: _embedded = false }: { embedded?: bo
       {!loading && !error && calls.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 space-y-2">
           <p>
-            Chưa có cuộc gọi trong kỳ đã chọn. Gọi từ <strong>Hồ sơ</strong> (nút OMICall) để hệ thống ghi nhận; quản trị có
-            thể đồng bộ lịch sử trong{' '}
-            <Link to="/settings?main=connect&sub=omicall" className="font-semibold text-sky-800 underline">
-              Cài đặt → Gọi điện
-            </Link>
-            .
+            Chưa có cuộc gọi trong kỳ đã chọn. Gọi từ <strong>Hồ sơ</strong> (nút OMICall) để hệ thống tự ghi nhận.
           </p>
           <ul className="list-disc pl-5 text-xs text-slate-600 space-y-1">
             <li>Kiểm tra khoảng ngày (mặc định 7 ngày gần nhất).</li>
-            <li>Quản trị: bật «Đồng bộ lịch sử», nhập API key, bấm «Đồng bộ lịch sử ngay» và «Bù KPI».</li>
+            <li>Sau cuộc gọi mới, dữ liệu có thể cập nhật trễ vài phút.</li>
             <li>Hosting phải dùng database Firestore <strong>warmlist</strong> (biến build VITE_FIREBASE_FIRESTORE_DATABASE_ID).</li>
+            {can('config:omicall') ? (
+              <li>
+                Quản trị có thể kiểm tra trạng thái tổng đài trong{' '}
+                <Link to="/settings?main=connect&sub=omicall" className="font-semibold text-sky-800 underline">
+                  Cài đặt → Gọi điện
+                </Link>
+                .
+              </li>
+            ) : null}
           </ul>
         </div>
       ) : null}

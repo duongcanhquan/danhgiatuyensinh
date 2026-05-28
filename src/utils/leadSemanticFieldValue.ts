@@ -23,15 +23,25 @@ export function evaluationRecordFieldValue(rec: Record<string, unknown>, field: 
     case 'source':
     case 'leadSource':
       return String(rec.source ?? rec.leadSource ?? '')
-    case 'educationLevel':
-      return String(rec.educationLevel ?? '')
+    case 'educationLevel': {
+      const fmt = String(rec.studyIntention ?? '').trim() || String(rec.educationLevel ?? '').trim()
+      return fmt
+    }
     case 'major':
     case 'majorInterest':
       return String(rec.majorInterest ?? rec.major ?? rec.educationLevel ?? '').trim()
     case 'academicLevel':
       return String(rec.academicLevel ?? rec.academicPerformance ?? rec.educationLevel ?? '').trim()
-    case 'studyIntention':
-      return String(rec.studyIntention ?? '').trim()
+    case 'studyIntention': {
+      const fmt = String(rec.studyIntention ?? '').trim() || String(rec.educationLevel ?? '').trim()
+      return fmt
+    }
+    case 'ethnicity':
+      return String(rec.ethnicity ?? '').trim()
+    case 'permanentAddress':
+      return String(rec.permanentAddress ?? rec.address ?? '').trim()
+    case 'currentResidence':
+      return String(rec.currentResidence ?? '').trim()
     case 'schoolType':
       return String(rec.schoolType ?? '')
     case 'schoolTypeKey':
@@ -48,7 +58,7 @@ export function evaluationRecordFieldValue(rec: Record<string, unknown>, field: 
     case 'gradeClass':
       return String(rec.gradeClass ?? '')
     case 'address':
-      return String(rec.address ?? '')
+      return String(rec.permanentAddress ?? rec.address ?? '').trim()
     case 'description':
       return String(rec.description ?? '')
     case 'dateOfBirth':

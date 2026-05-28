@@ -67,6 +67,9 @@ export function parseOmicallConfigDoc(raw: Record<string, unknown> | null | unde
       raw.historyLookbackMinutes !== undefined ? Math.max(15, Math.min(4320, Number(raw.historyLookbackMinutes))) : 180,
     historyMaxPages:
       raw.historyMaxPages !== undefined ? Math.max(1, Math.min(100, Number(raw.historyMaxPages))) : 20,
+    webhookRegisteredUrl: String(raw.webhookRegisteredUrl ?? '').trim() || undefined,
+    webhookRegisteredAt: String(raw.webhookRegisteredAt ?? '').trim() || undefined,
+    lastInternalPhonesSyncAt: String(raw.lastInternalPhonesSyncAt ?? '').trim() || undefined,
   }
 }
 

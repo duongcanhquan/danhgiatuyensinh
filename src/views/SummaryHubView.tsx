@@ -85,8 +85,6 @@ export function SummaryHubView() {
           <div className="space-y-6">
             {showPersonnelEval ? (
               <section className="app-glass-panel rounded-2xl p-4 shadow-sm sm:p-5">
-                <h2 className="text-sm font-bold text-slate-900">Đánh giá tuân thủ &amp; điểm nhân sự</h2>
-                <p className="mt-1 text-xs text-slate-600">Theo nhóm / từng TVV — nhập điểm và xem 4 trụ KPI.</p>
                 <div className="mt-4">
                   <AdminPersonnelKpiPanel />
                 </div>

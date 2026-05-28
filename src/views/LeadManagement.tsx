@@ -1708,9 +1708,9 @@ export function LeadManagement() {
                 </th>
                 <th
                   className="max-w-[11rem] px-2 py-3 text-sm font-medium normal-case"
-                  title="Mô tả / ghi chú chính trên hồ sơ"
+                  title="Mô tả, ghi chú chính và nguyện vọng trên hồ sơ"
                 >
-                  Ghi chú
+                  Ghi chú/ Nguyện vọng
                 </th>
                 <th
                   className="max-w-[11rem] px-2 py-3 text-sm font-medium normal-case"
