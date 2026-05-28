@@ -20,14 +20,23 @@ export function KpiCallHint({
     )
   }
 
+  if (source === 'both') {
+    return (
+      <p className={`text-xs text-slate-500 ${className}`}>
+        Cuộc gọi: kết hợp <span className="font-medium text-slate-700">báo cáo ngày</span> và{' '}
+        <span className="font-medium text-slate-700">dòng thời gian hồ sơ</span>.
+      </p>
+    )
+  }
+
   if (source === 'calls_live') {
     return (
       <p
         className={`rounded-lg border border-sky-200/90 bg-sky-50/90 px-3 py-2 text-xs leading-relaxed text-sky-950 ${className}`}
         role="status"
       >
-        <strong>Đang hiển thị từ lịch sử gọi</strong> — báo cáo ngày chưa cập nhật. Gọi từ nút OMICall trên hồ sơ để hệ
-        thống tự đồng bộ.
+        <strong>Cuộc gọi từ dòng thời gian hồ sơ</strong> (tương tác OMICall) — cùng nguồn với tab hoạt động khi bạn gọi từ hồ sơ tư vấn.
+        Cọc / NE / doanh thu vẫn lấy từ báo cáo ngày khi đã đồng bộ.
         {showAdminLink ? (
           <>
             {' '}Nếu cần kiểm tra dữ liệu toàn hệ thống, quản trị có thể mở{' '}

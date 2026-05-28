@@ -70,7 +70,7 @@ export function SummaryHubView() {
         ) : null}
         {profile?.role === 'counselor' && activeTab === 'tong-quan' ? (
           <p className="mt-3 text-xs text-slate-500">
-            Công việc hằng ngày: mục <strong>Ngày của tôi</strong> trên menu.
+            Báo cáo theo kỳ (cọc, nguồn SV): mục <strong>Ngày của tôi</strong> trên menu — không nằm trong Tổng kết.
           </p>
         ) : null}
       </header>

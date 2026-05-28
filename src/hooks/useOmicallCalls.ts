@@ -423,7 +423,7 @@ export function useOmicallCalls({
         }
         if (fallbackSource === 'interactions') {
           notices.push(
-            'Đang hiển thị dữ liệu cuộc gọi từ tương tác hồ sơ (fallback) do lịch sử OMICall chưa đồng bộ đầy đủ.',
+            'Dữ liệu cuộc gọi lấy từ dòng thời gian hồ sơ (tương tác OMICall) — cùng nguồn với tab hoạt động khi bạn gọi từ hồ sơ tư vấn.',
           )
         } else if (serverFallbackUsed) {
           notices.push('Đang hiển thị dữ liệu cuộc gọi qua Cloud Function (đồng bộ từ Firestore warmlist).')
