@@ -43,10 +43,6 @@ export function SummaryHubView() {
         <VietMyAccentHeading as="h1" tone="onLight" size="xl" className="block">
           Tổng kết
         </VietMyAccentHeading>
-        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
-          Một nơi xem <strong>tổng quan</strong>, <strong>KPI &amp; cuộc gọi</strong>, <strong>bảng điểm tháng</strong>{' '}
-          và vận hành ngày — mỗi tab một việc, không trùng menu Hồ sơ.
-        </p>
         {tabs.length > 1 ? (
           <nav
             className="mt-4 flex gap-2 overflow-x-auto overscroll-x-contain pb-0.5"
