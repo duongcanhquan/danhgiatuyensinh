@@ -103,6 +103,19 @@ Google Cloud Console → **APIs & Services** → **Credentials** → chọn API 
 
 Hoặc tạm **None** để thử (kém an toàn hơn).
 
+## Deploy Cloud Function lịch sử gọi (Tổng kết)
+
+Function `fetchOmicallCallsForClient` nằm codebase **`callhistory`** — **không cần** nhập secret OMICall khi deploy.
+
+```bash
+cd danhgiatuyensinh
+npm run deploy:fetch-calls
+```
+
+Tương đương: `npx firebase-tools deploy --only functions:callhistory:fetchOmicallCallsForClient --project tvts-8f713`
+
+> **Lưu ý:** Git repo nằm trong thư mục `danhgiatuyensinh`, không phải thư mục cha `LỌC DỮ LIỆU`.
+
 ## Bảo mật
 
 - Không commit `.env` hoặc file service account JSON.
