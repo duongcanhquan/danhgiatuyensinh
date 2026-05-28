@@ -261,13 +261,14 @@ async function fetchCallsFromInteractionsFallback(
   toTs: Timestamp,
   cap: number,
 ): Promise<OmicallCallRecord[]> {
+  // Query theo timestamp trước (không ép composite index provider+timestamp),
+  // rồi lọc provider OMICALL ở client để tăng khả năng chạy được trên môi trường chưa đủ index.
+  const fetchLimit = Math.min(Math.max(cap * 4, 600), 4000)
   const q = query(
     collectionGroup(db, FS_COLLECTIONS.interactions),
-    where('provider', '==', 'OMICALL'),
     where('timestamp', '>=', fromTs),
     where('timestamp', '<=', toTs),
-    orderBy('timestamp', 'desc'),
-    limit(cap),
+    limit(fetchLimit),
   )
   const snap = await getDocs(q)
   const rows: OmicallCallRecord[] = []
@@ -275,6 +276,8 @@ async function fetchCallsFromInteractionsFallback(
     const mapped = mapInteractionToCallFallback(d.id, d.data() as Record<string, unknown>)
     if (mapped) rows.push(mapped)
   })
+  rows.sort((a, b) => tsMsCall(b.endedAt ?? b.startedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.startedAt ?? a.createdAt))
+  if (rows.length > cap) return rows.slice(0, cap)
   return rows
 }
 
@@ -341,6 +344,7 @@ export function useOmicallCalls({
 
         let raw = rawPrimary
         let fallbackSource: FallbackSource = 'none'
+        let fallbackError = false
         if (raw.length === 0) {
           try {
             const fallbackRows = await fetchCallsFromInteractionsFallback(db, fromTs, toTs, fetchCap)
@@ -350,6 +354,7 @@ export function useOmicallCalls({
             }
           } catch {
             // Fallback chỉ hỗ trợ hiển thị; nếu truy vấn lỗi thì giữ nguyên luồng chính.
+            fallbackError = true
           }
         }
 
@@ -386,6 +391,10 @@ export function useOmicallCalls({
         if (fallbackSource === 'interactions') {
           notices.push(
             'Đang hiển thị dữ liệu cuộc gọi từ tương tác hồ sơ (fallback) do lịch sử OMICall chưa đồng bộ đầy đủ.',
+          )
+        } else if (fallbackError) {
+          notices.push(
+            'Không đọc được dữ liệu fallback từ tương tác OMICALL (có thể do quyền hoặc index Firestore).',
           )
         }
         if (raw.length === 0 && !dbHint) {
