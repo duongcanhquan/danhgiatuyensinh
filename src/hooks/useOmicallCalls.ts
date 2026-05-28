@@ -13,6 +13,7 @@ import type { OmicallCallRecord } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { mapOmicallCallDoc, tsMsCall } from '../utils/omicallCallMap'
+import { firestoreDatabaseMismatchHint } from '../utils/firestoreDatabaseHint'
 
 export type OmicallCallsScope =
   | { mode: 'counselor'; counselorUid: string }
@@ -31,6 +32,8 @@ export type UseOmicallCallsOpts = {
 const CHUNK_DAYS = 7
 const CHUNK_QUERY_LIMIT = 1200
 
+type DateField = 'endedAt' | 'startedAt'
+
 function isMissingIndexError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   return e.message.includes('requires an index') || e.message.includes('FAILED_PRECONDITION')
@@ -47,7 +50,7 @@ function userFacingLoadError(e: unknown): string {
     return 'Bạn chưa có quyền xem lịch sử gọi toàn hệ thống. Liên hệ quản trị nếu cần xem nhóm hoặc toàn trường.'
   }
   if (isMissingIndexError(e)) {
-    return 'Hệ thống chưa sẵn sàng hiển thị lịch sử gọi theo kỳ. Vui lòng báo quản trị viên (không cần thao tác trên Firebase).'
+    return 'Hệ thống chưa sẵn sàng hiển thị lịch sử gọi theo kỳ. Vui lòng báo quản trị viên chạy deploy index Firestore (database warmlist).'
   }
   if (e instanceof Error) return e.message || 'Không đọc được lịch sử cuộc gọi.'
   return 'Không đọc được lịch sử cuộc gọi.'
@@ -72,13 +75,27 @@ function filterCallsByScope(
   return calls.filter((c) => c.teamLeadUid === scope.teamLeadUid)
 }
 
-function dateRangeConstraints(fromTs: Timestamp, toTs: Timestamp, limitN: number): QueryConstraint[] {
-  return [
-    where('endedAt', '>=', fromTs),
-    where('endedAt', '<=', toTs),
-    orderBy('endedAt', 'desc'),
-    limit(limitN),
-  ]
+function callInDateRange(c: OmicallCallRecord, fromMs: number, toMs: number): boolean {
+  const ms = tsMsCall(c.endedAt ?? c.startedAt ?? c.createdAt)
+  if (!ms) return false
+  return ms >= fromMs && ms <= toMs
+}
+
+/** Bỏ event webhook dở (ringing) không có thời lượng — tránh làm nhiễu báo cáo. */
+function isDisplayableCall(c: OmicallCallRecord): boolean {
+  if (c.isFinal === false && !c.endedAt && (c.billSeconds ?? 0) === 0 && (c.answerSeconds ?? 0) === 0) {
+    return false
+  }
+  return true
+}
+
+function dateRangeConstraints(
+  field: DateField,
+  fromTs: Timestamp,
+  toTs: Timestamp,
+  limitN: number,
+): QueryConstraint[] {
+  return [where(field, '>=', fromTs), where(field, '<=', toTs), orderBy(field, 'desc'), limit(limitN)]
 }
 
 async function runOmicallQuery(
@@ -92,41 +109,81 @@ async function runOmicallQuery(
   return rows
 }
 
-/** Tải theo từng đoạn ngày — chỉ cần index `endedAt`, không phụ thuộc counselorUid/teamLeadUid. */
+async function fetchChunkByField(
+  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
+  field: DateField,
+  fromTs: Timestamp,
+  toTs: Timestamp,
+): Promise<{ rows: OmicallCallRecord[]; hitLimit: boolean; indexMissing: boolean }> {
+  try {
+    const batch = await runOmicallQuery(
+      db,
+      dateRangeConstraints(field, fromTs, toTs, CHUNK_QUERY_LIMIT),
+    )
+    return { rows: batch, hitLimit: batch.length >= CHUNK_QUERY_LIMIT, indexMissing: false }
+  } catch (e) {
+    if (isMissingIndexError(e)) return { rows: [], hitLimit: false, indexMissing: true }
+    throw e
+  }
+}
+
+/** Tải theo từng đoạn ngày — `endedAt` + `startedAt` (bù doc thiếu giờ kết thúc). */
 async function fetchCallsByDateChunks(
   db: NonNullable<ReturnType<typeof getFirestoreDb>>,
   fromTs: Timestamp,
   toTs: Timestamp,
   cap: number,
-): Promise<{ rows: OmicallCallRecord[]; truncated: boolean }> {
+): Promise<{ rows: OmicallCallRecord[]; truncated: boolean; startedAtFallback: boolean }> {
   const fromMs = fromTs.toMillis()
   const toMs = toTs.toMillis()
-  if (fromMs > toMs) return { rows: [], truncated: false }
+  if (fromMs > toMs) return { rows: [], truncated: false, startedAtFallback: false }
 
   const chunkMs = CHUNK_DAYS * 86400000
   const merged = new Map<string, OmicallCallRecord>()
   let truncated = false
+  let startedAtFallback = false
+  let startedAtIndexMissing = false
 
   for (let start = fromMs; start <= toMs && merged.size < cap; start += chunkMs) {
     const end = Math.min(start + chunkMs - 1, toMs)
-    const batch = await runOmicallQuery(
-      db,
-      dateRangeConstraints(Timestamp.fromMillis(start), Timestamp.fromMillis(end), CHUNK_QUERY_LIMIT),
-    )
-    for (const row of batch) {
+    const chunkFrom = Timestamp.fromMillis(start)
+    const chunkTo = Timestamp.fromMillis(end)
+
+    const ended = await fetchChunkByField(db, 'endedAt', chunkFrom, chunkTo)
+    if (ended.hitLimit) truncated = true
+    for (const row of ended.rows) {
+      if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
       merged.set(row.id, row)
       if (merged.size >= cap) {
         truncated = true
         break
       }
     }
-    if (batch.length >= CHUNK_QUERY_LIMIT) truncated = true
+    if (merged.size >= cap) break
+
+    const started = await fetchChunkByField(db, 'startedAt', chunkFrom, chunkTo)
+    if (started.indexMissing) startedAtIndexMissing = true
+    else if (started.rows.length > 0) startedAtFallback = true
+    if (started.hitLimit) truncated = true
+    for (const row of started.rows) {
+      if (merged.has(row.id)) continue
+      if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
+      merged.set(row.id, row)
+      if (merged.size >= cap) {
+        truncated = true
+        break
+      }
+    }
+  }
+
+  if (startedAtIndexMissing && merged.size === 0 && !startedAtFallback) {
+    startedAtFallback = false
   }
 
   const rows = [...merged.values()].sort(
-    (a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt),
+    (a, b) => tsMsCall(b.endedAt ?? b.startedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.startedAt ?? a.createdAt),
   )
-  return { rows: rows.slice(0, cap), truncated }
+  return { rows: rows.slice(0, cap), truncated, startedAtFallback }
 }
 
 export function useOmicallCalls({
@@ -182,20 +239,33 @@ export function useOmicallCalls({
 
     ;(async () => {
       try {
-        const { rows: raw, truncated } = await fetchCallsByDateChunks(db, fromTs, toTs, fetchCap)
+        const { rows: raw, truncated, startedAtFallback } = await fetchCallsByDateChunks(
+          db,
+          fromTs,
+          toTs,
+          fetchCap,
+        )
         if (cancelled) return
 
         const scoped = filterCallsByScope(raw, scope, viewerSipUser)
-        scoped.sort((a, b) => tsMsCall(b.endedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.createdAt))
+        scoped.sort(
+          (a, b) =>
+            tsMsCall(b.endedAt ?? b.startedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.startedAt ?? a.createdAt),
+        )
         const visible = scoped.slice(0, maxRows)
 
         setCalls(visible)
 
         const notices: string[] = []
+        const dbHint = firestoreDatabaseMismatchHint()
+        if (dbHint && raw.length === 0) notices.push(dbHint)
         if (truncated) {
           notices.push(
             `Đã tải tối đa ${fetchCap.toLocaleString('vi-VN')} cuộc trong kỳ — thu hẹp khoảng ngày nếu thiếu cuộc cũ.`,
           )
+        }
+        if (startedAtFallback) {
+          notices.push('Đã bù thêm cuộc gọi theo giờ bắt đầu (một số bản ghi chưa có giờ kết thúc).')
         }
         if (scope.mode !== 'global' && raw.length > 0 && scoped.length === 0) {
           notices.push(
@@ -207,12 +277,17 @@ export function useOmicallCalls({
             `Hiển thị ${visible.length.toLocaleString('vi-VN')} cuộc thuộc phạm vi đã chọn (đã lọc từ ${raw.length.toLocaleString('vi-VN')} cuộc trong kỳ).`,
           )
         }
+        if (raw.length === 0 && !dbHint) {
+          notices.push(
+            'Nếu vừa gọi thử: đợi 1–2 phút hoặc nhờ quản trị «Đồng bộ lịch sử» trong Cài đặt → Gọi điện (cần deploy Functions + API key OMICall).',
+          )
+        }
         setNotice(notices.length ? notices.join(' ') : null)
         setError(null)
       } catch (e) {
         if (cancelled) return
         setCalls([])
-        setNotice(null)
+        setNotice(firestoreDatabaseMismatchHint())
         setError(userFacingLoadError(e))
       } finally {
         if (!cancelled) setLoading(false)

@@ -250,7 +250,12 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
     sipUser: omicallSipUserFromRaw(raw),
     startedAt: toTs(raw.time_start_call || raw.created_date || raw.created_time || raw.date_time),
     answeredAt: toTs(raw.time_answer_start || raw.time_start_to_answer || (stateLower === 'answered' ? eventTime : undefined)),
-    endedAt: toTs(raw.time_end_call || (stateLower === 'hangup' || stateLower === 'cdr' ? eventTime : undefined)),
+    endedAt: toTs(
+      raw.time_end_call ||
+        raw.timeEndCall ||
+        raw.time_end ||
+        (stateLower === 'hangup' || stateLower === 'cdr' ? eventTime : undefined),
+    ),
     createdAt: toTs(raw.created_date || raw.created_time || raw.date_time),
     answerSeconds,
     billSeconds,
@@ -377,6 +382,21 @@ function interactionNote(call: NormalizedOmicallCall): string {
     .join(' · ')
 }
 
+/** Đảm bảo có `endedAt` để app truy vấn lịch sử theo kỳ (Firestore không lọc doc thiếu field). */
+function resolveStoredEndedAt(
+  call: NormalizedOmicallCall,
+  source: 'webhook' | 'history_sync',
+  isFinal: boolean,
+): Timestamp | undefined {
+  if (call.endedAt) return call.endedAt
+  if (!isFinal && source !== 'history_sync') return undefined
+  if (call.startedAt && (call.billSeconds > 0 || call.durationSeconds > 0)) {
+    const extra = Math.max(call.billSeconds, call.durationSeconds, call.answerSeconds) * 1000
+    return Timestamp.fromMillis(call.startedAt.toMillis() + extra)
+  }
+  return call.startedAt ?? call.createdAt
+}
+
 async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'webhook' | 'history_sync') {
   const kpiCfg = await loadKpiEvalConfig(db)
   const match = await resolveCounselorAndLead(db, call)
@@ -400,27 +420,34 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
         : call.outcome,
   }
   const isFinal = isFinalCallState(mergedCall, source) || existingData?.isFinal === true
-  const validity = evaluateValidCall(mergedCall, match, kpiCfg)
-  const { raw: _raw, ...callFields } = mergedCall
+  const storedEndedAt =
+    resolveStoredEndedAt(mergedCall, source, isFinal) ??
+    (existingData?.endedAt as Timestamp | undefined)
+  const mergedForStore: NormalizedOmicallCall = {
+    ...mergedCall,
+    endedAt: storedEndedAt ?? mergedCall.endedAt,
+  }
+  const validity = evaluateValidCall(mergedForStore, match, kpiCfg)
+  const { raw: _raw, ...callFields } = mergedForStore
   const payload = {
     ...callFields,
     leadId: match.leadId ?? str(existingData?.leadId) ?? null,
     counselorUid: match.counselorUid ?? str(existingData?.counselorUid) ?? null,
     teamLeadUid: match.teamLeadUid ?? str(existingData?.teamLeadUid) ?? null,
-    disposition: mergedCall.disposition ?? null,
-    agentId: mergedCall.agentId ?? null,
-    agentName: mergedCall.agentName ?? null,
-    customerName: mergedCall.customerName ?? null,
-    callNote: mergedCall.callNote ?? null,
-    isAutoCall: mergedCall.isAutoCall ?? false,
-    evaluationScore: mergedCall.evaluationScore ?? null,
+    disposition: mergedForStore.disposition ?? null,
+    agentId: mergedForStore.agentId ?? null,
+    agentName: mergedForStore.agentName ?? null,
+    customerName: mergedForStore.customerName ?? null,
+    callNote: mergedForStore.callNote ?? null,
+    isAutoCall: mergedForStore.isAutoCall ?? false,
+    evaluationScore: mergedForStore.evaluationScore ?? null,
     isValidCall: validity.isValid,
     invalidReason: validity.invalidReason ?? null,
     isFinal,
     syncSource: source,
     syncedAt: now,
     updatedAt: now,
-    createdAt: mergedCall.createdAt ?? mergedCall.startedAt ?? (existingData?.createdAt as Timestamp) ?? now,
+    createdAt: mergedForStore.createdAt ?? mergedForStore.startedAt ?? (existingData?.createdAt as Timestamp) ?? now,
   }
   await callRef.set(payload, { merge: true })
 
@@ -429,7 +456,7 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     const effectiveLeadId = match.leadId ?? (str(existingData?.leadId) || undefined)
     if (effectiveLeadId && !existingData?.interactionId) {
       const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
-      const dupSnap = await interactionsCol.where('providerCallId', '==', mergedCall.transactionId).limit(1).get()
+      const dupSnap = await interactionsCol.where('providerCallId', '==', mergedForStore.transactionId).limit(1).get()
       if (!dupSnap.empty) {
         await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
       } else {
@@ -438,20 +465,20 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
         channel: 'CALL',
         authorUid: match.counselorUid || str(existingData?.counselorUid) || 'omicall',
         authorRole: 'counselor',
-        counselorNote: interactionNote(mergedCall),
-        callOutcome: mergedCall.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER',
-        durationSeconds: mergedCall.billSeconds || mergedCall.answerSeconds || undefined,
+        counselorNote: interactionNote(mergedForStore),
+        callOutcome: mergedForStore.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER',
+        durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || undefined,
         provider: 'OMICALL',
-        providerCallId: mergedCall.transactionId,
-        providerUuid: mergedCall.callUuid ?? null,
-        recordingUrl: mergedCall.recordingFileUrl ?? null,
-        recordSeconds: mergedCall.recordSeconds || null,
-        billSeconds: mergedCall.billSeconds || null,
-        answerSeconds: mergedCall.answerSeconds || null,
-        hotline: mergedCall.hotline ?? null,
-        sipUser: mergedCall.sipUser ?? null,
+        providerCallId: mergedForStore.transactionId,
+        providerUuid: mergedForStore.callUuid ?? null,
+        recordingUrl: mergedForStore.recordingFileUrl ?? null,
+        recordSeconds: mergedForStore.recordSeconds || null,
+        billSeconds: mergedForStore.billSeconds || null,
+        answerSeconds: mergedForStore.answerSeconds || null,
+        hotline: mergedForStore.hotline ?? null,
+        sipUser: mergedForStore.sipUser ?? null,
         syncedFrom: source,
-        timestamp: mergedCall.endedAt ?? mergedCall.startedAt ?? now,
+        timestamp: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
       })
       await callRef.set({ interactionId: interactionRef.id }, { merge: true })
       }
@@ -461,7 +488,7 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     !existingData?.kpiAppliedAt || (existingData?.kpiPending === true && match.counselorUid)
   if (shouldApplyKpi) {
     if (match.counselorUid) {
-      await updateDailyKpi(mergedCall, match, validity.isValid, kpiCfg)
+      await updateDailyKpi(mergedForStore, match, validity.isValid, kpiCfg)
       await callRef.set(
         { kpiAppliedAt: now, kpiPending: FieldValue.delete(), kpiPendingReason: FieldValue.delete() },
         { merge: true },
@@ -858,13 +885,54 @@ function omicallHeaders(apiKey: string): Record<string, string> {
   }
 }
 
+/** Bù `endedAt` cho doc cũ — app chỉ truy vấn lịch sử theo field này. */
+async function backfillOmicallCallsMissingEndedAt(scanLimit = 500): Promise<number> {
+  const snap = await db
+    .collection(COLLECTIONS.omicallCalls)
+    .orderBy('updatedAt', 'desc')
+    .limit(scanLimit)
+    .get()
+  const batch = db.batch()
+  let patched = 0
+  for (const docSnap of snap.docs) {
+    const d = docSnap.data()
+    if (d.endedAt) continue
+    const started = d.startedAt as Timestamp | undefined
+    const created = d.createdAt as Timestamp | undefined
+    const bill = num(d.billSeconds)
+    let endedAt: Timestamp | undefined
+    if (started && bill > 0) {
+      endedAt = Timestamp.fromMillis(started.toMillis() + bill * 1000)
+    } else if (started) {
+      endedAt = started
+    } else if (created) {
+      endedAt = created
+    }
+    if (!endedAt) continue
+    batch.set(
+      docSnap.ref,
+      { endedAt, isFinal: d.isFinal !== false, updatedAt: Timestamp.now() },
+      { merge: true },
+    )
+    patched++
+    if (patched >= 400) break
+  }
+  if (patched > 0) await batch.commit()
+  return patched
+}
+
 async function runOmicallHistorySync(opts: {
   apiKey: string
   baseUrl: string
   lookbackMinutes: number
   maxPages: number
   apiVersion: OmicallHistoryApiVersion
-}): Promise<{ processed: number; analysesProcessed: number; analysisError: string | null }> {
+}): Promise<{
+  processed: number
+  analysesProcessed: number
+  analysisError: string | null
+  backfilledEndedAt: number
+}> {
   const to = Date.now()
   const from = to - opts.lookbackMinutes * 60_000
   const analysisTransactionIds: string[] = []
@@ -892,7 +960,8 @@ async function runOmicallHistorySync(opts: {
   } catch (e) {
     analysisError = e instanceof Error ? e.message : String(e)
   }
-  return { processed, analysesProcessed, analysisError }
+  const backfilledEndedAt = await backfillOmicallCallsMissingEndedAt(500)
+  return { processed, analysesProcessed, analysisError, backfilledEndedAt }
 }
 
 async function fetchCallAnalysisList(baseUrl: string, apiKey: string, transactionIds: string[]) {
@@ -1169,6 +1238,7 @@ export const triggerOmicallHistorySync = onCall(
         finishedAt: Timestamp.now(),
         processed: result.processed,
         analysesProcessed: result.analysesProcessed,
+        backfilledEndedAt: result.backfilledEndedAt,
         kpiReconcileApplied: kpiReconcile.applied,
         interactionsKpiApplied: interactionsApplied,
         lookbackMinutes,
@@ -1182,6 +1252,7 @@ export const triggerOmicallHistorySync = onCall(
         ok: true,
         processed: result.processed,
         analysesProcessed: result.analysesProcessed,
+        backfilledEndedAt: result.backfilledEndedAt,
         kpiReconcileApplied: kpiReconcile.applied,
         interactionsApplied,
         lookbackMinutes,

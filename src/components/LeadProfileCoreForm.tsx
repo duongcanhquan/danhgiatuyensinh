@@ -1,5 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useFloatingDropdownPosition } from '../hooks/useFloatingDropdownPosition'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
 import type { LeadSourceRecord, MasterDataEntry, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
 import { OmicallCallButton } from './OmicallCallButton'
@@ -41,15 +43,17 @@ export type LeadProfileFormTabId =
   | 'invite'
 
 const PROFILE_TABS: { id: LeadProfileFormTabId; label: string; short: string }[] = [
-  { id: 'contact', label: 'Liên hệ & nguồn', short: 'Liên hệ' },
+  { id: 'contact', label: 'Thông tin chung', short: 'Chung' },
   { id: 'family', label: 'Gia đình', short: 'Gia đình' },
   { id: 'scholarship', label: 'Học Bổng', short: 'Học Bổng' },
-  { id: 'geo', label: 'Trường học', short: 'Trường học' },
-  { id: 'study', label: 'Học tập', short: 'Học tập' },
+  { id: 'geo', label: 'Hồ sơ học tập', short: 'Học tập' },
+  { id: 'study', label: 'Nguyện vọng', short: 'NV' },
   { id: 'notes', label: 'Ghi chú', short: 'Ghi chú' },
   { id: 'finance', label: 'Tài chính', short: 'Tài chính' },
   { id: 'invite', label: 'Giấy mời', short: 'Giấy mời' },
 ]
+
+const ASPIRATIONS_LIST_MAX = 'max-h-72'
 
 function Field({ label, span = 1, children }: { label: string; span?: 1 | 2 | 3; children: ReactNode }) {
   const spanCls =
@@ -161,16 +165,88 @@ function SourceSelect({
   disabled: boolean
   onChange: (v: string) => void
 }) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  const [open, setOpen] = useState(false)
+  const viewportCap = typeof window !== 'undefined' ? Math.min(400, window.innerHeight * 0.55) : 360
+  const { style: listStyle } = useFloatingDropdownPosition(rootRef, open, { maxHeight: viewportCap })
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (!rootRef.current?.contains(t) && !listRef.current?.contains(t)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  const display = value.trim() || '— Chọn —'
+
+  const listPanel =
+    open && !disabled ? (
+      <ul
+        ref={listRef}
+        style={listStyle}
+        className="overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-xl ring-1 ring-slate-900/10 [scrollbar-width:thin]"
+        role="listbox"
+      >
+        <li>
+          <button
+            type="button"
+            role="option"
+            aria-selected={!value.trim()}
+            className={[
+              'block w-full px-3 py-2 text-left text-slate-600 hover:bg-emerald-50',
+              !value.trim() ? 'bg-sky-50 font-semibold text-sky-950' : '',
+            ].join(' ')}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange('')
+              setOpen(false)
+            }}
+          >
+            — Chọn —
+          </button>
+        </li>
+        {options.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              role="option"
+              aria-selected={s.label === value}
+              className={[
+                'block w-full px-3 py-2 text-left text-slate-800 hover:bg-emerald-50',
+                s.label === value ? 'bg-sky-50 font-semibold text-sky-950' : '',
+              ].join(' ')}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(s.label)
+                setOpen(false)
+              }}
+            >
+              {s.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    ) : null
+
   return (
     <Field label={label}>
-      <select className={INPUT_CLS} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— Chọn —</option>
-        {options.map((s) => (
-          <option key={s.id} value={s.label}>
-            {s.label}
-          </option>
-        ))}
-      </select>
+      <div ref={rootRef} className="relative min-w-0">
+        <button
+          type="button"
+          disabled={disabled}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          onClick={() => setOpen((o) => !o)}
+          className={`${INPUT_CLS} flex w-full items-center justify-between gap-2 text-left`}
+        >
+          <span className={value.trim() ? 'text-slate-900' : 'text-slate-500'}>{display}</span>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {typeof document !== 'undefined' && listPanel ? createPortal(listPanel, document.body) : null}
+      </div>
     </Field>
   )
 }
@@ -211,6 +287,15 @@ function ScholarshipSelect({
         })}
       </select>
     </Field>
+  )
+}
+
+/** Hai cột trên một hàng (SĐT, nguồn…). */
+function TwoColRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
+      {children}
+    </div>
   )
 }
 
@@ -267,10 +352,13 @@ export function LeadProfileCoreForm({
   financePanel,
   invitePanel,
   callContext,
+  isNewLead = false,
 }: {
   draft: LeadCoreDraft
   onChange: (next: LeadCoreDraft) => void
   disabled: boolean
+  /** Tạo hồ sơ mới — mã hệ thống sinh khi lưu. */
+  isNewLead?: boolean
   leadSources?: readonly LeadSourceRecord[]
   scholarships?: readonly ScholarshipRecord[]
   catalogs?: LeadProfileCatalogBundle
@@ -327,11 +415,21 @@ export function LeadProfileCoreForm({
         tabMode={tabMode}
         visible={!tabMode || activeTab === 'contact'}
         defaultOpen
-        title="Liên hệ & nguồn"
+        title="Thông tin chung"
       >
         <div className={grid}>
           <Field label="Họ tên">
             <input className={INPUT_CLS} value={draft.fullName} disabled={disabled} onChange={(e) => patch('fullName', e.target.value)} />
+          </Field>
+          <Field label="Mã hệ thống">
+            <input
+              className={`${INPUT_CLS} bg-slate-50 text-slate-700`}
+              value={draft.systemCode}
+              readOnly
+              disabled
+              placeholder={isNewLead ? 'Tự sinh khi lưu (YYMMDD + 0001…)' : '—'}
+              title="Mã cố định do hệ thống cấp khi tạo hồ sơ"
+            />
           </Field>
           <Field label="Mã khách hàng">
             <input className={INPUT_CLS} value={draft.customerId} disabled={disabled} onChange={(e) => patch('customerId', e.target.value)} />
@@ -378,24 +476,28 @@ export function LeadProfileCoreForm({
               onChange={(e) => patch('studentEmail', e.target.value)}
             />
           </Field>
-          <PhoneFieldWithCall
-            label="Điện thoại SV"
-            value={draft.phone}
-            disabled={disabled}
-            onChange={(v) => patch('phone', v)}
-            callContext={callContext}
-            target="student"
-          />
-          <PhoneFieldWithCall
-            label="ĐT người liên hệ"
-            value={draft.parentPhone}
-            disabled={disabled}
-            onChange={(v) => patch('parentPhone', v)}
-            callContext={callContext}
-            target="parent"
-          />
-          <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
-          <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
+          <TwoColRow>
+            <PhoneFieldWithCall
+              label="Điện thoại sinh viên"
+              value={draft.phone}
+              disabled={disabled}
+              onChange={(v) => patch('phone', v)}
+              callContext={callContext}
+              target="student"
+            />
+            <PhoneFieldWithCall
+              label="Điện thoại người liên hệ"
+              value={draft.parentPhone}
+              disabled={disabled}
+              onChange={(v) => patch('parentPhone', v)}
+              callContext={callContext}
+              target="parent"
+            />
+          </TwoColRow>
+          <TwoColRow>
+            <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
+            <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
+          </TwoColRow>
           <Field label="Nguồn tiếp nhận (ghi chú)" span={noteSpan}>
             <input className={INPUT_CLS} value={draft.source} disabled={disabled} onChange={(e) => patch('source', e.target.value)} />
           </Field>
@@ -453,7 +555,7 @@ export function LeadProfileCoreForm({
         </div>
       </FormSection>
 
-      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Trường học">
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Hồ sơ học tập">
         <div className={grid}>
           <Field label="Tỉnh / TP">
             <CatalogCombobox
@@ -488,33 +590,13 @@ export function LeadProfileCoreForm({
           <Field label="Lớp hiện đang học">
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
           </Field>
-        </div>
-      </FormSection>
-
-      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Học tập & định hướng">
-        <div className={grid}>
-          <Field label="Hệ đào tạo">
+          <Field label="Loại hình trường">
             <CatalogCombobox
-              value={draft.educationLevel}
-              options={labelsFromEntries(catalogs?.trainingPrograms)}
+              value={draft.schoolType}
+              options={catalogs?.schoolTypes ?? []}
               disabled={disabled}
-              onChange={setEducationLevel}
-              onEnsureOption={onEnsureCatalogEntry ? ensure('training_programs') : undefined}
-              placeholder="Chọn hoặc thêm hệ đào tạo…"
-            />
-          </Field>
-          <Field label="Chuyên ngành / ngành quan tâm">
-            <CatalogCombobox
-              value={draft.majorInterest}
-              options={majorOptions}
-              disabled={disabled}
-              onChange={(v) => patch('majorInterest', v)}
-              onEnsureOption={
-                onEnsureCatalogEntry
-                  ? ensure('majors', trainingProgramId ? { departmentId: trainingProgramId } : undefined)
-                  : undefined
-              }
-              placeholder={draft.educationLevel.trim() ? 'Chọn ngành thuộc hệ đã chọn…' : 'Chọn hệ đào tạo trước'}
+              onChange={(v) => patch('schoolType', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('school_types') : undefined}
             />
           </Field>
           <Field label="Học lực / xếp loại">
@@ -526,31 +608,67 @@ export function LeadProfileCoreForm({
               onEnsureOption={onEnsureCatalogEntry ? ensure('academic_performance') : undefined}
             />
           </Field>
-          <Field label="Dự định (hình thức)">
-            <CatalogCombobox
-              value={draft.studyIntention}
-              options={catalogs?.studyIntentions ?? []}
+        </div>
+      </FormSection>
+
+      <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Nguyện vọng">
+        <div className="space-y-4">
+          <div className={grid}>
+            <Field label="Hệ đào tạo">
+              <CatalogCombobox
+                value={draft.educationLevel}
+                options={labelsFromEntries(catalogs?.trainingPrograms)}
+                disabled={disabled}
+                onChange={setEducationLevel}
+                onEnsureOption={onEnsureCatalogEntry ? ensure('training_programs') : undefined}
+                placeholder="Chọn hoặc thêm hệ đào tạo…"
+                listMaxClass={ASPIRATIONS_LIST_MAX}
+              />
+            </Field>
+            <Field label="Chuyên ngành / ngành quan tâm">
+              <CatalogCombobox
+                value={draft.majorInterest}
+                options={majorOptions}
+                disabled={disabled}
+                onChange={(v) => patch('majorInterest', v)}
+                onEnsureOption={
+                  onEnsureCatalogEntry
+                    ? ensure('majors', trainingProgramId ? { departmentId: trainingProgramId } : undefined)
+                    : undefined
+                }
+                placeholder={draft.educationLevel.trim() ? 'Chọn ngành thuộc hệ đã chọn…' : 'Chọn hệ đào tạo trước'}
+                listMaxClass={ASPIRATIONS_LIST_MAX}
+              />
+            </Field>
+            <Field label="Dự định (hình thức)">
+              <CatalogCombobox
+                value={draft.studyIntention}
+                options={catalogs?.studyIntentions ?? []}
+                disabled={disabled}
+                onChange={(v) => patch('studyIntention', v)}
+                onEnsureOption={onEnsureCatalogEntry ? ensure('study_intentions') : undefined}
+                listMaxClass={ASPIRATIONS_LIST_MAX}
+              />
+            </Field>
+            <Field label="Nhóm tài chính">
+              <CatalogCombobox
+                value={draft.financialStatus}
+                options={catalogs?.financialProfiles ?? []}
+                disabled={disabled}
+                onChange={(v) => patch('financialStatus', v)}
+                onEnsureOption={onEnsureCatalogEntry ? ensure('financial_profiles') : undefined}
+                listMaxClass={ASPIRATIONS_LIST_MAX}
+              />
+            </Field>
+          </div>
+          <Field label="Nguyện vọng / mong muốn" span={noteSpan}>
+            <textarea
+              rows={6}
+              className={`${INPUT_CLS} min-h-[8.5rem] resize-y leading-relaxed`}
+              value={draft.aspirations}
               disabled={disabled}
-              onChange={(v) => patch('studyIntention', v)}
-              onEnsureOption={onEnsureCatalogEntry ? ensure('study_intentions') : undefined}
-            />
-          </Field>
-          <Field label="Loại hình trường">
-            <CatalogCombobox
-              value={draft.schoolType}
-              options={catalogs?.schoolTypes ?? []}
-              disabled={disabled}
-              onChange={(v) => patch('schoolType', v)}
-              onEnsureOption={onEnsureCatalogEntry ? ensure('school_types') : undefined}
-            />
-          </Field>
-          <Field label="Nhóm tài chính">
-            <CatalogCombobox
-              value={draft.financialStatus}
-              options={catalogs?.financialProfiles ?? []}
-              disabled={disabled}
-              onChange={(v) => patch('financialStatus', v)}
-              onEnsureOption={onEnsureCatalogEntry ? ensure('financial_profiles') : undefined}
+              placeholder="Ghi rõ nguyện vọng, mong muốn học tập, thời gian dự kiến…"
+              onChange={(e) => patch('aspirations', e.target.value)}
             />
           </Field>
         </div>
@@ -558,11 +676,6 @@ export function LeadProfileCoreForm({
 
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'notes'} title="Mô tả & ghi chú">
         <div className="space-y-2.5">
-          <div className={grid}>
-            <Field label="Mong muốn" span={noteSpan}>
-              <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.aspirations} disabled={disabled} onChange={(e) => patch('aspirations', e.target.value)} />
-            </Field>
-          </div>
           <details className="rounded-lg border border-slate-200/80 bg-slate-50/60">
             <summary className="cursor-pointer px-2.5 py-2 text-sm font-semibold text-slate-700">Ghi chú bổ sung</summary>
             <div className={`${grid} p-2.5 pt-0`}>
@@ -602,7 +715,7 @@ export function LeadProfileCoreForm({
         <ProfileTabBar active={activeTab} onChange={setActiveTab} compact={!wideGrid} />
         <div
           role="tabpanel"
-          className="min-h-[14rem] flex-1 overflow-y-auto overscroll-y-contain rounded-xl border border-slate-200/90 bg-white p-3 sm:p-4 [scrollbar-width:thin]"
+          className="min-h-[18rem] flex-1 overflow-y-auto overscroll-y-contain rounded-xl border border-slate-200/90 bg-white p-3 sm:p-4 [scrollbar-width:thin]"
         >
           {tabPanel}
         </div>

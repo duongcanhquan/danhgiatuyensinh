@@ -223,6 +223,7 @@ export function CreateLeadModal({
               draft={draft}
               onChange={setDraft}
               disabled={busy}
+              isNewLead
               leadSources={leadSources}
               scholarships={scholarships}
               catalogs={catalogs}

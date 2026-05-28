@@ -185,6 +185,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         : '')
     const highSchool = String(data.highSchool ?? data.highSchoolName ?? data.schoolName ?? '')
     const customerId = String(data.customerId ?? '')
+    const systemCode = String(data.systemCode ?? '').trim() || undefined
     const fullName = String(data.fullName ?? '')
     const phone = String(data.phone ?? '')
     const parentPhone = String(data.parentPhone ?? '')
@@ -246,6 +247,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
     return {
       id,
       customerId,
+      ...(systemCode ? { systemCode } : {}),
       fullName,
       phone,
       parentPhone,

@@ -295,6 +295,8 @@ export interface Lead {
   id: DocumentId
   /** Mã KH */
   customerId: string
+  /** Mã hệ thống — YYMMDD + 4 số thứ tự/ngày (tự sinh khi tạo hồ sơ). */
+  systemCode?: string
   /** Tên sinh viên (mẫu Excel); trường `fullName` */
   fullName: string
   /** Điện thoại */

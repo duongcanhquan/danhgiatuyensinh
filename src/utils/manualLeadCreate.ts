@@ -13,7 +13,7 @@ import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { buildLeadFirestorePayload, type ExcelLeadRow } from './excelLeadMapper'
 import { computeLeadUniqueHash, normalizePhoneKey } from './leadIdentity'
-import { allocateStudentCodeForNewLead, isStandardStudentCode } from './studentDisplayCode'
+import { allocateSystemCodeForNewLead } from './systemLeadCode'
 import { evaluateLead } from './scoring'
 import { leadCoreDraftToFirestoreFields, type LeadCoreDraft } from './leadProfileEdit'
 import { validateNationalIdInput } from './leadProfileCatalog'
@@ -102,10 +102,8 @@ export async function createManualLead(
   if (validationErr) throw new Error(validationErr)
 
   const row = coreDraftToExcelRow(input.draft)
-  let customerId = norm(row.customerId ?? '')
-  if (!customerId || !isStandardStudentCode(customerId)) {
-    customerId = await allocateStudentCodeForNewLead(db)
-  }
+  const customerId = norm(row.customerId ?? '')
+  const systemCode = await allocateSystemCodeForNewLead(db)
   const rowWithCode = { ...row, customerId }
   const hash = computeLeadUniqueHash(rowWithCode)
   const existingId = await findExistingLeadIdByHash(db, hash)
@@ -158,7 +156,7 @@ export async function createManualLead(
   const ref = doc(collection(db, FS_COLLECTIONS.leads))
   await setDoc(ref, {
     ...base,
-    ...leadCoreDraftToFirestoreFields({ ...input.draft, customerId }),
+    ...leadCoreDraftToFirestoreFields({ ...input.draft, customerId, systemCode }),
     createdAt: now,
     updatedAt: now,
     uploadedAt: now,

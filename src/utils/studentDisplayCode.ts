@@ -66,6 +66,8 @@ export function resolveStudentDisplayCode(
   lead: Lead,
   sequenceIndex?: Map<string, number>,
 ): string {
+  const system = String(lead.systemCode ?? '').trim()
+  if (system) return system
   const cid = String(lead.customerId ?? '').trim()
   if (isStandardStudentCode(cid)) return cid
   if (cid) return cid

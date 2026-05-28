@@ -3,6 +3,7 @@ import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from 
 /** Trường chỉnh trên panel chi tiết — đồng bộ Firestore + chấm điểm qua `leadToEvaluationRecord`. */
 export type LeadCoreDraft = {
   fullName: string
+  systemCode: string
   customerId: string
   dateOfBirth: string
   phone: string
@@ -43,6 +44,7 @@ export type LeadCoreDraft = {
 export function emptyLeadCoreDraft(): LeadCoreDraft {
   return {
     fullName: '',
+    systemCode: '',
     customerId: '',
     dateOfBirth: '',
     phone: '',
@@ -84,6 +86,7 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
 export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
   return {
     fullName: lead.fullName ?? '',
+    systemCode: lead.systemCode ?? '',
     customerId: lead.customerId ?? '',
     dateOfBirth: lead.dateOfBirth ?? '',
     phone: lead.phone ?? '',
@@ -136,6 +139,7 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
   const o: Record<string, unknown> = {
     fullName: norm(draft.fullName),
     customerId: norm(draft.customerId),
+    ...(norm(draft.systemCode) ? { systemCode: norm(draft.systemCode) } : {}),
     dateOfBirth: norm(draft.dateOfBirth),
     phone: norm(draft.phone),
     parentPhone: norm(draft.parentPhone),
