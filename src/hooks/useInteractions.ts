@@ -31,6 +31,11 @@ function mapInteraction(
       durationSeconds:
         data.durationSeconds !== undefined ? Number(data.durationSeconds) : undefined,
       aiSentiment: data.aiSentiment as Interaction['aiSentiment'],
+      callSessionTags: Array.isArray(data.callSessionTags)
+        ? (data.callSessionTags as Interaction['callSessionTags'])
+        : undefined,
+      callAiAssessment: data.callAiAssessment as Interaction['callAiAssessment'],
+      callSessionEvaluation: data.callSessionEvaluation as Interaction['callSessionEvaluation'],
       evaluationTag: data.evaluationTag !== undefined ? String(data.evaluationTag) : undefined,
       snapshotCrmStatus: data.snapshotCrmStatus as Interaction['snapshotCrmStatus'],
       snapshotPipelineStatus: data.snapshotPipelineStatus as Interaction['snapshotPipelineStatus'],

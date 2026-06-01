@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { deleteDoc, doc, setDoc, Timestamp } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import { BookOpen, Key, ListChecks, Shield, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { BookOpen, Key, ListChecks, Phone, Shield, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { CallSessionChipsSettingsPanel } from './CallSessionChipsSettingsPanel'
 import type { AIIntegrationConfig, AIProviderId, AITask } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { useAITasks } from '../hooks/useAITasks'
@@ -25,11 +26,12 @@ const DEFAULT_MODELS: Record<AIProviderId, string> = {
 
 type SchemaRow = { key: string; typeHint: string }
 
-type AiSettingsSubTab = 'guide' | 'api' | 'gatekeeper' | 'library' | 'tasks'
+type AiSettingsSubTab = 'guide' | 'api' | 'call_chips' | 'gatekeeper' | 'library' | 'tasks'
 
 const SUB_TABS: { id: AiSettingsSubTab; label: string; short: string; Icon: typeof BookOpen }[] = [
   { id: 'guide', label: 'Hướng dẫn', short: 'HD', Icon: BookOpen },
   { id: 'api', label: 'API', short: 'API', Icon: Key },
+  { id: 'call_chips', label: 'Bảng đánh giá gọi', short: 'Gọi', Icon: Phone },
   { id: 'gatekeeper', label: 'Lọc trước khi gọi AI', short: 'Lọc', Icon: Shield },
   { id: 'library', label: 'Tác vụ đã lưu', short: 'DS', Icon: ListChecks },
   { id: 'tasks', label: 'Tạo tác vụ', short: 'Mới', Icon: Wand2 },
@@ -326,9 +328,10 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               <strong>Siêu quản trị</strong>.
             </p>
           ) : null}
-          {!canTasks && (subTab === 'library' || subTab === 'tasks') ? (
+          {!canTasks && (subTab === 'library' || subTab === 'tasks' || subTab === 'call_chips') ? (
             <p className="rounded-lg border border-violet-500/25 bg-violet-950/40 px-3 py-2 text-xs text-violet-100">
-              Tab <strong>Tác vụ</strong> chỉ dành cho tài khoản được giao quyền <strong>cấu hình AI / tác vụ</strong>.
+              Tab <strong>Tác vụ</strong> và <strong>Bảng đánh giá gọi</strong> chỉ dành tài khoản có quyền{' '}
+              <strong>cấu hình AI / tác vụ</strong>.
             </p>
           ) : null}
         </div>
@@ -361,7 +364,10 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   quản trị không cần).
                 </li>
                 <li>
-                  <strong className="text-slate-100">Vận hành</strong> — chi tiết hồ sơ → <strong>LLM</strong> → chọn tác vụ → chạy.
+                  <strong className="text-slate-100">Bảng đánh giá gọi</strong> — chỉnh các chiều thái độ, sẵn sàng, tín hiệu… khi TVV gọi OMICall.
+                </li>
+                <li>
+                  <strong className="text-slate-100">Vận hành</strong> — gọi từ hồ sơ → ghi thẻ → <strong>Lưu &amp; AI</strong>; hoặc chi tiết hồ sơ → <strong>LLM</strong>.
                 </li>
               </ol>
               {canTasks ? (
@@ -395,9 +401,20 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   <li>
                     <strong>AI Miner</strong> — lọc hàng loạt; cấu hình tab «Lọc trước khi gọi AI».
                   </li>
+                  <li>
+                    <strong>Ghi chú cuộc gọi</strong> — thẻ bấm nhanh + AI sau gọi (panel OMICall), không thay Playbook.
+                  </li>
                 </ul>
               </div>
             </div>
+          ) : null}
+
+          {subTab === 'call_chips' ? (
+            canTasks ? (
+              <CallSessionChipsSettingsPanel />
+            ) : (
+              <p className="text-sm text-slate-400">Cần quyền cấu hình AI để chỉnh danh sách thẻ.</p>
+            )
           ) : null}
 
           {subTab === 'api' ? (

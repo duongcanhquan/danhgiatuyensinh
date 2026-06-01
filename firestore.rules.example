@@ -17,6 +17,7 @@ service cloud.firestore {
     // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
     // write: admin only) — collection used by RAG / Settings → Kho tri thức.
     //
+    // `scoringAux/callSessionChips`: bảng đánh giá trực tiếp khi gọi (v2 dimensions) — đọc: authenticated; ghi: admin (`config:ai_engine`).
     // `scoringAux/omicallIntegration`: OMICall — đọc: authenticated; ghi: admin (`config:omicall`).
     // Trường `defaultSipPassword` / `apiKey` nhạy cảm — cân nhắc Cloud Function thay vì Rules mở.
     //

@@ -1,24 +1,50 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronUp, GripVertical, Phone, PhoneOff, User, X } from 'lucide-react'
 import { useOmicallOptional } from '../contexts/OmicallProvider'
+import { useCallSessionDraft } from '../contexts/CallSessionDraftProvider'
+import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
+import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
 import { formatCallDuration } from '../utils/omicallCallMap'
+import { CallSessionQuickPanel } from './CallSessionQuickPanel'
 
 const STATE_LABEL: Record<string, string> = {
   connecting: 'Đang kết nối',
   ringing: 'Đang đổ chuông',
   accepted: 'Đang nói chuyện',
+  ended: 'Đã kết thúc',
 }
 
 export function OmicallActiveCallPanel() {
   const omicall = useOmicallOptional()
   const call = omicall?.activeCall ?? null
+  const { setCallUid, resetDraft } = useCallSessionDraft()
+  const { documents: knowledgeDocuments } = useKnowledgeDocuments()
+  const institutionalRagBlock = useMemo(
+    () => buildInstitutionalRagBlock(knowledgeDocuments),
+    [knowledgeDocuments],
+  )
+
   const [expanded, setExpanded] = useState(true)
   const [position, setPosition] = useState({ left: 16, bottom: 16 })
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const dragOffsetRef = useRef({ x: 0, y: 0 })
+
+  const showQuickNotes = Boolean(call?.leadId && (call.state === 'accepted' || call.phase === 'wrapup'))
+
+  useEffect(() => {
+    if (call?.uid) setCallUid(call.uid)
+  }, [call?.uid, setCallUid])
+
+  useEffect(() => {
+    if (!call) resetDraft()
+  }, [call, resetDraft])
+
+  useEffect(() => {
+    if (showQuickNotes) setExpanded(true)
+  }, [showQuickNotes, call?.phase])
 
   useEffect(() => {
     if (!call) return
@@ -45,13 +71,14 @@ export function OmicallActiveCallPanel() {
 
   if (!call || !omicall) return null
 
-  const stateLabel = STATE_LABEL[call.state] ?? call.state
+  const stateLabel =
+    call.phase === 'wrapup' ? 'Ghi chú sau cuộc gọi' : (STATE_LABEL[call.state] ?? call.state)
   const duration =
     call.durationLabel ||
     (call.durationSec > 0 ? formatCallDuration(call.durationSec) : call.state === 'accepted' ? '0:00' : '—')
   const isDeskCall = call.source === 'click2call'
-  const isStuck = call.state === 'connecting' || call.state === 'ringing'
-  const canSdkHangup = !isDeskCall || omicall.connectionStatus === 'connected'
+  const isStuck = call.phase === 'live' && (call.state === 'connecting' || call.state === 'ringing')
+  const canSdkHangup = call.phase === 'live' && (!isDeskCall || omicall.connectionStatus === 'connected')
 
   const startDrag = (e: ReactPointerEvent<HTMLButtonElement>) => {
     e.stopPropagation()
@@ -76,7 +103,7 @@ export function OmicallActiveCallPanel() {
   const panel = (
     <div
       ref={panelRef}
-      className="pointer-events-auto fixed z-[9990] w-[min(100vw-1.5rem,28rem)]"
+      className="pointer-events-auto fixed z-[9990] w-[min(100vw-0.5rem,40rem)] sm:w-[min(100vw-1rem,42rem)]"
       style={{ left: `${position.left}px`, bottom: `${position.bottom}px` }}
       role="region"
       aria-label="Cuộc gọi đang diễn ra"
@@ -108,7 +135,13 @@ export function OmicallActiveCallPanel() {
 
         {expanded ? (
           <div className="border-t border-white/10 px-4 py-3 text-sm">
-            {isDeskCall ? (
+            {call.phase === 'wrapup' ? (
+              <p className="mb-2 text-xs text-amber-200/95">
+                Cuộc gọi đã kết thúc — hoàn tất <strong>bảng đánh giá</strong> bên dưới rồi <strong>Lưu</strong> hoặc{' '}
+                <strong>Lưu &amp; AI</strong>.
+              </p>
+            ) : null}
+            {isDeskCall && call.phase === 'live' ? (
               <p className="mb-2 text-xs text-amber-200/95">
                 Gọi <strong>máy bàn</strong> — bấm <strong>Dập máy</strong> để gửi lệnh cắt qua tổng đài (nếu đã kết nối
                 SIP). Nếu vẫn nghe máy đổ chuông, cắt trên điện thoại / máy IP.
@@ -136,6 +169,17 @@ export function OmicallActiveCallPanel() {
             ) : null}
             {omicall.lastCallHint ? (
               <p className="mt-2 text-xs text-amber-200/90">{omicall.lastCallHint}</p>
+            ) : null}
+            {showQuickNotes ? (
+              <CallSessionQuickPanel
+                call={call}
+                institutionalRagBlock={institutionalRagBlock}
+                onClose={onDismiss}
+              />
+            ) : call.leadId ? (
+              <p className="mt-2 text-xs text-violet-300/90">
+                Khi bắt máy, bảng đánh giá trực tiếp (thái độ, sẵn sàng, giọng nói…) sẽ hiện tại đây.
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -177,12 +221,16 @@ export function OmicallActiveCallPanel() {
           </div>
           <button
             type="button"
-            title="Đóng panel — tiếp tục làm việc trên CRM ngay"
+            title={
+              call.phase === 'wrapup'
+                ? 'Đóng sau khi đã lưu ghi chú (hoặc bỏ qua)'
+                : 'Đóng panel — tiếp tục làm việc trên CRM ngay'
+            }
             onClick={onDismiss}
             className="flex w-full cursor-pointer items-center justify-center gap-2 border-t border-white/10 bg-slate-700 py-2.5 text-xs font-bold text-white hover:bg-slate-600"
           >
             <X className="h-4 w-4 shrink-0 pointer-events-none" aria-hidden />
-            Huỷ trên CRM {isDeskCall ? '(đóng cửa sổ)' : ''}
+            {call.phase === 'wrapup' ? 'Đóng (bỏ qua ghi chú)' : `Huỷ trên CRM ${isDeskCall ? '(đóng cửa sổ)' : ''}`}
           </button>
         </div>
       </div>

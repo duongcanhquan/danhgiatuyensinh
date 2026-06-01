@@ -17,8 +17,11 @@ import {
 import { MAX_FULL_SCOPE_LEADS, useLeads } from '../hooks/useLeads'
 import { useAuth } from '../hooks/useAuth'
 import { useLeadScoring } from '../hooks/useLeadScoring'
-import type { LeadPipelineStatus, PriorityTag } from '../types'
+import type { Lead, LeadPipelineStatus, PriorityTag } from '../types'
+import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
+import { CallEvaluationAnalyticsPanel } from '../components/CallEvaluationAnalyticsPanel'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { useCallEvaluationStats } from '../hooks/useCallEvaluationStats'
 
 const glassTooltip =
   'rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-lg backdrop-blur-xl'
@@ -68,6 +71,7 @@ export function AnalyticsAdvancedView() {
     includeScopeTagCounts: true,
   })
   const { activeScoringProfile, scoreByLeadId } = useLeadScoring(leads)
+  const callEvalStats = useCallEvaluationStats({ days: 90, authorUid: null })
 
   const funnelData = useMemo(() => {
     const crmTotal = Math.max(totalLeadCount ?? leads.length, 1)
@@ -97,7 +101,8 @@ export function AnalyticsAdvancedView() {
     const counts: Record<PriorityTag, number> = { HOT: 0, WARM: 0, COLD: 0, LOSS: 0 }
     if (activeScoringProfile) {
       for (const l of leads) {
-        const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
+        const scored = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
+        const tag = resolveLeadDisplayPriorityTag(l as Lead, scored)
         counts[tag]++
       }
     } else {
@@ -258,6 +263,16 @@ export function AnalyticsAdvancedView() {
             </ResponsiveContainer>
           </div>
         </section>
+
+        <div className="lg:col-span-2">
+          <CallEvaluationAnalyticsPanel
+            aggregates={callEvalStats.aggregates}
+            loading={callEvalStats.loading}
+            error={callEvalStats.error}
+            days={90}
+            scopeLabel="Toàn phạm vi (cuộc gọi có lưu bảng đánh giá)"
+          />
+        </div>
 
         <section className="app-card-glass p-5 md:p-6 lg:col-span-2">
           <h2 className="app-section-heading mb-1">Điểm cảm xúc AI — 30 ngày (trung bình)</h2>

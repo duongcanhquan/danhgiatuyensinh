@@ -72,6 +72,8 @@ import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
+import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
+import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
 import { InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
@@ -354,10 +356,12 @@ export function LeadManagement() {
   )
 
   const effectiveLeadTag = useCallback(
-    (l: Lead) =>
-      profileScoringActive
+    (l: Lead) => {
+      const scored = profileScoringActive
         ? (scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag)
-        : l.priorityTag,
+        : l.priorityTag
+      return resolveLeadDisplayPriorityTag(l, scored)
+    },
     [profileScoringActive, scoreByLeadId],
   )
 
@@ -1796,6 +1800,7 @@ export function LeadManagement() {
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
                 const extraNotesFull = leadSupplementaryNotesText(l)
+                const callAiLine = formatLeadLastCallAiLine(l)
                 return (
                 <motion.tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
@@ -1828,6 +1833,14 @@ export function LeadManagement() {
                       ) : null}
                       <span className="min-w-0 truncate">{l.fullName || '—'}</span>
                     </span>
+                    {callAiLine ? (
+                      <p
+                        className="mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-violet-800"
+                        title={callAiLine}
+                      >
+                        Đánh giá gọi: {callAiLine}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.customerId || undefined}>
                     {l.customerId || '—'}

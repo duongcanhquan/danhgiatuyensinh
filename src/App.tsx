@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AuthProvider } from './contexts/AuthProvider'
+import { CallSessionConfigProvider } from './contexts/CallSessionConfigContext'
 import { OmicallProvider } from './contexts/OmicallProvider'
 import { OmicallAutoBootstrap } from './components/OmicallAutoBootstrap'
 import { Layout } from './components/Layout'
@@ -28,6 +29,7 @@ export default function App() {
     <AppErrorBoundary>
       <AuthProvider>
         <BrowserRouter basename={basename}>
+          <CallSessionConfigProvider>
           <OmicallProvider>
           <OmicallAutoBootstrap />
           <Routes>
@@ -62,6 +64,7 @@ export default function App() {
             </Route>
           </Routes>
           </OmicallProvider>
+          </CallSessionConfigProvider>
         </BrowserRouter>
       </AuthProvider>
     </AppErrorBoundary>

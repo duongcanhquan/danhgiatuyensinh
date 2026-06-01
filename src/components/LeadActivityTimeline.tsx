@@ -211,8 +211,43 @@ export function LeadActivityTimeline({
                       ) : null}
                     </div>
                   )}
+                  {it.callSessionEvaluation?.picks?.length ? (
+                    <dl className="mt-1.5 space-y-0.5 rounded-md border border-violet-200/70 bg-violet-50/80 px-2 py-1.5 text-[10px]">
+                      <dt className="font-bold text-violet-950">Đánh giá trực tiếp</dt>
+                      {it.callSessionEvaluation.picks.map((p) => (
+                        <dd key={`${p.dimensionId}-${p.optionId}`} className="text-slate-800">
+                          <span className="font-medium text-violet-900">{p.dimensionLabel}:</span>{' '}
+                          {p.optionLabel}
+                        </dd>
+                      ))}
+                    </dl>
+                  ) : it.callSessionTags?.length ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {it.callSessionTags.map((t) => (
+                        <span
+                          key={`${t.category}-${t.label}`}
+                          className="rounded-md border border-violet-200/80 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-900"
+                        >
+                          {t.label}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   {it.counselorNote ? (
                     <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
+                  ) : null}
+                  {it.callAiAssessment ? (
+                    <div className="mt-2 rounded-md border border-amber-200/80 bg-amber-50/90 px-2 py-1.5 text-[11px] text-amber-950">
+                      <p className="font-bold">
+                        AI sau gọi · {it.callAiAssessment.mucDoSanSang} · {it.callAiAssessment.diemCamXuc}/100
+                      </p>
+                      <p className="mt-1 leading-snug text-slate-800">{it.callAiAssessment.tomTatCuocGoi}</p>
+                      {it.callAiAssessment.hanhDongTiepTheo ? (
+                        <p className="mt-1 font-medium text-emerald-900">
+                          Tiếp theo: {it.callAiAssessment.hanhDongTiepTheo}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                   {it.callOutcome ? (
                     <p className="mt-1 text-[11px] font-medium text-slate-600">

@@ -340,6 +340,28 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.aiProcessedAt && typeof data.aiProcessedAt === 'object' && 'toMillis' in (data.aiProcessedAt as object)
           ? (data.aiProcessedAt as Timestamp)
           : undefined,
+      lastCallAiSummary:
+        data.lastCallAiSummary !== undefined && data.lastCallAiSummary !== null
+          ? String(data.lastCallAiSummary).slice(0, 500)
+          : undefined,
+      lastCallAiReadiness:
+        data.lastCallAiReadiness !== undefined && data.lastCallAiReadiness !== null
+          ? String(data.lastCallAiReadiness).slice(0, 64)
+          : undefined,
+      lastCallAiAt:
+        data.lastCallAiAt && typeof data.lastCallAiAt === 'object' && 'toMillis' in (data.lastCallAiAt as object)
+          ? (data.lastCallAiAt as Timestamp)
+          : undefined,
+      callEvalPriorityBoost:
+        data.callEvalPriorityBoost !== undefined && data.callEvalPriorityBoost !== null
+          ? normPriorityTag(data.callEvalPriorityBoost)
+          : undefined,
+      callEvalPriorityBoostAt:
+        data.callEvalPriorityBoostAt &&
+        typeof data.callEvalPriorityBoostAt === 'object' &&
+        'toMillis' in (data.callEvalPriorityBoostAt as object)
+          ? (data.callEvalPriorityBoostAt as Timestamp)
+          : undefined,
       scoringSignals: parseScoringSignalsFromFirestore(data.scoringSignals),
       scoringCustomSignals: parseScoringCustomSignalsFromFirestore(data.scoringCustomSignals),
     }

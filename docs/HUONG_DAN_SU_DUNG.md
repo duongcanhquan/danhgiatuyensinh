@@ -137,7 +137,24 @@ Chi tiết KPI gọi điện, cọc, thưởng tháng: xem **[HUONG-DAN-KPI-SALE
 
 ---
 
-## 8. Thói quen nên nhớ
+## 8. Bảng đánh giá khi gọi (OMICall)
+
+Khi gọi **từ hồ sơ lead**, sau khi bắt máy hoặc kết thúc cuộc gọi sẽ có panel **đánh giá trực tiếp**:
+
+1. Bấm từng dòng (thái độ, sẵn sàng, ai quyết định, giọng/nhịp, nội dung, rào cản, việc đã làm, tín hiệu tuyển sinh).
+2. Các dòng có dấu **\*** là bắt buộc trước khi lưu.
+3. **Lưu** — ghi vào lịch sử hồ sơ; **Lưu & AI** — thêm tóm tắt AI (cần bật AI và khóa API).
+
+**Sau khi lưu:**
+
+- Dòng dưới tên trên danh sách: *Đánh giá gọi: …*
+- Chọn **Rất quan tâm** hoặc **Sẵn sàng đăng ký** có thể **nâng nhãn HOT/WARM** trên hồ sơ (không tự hạ nhãn).
+- **Phân tích nâng cao** (quản lý): biểu đồ tổng hợp + **Xuất CSV** theo từng lựa chọn.
+- **Cài đặt → AI & LLM → Bảng đánh giá gọi**: quản trị chỉnh danh sách dòng/lựa chọn.
+
+---
+
+## 9. Thói quen nên nhớ
 
 1. Làm việc trên **Hồ sơ** → chọn đúng **bộ chấm điểm** trước khi lọc HOT/WARM.
 2. Sửa hồ sơ xong → đợi thông báo **đã lưu** rồi mới chuyển trang.
@@ -146,4 +163,4 @@ Chi tiết KPI gọi điện, cọc, thưởng tháng: xem **[HUONG-DAN-KPI-SALE
 
 ---
 
-*Tài liệu theo giao diện hiện tại. Nhãn nút có thể chỉnh nhẹ theo trường; luồng chính: **đăng nhập → Hồ sơ → chọn bộ chấm điểm → lọc / gọi / cập nhật hồ sơ**.*
+*Tài liệu theo giao diện hiện tại. Luồng chính: **đăng nhập → Hồ sơ → chọn bộ chấm điểm → gọi + đánh giá trực tiếp → lọc / cập nhật hồ sơ**.*

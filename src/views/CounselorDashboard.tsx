@@ -27,12 +27,16 @@ import {
   LEADS_UI_FULL_SCOPE_MAX,
   useLeads,
 } from '../hooks/useLeads'
-import { useLeadScoring, type LeadScorePreview } from '../hooks/useLeadScoring'
+import { useLeadScoring } from '../hooks/useLeadScoring'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { CallEvaluationAnalyticsPanel } from '../components/CallEvaluationAnalyticsPanel'
+import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
+import { useCallEvaluationStats } from '../hooks/useCallEvaluationStats'
+import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/leadIdentity'
 import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { exportSelectedEvaluatedLeadsToXlsx } from '../utils/exportEvaluatedLeads'
@@ -159,6 +163,7 @@ function CounselorLeadListRow({
   const { profile } = useAuth()
   const slaNewStale = isStaleNewSla(lead)
   const followToday = isFollowUpTodayLocal(lead.nextFollowUpDate)
+  const callAiLine = formatLeadLastCallAiLine(lead)
   const performerName = profile?.displayName?.trim() || profile?.email || profile?.id || ''
   const logCall = async (e: MouseEvent) => {
     e.stopPropagation()
@@ -280,7 +285,16 @@ function CounselorLeadListRow({
             </span>
           ) : null}
           <p className="truncate pl-1 text-sm font-semibold text-slate-900">{lead.fullName || '—'}</p>
-          <p className="truncate text-xs text-slate-500">{lead.province?.trim() || '—'} · {lead.highSchool?.trim() || '—'}</p>
+          {callAiLine ? (
+            <p
+              className="mt-0.5 line-clamp-2 pl-1 text-[11px] font-medium leading-snug text-violet-800"
+              title={callAiLine}
+            >
+              Đánh giá gọi: {callAiLine}
+            </p>
+          ) : (
+            <p className="truncate text-xs text-slate-500">{lead.province?.trim() || '—'} · {lead.highSchool?.trim() || '—'}</p>
+          )}
         </div>
       </td>
       <td className="whitespace-nowrap px-2 py-2 align-middle text-xs text-slate-700">{lead.phone || lead.parentPhone || '—'}</td>
@@ -360,7 +374,7 @@ function CounselorLeadWorklist({
   page,
   pageSize,
   onPageChange,
-  scoreByLeadId,
+  getPriorityTag,
   selectedIds,
   toggleSelectId,
   toggleSelectAllOnPage,
@@ -377,7 +391,7 @@ function CounselorLeadWorklist({
   page: number
   pageSize: number
   onPageChange: (p: number) => void
-  scoreByLeadId: Map<string, LeadScorePreview>
+  getPriorityTag: (lead: Lead) => PriorityTag
   selectedIds: Set<string>
   toggleSelectId: (id: string, e?: MouseEvent) => void
   toggleSelectAllOnPage: () => void
@@ -427,7 +441,7 @@ function CounselorLeadWorklist({
                 <CounselorLeadListRow
                   key={lead.id}
                   lead={lead}
-                  priorityTag={scoreByLeadId.get(lead.id)?.priorityTag ?? lead.priorityTag}
+                  priorityTag={getPriorityTag(lead)}
                   onToast={pushToast}
                   canWrite={canWrite}
                   canInteract={canInteract}
@@ -560,6 +574,23 @@ export function CounselorDashboard() {
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(canWrite || showBulkReassign)
 
+  const callEvalAuthorUid = isElevatedLeadScope ? null : profile?.id ?? null
+  const callEvalStats = useCallEvaluationStats({
+    days: 30,
+    authorUid: callEvalAuthorUid,
+    enabled: Boolean(profile?.id),
+  })
+
+  const displayPriorityTag = useCallback(
+    (lead: Lead) => {
+      const scored = activeScoringProfile
+        ? (scoreByLeadId.get(lead.id)?.priorityTag ?? lead.priorityTag)
+        : lead.priorityTag
+      return resolveLeadDisplayPriorityTag(lead, scored)
+    },
+    [activeScoringProfile, scoreByLeadId],
+  )
+
   const reassignPickList = useMemo(() => {
     const base = counselorUsers
     if (!isElevatedLeadScope) return base
@@ -578,9 +609,9 @@ export function CounselorDashboard() {
   const hotSlaCount = useMemo(
     () =>
       leads.filter((l) =>
-        isHotStaleNewSla(l, scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag),
+        isHotStaleNewSla(l, displayPriorityTag(l)),
       ).length,
-    [leads, scoreByLeadId],
+    [leads, displayPriorityTag],
   )
 
   const regionOptions = useMemo(() => {
@@ -639,11 +670,10 @@ export function CounselorDashboard() {
       if (!leadMatchesDateRange(l, dateAxis, dateFrom, dateTo)) return false
       if (myDayFilter === 'followup' && !isDueTodayOrOverdue(l.nextFollowUpDate)) return false
       if (myDayFilter === 'hot_sla') {
-        const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
-        if (!isHotStaleNewSla(l, tag)) return false
+        if (!isHotStaleNewSla(l, displayPriorityTag(l))) return false
       }
       if (dueOnly && !isDueTodayOrOverdue(l.nextFollowUpDate)) return false
-      const tag = scoreByLeadId.get(l.id)?.priorityTag ?? l.priorityTag
+      const tag = displayPriorityTag(l)
       if (tagFilter !== 'ALL' && tag !== tagFilter) return false
       if (pipelineUrlFilter !== 'ALL' && l.pipelineStatus !== pipelineUrlFilter) return false
       if (sourceUrlFilter !== 'ALL' && (l.source ?? '').trim() !== sourceUrlFilter) return false
@@ -655,7 +685,7 @@ export function CounselorDashboard() {
     qLower,
     dueOnly,
     tagFilter,
-    scoreByLeadId,
+    displayPriorityTag,
     myDayFilter,
     regionFilter,
     schoolFilter,
@@ -1291,7 +1321,7 @@ export function CounselorDashboard() {
           page={effectiveListPage}
           pageSize={LIST_PAGE_SIZE}
           onPageChange={setListPage}
-          scoreByLeadId={scoreByLeadId}
+          getPriorityTag={displayPriorityTag}
           selectedIds={selectedIds}
           toggleSelectId={toggleSelectId}
           toggleSelectAllOnPage={toggleSelectAllOnPage}
@@ -1304,6 +1334,16 @@ export function CounselorDashboard() {
           onLeadLocallyPatched={applyLocalLeadPatch}
         />
       )}
+
+      <CallEvaluationAnalyticsPanel
+        aggregates={callEvalStats.aggregates}
+        loading={callEvalStats.loading}
+        error={callEvalStats.error}
+        days={30}
+        scopeLabel={isElevatedLeadScope ? 'Toàn nhóm (đánh giá đã lưu)' : 'Đánh giá của bạn'}
+        compact
+        showExport={isElevatedLeadScope}
+      />
 
       {canBulkWrite && selectedIds.size > 0 ? (
         <BulkLeadActionBar

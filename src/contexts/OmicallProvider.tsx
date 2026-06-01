@@ -36,14 +36,19 @@ import {
 } from '../services/omicallSdk'
 import { formatCallDuration } from '../utils/omicallCallMap'
 import { OmicallActiveCallPanel } from '../components/OmicallActiveCallPanel'
+import { CallSessionDraftProvider } from './CallSessionDraftProvider'
 import { logOmicallInteraction } from '../services/logOmicallInteraction'
 import { reportOmicallCallFromClient } from '../services/reportOmicallCallFromClient'
 
 export type OmicallConnectionStatus = 'off' | 'loading' | 'ready' | 'registering' | 'connected' | 'error'
 
+export type OmicallCallPhase = 'live' | 'wrapup'
+
 export type OmicallActiveCall = {
   uid: string
   state: OmicallCallData['state']
+  /** `wrapup` = đã cúp máy, TVV ghi chú / AI trước khi đóng panel. */
+  phase: OmicallCallPhase
   direction: OmicallCallData['direction']
   phone: string
   leadId?: string
@@ -299,10 +304,50 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       if (!call?.uid) return
       touchCallClock(call.state)
       if (call.state === 'ended') {
-        activeCallUidRef.current = null
-        activeCallStartedMsRef.current = null
-        activeCallTalkStartedMsRef.current = null
-        setActiveCall(null)
+        const pending = pendingCallMetaRef.current
+        const display = pendingCallDisplayRef.current
+        setActiveCall((prev) => {
+          const durationSec = call.callingDuration?.value ?? prev?.durationSec ?? 0
+          let leadId = prev?.leadId ?? display?.leadId
+          let leadName = prev?.leadName ?? display?.leadName
+          let phone = prev?.phone ?? (call.displayNumber || call.remoteNumber || pending?.phone || '')
+          if (call.userData) {
+            try {
+              const parsed = JSON.parse(call.userData) as OmicallCallUserData
+              if (parsed.leadId) leadId = parsed.leadId
+              if (parsed.phone) phone = parsed.phone
+            } catch {
+              /* ignore */
+            }
+          }
+          const base: OmicallActiveCall =
+            prev ??
+            ({
+              uid: call.uid,
+              state: 'ended',
+              phase: 'wrapup',
+              direction: call.direction,
+              phone,
+              leadId,
+              leadName,
+              target: display?.target ?? pending?.target,
+              outbound: call.sipNumber?.number || resolvedOutbound || availableHotlines[0],
+              durationSec,
+              durationLabel: call.callingDuration?.text,
+              source: 'sdk',
+            } satisfies OmicallActiveCall)
+          return {
+            ...base,
+            uid: call.uid,
+            state: 'ended',
+            phase: 'wrapup',
+            leadId,
+            leadName,
+            phone,
+            durationSec,
+            durationLabel: call.callingDuration?.text ?? base.durationLabel,
+          }
+        })
         return
       }
       activeCallUidRef.current = call.uid
@@ -326,6 +371,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setActiveCall({
         uid: call.uid,
         state: call.state,
+        phase: 'live',
         direction: call.direction,
         phone,
         leadId,
@@ -654,7 +700,9 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         const ended = Boolean(d.endedAt)
         const answered = bill > 0 || String(d.outcome ?? '') === 'CONNECTED'
         if (ended) {
-          clearActiveCallUi()
+          setActiveCall((prev) =>
+            prev ? { ...prev, state: 'ended', phase: 'wrapup', durationSec: bill > 0 ? bill : prev.durationSec } : null,
+          )
           return
         }
         if (answered) touchCallClock('accepted')
@@ -694,9 +742,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
     if (sdkOk) {
       setLastCallHint('Đã gửi lệnh dập máy qua tổng đài…')
-      window.setTimeout(() => {
-        if (activeCallUidRef.current) clearActiveCallUi()
-      }, 4000)
+      setActiveCall((prev) => (prev ? { ...prev, state: 'ended', phase: 'wrapup' } : null))
       return
     }
     clearActiveCallUi()
@@ -757,6 +803,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setActiveCall({
         uid: `c2c-${Date.now()}`,
         state: 'connecting',
+        phase: 'live',
         direction: 'outbound',
         phone: normalized,
         leadId: input.leadId,
@@ -846,6 +893,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setActiveCall({
         uid: `pending-${Date.now()}`,
         state: 'connecting',
+        phase: 'live',
         direction: 'outbound',
         phone: normalized,
         leadId: input.leadId,
@@ -967,9 +1015,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <OmicallContext.Provider value={value}>
-      {children}
-      <OmicallActiveCallPanel />
-    </OmicallContext.Provider>
+    <CallSessionDraftProvider>
+      <OmicallContext.Provider value={value}>
+        {children}
+        <OmicallActiveCallPanel />
+      </OmicallContext.Provider>
+    </CallSessionDraftProvider>
   )
 }

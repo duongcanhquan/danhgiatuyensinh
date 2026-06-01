@@ -414,6 +414,14 @@ export interface Lead {
   aiShortlistReason?: string
   recommendedAction?: string
   aiProcessedAt?: Timestamp
+  /** Tóm tắt AI sau cuộc gọi gần nhất (panel ghi chú OMICall). */
+  lastCallAiSummary?: string
+  /** Mức sẵn sàng từ AI cuộc gọi (Cao / Trung bình / Thấp). */
+  lastCallAiReadiness?: string
+  lastCallAiAt?: Timestamp
+  /** Nhãn ưu tiên tối thiểu sau bảng đánh giá gọi (chỉ nâng HOT/WARM, không tự hạ). */
+  callEvalPriorityBoost?: PriorityTag
+  callEvalPriorityBoostAt?: Timestamp
   /**
    * Checklist «Hành vi» / «Rủi ro» do TVV bật trên màn chi tiết — đưa vào chấm điểm qua các trường `sig_*`
    * trong bản ghi đánh giá nội bộ (xem `leadToEvaluationRecord`).
@@ -892,6 +900,67 @@ export type InteractionChannel = 'CALL' | 'SMS' | 'EMAIL' | 'ZALO' | 'IN_PERSON'
 
 export type SentimentLabel = 'positive' | 'neutral' | 'negative' | 'mixed'
 
+/** Nhóm thẻ ghi nhanh trong / sau cuộc gọi (panel OMICall). */
+export type CallSessionTagCategory =
+  | 'attitude'
+  | 'voice'
+  | 'topic'
+  | 'activity'
+  | 'objection'
+  | 'signal'
+
+export interface CallSessionTagPick {
+  category: CallSessionTagCategory
+  label: string
+}
+
+/** Một lựa chọn trong bảng đánh giá cuộc gọi (cấu hình + lưu kết quả). */
+export interface CallEvalOption {
+  id: string
+  label: string
+}
+
+/** Một chiều đánh giá (thái độ, sẵn sàng, giọng nói…) — admin có thể chỉnh trong Cài đặt. */
+export interface CallEvalDimension {
+  id: string
+  label: string
+  /** Gợi ý ngắn cho TVV (không bắt buộc thuật ngữ học thuật). */
+  hint?: string
+  selectionMode: 'single' | 'multi'
+  required?: boolean
+  order?: number
+  options: CallEvalOption[]
+}
+
+export interface CallEvalPick {
+  dimensionId: string
+  dimensionLabel: string
+  optionId: string
+  optionLabel: string
+}
+
+/** Bản ghi đánh giá trực tiếp sau cuộc gọi — dùng cho báo cáo / AI. */
+export interface CallSessionEvaluationRecord {
+  version: 2
+  picks: CallEvalPick[]
+  evaluatedAt?: Timestamp
+}
+
+/** Kết quả phân tích AI sau cuộc gọi (lưu trên interaction). */
+export interface CallAiAssessment {
+  tomTatCuocGoi: string
+  mucDoSanSang: string
+  camXuc: SentimentLabel
+  /** 0–100 — đồng bộ lên `lead.aiSentimentScore` khi lưu. */
+  diemCamXuc: number
+  diemManh: string
+  ruiRo: string
+  hanhDongTiepTheo: string
+  cauHoiNenHoi: string
+  model?: string
+  analyzedAt: Timestamp
+}
+
 export interface AiSentimentAnalysis {
   label: SentimentLabel
   /** -1 .. 1 or 0 .. 100 — pick one convention in Phase 4 & keep consistent */
@@ -932,6 +1001,12 @@ export interface Interaction {
   syncedFrom?: 'sdk' | 'webhook' | 'history_sync'
   /** Post-call AI enrichment */
   aiSentiment?: AiSentimentAnalysis
+  /** Thẻ TVV bấm nhanh khi / sau gọi (OMICall panel) — legacy, sinh từ bảng đánh giá. */
+  callSessionTags?: CallSessionTagPick[]
+  /** Bảng đánh giá trực tiếp (các chiều thái độ, sẵn sàng, tín hiệu…). */
+  callSessionEvaluation?: CallSessionEvaluationRecord
+  /** Phân tích AI từ ghi chú + bảng đánh giá cuộc gọi. */
+  callAiAssessment?: CallAiAssessment
   /** Optional evaluation tag for QA (Head of Profession) */
   evaluationTag?: string
   /** Snapshot CRM (TVV) tại lúc lưu — hiển thị lịch sử đầy đủ trên client mới */
@@ -1242,6 +1317,9 @@ export const SCORING_AUX_OMICALL_DOC_ID = 'omicallIntegration' as const
 
 /** Doc cố định: `scoringAux/kpiEvaluationConfig` — quy tắc KPI Sale (gọi HL, cảnh báo, điểm tháng, hạng thưởng). */
 export const SCORING_AUX_KPI_EVAL_DOC_ID = 'kpiEvaluationConfig' as const
+
+/** Doc cố định: `scoringAux/callSessionChips` — thẻ ghi nhanh khi gọi (panel OMICall). */
+export const SCORING_AUX_CALL_SESSION_DOC_ID = 'callSessionChips' as const
 
 /** Mục tiêu KPI theo tháng (mặc định chung hoặc ghi đè từng TVV). */
 export type KpiMetricTargets = {
