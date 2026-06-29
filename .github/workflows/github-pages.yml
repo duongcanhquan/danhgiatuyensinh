@@ -1,0 +1,112 @@
+# Triển khai lên GitHub Pages khi push nhánh main
+#
+# Bắt buộc: Settings → Pages → Build and deployment → Source: «GitHub Actions»
+# (Nếu vẫn chọn «Deploy from a branch» thì job deploy từ Actions thường thất bại.)
+#
+# Job «deploy» có thể cần Approve môi trường «github-pages» (repo/org).
+# Build không dùng actions/configure-pages (hay 404/403 khi Pages chưa khởi tạo). Base Vite = /<tên-repo>/.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test
+
+      - name: Kiểm tra secrets Firebase (Actions)
+        run: |
+          miss=""
+          for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID; do
+            v=$(printenv "$name" || true)
+            if [ -z "$v" ]; then miss="$miss $name"; fi
+          done
+          if [ -n "$miss" ]; then
+            echo "::warning::Thiếu GitHub Actions secrets:$miss — build vẫn chạy nhưng app online sẽ giống «Chưa cấu hình Firebase». Vào Repo → Settings → Secrets and variables → Actions → New repository secret (tên trùng .env). Xem README mục Deploy."
+          else
+            echo "Đủ 6 biến Firebase bắt buộc cho build (tên secret đã set)."
+          fi
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
+      - name: Build
+        run: npm run build
+        env:
+          # Project site: https://<user>.github.io/<repo>/ → base phải là /<repo>/
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_DATABASE_URL: ${{ secrets.VITE_FIREBASE_DATABASE_URL }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          VITE_FIREBASE_FIRESTORE_DATABASE_ID: ${{ secrets.VITE_FIREBASE_FIRESTORE_DATABASE_ID }}
+          VITE_SUPER_ADMIN_EMAIL: ${{ secrets.VITE_SUPER_ADMIN_EMAIL }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # deploy-pages trả 404 nếu Pages chưa bật hoặc Source ≠ «GitHub Actions»
+      - name: Kiểm tra GitHub Pages đã bật (tránh lỗi 404 mơ hồ)
+        run: |
+          code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pages")
+          if [ "$code" = "404" ]; then
+            echo "::error::GitHub Pages chưa được cấu hình cho repo này."
+            echo ""
+            echo "Làm theo thứ tự:"
+            echo "  1. Mở https://github.com/${{ github.repository }}/settings/pages"
+            echo "  2. Mục «Build and deployment» → Source: chọn «GitHub Actions» (KHÔNG dùng «Deploy from a branch»)."
+            echo "  3. Lưu, rồi Actions → «Deploy GitHub Pages» → Run workflow."
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::warning::GET /pages trả HTTP $code"; cat /tmp/pages.json || true
+          else
+            echo "GitHub Pages đã bật:"; cat /tmp/pages.json
+          fi
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

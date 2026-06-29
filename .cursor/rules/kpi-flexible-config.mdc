@@ -1,0 +1,17 @@
+---
+description: KPI Sale — cấu hình linh hoạt theo vai trò và giai đoạn
+alwaysApply: true
+---
+
+# KPI linh hoạt (VietMy)
+
+Khi chỉnh KPI (UI, schema, engine, Cloud Functions):
+
+- **Theo vai trò:** CTV, TVV (`counselor`), Trưởng nhóm (`team_lead`) phải có chỉ tiêu và trọng số **riêng** — không hard-code một bộ số cho tất cả.
+- **Theo nguồn lead:** Chỉ tiêu ngày tách OFF / MKT (bucket `off`, `mkt`; `all` = tổng hợp).
+- **Theo giai đoạn:** Admin đổi cấu hình trên Firestore bất cứ lúc nào — **Lưu = áp dụng ngay** cho điểm tháng trên app. Ngày áp dụng (`goLiveDate`) chỉ giới hạn đếm metric mới trên server (lead chạm, LPXT), không backfill.
+- **Không khóa vào PDF:** Mặc định PDF chỉ là `getDefaultKpiV2Config()`; mọi số đều chỉnh qua **Cài đặt → KPI Sale**.
+- **UI admin:** Luôn expose đủ trường theo role (chỉ tiêu ngày, HL/tháng, trọng số điểm tháng, map nguồn). Tránh gộp nhiều vai trò thành một hàng không sửa được.
+- **Tương lai (nếu cần):** Ghi đè theo tháng hoặc từng nhân sự — schema mở rộng, không phá config hiện tại.
+
+Schema tham chiếu: `KpiV2ConfigPersisted` trong `src/types.ts`, doc Firestore `scoringAux/kpiV2Config`.

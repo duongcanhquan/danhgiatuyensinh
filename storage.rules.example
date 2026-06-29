@@ -1,0 +1,16 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Chứng từ thu: receipts/{HọTên_MãSV}/{slot}_{tên_file}
+    // URL tải (getDownloadURL) lưu trong Firestore leads.finance.payments.*.receiptUrl
+    match /receipts/{folder}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Dev — mở rộng nếu cần (KHÔNG production):
+    // match /{allPaths=**} {
+    //   allow read, write: if request.auth != null;
+    // }
+  }
+}

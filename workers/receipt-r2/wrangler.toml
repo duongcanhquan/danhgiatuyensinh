@@ -1,0 +1,17 @@
+name = "vietmy-receipt-r2"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+# Tạo bucket: wrangler r2 bucket create vietmy-lead-receipts
+[[r2_buckets]]
+binding = "RECEIPTS_BUCKET"
+bucket_name = "vietmy-lead-receipts"
+
+[vars]
+# URL công khai trả về cho app (worker /files/… hoặc custom domain R2)
+# PUBLIC_BASE_URL = "https://vietmy-receipt-r2.<account>.workers.dev"
+
+# CORS — domain frontend (phẩy nếu nhiều), * chỉ dev
+ALLOWED_ORIGINS = "http://localhost:5173,https://danhgiatuyensinh.vercel.app"
+
+# wrangler secret put UPLOAD_TOKEN

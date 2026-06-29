@@ -1,0 +1,240 @@
+[
+  {
+    "title": "Điều dưỡng – Phụ huynh bắt máy",
+    "priority": 85,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Điều dưỡng"
+      }
+    ],
+    "strategy": "Ngành y tế phụ huynh quyết định 90%. Thái độ TVV phải cực kỳ lễ phép, chững chạc. Nhấn mạnh vào: Ổn định, Không thất nghiệp, và Cơ hội đi làm ở nước ngoài.",
+    "keySellingPoints": [
+      "Ngành học ổn định nhất, 100% có việc làm.",
+      "Cơ hội xuất khẩu lao động Đức, Nhật Bản phí rẻ."
+    ],
+    "objectionHandling": [
+      "Trường tư học phí cao: -> Đầu tư cho ngành Y là đầu tư chắc chắn, ra trường lương bù lại rất nhanh ạ."
+    ]
+  },
+  {
+    "title": "Điều dưỡng – Tỉnh xa (Nghệ An/Thanh Hóa/Miền núi)",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Điều dưỡng"
+      },
+      {
+        "field": "province",
+        "operator": "IN",
+        "value": [
+          "Nghệ An",
+          "Thanh Hóa",
+          "Sơn La",
+          "Điện Biên"
+        ]
+      }
+    ],
+    "strategy": "Tệp miền núi và Bắc Trung Bộ cực chuộng ngành Điều dưỡng. Nhấn mạnh cơ hội đổi đời, thoát nghèo nhờ đi xuất khẩu điều dưỡng hoặc làm tại viện lớn ở HN. Đề cập chính sách trả góp.",
+    "keySellingPoints": [
+      "Hỗ trợ trả góp học phí lãi suất 0%.",
+      "Ưu tiên xếp phòng KTX cho học sinh tỉnh."
+    ],
+    "objectionHandling": [
+      "Gia đình không có tiền đóng 1 cục: -> Trường cho đóng theo kỳ, hỗ trợ vay vốn ngân hàng chính sách."
+    ]
+  },
+  {
+    "title": "Điều dưỡng – Trạng thái HOT",
+    "priority": 95,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Điều dưỡng"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      }
+    ],
+    "strategy": "Khách đang rất nhiệt tình, sẵn sàng chốt. Nhấn mạnh chỉ tiêu ngành y tế có hạn; mời nộp học bạ (ảnh chụp) qua Zalo để xét tuyển và giữ suất.",
+    "keySellingPoints": [
+      "Chỉ tiêu ngành Y tế năm nay có hạn.",
+      "Thực tập tại viện lớn tuyến Trung ương ngay năm 2."
+    ],
+    "objectionHandling": [
+      "Chưa có bằng tốt nghiệp: -> Chỉ cần dùng bảng điểm lớp 12 xét trước giữ chỗ, bổ sung bằng sau."
+    ]
+  },
+  {
+    "title": "Điều dưỡng – Quan tâm cơ hội đi Nhật/Đức (mô tả có từ khóa xuất khẩu)",
+    "priority": 70,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Điều dưỡng"
+      },
+      {
+        "field": "description",
+        "operator": "CONTAINS",
+        "value": "xuất"
+      }
+    ],
+    "strategy": "(Khi mô tả/ghi chú lead có nhắc xuất khẩu / nước ngoài.) Tư vấn kép: Vừa học chuyên môn Điều dưỡng, vừa được học ngoại ngữ ngay tại trường. Có đối tác lo visa, không qua môi giới bên ngoài.",
+    "keySellingPoints": [
+      "Học song song chuyên môn Y tế và Ngoại ngữ.",
+      "Trường trực tiếp làm hồ sơ xuất khẩu, an toàn 100%."
+    ],
+    "objectionHandling": [
+      "Sợ sang đó bị bóc lột: -> Trường ký kết với đối tác cấp bộ, cam kết điều kiện làm việc chuẩn châu Âu."
+    ]
+  },
+  {
+    "title": "Điều dưỡng – Sợ máu/Sợ vất vả",
+    "priority": 60,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Điều dưỡng"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "Trấn an tâm lý. Giải thích Điều dưỡng không chỉ là làm trong phòng cấp cứu, có thể làm nha khoa, thẩm mỹ viện, phòng khám tư nhân (rất nhàn và lương cao).",
+    "keySellingPoints": [
+      "Cơ hội làm việc tại Spa, Thẩm mỹ viện thu nhập cao.",
+      "Chăm sóc sức khỏe là kỹ năng sống giá trị cho gia đình."
+    ],
+    "objectionHandling": [
+      "Em sợ trực đêm mệt: -> Làm ở phòng khám tư hoặc nha khoa chỉ làm giờ hành chính em nhé."
+    ]
+  },
+  {
+    "title": "Tiếng Đức – Chốt xuất khẩu lao động",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Tiếng Đức"
+      }
+    ],
+    "strategy": "Đánh thẳng vào kinh tế. Phân tích bài toán học tiếng Đức ở trường quy củ hơn ra các trung tâm xuất khẩu bên ngoài. Tốt nghiệp có bằng Cao đẳng Chính quy + Bằng B1 Đức = Vé VIP đi Đức.",
+    "keySellingPoints": [
+      "Cam kết đầu ra trình độ B1/B2 tiếng Đức.",
+      "Hỗ trợ 100% thủ tục du học nghề tại Đức."
+    ],
+    "objectionHandling": [
+      "Học tiếng Đức khó quá: -> Trường có phương pháp dạy thực hành, giáo viên bản ngữ kèm cặp."
+    ]
+  },
+  {
+    "title": "Tiếng Đức – Khách hàng từ Nam Định / Thái Bình",
+    "priority": 85,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Tiếng Đức"
+      },
+      {
+        "field": "province",
+        "operator": "IN",
+        "value": [
+          "Nam Định",
+          "Thái Bình"
+        ]
+      }
+    ],
+    "strategy": "Đây là thủ phủ của phong trào XKLĐ châu Âu. Nói chuyện thẳng thắn với phụ huynh về mức lương 60-80tr tại Đức sau khi tốt nghiệp.",
+    "keySellingPoints": [
+      "Miễn 100% học phí khi sang Đức học nghề (theo chương trình/điều kiện áp dụng — cập nhật từ kho tri thức).",
+      "Lương thực tập tại Đức đủ gửi về gia đình."
+    ],
+    "objectionHandling": [
+      "Chi phí đi Đức cao không: -> Tiền đi Đức rẻ hơn đi Nhật/Hàn rất nhiều vì được chính phủ Đức tài trợ (chi tiết theo chính sách hiện hành)."
+    ]
+  },
+  {
+    "title": "Tiếng Đức – Rớt Đại học Ngoại ngữ",
+    "priority": 75,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Tiếng Đức"
+      },
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "NEW"
+      }
+    ],
+    "strategy": "Xoa dịu nỗi buồn trượt ĐH. Phân tích học Cao đẳng Tiếng Đức chú trọng giao tiếp thực tế, ra trường dễ xin việc ở các tập đoàn đa quốc gia hơn học lý thuyết hàn lâm.",
+    "keySellingPoints": [
+      "Học thiên về giao tiếp thương mại, dịch thuật.",
+      "Liên thông Đại học dễ dàng sau khi tốt nghiệp."
+    ],
+    "objectionHandling": [
+      "Bằng Cao đẳng sợ khó xin việc: -> Nhiều doanh nghiệp Đức ưu tiên kỹ năng giao tiếp thực tế hơn bằng cấp lý thuyết hàn lâm."
+    ]
+  },
+  {
+    "title": "Tiếng Đức – Quan tâm ngành Điều dưỡng/Nhà hàng tại Đức",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Tiếng Đức"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      }
+    ],
+    "strategy": "Khách đã có định hướng nghề rõ ràng ở Đức. Tư vấn ngay gói Combo: Học tiếng + Bồi dưỡng sơ cấp nghề tại trường rồi bay.",
+    "keySellingPoints": [
+      "Lộ trình khép kín: Học tiếng -> Học nghề -> Bay.",
+      "Đối tác tiếp nhận tại Đức uy tín, nhà ở đầy đủ."
+    ],
+    "objectionHandling": [
+      "Sợ sang đó không có người lo: -> Trường có ban đại diện và hội cựu sinh viên tại Đức hỗ trợ."
+    ]
+  },
+  {
+    "title": "Tiếng Đức – Tệp WARM (Đang phân vân tiếng Trung/Nhật)",
+    "priority": 65,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Tiếng Đức"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "So sánh cạnh tranh. Tiếng Trung/Nhật đã bão hòa, lương cơ bản tại châu Á thấp hơn. Tiếng Đức đang là đại dương xanh, Đức đang khát nhân lực trầm trọng.",
+    "keySellingPoints": [
+      "Đức đang thiếu hụt nhân lực trầm trọng, đãi ngộ cực tốt.",
+      "Lương tại Đức cao gấp 3 lần Nhật/Hàn (tham khảo thị trường)."
+    ],
+    "objectionHandling": [
+      "Tiếng Đức ít người học: -> Chính vì ít người học nên tính cạnh tranh thấp, dễ xin việc lương cao."
+    ]
+  }
+]

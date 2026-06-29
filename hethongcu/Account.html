@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <title>CỔNG KẾ TOÁN</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  
+<style>
+        /* =========================================
+           CẤU HÌNH GỐC
+        ========================================= */
+        :root { 
+            --primary-color: #4a5568; 
+            --accent-color: #198754; /* Đổi tone màu nhấn sang Xanh Kế toán */
+            --card-bg: #ffffff; 
+            --border-color: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); 
+        }
+        
+        body { font-family: 'Montserrat', sans-serif; font-size: 0.85rem; color: #2d3748; background-color: #f4f7f6; min-height: 100vh; overflow-x: hidden; }
+        .fw-800 { font-weight: 800 !important; }
+        .app-logo { max-width: 160px; }
+        
+        .glass-card { background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border-color); box-shadow: var(--shadow); padding: 20px; margin-bottom: 20px; }
+        
+        #loginPage, #loginOverlay { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 9000; background-color: #f4f7f6; }
+        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 90%; max-width: 400px;}
+        
+        .form-control, .form-select { border-radius: 6px; border: 1px solid #cbd5e0; padding: 8px 12px; font-weight: 600; font-size: 0.85rem; }
+        .form-control:focus, .form-select:focus { box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.2); border-color: #198754; outline: none;}
+        
+        .btn-kt { background: #198754; border: none; color: white; border-radius: 6px; padding: 10px 20px; font-weight: 700; transition: all 0.2s ease; }
+        .btn-kt:hover { background: #146c43; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); }
+
+        /* =========================================
+           1. THỐNG KÊ TRẠNG THÁI (DESKTOP) 
+           Sửa lỗi mớ chữ dính liền nhau trong ảnh 1.jpg
+        ========================================= */
+        .stat-item { 
+            flex: 1; margin: 0 10px; padding: 15px; 
+            border-radius: 10px; background: #fff; 
+            box-shadow: var(--shadow); border: 1px solid var(--border-color);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-weight: 700; color: #4a5568; text-transform: uppercase; font-size: 0.85rem;
+        }
+        .stat-item:first-child { margin-left: 0; }
+        .stat-item:last-child { margin-right: 0; }
+        .stat-item .stat-num { font-size: 2rem; font-weight: 900; margin-top: 5px; }
+        .stat-moi .stat-num { color: #3498db; }
+        .stat-coc .stat-num { color: #f39c12; }
+        .stat-full .stat-num { color: #2ecc71; }
+        .stat-err .stat-num { color: #e74c3c; }
+
+        /* =========================================
+           2. BẢNG DỮ LIỆU KẾ TOÁN (DESKTOP)
+           Sửa lỗi cột dính nhau, mở rộng không gian
+        ========================================= */
+        .table-container { background: #fff; border-radius: 8px; box-shadow: var(--shadow); border: 1px solid var(--border-color); overflow-x: auto; margin-bottom: 30px;}
+        .table-container table { width: 100%; border-collapse: collapse; min-width: 1400px; } /* Mở rộng tối đa để 10 cột thở được */
+        .table-container th { background-color: #f8f9fa; color: #4a5568; font-weight: 800; padding: 15px 10px; border-bottom: 2px solid #e2e8f0; font-size: 0.75rem; text-transform: uppercase; text-align: center; white-space: nowrap;}
+        .table-container th:nth-child(1), .table-container th:nth-child(2), .table-container th:nth-child(3), .table-container th:nth-child(4) { text-align: left; }
+        .table-container td { padding: 15px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; font-size: 0.85rem; }
+        .table-container tr:hover { background-color: #f8fafc; }
+
+        /* =========================================
+           3. Ô NHẬP TIỀN & NÚT DUYỆT (DESKTOP)
+        ========================================= */
+        .col-pay-active { min-width: 160px; background-color: #fafffa; border-left: 1px dashed #e2e8f0; border-right: 1px dashed #e2e8f0; }
+        .col-pay-empty { width: 70px; text-align: center; background-color: #fdfdfd; border-left: 1px dashed #eee; border-right: 1px dashed #eee; vertical-align: middle !important;}
+        
+        .pay-box { display: flex; flex-direction: column; gap: 8px; }
+        .pay-input { width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 6px; font-family: 'Consolas', monospace; font-weight: 700; color: #198754; text-align: right; background: #fff;}
+        .pay-input:focus { border-color: #198754; outline: none; box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.2); }
+        
+        .status-txt { text-align: center; font-size: 0.8rem; font-weight: 800; padding: 6px; border-radius: 6px; width: 100%; text-transform: uppercase;}
+        .st-ok { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+        .st-no { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+        
+        /* Nút Đánh dấu Full NE */
+        .btn-ne { background-color: #f8f9fa; border: 1px solid #6c757d; color: #4a5568; font-weight: bold; font-size: 0.75rem; border-radius: 6px; padding: 8px; width: 100%; margin-top: 10px; transition: all 0.2s; cursor: pointer;}
+        .btn-ne:hover { background-color: #6c757d; color: white; }
+        
+        /* Nút Cảnh báo có Yêu cầu Full NE */
+        .btn-req-ne { background-color: #dc3545; border: none; color: white; font-weight: bold; font-size: 0.75rem; border-radius: 6px; padding: 8px; width: 100%; margin-top: 10px; cursor: pointer; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); } }
+
+        /* =========================================
+           4. TỐI ƯU GIAO DIỆN MOBILE & TABLET (APP UI)
+        ========================================= */
+        @media (max-width: 1024px) {
+            .glass-card .d-flex.gap-2 { width: 100%; justify-content: space-between; margin-top: 15px;}
+            
+            /* Bo lại các thẻ thống kê thành 2 ô 1 dòng */
+            #app > .d-flex.flex-wrap { padding: 0 5px;}
+            .stat-item { width: calc(50% - 10px); flex: none; margin: 0 5px 10px 5px; padding: 10px; }
+            .stat-item .stat-num { font-size: 1.5rem; }
+            
+            /* Bộ lọc tìm kiếm xếp 2 ô 1 dòng */
+            .glass-card .row.g-2 > div { width: 50%; padding: 0 5px; margin-bottom: 10px;}
+            
+            /* BIẾN BẢNG THÀNH CARD DỌC DỄ VUỐT */
+            .table-container { background: transparent; border: none; box-shadow: none; padding: 0 10px; margin-top: 10px;}
+            .table-container table { min-width: 100%; }
+            table, thead, tbody, th, td, tr { display: block; width: 100%; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; } /* Ẩn tiêu đề ngang trên Mobile */
+            
+            .table-container tr { margin-bottom: 20px; border: 2px solid #198754; border-radius: 12px; padding: 15px 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); background: #fff;}
+            .table-container td { border: none; border-bottom: 1px dashed #eee; position: relative; padding-left: 40% !important; text-align: right; min-height: 45px; padding-top: 12px; padding-bottom: 12px; background: #fff;}
+            .table-container td:last-child { border-bottom: none; }
+            
+            /* Tự lấy chữ từ data-label đắp sang trái */
+            .table-container td:before { position: absolute; top: 12px; left: 10px; width: 35%; padding-right: 10px; white-space: normal; font-weight: 800; font-size: 0.8rem; text-align: left; content: attr(data-label); color: #4a5568; }
+            
+            /* Ẩn đợt thu trống trên điện thoại cho gọn gàng */
+            .col-pay-empty { display: none !important; } 
+            .col-pay-active { border: none !important; }
+            
+            /* Phóng to ô gõ tiền và nút duyệt để dễ chạm ngón tay */
+            .pay-box { text-align: right; gap: 10px;}
+            .pay-input { font-size: 1.1rem; padding: 10px;}
+            .pay-box input[type="date"] { font-size: 1rem !important; padding: 10px; }
+            .status-txt { font-size: 1rem; padding: 10px; }
+            .btn-sm { padding: 12px; font-size: 1.2rem; border-radius: 8px;}
+            .btn-ne, .btn-req-ne { padding: 12px; font-size: 1.1rem; margin-top: 15px; width: 100%;}
+        }
+    </style>
+
+</head>
+<body>
+
+<div id="loader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.9);z-index:10000;display:none;align-items:center;justify-content:center"><div class="spinner-border text-success"></div></div>
+
+<div id="loginOverlay">
+    <div class="login-box animate__animated animate__zoomIn">
+        <img src="https://raw.githubusercontent.com/duongcanhquan/image/main/Logo%20Cao%20%C4%91a%CC%86%CC%89ng%20Vie%CC%A3%CC%82t%20My%CC%83%20-%20ba%CC%89n%20chua%CC%82%CC%89n%202025-01.png" style="width:180px; margin-bottom:20px">
+        <h4 class="fw-800 text-success mb-4">CỔNG KẾ TOÁN</h4>
+        <input type="text" id="ktUser" class="form-control mb-3" placeholder="Tài khoản">
+        <input type="password" id="ktPass" class="form-control mb-4" placeholder="Mật khẩu">
+        <div class="form-check mb-4 text-start ps-4"><input class="form-check-input" type="checkbox" id="rememberMe"><label class="form-check-label fw-bold text-muted small" for="rememberMe">Ghi nhớ đăng nhập</label></div>
+        <button onclick="doLogin()" class="btn-kt w-100 shadow">ĐĂNG NHẬP</button>
+    </div>
+</div>
+
+<div id="app" style="display:none; max-width:1800px; margin:0 auto">
+    <div class="glass-card d-flex flex-wrap justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center mb-2 mb-md-0">
+            <img src="https://raw.githubusercontent.com/duongcanhquan/image/main/Logo%20Cao%20%C4%91a%CC%86%CC%89ng%20Vie%CC%A3%CC%82t%20My%CC%83%20-%20ba%CC%89n%20chua%CC%82%CC%89n%202025-01.png" class="app-logo">
+            <div class="border-start ps-3 border-success">
+                <h5 class="fw-800 text-success m-0">QUẢN LÝ THU CHI</h5>
+                <small class="text-muted fw-bold">Duyệt hồ sơ & Xác nhận tiền</small>
+            </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <div class="form-check form-switch me-3">
+                <input class="form-check-input" type="checkbox" id="showDone" onchange="renderData()">
+                <label class="form-check-label fw-bold">Hiện "CỌC THÀNH CÔNG"</label>
+            </div>
+            <button onclick="loadData()" class="btn btn-light border rounded-pill fw-bold text-success"><i class="fa-solid fa-rotate me-1"></i> Tải lại</button>
+            <button onclick="logout()" class="btn btn-outline-danger rounded-pill fw-bold"><i class="fa-solid fa-power-off"></i></button>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap mb-3">
+        <div class="stat-item stat-moi">MỚI<span class="stat-num" id="cnt-moi">0</span></div>
+        <div class="stat-item stat-coc">ĐANG HOÀN THIỆN<span class="stat-num" id="cnt-dang">0</span></div>
+        <div class="stat-item stat-full">CỌC THÀNH CÔNG<span class="stat-num" id="cnt-full">0</span></div>
+        <div class="stat-item stat-err">KIỂM TRA LẠI<span class="stat-num" id="cnt-err">0</span></div>
+    </div>
+
+    <div class="glass-card py-3">
+        <div class="row g-2">
+            <div class="col-md-3"><input type="text" id="search" class="form-control" placeholder="🔍 Tìm Tên, Mã SV, CCCD..." onkeyup="renderData()"></div>
+            <div class="col-md-3">
+                <select id="filterSt" class="form-select" onchange="renderData()">
+                    <option value="">-- Lọc Trạng thái --</option>
+                    <option value="MỚI">MỚI</option>
+                    <option value="ĐANG HOÀN THIỆN">ĐANG HOÀN THIỆN</option>
+                    <option value="CỌC THÀNH CÔNG">CỌC THÀNH CÔNG</option>
+                    <option value="KIỂM TRA LẠI">KIỂM TRA LẠI</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead><tr><th>1. THÔNG TIN</th><th>2. LIÊN HỆ</th><th>3. NGÀNH/HỆ</th><th>4. TRẠNG THÁI</th><th>5. TỔNG (AL)</th><th class="text-center">LẦN 1</th><th class="text-center">LẦN 2</th><th class="text-center">LẦN 3</th><th class="text-center">LẦN 4</th><th class="text-center">LẦN 5</th></tr></thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    let DATA = [];
+    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true, background: 'rgba(255, 255, 255, 0.9)', color: '#198754' });
+
+    window.onload = function() {
+        const savedUser = localStorage.getItem('kt_user'); 
+        const savedPass = localStorage.getItem('kt_pass');
+        const autoLogin = localStorage.getItem('kt_auto_login'); 
+
+        if(savedUser && savedPass) { 
+            document.getElementById('ktUser').value = savedUser; 
+            document.getElementById('ktPass').value = savedPass; 
+            document.getElementById('rememberMe').checked = true; 
+            
+            if(autoLogin === 'true') {
+                doLogin(); 
+            }
+        }
+    }
+
+    function doLogin() {
+        const u = document.getElementById('ktUser').value; const p = document.getElementById('ktPass').value; const remember = document.getElementById('rememberMe').checked;
+        toggleLoader(true);
+        google.script.run.withSuccessHandler(res => {
+            toggleLoader(false);
+            if(res && res.status === 'success') { 
+                document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; 
+                if(remember) { 
+                    localStorage.setItem('kt_user', u); 
+                    localStorage.setItem('kt_pass', p); 
+                    localStorage.setItem('kt_auto_login', 'true'); 
+                } else { 
+                    localStorage.removeItem('kt_user'); 
+                    localStorage.removeItem('kt_pass'); 
+                    localStorage.setItem('kt_auto_login', 'false'); 
+                }
+                loadData(); 
+            } else Swal.fire('Lỗi', (res && res.message) || "Lỗi đăng nhập", 'error');
+        }).loginAccountant(u, p);
+    }
+
+    function logout() { 
+        localStorage.setItem('kt_auto_login', 'false'); 
+        location.reload(); 
+    }
+
+    function toggleLoader(s) { document.getElementById('loader').style.display = s?'flex':'none'; }
+
+function loadData() {
+    toggleLoader(true);
+    google.script.run.withSuccessHandler(res => { 
+        toggleLoader(false); 
+        if (res && res.status === "success") { 
+            // 1. Lấy dữ liệu và làm sạch dấu nháy đơn
+            let rawData = res.data.map(row => row.map(cell => {
+                if (typeof cell === 'string' && cell.startsWith("'")) return cell.substring(1);
+                return cell;
+            }));
+
+            // 2. LOGIC SẮP XẾP ƯU TIÊN DUYỆT (THÔNG MINH)
+            rawData.sort((a, b) => {
+                // Kiểm tra xem dòng đó có khoản nào đang chờ duyệt không (Cột 50, 51, 52, 53, 54)
+                const hasPending = (r) => {
+                    const st1 = String(r[50] || "").trim();
+                    const st2 = String(r[51] || "").trim();
+                    const st3 = String(r[52] || "").trim();
+                    const st4 = String(r[53] || "").trim();
+                    const st5 = String(r[54] || "").trim();
+                    // Nếu có tiền nhưng trạng thái chưa phải ĐỒNG Ý/TỪ CHỐI
+                    const hasMoney = (idx) => parseInt(String(r[idx] || "0").replace(/\D/g, '')) > 0;
+                    
+                    if ((hasMoney(30) && !st1) || (hasMoney(31) && !st2) || (hasMoney(44) && !st3) || (hasMoney(46) && !st4) || (hasMoney(48) && !st5)) return true;
+                    // Hoặc có yêu cầu Full NE chưa duyệt
+                    if (String(r[65]).trim() === "YÊU CẦU FULL NE") return true;
+                    return false;
+                };
+
+                const pendingA = hasPending(a);
+                const pendingB = hasPending(b);
+
+                // Nếu A chờ duyệt mà B đã duyệt xong -> A lên đầu
+                if (pendingA && !pendingB) return -1;
+                // Nếu B chờ duyệt mà A đã duyệt xong -> B lên đầu
+                if (!pendingA && pendingB) return 1;
+
+                // Nếu cả hai cùng trạng thái (cùng chờ hoặc cùng xong) -> Ai mới cập nhật hơn thì lên đầu
+                // (Giả định cột 17 là ngày cập nhật cuối)
+                return 0; 
+            });
+
+            DATA = rawData;
+            renderData(); 
+        } else {
+            Swal.fire('Lỗi', (res && res.message) || "Không tải được dữ liệu", 'error');
+        }
+    }).getAccountantData();
+}
+    
+    function toNormal(str) { return String(str || "").normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim(); }
+
+    function renderData() {
+        const searchInput = toNormal(document.getElementById('search').value); const filterInput = document.getElementById('filterSt').value; const showDone = document.getElementById('showDone').checked;
+        const tb = document.getElementById('tableBody'); tb.innerHTML = '';
+        let cMoi=0, cDang=0, cFull=0, cErr=0;
+
+        DATA.forEach(r => { const st = String(r[39] || "MỚI").trim(); if (st === "MỚI") cMoi++; else if (st === "ĐANG HOÀN THIỆN") cDang++; else if (st === "CỌC THÀNH CÔNG") cFull++; else if (st === "KIỂM TRA LẠI") cErr++; });
+        document.getElementById('cnt-moi').innerText = cMoi; document.getElementById('cnt-dang').innerText = cDang; document.getElementById('cnt-full').innerText = cFull; document.getElementById('cnt-err').innerText = cErr;
+
+      const list = DATA.filter(r => {
+            const name = toNormal(r[2]); const id = toNormal(r[1]); const cccd = toNormal(r[16]); const phone = toNormal(r[5]); const st = String(r[39] || "MỚI").trim(); 
+            const matchSearch = name.includes(searchInput) || id.includes(searchInput) || cccd.includes(searchInput) || phone.includes(searchInput);
+            if (!matchSearch) return false;
+            if (filterInput && st !== filterInput) return false;
+            
+            // KIỂM TRA XEM CÓ KHOẢN TIỀN NÀO ĐANG CHỜ DUYỆT KHÔNG
+            let hasPending = false;
+            const mIdx = [30, 31, 44, 46, 48]; const sIdx = [50, 51, 52, 53, 54];
+            for (let i=0; i<5; i++) {
+                let amt = parseInt(String(r[mIdx[i]]).replace(/\D/g, '')) || 0;
+                let status = String(r[sIdx[i]]).trim();
+                // Có tiền nhưng Kế toán chưa Đồng ý/Từ chối -> Là đang chờ duyệt
+                if (amt > 0 && status === "") hasPending = true; 
+            }
+
+            // ĐÃ FIX: Nếu học sinh có khoản CHỜ DUYỆT, LUÔN LUÔN HIỂN THỊ để Kế toán thấy.
+            // Chỉ giấu đi nếu đã duyệt xong hết và công tắc đang tắt.
+            if (!hasPending && !filterInput && !showDone && (st === 'CỌC THÀNH CÔNG' || st === 'ĐÃ HOÀN THIỆN')) return false; 
+            
+            return true;
+        });
+        
+        if(list.length === 0) { tb.innerHTML = '<tr><td colspan="10" class="text-center p-5 text-muted fw-bold">Không có dữ liệu phù hợp</td></tr>'; return; }
+
+        list.forEach(r => {
+            let payCells = ''; const items = [{m:r[30],b:r[34],s:r[50],i:1}, {m:r[31],b:r[35],s:r[51],i:2}, {m:r[44],b:r[45],s:r[52],i:3}, {m:r[46],b:r[47],s:r[53],i:4}, {m:r[48],b:r[49],s:r[54],i:5}];
+
+
+            
+         function toInputDate(str) {
+                if(!str) return "";
+                // Gọt sạch dấu nháy đơn và khoảng trắng thừa từ Firebase
+                let cleanStr = String(str).replace(/'/g, '').trim().split(' ')[0];
+                const p = cleanStr.split('/');
+                if(p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`;
+                return "";
+            }
+
+            // XỬ LÝ 5 CỘT TIỀN - TỰ ĐỘNG THU GỌN NẾU TRỐNG
+            items.forEach(x => {
+                const amt = parseInt(String(x.m||"0").replace(/\D/g,'')) || 0;
+                const status = String(x.s || "").trim().toUpperCase(); 
+                
+                const isApproved = status === 'ĐỒNG Ý';
+                const isRejected = status === 'TỪ CHỐI';
+                const isDone = isApproved || isRejected;
+
+                let content = '';
+                let colClass = 'col-pay-empty';
+                
+                if(amt > 0 || isDone) {
+                    colClass = 'col-pay-active'; // Nở rộng cột ra nếu có tiền
+                    const link = x.b ? `<a href="${x.b}" target="_blank" class="d-block small mb-2 fw-bold text-decoration-none text-primary"><i class="fa-solid fa-file-invoice me-1"></i>Xem Bill</a>` : '<span class="d-block small text-muted mb-2">-</span>';
+                    const displayStatus = x.s || status;
+                    const btnsContainerId = `btns_${r[1]}_${x.i}`;
+                    
+                    let btns = '';
+                    
+                    if (isDone) {
+                        const badgeClass = isApproved ? 'st-ok' : 'st-no';
+                        btns = `<div class="status-txt ${badgeClass} mt-2 w-100" id="${btnsContainerId}">${displayStatus}</div>`;
+                    } else {
+                        btns = `<div id="${btnsContainerId}" class="d-flex justify-content-center gap-1 mt-2">
+                            <button class="btn btn-success btn-sm py-1 px-1 fw-bold flex-grow-1" onclick="process('${r[1]}','${r[2]}',${x.i},'ĐỒNG Ý')" title="Duyệt"><i class="fa-solid fa-check"></i></button>
+                            <button class="btn btn-danger btn-sm py-1 px-1 fw-bold flex-grow-1" onclick="process('${r[1]}','${r[2]}',${x.i},'TỪ CHỐI')" title="Từ chối"><i class="fa-solid fa-xmark"></i></button>
+                        </div>`;
+                    }
+                    
+                    const dVal = toInputDate(r[60 + x.i - 1]); 
+                    
+                    content = `<div class="pay-box">
+                        <input type="text" id="m_${r[1]}_${x.i}" class="pay-input" value="${amt.toLocaleString()}" onkeyup="fmt(this)">
+                        <input type="date" id="d_${r[1]}_${x.i}" class="form-control form-control-sm mb-1" style="font-size:0.7rem; color:#666; font-weight:bold" value="${dVal}">
+                        <div class="text-center">${link}<input type="file" id="f_${r[1]}_${x.i}" style="width:100%;font-size:0.7rem" class="mb-1"></div>
+                        ${btns}
+                    </div>`;
+                } else {
+                    // Nếu trống tiền, chỉ hiện dấu trừ nhẹ nhàng
+                    content = `<div class="text-muted opacity-25 fw-bold"><i class="fa-solid fa-minus"></i></div>`;
+                }
+                
+                payCells += `<td class="${colClass}" data-label="Thanh toán lần ${x.i}">${content}</td>`;
+            });
+
+            const displaySt = String(r[39] || "MỚI").trim();
+            const totalMoneyRaw = parseInt(String(r[37]||"0").replace(/\D/g,'')) || 0;
+         
+          // XỬ LÝ GIAO DIỆN NÚT BẤM FULL NE (CỘT 65: BM)
+            const isFullNE = String(r[65] || "").trim() === "ĐÃ FULL NE"; 
+            const isReqNE = String(r[65] || "").trim() === "YÊU CẦU FULL NE"; // Bắt tín hiệu từ TVV
+            let neButtonHtml = "";
+            
+            if (isFullNE) {
+                neButtonHtml = '<span class="badge bg-dark mt-2 px-3 py-2 text-white shadow-sm w-100"><i class="fa-solid fa-star text-warning me-1"></i> ĐÃ DUYỆT FULL</span>';
+            } else if (isReqNE) {
+                // Nếu TVV có tick báo -> Nút đỏ, nhấp nháy, icon rung
+                neButtonHtml = `<button class="btn-req-ne shadow-sm w-100" onclick="confirmNE('${r[1]}', '${r[2]}')"><i class="fa-solid fa-bell fa-shake"></i> XÁC NHẬN FULL</button>`;
+            } else if (totalMoneyRaw > 0) {
+                // Nếu TVV không báo gì, chỉ hiện nút tím bình thường
+                neButtonHtml = `<button class="btn-ne shadow-sm w-100" onclick="confirmNE('${r[1]}', '${r[2]}')"><i class="fa-solid fa-check-double"></i> Đánh dấu Full NE</button>`;
+            }
+
+            const row = `<tr>
+                <td data-label="Thông tin cá nhân">
+                    <div class="fw-800 text-success text-uppercase">${r[2]||'---'}</div>
+                    <div class="small text-muted fw-bold">${r[1]||'---'}</div>
+                    <div class="small fw-bold mt-1 text-primary"><i class="fa-regular fa-id-card me-1"></i> ${r[16]||'---'}</div>
+                </td>
+                <td data-label="Liên hệ">
+                    <div class="small fw-bold text-dark"><i class="fa-solid fa-phone me-1 text-success"></i> ${r[5]||'---'}</div>
+                    <div class="small text-muted mt-1"><i class="fa-solid fa-people-roof me-1"></i> ${r[23]||'---'}</div>
+                </td>
+                <td data-label="Ngành / Hệ">
+                    <div class="small fw-bold">${r[12]||'---'}</div>
+                    <div class="small text-muted border-top mt-1 pt-1">${r[10]||'---'}</div>
+                </td>
+                <td data-label="Trạng thái / TVV">
+                    <span class="badge ${getBadge(displaySt)} mb-1 p-2">${displaySt}</span>
+                    <div class="small fw-bold text-muted border-top mt-1 pt-1"><i class="fa-solid fa-user-tie me-1"></i> ${r[18]||'---'}</div>
+                </td>
+                <td class="text-center" data-label="Tổng đã nộp" style="background: #e8f5e9; border-radius: 8px;">
+                    <div class="fw-800 text-danger fs-6">${totalMoneyRaw.toLocaleString()} đ</div>
+                    <div id="neBox_${r[1]}">${neButtonHtml}</div>
+                </td>
+                ${payCells}
+            </tr>`;
+            tb.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    function getBadge(st) { if(st==='CỌC THÀNH CÔNG') return 'bg-success'; if(st==='ĐANG HOÀN THIỆN') return 'bg-warning text-dark'; if(st==='KIỂM TRA LẠI') return 'bg-danger'; return 'bg-info text-dark'; }
+    function fmt(el) { el.value = el.value.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+    const toBase64 = f => new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res({base64: r.result.split(',')[1], type: f.type, name: f.name}); r.onerror = e => rej(e); });
+    
+    // HÀM XÁC NHẬN FULL NE
+    let isConfirmingNE = false; // Cờ khóa chống bấm đúp
+    
+    function confirmNE(id, name) {
+        if (isConfirmingNE) return; 
+
+        Swal.fire({ 
+            title: `Xác nhận Full NE?`, 
+            text: `Xác nhận học sinh ${name} đã nộp ĐỦ toàn bộ học phí nhập học?`, 
+            icon: 'question', 
+            showCancelButton: true, 
+            confirmButtonColor: '#8e44ad', 
+            confirmButtonText: 'Đã Full phí NE', 
+            customClass: { popup: 'my-popup-class' } 
+        }).then((result) => {
+            if (result.isConfirmed) {
+                isConfirmingNE = true; // Bật cờ khóa
+                toggleLoader(true);
+                google.script.run.withSuccessHandler(res => { 
+                    isConfirmingNE = false; // Mở khóa
+                    toggleLoader(false); 
+                    if(res.status==='success') { 
+                        Toast.fire({icon:'success', title:'Ghi nhận Full NE thành công!'}); 
+                        document.getElementById(`neBox_${id}`).innerHTML = '<span class="badge bg-dark mt-2 px-3 py-2 text-white shadow-sm w-100"><i class="fa-solid fa-star text-warning me-1"></i> FULL NE</span>';
+                    } else Swal.fire('Lỗi', res.message, 'error'); 
+                }).withFailureHandler(err => {
+                    isConfirmingNE = false;
+                    toggleLoader(false);
+                    Swal.fire('Lỗi', err.message, 'error');
+                }).setFullNE(id);
+            }
+        });
+    }
+
+    let isProcessingPayment = false; // Cờ chống bấm đúp cho Kế toán
+    
+    async function process(id, name, batch, action) {
+        if (isProcessingPayment) return;
+        
+        Swal.fire({ title: `Xác nhận ${action}?`, text: `Bạn có chắc chắn muốn ${action} khoản thu này của ${name}?`, icon: action==='ĐỒNG Ý'?'question':'warning', showCancelButton: true, confirmButtonColor: '#198754', cancelButtonColor: '#d33', confirmButtonText: 'Xác nhận ngay', customClass: { popup: 'my-popup-class' }
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                isProcessingPayment = true; // Khóa lệnh
+                const btnsContainer = document.getElementById(`btns_${id}_${batch}`);
+                if (btnsContainer) {
+                    btnsContainer.style.pointerEvents = 'none';
+                    btnsContainer.style.opacity = '0.5';
+                }
+                
+                // LỌC SẠCH MỌI DẤU CHẤM/PHẨY ĐỂ LẤY ĐÚNG SỐ TIỀN
+                const m = document.getElementById(`m_${id}_${batch}`).value.replace(/\D/g, ''); 
+                
+                const fEl = document.getElementById(`f_${id}_${batch}`);
+                const f = (fEl && fEl.files) ? fEl.files[0] : null; 
+                const d = document.getElementById(`d_${id}_${batch}`).value; 
+                let fd = null; if(f) fd = await toBase64(f); 
+                
+                toggleLoader(true);
+                google.script.run.withSuccessHandler(res => { 
+                    isProcessingPayment = false; // Mở khóa
+                    toggleLoader(false); 
+                    if(res.status==='success') { 
+                        Toast.fire({icon:'success', title:'Cập nhật thành công!'}); 
+                        if (btnsContainer) {
+                            const badgeClass = action === 'ĐỒNG Ý' ? 'st-ok' : 'st-no';
+                            btnsContainer.outerHTML = `<div class="status-txt ${badgeClass} mt-2 w-100">${action}</div>`;
+                        }
+                        loadData(); 
+                    } else {
+                        Swal.fire('Lỗi', res.message, 'error'); 
+                        if (btnsContainer) {
+                            btnsContainer.style.pointerEvents = 'auto';
+                            btnsContainer.style.opacity = '1';
+                        }
+                    }
+                }).withFailureHandler(err => {
+                    isProcessingPayment = false; // Mở khóa
+                    toggleLoader(false);
+                    Swal.fire('Lỗi mạng', err.message, 'error');
+                    if (btnsContainer) {
+                        btnsContainer.style.pointerEvents = 'auto';
+                        btnsContainer.style.opacity = '1';
+                    }
+                }).processPaymentDecision({studentId: id, studentName: name, batch: batch, decision: action, amount: m, newFile: fd, paymentDate: d});
+            }
+        });
+    }
+</script>
+</body>
+</html>

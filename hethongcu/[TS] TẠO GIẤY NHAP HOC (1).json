@@ -1,0 +1,259 @@
+{
+  "name": "[TS] TẠO GIẤY NHAP HOC",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "giaymoits",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -864,
+        -80
+      ],
+      "id": "48dc9482-c7b8-440e-9d5c-bbc0925d6f96",
+      "name": "Webhook",
+      "webhookId": "a83861b8-9e4e-465b-bb6f-8ee3b18c0321"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Lấy dữ liệu từ GAS gửi sang\nconst body = items[0].json.body;\nconst student = body.studentData;\nconst docType = body.docType;\nconst targetFolderId = body.folderId; \n\n// 2. KHAI BÁO ID CÁC FILE MẪU\nconst mapIDs = {\n    \"LE_PHI_CO_DAU\":          \"1No3hQ-NmAANHFfCggNjOibrY8gYb6fE6ao0mOIYilSY\",\n    \"LE_PHI_KHONG_DAU\":       \"1ParZPpOVxdU8McWItDTxTAKZd8KGHOO3dsfkp34fPOU\",\n    \"TRUNG_TUYEN_9_CO_DAU\":   \"1gZ4Bukk98oKacJfrklj1Jm6UYhAfnypew_1OD9OCO44\",\n    \"TRUNG_TUYEN_9_KHONG_DAU\":\"1pbcCdYhcBMEhQznZI7CTObfGw-QNSJsdt_ZRcLQ-fCg\",\n    \"TRUNG_TUYEN_CD_CO_DAU\":  \"1z1WCDPH6FffJ78ZeBkskWmaAnPJNdDCQpuEFt7Yrjz4\",\n    \"TRUNG_TUYEN_CD_KHONG_DAU\":\"1WzzIElO_Xo1nIuSjLMAvuSdHL2qVr1DyVInSrH4pENI\",\n    \"THU_MOI_CD_CO_DAU\":      \"1b0stRDQa1kVQimjQdjTuVs41rOOW5a0VFdih0pPB_UI\",\n    \"THU_MOI_CD_KHONG_DAU\":   \"1FOeCmFKBVhNdbUhXpqxULa_66BuOZLqeNldmhmCzHHk\"\n};\n\n// 3. HÀM HỖ TRỢ FORMAT (Đã sửa để không bị lỗi cú pháp)\n// 3. HÀM HỖ TRỢ FORMAT (ĐÃ VÁ LỖI NHẢY NGƯỢC NGÀY SINH)\nfunction formatDate(input) {\n    if (!input) return \"\";\n\n    // ĐÃ FIX: Nếu input là chuỗi ngày gửi từ Web sang đã có sẵn dấu \"/\" (VD: 05/04/2005)\n    // -> Bắt buộc giữ nguyên gốc, không cho JavaScript dịch lại để tránh bị đảo MM/DD\n    if (typeof input === 'string' && input.includes('/')) {\n        return input;\n    }\n\n    // Phần này vẫn giữ để dùng cho các biến ngày hệ thống tự sinh (today, datePlus3...)\n    const dateObj = new Date(input);\n    if (isNaN(dateObj.getTime())) return input;\n\n    const d = String(dateObj.getDate()).padStart(2, '0');\n    const m = String(dateObj.getMonth() + 1).padStart(2, '0');\n    const y = dateObj.getFullYear();\n    return `${d}/${m}/${y}`;\n}\nfunction formatMoney(amount) {\n    if (!amount) return \"0 VNĐ\";\n    let num = parseInt(String(amount).replace(/\\D/g, '')) || 0;\n    return num.toLocaleString('vi-VN') + \" VNĐ\";\n}\n\n// 4. TÍNH TOÁN NGÀY\nconst today = new Date();\nconst datePlus3 = new Date(today); datePlus3.setDate(today.getDate() + 3);\nconst datePlus25 = new Date(today); datePlus25.setDate(today.getDate() + 25);\n\n// 5. CHUẨN BỊ DỮ LIỆU IN ẤN\nconst printData = {\n    ngay_hom_nay: String(today.getDate()).padStart(2, '0'),\n    thang_ngay: String(today.getMonth() + 1).padStart(2, '0'),\n    nam_nay: String(today.getFullYear()),\n    ngay_gui: formatDate(today),\n    \n    ho_va_ten: (student.name || \"\").toUpperCase(),\n    ngay_sinh: formatDate(student.dob), \n    dia_chi: student.address || \"\",\n    \n    nganh_hoc: student.major || \"\",\n    nganh_nghe: student.major || \"\",\n    trinh_do: student.eduSystem || \"\",\n    \n    hoc_bong: student.scholarshipName || \"\",\n    gia_tri_hb: formatMoney(student.scholarshipValue),\n    \n    ngay_nhap_hoc: formatDate(datePlus3),\n    ngay_het_han: formatDate(datePlus25)\n};\n\n// 6. TRẢ KẾT QUẢ\nreturn [{\n    json: {\n        templateId: mapIDs[docType] || \"MISSING_ID\",\n        targetFolderId: targetFolderId,\n        printData: printData\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        -80
+      ],
+      "id": "1e28c081-f8f8-4b12-9543-977d404c7c82",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.templateId }}",
+          "mode": "id"
+        },
+        "name": "={{ $json.printData.ho_va_ten }}_{{ $json.printData.nganh_nghe }}",
+        "sameFolder": false,
+        "driveId": {
+          "__rl": true,
+          "value": "={{ $json.targetFolderId }}",
+          "mode": "id"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        -80
+      ],
+      "id": "669d6585-49b2-416c-90ab-907a71615377",
+      "name": "Copy file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "7MrvHBkyud9vUR01",
+          "name": "Drive Cá Nhân"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "replaceAll",
+              "text": "ngay_hom_nay",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.ngay_hom_nay }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "thang_ngay",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.thang_ngay }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "nam_nay",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.nam_nay }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "ngay_gui",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.ngay_gui }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "ho_va_ten",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.ho_va_ten }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "ngay_sinh",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.ngay_sinh }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "dia_chi",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.dia_chi }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "nganh_hoc",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.nganh_hoc }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "trinh_do",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.trinh_do }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "nganh_nghe",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.nganh_nghe }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "hoc_bong",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.hoc_bong }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "gia_tri_hb",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.gia_tri_hb }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "ngay_nhap_hoc",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.ngay_nhap_hoc }}"
+            },
+            {
+              "action": "replaceAll",
+              "text": "ngay_het_han",
+              "replaceText": "={{ $('Code in JavaScript').item.json.printData.ngay_het_han }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -80
+      ],
+      "id": "17605c8f-c00e-423e-9ac8-fb48c820d843",
+      "name": "Update a document",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "zAKY1KdO3qn23DG9",
+          "name": "CÁNHÂN"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -32,
+        -80
+      ],
+      "id": "69b4ba04-2b70-4d34-84d5-84c2f2c909a9",
+      "name": "Wait",
+      "webhookId": "d7b59150-4f3d-40b2-aefa-72742c24defd"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -448,
+        -80
+      ],
+      "id": "24b55247-c803-4fe0-a0f3-e18b708ff401",
+      "name": "Wait1",
+      "webhookId": "2aeea1c9-192a-4e4e-bde7-74524b5860d1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy file": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Update a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Copy file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "48c1f2e1-62dc-4d35-ba1b-80c9a8646910",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "11cf124f3552cdbc216dccd7d22c6c8436b1a6c2213808d49b9aedc94f7e7322"
+  },
+  "id": "DPV3Njo5J6uIbmYI",
+  "tags": []
+}

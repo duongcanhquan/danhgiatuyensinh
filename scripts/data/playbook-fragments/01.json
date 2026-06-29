@@ -1,0 +1,241 @@
+[
+  {
+    "title": "IT – Tệp HOT – Chốt cọc ngay",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ thông tin"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      }
+    ],
+    "strategy": "Khách hàng đã rất quan tâm và chủ động. Không cần giới thiệu dài dòng về trường. Hãy đi thẳng vào cam kết việc làm, thực hành phòng máy và hối thúc giữ chỗ trước khi hết ưu đãi. Mục tiêu cuộc gọi: Chốt chuyển khoản cọc.",
+    "keySellingPoints": [
+      "Thực hành 70% tại phòng Lab cấu hình cao.",
+      "Cam kết giới thiệu việc làm FPT, CMC."
+    ],
+    "objectionHandling": [
+      "Hỏi ý kiến bố mẹ: -> Mời cả bố mẹ vào nhóm Zalo để gửi hình ảnh phòng máy và video cựu sinh viên thành đạt."
+    ]
+  },
+  {
+    "title": "IT – Tệp WARM – Cần nuôi dưỡng",
+    "priority": 60,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ thông tin"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "Khách hàng có hứng thú nhưng còn phân vân ngành khác hoặc trường khác. Cần khơi gợi đam mê công nghệ. Gửi các sản phẩm thực tế của sinh viên khóa trước. Mời tham gia group cộng đồng IT của trường.",
+    "keySellingPoints": [
+      "Học từ con số 0, không yêu cầu thi khối A.",
+      "Đội ngũ giảng viên từ doanh nghiệp phần mềm."
+    ],
+    "objectionHandling": [
+      "Sợ học code khó: -> Trường có lộ trình cơ bản, hỗ trợ kèm cặp ngoài giờ thực hành."
+    ]
+  },
+  {
+    "title": "IT – Khách ở Tỉnh xa Hà Nội",
+    "priority": 70,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ thông tin"
+      },
+      {
+        "field": "province",
+        "operator": "NOT_IN",
+        "value": [
+          "Hà Nội"
+        ]
+      }
+    ],
+    "strategy": "Học sinh tỉnh lẻ thường lo lắng về chi phí sinh hoạt và an ninh. Nhấn mạnh vào việc học IT dễ nhận việc làm thêm (freelance) ngay từ năm 2 để trang trải chi phí. Đề cập ngay KTX.",
+    "keySellingPoints": [
+      "Có Ký túc xá an ninh 24/7 ngay tại trường.",
+      "Hỗ trợ tìm việc làm thêm ngành IT năm 2."
+    ],
+    "objectionHandling": [
+      "Sợ sống ở HN đắt đỏ: -> Chi phí KTX chỉ từ 800k/tháng, rẻ và an toàn hơn thuê trọ."
+    ]
+  },
+  {
+    "title": "IT – Nguồn từ Đi trường THPT",
+    "priority": 50,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ thông tin"
+      },
+      {
+        "field": "source",
+        "operator": "CONTAINS",
+        "value": "đi trường"
+      }
+    ],
+    "strategy": "Khách này biết trường qua event nhưng chưa sâu. Cần nhắc lại ấn tượng tại event. Gọi điện với thái độ thân thiện như một người anh/chị khóa trên định hướng nghề nghiệp.",
+    "keySellingPoints": [
+      "Công nghệ thông tin là vua của mọi nghề.",
+      "Bằng Cao đẳng thực hành, ra trường sớm 1.5 năm."
+    ],
+    "objectionHandling": [
+      "Đang đợi điểm thi ĐH: -> Giữ chỗ bằng cọc trước cho an toàn, đỗ ĐH rút hồ sơ được hoàn cọc (theo quy định trường)."
+    ]
+  },
+  {
+    "title": "IT – Tệp COLD – Chăm sóc tự động",
+    "priority": 40,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ thông tin"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "COLD"
+      }
+    ],
+    "strategy": "Khách ít tương tác. Chỉ gọi 1 cuộc ngắn hỏi thăm, sau đó xin phép gửi thông tin qua Zalo. Dùng Automation gửi chuỗi ZNS về cơ hội nghề nghiệp ngành IT.",
+    "keySellingPoints": [
+      "Học IT không bao giờ lo thất nghiệp.",
+      "Thời gian học linh hoạt, thực hành thực tế."
+    ],
+    "objectionHandling": [
+      "Không muốn nghe máy: -> Dạ chị gửi Zalo kèm tài liệu tham khảo về cơ hội việc làm ngành IT; khi rảnh em xem giúp chị nhé."
+    ]
+  },
+  {
+    "title": "Thiết kế – Nữ giới – Khơi gợi sáng tạo",
+    "priority": 50,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Thiết kế đồ họa"
+      }
+    ],
+    "strategy": "Đặc thù ngành này các bạn thích cái đẹp, tự do. Nói về không gian học truyền cảm hứng, workshop handmade, quay chụp ngoại cảnh. Mời kết bạn Zalo và gửi video hậu trường sinh viên quay phim.",
+    "keySellingPoints": [
+      "Thực hành tại Studio ảnh chuyên nghiệp của trường.",
+      "Tặng tài khoản Adobe bản quyền suốt khóa."
+    ],
+    "objectionHandling": [
+      "Sợ học phí cao do phải mua máy tính: -> Trường có phòng máy Mac, năm nhất chưa cần mua máy ngay."
+    ]
+  },
+  {
+    "title": "Thiết kế – Phân vân giữa ĐH và CĐ",
+    "priority": 65,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Thiết kế đồ họa"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "Đánh mạnh vào việc ngành Thiết kế quan trọng Portfolio (Hồ sơ năng lực) hơn Bằng cấp. Học CĐ ra trường sớm, đi làm sớm, có kinh nghiệm thực chiến sớm hơn ĐH.",
+    "keySellingPoints": [
+      "Doanh nghiệp tuyển thiết kế nhìn Portfolio, không nhìn bằng.",
+      "Tốt nghiệp sau 2.5 năm, đi làm trước sinh viên ĐH."
+    ],
+    "objectionHandling": [
+      "Bố mẹ ép học Đại học: -> Dạ em gửi bài báo phân tích xu hướng tuyển dụng ngành thiết kế để gia đình xem ạ."
+    ]
+  },
+  {
+    "title": "Thiết kế – Trạng thái MỚI (NEW)",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Thiết kế đồ họa"
+      },
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "NEW"
+      }
+    ],
+    "strategy": "Gọi ngay trong 5 phút. Khách vừa điền form đang có cảm xúc cao nhất. Hỏi ngay «Em thích thiết kế 2D hay quay dựng video?» để tư vấn đúng trọng tâm.",
+    "keySellingPoints": [
+      "Đào tạo đa phương tiện: 2D, 3D, Video, UI/UX.",
+      "Đồ án tốt nghiệp là sản phẩm thực tế cho doanh nghiệp."
+    ],
+    "objectionHandling": [
+      "Chưa biết vẽ có học được không: -> Ngành này xài phần mềm là chính, vẽ tay trường sẽ đào tạo từ số 0."
+    ]
+  },
+  {
+    "title": "Thiết kế – Tỉnh xa",
+    "priority": 70,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Thiết kế đồ họa"
+      },
+      {
+        "field": "province",
+        "operator": "NOT_IN",
+        "value": [
+          "Hà Nội"
+        ]
+      }
+    ],
+    "strategy": "Học sinh tỉnh lẻ thích môi trường năng động của Hà Nội. Nhấn mạnh việc trường thường xuyên tổ chức đi bảo tàng, triển lãm nghệ thuật tại thủ đô.",
+    "keySellingPoints": [
+      "Tham gia các triển lãm nghệ thuật lớn tại Hà Nội.",
+      "Hỗ trợ KTX giá rẻ, an ninh cho sinh viên tỉnh."
+    ],
+    "objectionHandling": [
+      "Sợ không theo kịp các bạn thành phố: -> Sinh viên tỉnh trường mình rất chăm chỉ và thường đứng top lớp."
+    ]
+  },
+  {
+    "title": "Thiết kế – Đã liên hệ nhưng chưa chốt (CONTACTED)",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Thiết kế đồ họa"
+      },
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "CONTACTED"
+      }
+    ],
+    "strategy": "Gọi lại với lý do cụ thể, hữu ích. Ví dụ: trường đang có suất workshop nhiếp ảnh trong tuần — mời em đến trải nghiệm miễn phí và xem cơ sở vật chất.",
+    "keySellingPoints": [
+      "Trải nghiệm thực tế không gian sáng tạo.",
+      "Gặp gỡ giảng viên là Giám đốc Sáng tạo."
+    ],
+    "objectionHandling": [
+      "Em bận không đi được: -> Dạ em giữ vé gửi qua Zalo, khi nào em thu xếp được thì báo chị nhé."
+    ]
+  }
+]

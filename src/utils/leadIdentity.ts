@@ -1,0 +1,118 @@
+import { sha256 } from '@noble/hashes/sha256'
+import type { Lead, LeadCounselorStatus } from '../types'
+import { LEAD_COUNSELOR_STATUS_ORDER } from '../types'
+import type { ExcelLeadRow } from './excelLeadMapper'
+
+const COUNSELOR_SET = new Set<string>([...LEAD_COUNSELOR_STATUS_ORDER])
+
+/** Map legacy Firestore / Excel counselor statuses to the EdTech Kanban model. */
+const LEGACY_COUNSELOR_STATUS: Record<string, LeadCounselorStatus> = {
+  ATTEMPTED_CONTACT: 'INTERESTED',
+  IN_PROGRESS: 'INTERESTED',
+  CAMPUS_TOUR_BOOKED: 'INTERESTED',
+}
+
+export function isLeadCounselorStatus(v: string): v is LeadCounselorStatus {
+  return COUNSELOR_SET.has(v)
+}
+
+export function coerceLeadCounselorStatus(raw: string): LeadCounselorStatus {
+  const u = String(raw ?? '').toUpperCase()
+  if (COUNSELOR_SET.has(u)) return u as LeadCounselorStatus
+  if (LEGACY_COUNSELOR_STATUS[u]) return LEGACY_COUNSELOR_STATUS[u]
+  return 'NEW'
+}
+
+/** Digits-only key; prefers student phone, then parent. Vietnam +84 → 0… */
+export function normalizePhoneKey(phone: string, parentPhone?: string): string {
+  const raw = (phone ?? '').trim() || (parentPhone ?? '').trim()
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.startsWith('84') && digits.length >= 10) return `0${digits.slice(2)}`
+  return digits
+}
+
+function normIdentity(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+}
+
+/** SHA-256 hex — đồng bộ, cùng kết quả với `crypto.subtle` (đã dùng trước đây) để `uniqueHash` trên Firestore không đổi. */
+function sha256HexSync(input: string): string {
+  const digest = sha256(new TextEncoder().encode(input))
+  return Array.from(digest)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
+ * Dedupe fingerprint: primary phone (student → parent); else normalized name + customer id + education.
+ */
+export function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): string {
+  const phoneKey = normalizePhoneKey(row.phone ?? '', row.parentPhone)
+  let basis: string
+  if (phoneKey.length >= 9) {
+    basis = `phone:${phoneKey}`
+  } else {
+    const n = normIdentity(row.fullName ?? '')
+    const cid = normIdentity(row.customerId ?? '')
+    const edu = normIdentity(row.educationLevel ?? '')
+    const grade = normIdentity(row.gradeClass ?? '')
+    const dob = normIdentity(row.dateOfBirth ?? '')
+    basis = `identity:${n}|kh:${cid}|edu:${edu}|lop:${grade}|dob:${dob}`
+  }
+  return sha256HexSync(basis)
+}
+
+/** Map admission funnel stage to counselor Kanban when `status` is absent on legacy docs. */
+export function pipelineToCounselorStatus(p: Lead['pipelineStatus']): LeadCounselorStatus {
+  switch (p) {
+    case 'NEW':
+      return 'NEW'
+    case 'CONTACTED':
+      return 'INTERESTED'
+    case 'QUALIFIED':
+    case 'APPLIED':
+      return 'INTERESTED'
+    case 'ENROLLED':
+      return 'ENROLLED'
+    case 'LOST':
+    case 'ARCHIVED':
+      return 'DEAD'
+    default:
+      return 'NEW'
+  }
+}
+
+/**
+ * Ghi đồng bộ `assignedTo` + `assignedCounselorId` lên Firestore — tránh chỉ cập nhật một trường.
+ */
+export function assigneeFirestoreMirror(uid: string | null): {
+  assignedTo: string | null
+  assignedCounselorId: string | null
+} {
+  return { assignedTo: uid, assignedCounselorId: uid }
+}
+
+/** When only counselor `status` exists, infer admission funnel for analytics & legacy UI. */
+export function counselorStatusToPipeline(s: LeadCounselorStatus): Lead['pipelineStatus'] {
+  switch (s) {
+    case 'NEW':
+      return 'NEW'
+    case 'INTERESTED':
+      return 'QUALIFIED'
+    case 'DEPOSIT_PAID':
+      return 'APPLIED'
+    case 'ENROLLED':
+      return 'ENROLLED'
+    case 'SUMMER_MELT':
+    case 'DEAD':
+      return 'LOST'
+    default:
+      return 'NEW'
+  }
+}

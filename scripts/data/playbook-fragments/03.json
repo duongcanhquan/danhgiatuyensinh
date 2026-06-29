@@ -1,0 +1,237 @@
+[
+  {
+    "title": "Digital Marketing – Nội thành Hà Nội",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Digital Marketing"
+      },
+      {
+        "field": "province",
+        "operator": "EQUALS",
+        "value": "Hà Nội"
+      }
+    ],
+    "strategy": "Học sinh thành phố rất nhạy bén kinh doanh. Nhấn mạnh việc học Marketing để tự kinh doanh online, xây kênh TikTok, làm KOL/KOC.",
+    "keySellingPoints": [
+      "Thực hành chạy Ads bằng tiền thật của doanh nghiệp.",
+      "Học cách xây kênh TikTok triệu view."
+    ],
+    "objectionHandling": [
+      "Trường có dạy kinh doanh online không: -> Có hẳn module Thương mại điện tử và Affiliate Marketing."
+    ]
+  },
+  {
+    "title": "Digital Marketing – Quan tâm việc làm sớm",
+    "priority": 90,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Digital Marketing"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "HOT"
+      }
+    ],
+    "strategy": "Bán «Cơ hội kiếm tiền ngay năm nhất». Marketing là ngành có thể nhận job freelance viết bài, trực page ngay từ học kỳ 2.",
+    "keySellingPoints": [
+      "Sinh viên kiếm được tiền ngay từ năm thứ nhất.",
+      "Đội ngũ giảng viên là Giám đốc Marketing thực chiến."
+    ],
+    "objectionHandling": [
+      "Sợ AI cướp việc Marketing: -> Trường dạy sinh viên cách sử dụng AI để làm Marketing nhanh gấp 10 lần."
+    ]
+  },
+  {
+    "title": "Digital Marketing – COLD / Chưa rõ định hướng",
+    "priority": 50,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Digital Marketing"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "COLD"
+      }
+    ],
+    "strategy": "Khơi gợi sự tò mò. Kể câu chuyện sinh viên khóa trước phát triển kênh Shopee/TikTok sau khi học tại trường (mức thu nhập tùy cá nhân).",
+    "keySellingPoints": [
+      "Ngành năng động nhất, phù hợp GenZ.",
+      "Môi trường học tập cởi mở, không gò bó lý thuyết."
+    ],
+    "objectionHandling": [
+      "Em không giỏi văn có làm Marketing được không: -> Marketing hiện đại cần tư duy logic và số liệu (Ads), không chỉ viết lách."
+    ]
+  },
+  {
+    "title": "Digital Marketing – Phân vân với Báo chí / PR",
+    "priority": 70,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Digital Marketing"
+      },
+      {
+        "field": "pipelineStatus",
+        "operator": "EQUALS",
+        "value": "CONTACTED"
+      }
+    ],
+    "strategy": "So sánh thực dụng. Báo chí khó xin việc, Marketing thì doanh nghiệp nào cũng cần. Digital Marketing đo lường được bằng số, dễ thăng tiến.",
+    "keySellingPoints": [
+      "Doanh nghiệp nào cũng khát nhân sự Digital.",
+      "Thu nhập dựa trên hiệu quả doanh thu, rất cao."
+    ],
+    "objectionHandling": [
+      "Bố mẹ bảo ngành này «chém gió»: -> Digital marketing đo lường bằng chỉ số, báo cáo và hiệu quả chiến dịch — hoàn toàn có thể minh chứng bằng số liệu ạ."
+    ]
+  },
+  {
+    "title": "Digital Marketing – Mời tham quan trường",
+    "priority": 60,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Digital Marketing"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "WARM"
+      }
+    ],
+    "strategy": "Gọi điện mời đến trường dự thính 1 buổi học môn Quay dựng video ngắn. Trăm nghe không bằng một thấy.",
+    "keySellingPoints": [
+      "Tham gia thực tế một buổi học làm nội dung TikTok ngắn.",
+      "Giao lưu với các chuyên gia Marketing tại trường."
+    ],
+    "objectionHandling": [
+      "Nhà em xa ngại đi: -> Trường hỗ trợ xe đưa đón hoặc hỗ trợ voucher Grab cho nhóm đăng ký tham quan (theo chính sách)."
+    ]
+  },
+  {
+    "title": "Công nghệ Ô tô – Đam mê kỹ thuật",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ Ô tô"
+      }
+    ],
+    "strategy": "Nam giới đam mê xe cộ. Nhấn mạnh vào xưởng thực hành hiện đại, xu hướng xe điện (VinFast) và xe Hybrid. Bức tranh thu nhập mở gara riêng.",
+    "keySellingPoints": [
+      "70% thời gian học tại xưởng thực hành ô tô hiện đại.",
+      "Cập nhật công nghệ xe điện và Hybrid mới nhất."
+    ],
+    "objectionHandling": [
+      "Sợ lấm lem dầu mỡ: -> Kỹ sư ô tô hiện đại làm việc với máy chẩn đoán lỗi bằng máy tính, rất sạch sẽ và chuyên nghiệp."
+    ]
+  },
+  {
+    "title": "Công nghệ Ô tô – Tỉnh xa",
+    "priority": 75,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Công nghệ Ô tô"
+      },
+      {
+        "field": "province",
+        "operator": "NOT_IN",
+        "value": [
+          "Hà Nội"
+        ]
+      }
+    ],
+    "strategy": "Cam kết việc làm tại các đại lý Toyota, Kia... ở Hà Nội. Nhấn mạnh việc học nghề cứng thì về quê mở xưởng cũng rất giàu.",
+    "keySellingPoints": [
+      "Học nghề cứng, không lo thất nghiệp ở cả thành phố lẫn quê.",
+      "Trường giới thiệu thực tập có lương tại gara lớn."
+    ],
+    "objectionHandling": [
+      "Chi phí học có tốn thêm tiền vật tư không: -> Học phí đã bao gồm toàn bộ vật tư thực hành cơ bản."
+    ]
+  },
+  {
+    "title": "Quản trị Khách sạn – Ngoại hình sáng",
+    "priority": 80,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Quản trị Khách sạn"
+      }
+    ],
+    "strategy": "Đánh vào sự hào nhoáng, sang trọng của nghề. Được thực tập tại các resort 5 sao. Cơ hội du lịch và gặp gỡ giới tinh hoa.",
+    "keySellingPoints": [
+      "Thực tập nhận lương (Paid Internship) tại Resort 5 sao.",
+      "Môi trường học tập phong cách châu Âu, đồng phục đẹp."
+    ],
+    "objectionHandling": [
+      "Tiếng Anh em kém: -> Trường đào tạo Tiếng Anh chuyên ngành từ con số 0, tập trung giao tiếp."
+    ]
+  },
+  {
+    "title": "Quản trị Khách sạn – COLD (Nghĩ nghề này làm phục vụ)",
+    "priority": 60,
+    "triggerConditions": [
+      {
+        "field": "educationLevel",
+        "operator": "EQUALS",
+        "value": "Quản trị Khách sạn"
+      },
+      {
+        "field": "priorityTag",
+        "operator": "EQUALS",
+        "value": "COLD"
+      }
+    ],
+    "strategy": "Gỡ bỏ định kiến «làm bồi bàn». Giải thích lộ trình thăng tiến lên Giám sát, Quản lý tiền sảnh (Front Office Manager) với mức lương nghìn đô.",
+    "keySellingPoints": [
+      "Đào tạo tư duy Quản lý, không chỉ đào tạo nghề phục vụ.",
+      "Cơ hội làm việc trên các siêu du thuyền quốc tế."
+    ],
+    "objectionHandling": [
+      "Bố mẹ chê nghề phục vụ: -> Nghề Dịch vụ hiếu khách (Hospitality) là ngành công nghiệp triệu đô, rất được tôn trọng."
+    ]
+  },
+  {
+    "title": "Ô tô / Khách sạn – Nguồn từ Form Ads",
+    "priority": 50,
+    "triggerConditions": [
+      {
+        "field": "source",
+        "operator": "CONTAINS",
+        "value": "Facebook"
+      },
+      {
+        "field": "educationLevel",
+        "operator": "IN",
+        "value": [
+          "Công nghệ Ô tô",
+          "Quản trị Khách sạn"
+        ]
+      }
+    ],
+    "strategy": "Khách từ quảng cáo thường quyết định nhanh nhưng dễ quên. Gọi trong 15 phút. Xác nhận lại thông tin và gửi ngay tài liệu hình ảnh xưởng / phòng thực hành khách sạn.",
+    "keySellingPoints": [
+      "Học đi đôi với hành, cam kết việc làm 100%.",
+      "Cơ sở vật chất đầu tư mô phỏng doanh nghiệp."
+    ],
+    "objectionHandling": [
+      "Em bấm nhầm: -> Dạ không sao ạ. Nếu em tiện, kết bạn Zalo để chị gửi hình cơ sở vật chất cho em tham khảo."
+    ]
+  }
+]

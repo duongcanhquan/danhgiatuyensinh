@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/deepseek-proxy/:path*",
+      "destination": "https://api.deepseek.com/:path*"
+    },
+    {
+      "source": "/openai-proxy/:path*",
+      "destination": "https://api.openai.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

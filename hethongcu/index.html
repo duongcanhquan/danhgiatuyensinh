@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CỔNG ĐĂNG KÝ TRỰC TUYẾN | VIETMY COLLEGE</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #0056b3;
+            --accent-color: #ff4d4d;
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --body-bg: #f0f2f5;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(-45deg, #f5f7fa, #c3cfe2, #e0c3fc, #8ec5fc);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 30px 15px;
+            color: #2d3436;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .main-container {
+            max-width: 900px;
+            width: 100%;
+            margin: auto;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+            position: relative; /* Dùng để đặt nút chuyển ngôn ngữ */
+        }
+
+        @media (max-width: 768px) {
+            .glass-card { padding: 35px 20px 25px 20px; }
+            .header-title { font-size: 1.4rem !important; margin-top: 10px;}
+        }
+
+        .logo-box img {
+            max-width: 220px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+
+        .header-title {
+            font-weight: 800;
+            color: var(--primary-color);
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
+
+        .header-sub {
+            font-size: 0.95rem;
+            color: #636e72;
+            max-width: 600px;
+            margin: auto;
+            line-height: 1.6;
+        }
+
+        .contact-info {
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            padding: 15px;
+            display: inline-block;
+            margin-top: 15px;
+            border: 1px solid rgba(0, 86, 179, 0.1);
+        }
+
+        .section-box {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            border: 1px solid #f1f2f6;
+        }
+
+        .section-title {
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            font-size: 1.1rem;
+        }
+
+        .section-title i { margin-right: 10px; font-size: 1.2rem; }
+
+        .form-label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #4a4a4a;
+            margin-bottom: 8px;
+        }
+
+        .form-control, .form-select {
+            border-radius: 10px;
+            padding: 12px 15px;
+            border: 1px solid #dfe6e9;
+            background-color: #fafafa;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(0, 86, 179, 0.1);
+            background-color: #fff;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #0056b3 0%, #007bff 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            padding: 18px;
+            width: 100%;
+            font-weight: 700;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 86, 179, 0.3);
+            color: white;
+        }
+
+        .footer-note {
+            background: #fff5f5;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 30px;
+            font-size: 0.85rem;
+            color: #c0392b;
+            border-left: 5px solid #ff4d4d;
+        }
+
+        /* Nút Chuyển Ngôn Ngữ */
+        .lang-switch-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <div class="glass-card">
+        <div class="lang-switch-container">
+            <div class="btn-group border rounded-pill bg-white shadow-sm" role="group">
+                <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 fw-bold" id="btn-vn" onclick="setLanguage('vn')">VN</button>
+                <button type="button" class="btn btn-sm btn-light rounded-pill px-3 text-muted" id="btn-en" onclick="setLanguage('en')">EN</button>
+            </div>
+        </div>
+
+        <div class="text-center mb-5">
+            <div class="logo-box">
+                <img src="https://github.com/duongcanhquan/image/blob/main/Logo%20Cao%20%C4%91a%CC%86%CC%89ng%20Vie%CC%A3%CC%82t%20My%CC%83%20-%20ba%CC%89n%20chua%CC%82%CC%89n%202025-01.png?raw=true" alt="VietMy College">
+            </div>
+            <h2 class="header-title h4 lang-text" data-vn="Cổng Đăng Ký Trực Tuyến" data-en="Online Registration Portal">Cổng Đăng Ký Trực Tuyến</h2>
+            <p class="header-sub lang-text" data-vn="Hệ thống xét tuyển chính quy vào Trường Cao Đẳng Việt Mỹ - Cam kết chất lượng và việc làm sau tốt nghiệp." data-en="Official admission system of VietMy College - Commitment to quality and employment after graduation.">Hệ thống xét tuyển chính quy vào Trường Cao Đẳng Việt Mỹ - Cam kết chất lượng và việc làm sau tốt nghiệp.</p>
+            
+            <div class="contact-info">
+                <div class="small fw-bold">
+                    <i class="fa-solid fa-location-dot me-2 text-danger"></i> <span class="lang-text" data-vn="168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội" data-en="168 Trinh Van Bo, Nam Tu Liem, Hanoi">168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội</span> <br class="d-md-none">
+                    <span class="mx-2 d-none d-md-inline">|</span>
+                    <i class="fa-solid fa-phone me-2 text-success"></i> 0982.856.648
+                </div>
+            </div>
+        </div>
+
+        <form id="regForm">
+            <div class="section-box">
+                <div class="section-title"><i class="fa-solid fa-user-graduate"></i> <span class="lang-text" data-vn="1. Thông tin cá nhân" data-en="1. Personal Information">1. Thông tin cá nhân</span></div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Họ và tên thí sinh *" data-en="Full Name *">Họ và tên thí sinh *</label>
+                        <input type="text" name="fullName" class="form-control lang-ph" data-phvn="NGUYỄN VĂN A" data-phen="JOHN DOE" placeholder="NGUYỄN VĂN A" required style="text-transform: uppercase;">
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <label class="form-label lang-text" data-vn="Ngày sinh *" data-en="Date of Birth *">Ngày sinh *</label>
+                        <input type="text" name="dob" id="dobInput" class="form-control lang-ph" data-phvn="DD/MM/YYYY" data-phen="DD/MM/YYYY" placeholder="DD/MM/YYYY" maxlength="10" required>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <label class="form-label lang-text" data-vn="Giới tính *" data-en="Gender *">Giới tính *</label>
+                        <select name="gender" class="form-select">
+                            <option value="Nam" class="lang-text" data-vn="Nam" data-en="Male">Nam</option>
+                            <option value="Nữ" class="lang-text" data-vn="Nữ" data-en="Female">Nữ</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label lang-text" data-vn="Nơi sinh *" data-en="Place of Birth *">Nơi sinh *</label>
+                        <input type="text" name="pob" class="form-control lang-ph" data-phvn="Ví dụ: Hà Nội" data-phen="e.g., Hanoi" placeholder="Ví dụ: Hà Nội" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label lang-text" data-vn="Dân tộc *" data-en="Ethnicity *">Dân tộc *</label>
+                        <input type="text" name="ethnicity" class="form-control lang-ph" data-phvn="Kinh" data-phen="Kinh / Other" value="Kinh" required>
+                    </div>
+        <div class="col-md-4">
+    <label class="form-label lang-text" data-vn="Số CCCD/Mã định danh/Passport *" data-en="ID Card / Passport No. *">Số CCCD/Mã định danh/Passport *</label>
+    <input type="text" name="cccd" id="cccdInput" class="form-control lang-ph" data-phvn="12 số (hoặc Passport)" data-phen="12 digits (or Passport)" placeholder="12 số (hoặc Passport)" required>
+    
+    <div class="form-check mt-2 ms-1">
+        <input class="form-check-input" type="checkbox" id="checkNoCCCD_Public" onchange="handleNoCCCD_Public(this)" style="cursor:pointer; transform: scale(1.2);">
+        <label class="form-check-label lang-text ms-1" for="checkNoCCCD_Public" data-vn="Tôi chưa có CCCD/Passport" data-en="I don't have an ID/Passport yet" style="font-size:0.85rem; font-weight:600; cursor:pointer; color:#c0392b;">Tôi chưa có CCCD/Passport</label>
+    </div>
+</div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Số điện thoại (Thêm + nếu SĐT Quốc tế) *" data-en="Phone Number (Add + for Int'l) *">Số điện thoại (Thêm + nếu SĐT Quốc tế) *</label>
+                        <input type="tel" name="phone" id="phoneInput" class="form-control lang-ph" data-phvn="0xxx xxx xxx (hoặc +82...)" data-phen="0xxx xxx xxx (or +82...)" placeholder="0xxx xxx xxx (hoặc +82...)" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Địa chỉ Email *" data-en="Email Address *">Địa chỉ Email *</label>
+                        <input type="email" name="email" class="form-control lang-ph" data-phvn="example@gmail.com" data-phen="example@gmail.com" placeholder="example@gmail.com" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label lang-text" data-vn="Địa chỉ thường trú (Ghi rõ thôn/xóm, xã/phường, quận/huyện) *" data-en="Permanent Address (Specific details) *">Địa chỉ thường trú (Ghi rõ thôn/xóm, xã/phường, quận/huyện) *</label>
+                        <input type="text" name="address" class="form-control" required>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <div class="section-title"><i class="fa-solid fa-users"></i> <span class="lang-text" data-vn="2. Thông tin gia đình" data-en="2. Family Information">2. Thông tin gia đình</span></div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Họ tên Cha" data-en="Father's Name">Họ tên Cha</label>
+                        <input type="text" name="fatherName" class="form-control" style="text-transform: uppercase;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="SĐT Cha" data-en="Father's Phone">SĐT Cha</label>
+                        <input type="tel" name="fatherPhone" id="fatherPhoneInput" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Họ tên Mẹ" data-en="Mother's Name">Họ tên Mẹ</label>
+                        <input type="text" name="motherName" class="form-control" style="text-transform: uppercase;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="SĐT Mẹ *" data-en="Mother's Phone *">SĐT Mẹ *</label>
+                        <input type="tel" name="motherPhone" id="motherPhoneInput" class="form-control" required>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <div class="section-title"><i class="fa-solid fa-book"></i> <span class="lang-text" data-vn="3. Học vấn & Nguyện vọng" data-en="3. Education & Aspirations">3. Học vấn & Nguyện vọng</span></div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Trường THPT/THCS đã theo học *" data-en="High/Middle School Attended *">Trường THPT/THCS đã theo học *</label>
+                        <input type="text" name="school" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Tỉnh/Thành phố của trường *" data-en="School's Province/City *">Tỉnh/Thành phố của trường *</label>
+                        <input type="text" name="schoolProvince" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Đối tượng dự tuyển *" data-en="Applicant Category *">Đối tượng dự tuyển *</label>
+                        <select name="situation" class="form-select">
+                            <option value="Học sinh lớp 9" class="lang-text" data-vn="Học sinh lớp 9 (Xét học bạ)" data-en="Grade 9 Student (Transcript-based)">Học sinh lớp 9 (Xét học bạ)</option>
+                            <option value="Học sinh lớp 12" class="lang-text" data-vn="Học sinh lớp 12 (Xét học bạ/Điểm thi)" data-en="Grade 12 Student (Transcript/Exam)">Học sinh lớp 12 (Xét học bạ/Điểm thi)</option>
+                            <option value="Đã tốt nghiệp PTTH" class="lang-text" data-vn="Đã tốt nghiệp THPT" data-en="High School Graduate">Đã tốt nghiệp THPT</option>
+                            <option value="Đã tốt nghiệp TC, CĐ, ĐH khác" class="lang-text" data-vn="Đã tốt nghiệp TC, CĐ, ĐH khác" data-en="College/University Graduate">Đã tốt nghiệp TC, CĐ, ĐH khác</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Hệ đào tạo đăng ký *" data-en="Education System *">Hệ đào tạo đăng ký *</label>
+                        <select name="eduSystem" class="form-select">
+                            <option value="Cao đẳng chính quy" class="lang-text" data-vn="Cao đẳng chính quy (2 năm 4 tháng)" data-en="Regular College (2 years 4 months)">Cao đẳng chính quy (2 năm 4 tháng)</option>
+                            <option value="Phổ thông cao đẳng" class="lang-text" data-vn="Phổ thông cao đẳng (9+)" data-en="High School College (9+)">Phổ thông cao đẳng (9+)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Ngành học đăng ký *" data-en="Desired Major *">Ngành học đăng ký *</label>
+                        <select name="major" id="majorSelect" class="form-select" required>
+                            <option value="" class="lang-text" data-vn="Đang tải danh sách..." data-en="Loading list...">Đang tải danh sách...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label lang-text" data-vn="Thầy/Cô tư vấn hướng dẫn *" data-en="Admission Counselor *">Thầy/Cô tư vấn hướng dẫn *</label>
+                        <select name="counselor" id="counselorSelect" class="form-select" required>
+                            <option value="" class="lang-text" data-vn="Đang tải danh sách..." data-en="Loading list...">Đang tải danh sách...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label lang-text" data-vn="Điểm trung bình học tập *" data-en="Academic GPA *">Điểm trung bình học tập *</label>
+                        <select id="scoreSelect" class="form-select mb-2" onchange="toggleCustomScore(this.value)">
+                            <option value="8.0-9.0" class="lang-text" data-vn="8.0 - 9.0 (Ưu tiên tuyển thẳng)" data-en="8.0 - 9.0 (Direct Admission Priority)">8.0 - 9.0 (Ưu tiên tuyển thẳng)</option>
+                            <option value="6.5-7.9">6.5 - 7.9</option>
+                            <option value="5.0-6.4">5.0 - 6.4</option>
+                            <option value="Khác" class="lang-text" data-vn="Nhập điểm cụ thể..." data-en="Enter specific score...">Nhập điểm cụ thể...</option>
+                        </select>
+                        <input type="text" id="customScore" class="form-control d-none lang-ph" data-phvn="Nhập điểm trung bình cụ thể của bạn (VD: 7.8)" data-phen="Enter your specific GPA (e.g., 7.8)" placeholder="Nhập điểm trung bình cụ thể của bạn (VD: 7.8)">
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-submit">
+                <i class="fa-solid fa-paper-plane me-2"></i> <span class="lang-text" data-vn="Gửi Hồ Sơ Đăng Ký" data-en="Submit Registration">Gửi Hồ Sơ Đăng Ký</span>
+            </button>
+
+            <div class="footer-note">
+                <strong><i class="fa-solid fa-circle-info"></i> <span class="lang-text" data-vn="Lưu ý đặc biệt:" data-en="Special Note:">Lưu ý đặc biệt:</span></strong> 
+                <span class="lang-text" data-vn="Thí sinh có học lực từ 8.0 trở lên sẽ được ưu tiên tuyển thẳng. Thông tin đăng ký là cơ sở để Nhà trường xét tuyển. Nếu có sai sót về điểm số, kết quả xét tuyển có thể bị hủy bỏ. Kết quả được bảo lưu đến hết 31/12/2026." data-en="Students with a GPA of 8.0 or higher are prioritized for direct admission. Registration information is the basis for the school's admission. Any errors in score reporting may result in admission cancellation. Results are reserved until Dec 31, 2026.">Thí sinh có học lực từ 8.0 trở lên sẽ được ưu tiên tuyển thẳng. Thông tin đăng ký là cơ sở để Nhà trường xét tuyển. Nếu có sai sót về điểm số, kết quả xét tuyển có thể bị hủy bỏ. Kết quả được bảo lưu đến hết 31/12/2026.</span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwowbFfSrql3BPWY5iL1yEMX2UFHZ7IrueyX_5O_Eizi4CGIwbEO6hs1Qfl4jaE8Ph6/exec';
+
+    // --- BỘ TỪ ĐIỂN CẢNH BÁO SONG NGỮ ---
+    let lang = 'vn';
+    const msgs = {
+        vn: {
+            errDobTitle: 'Lỗi Ngày Sinh', errDobFmt: 'Vui lòng nhập ngày sinh đúng định dạng DD/MM/YYYY (Ví dụ: 15/05/2005)', errDobInv: 'Ngày tháng năm sinh bạn nhập không có thực trên lịch!',
+            errPhoneTitle: 'Lỗi Số Điện Thoại', errPhoneInv: 'SĐT Việt Nam phải có 10 số (Bắt đầu bằng số 0). SĐT Quốc tế phải có dấu + ở đầu (VD: +82...).',
+            errIdTitle: 'Lỗi CCCD / Passport', errIdInv: 'CCCD phải là 9 hoặc 12 số. Hộ chiếu (Passport) phải chứa chữ và số (7-15 ký tự).',
+            loadingTitle: 'Đang gửi hồ sơ...', loadingText: 'Vui lòng chờ trong giây lát',
+            successTitle: 'Đăng ký thành công!', successText: 'Hồ sơ của bạn đã được tiếp nhận. Nhà trường sẽ liên hệ sớm nhất!',
+            errTitle: 'Lỗi', errText: 'Có lỗi xảy ra khi gửi dữ liệu. Vui lòng thử lại sau!',
+            optMajor: '-- Chọn ngành học --', optTvv: '-- Chọn Thầy/Cô hướng dẫn --'
+        },
+        en: {
+            errDobTitle: 'DOB Error', errDobFmt: 'Please enter DOB in DD/MM/YYYY format (e.g., 15/05/2005)', errDobInv: 'The entered date of birth does not exist on the calendar!',
+            errPhoneTitle: 'Phone Number Error', errPhoneInv: 'VN phone must have 10 digits (start with 0). Int\'l phone must start with + (e.g., +82...).',
+            errIdTitle: 'ID / Passport Error', errIdInv: 'ID must be 9 or 12 digits. Passport must contain letters and numbers (7-15 characters).',
+            loadingTitle: 'Submitting...', loadingText: 'Please wait a moment',
+            successTitle: 'Registration Successful!', successText: 'Your application has been received. The school will contact you soon!',
+            errTitle: 'Error', errText: 'An error occurred while sending data. Please try again later!',
+            optMajor: '-- Select Major --', optTvv: '-- Select Counselor --'
+        }
+    };
+
+    function setLanguage(selectedLang) {
+        lang = selectedLang;
+        
+        // Đổi màu nút
+        document.getElementById('btn-vn').className = lang === 'vn' ? 'btn btn-sm btn-primary rounded-pill px-3 fw-bold' : 'btn btn-sm btn-light rounded-pill px-3 text-muted';
+        document.getElementById('btn-en').className = lang === 'en' ? 'btn btn-sm btn-primary rounded-pill px-3 fw-bold' : 'btn btn-sm btn-light rounded-pill px-3 text-muted';
+        
+        // Đổi Label và Option text
+        document.querySelectorAll('.lang-text').forEach(el => {
+            if(el.dataset[lang]) el.innerHTML = el.dataset[lang];
+        });
+        
+        // Đổi Placeholder
+        document.querySelectorAll('.lang-ph').forEach(el => {
+            if(el.dataset['ph' + lang]) el.placeholder = el.dataset['ph' + lang];
+        });
+    }
+    // ------------------------------------
+
+    // 1. Xử lý nhập ngày tháng thông minh (Auto-format DD/MM/YYYY)
+    const dobInput = document.getElementById('dobInput');
+    dobInput.addEventListener('input', function(e) {
+        let v = this.value.replace(/\D/g, ''); // Chỉ lấy số
+        if (v.length > 8) v = v.substring(0, 8);
+        
+        if (v.length >= 5) this.value = v.substring(0, 2) + '/' + v.substring(2, 4) + '/' + v.substring(4);
+        else if (v.length >= 3) this.value = v.substring(0, 2) + '/' + v.substring(2);
+        else this.value = v;
+    });
+
+   // Cho phép nhập chữ, số cho Passport. Ép viết hoa. (Bỏ qua nếu là CHƯA CÓ)
+document.getElementById('cccdInput').addEventListener('input', function() { 
+    if(this.value !== "CHƯA CÓ") this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase(); 
+});
+    // Cho phép nhập số và dấu + cho SĐT Quốc tế.
+    ['phoneInput', 'fatherPhoneInput', 'motherPhoneInput'].forEach(id => {
+        document.getElementById(id).addEventListener('input', function() { this.value = this.value.replace(/[^0-9+]/g, ''); });
+    });
+
+
+    // Toggle custom score input
+    function toggleCustomScore(val) {
+        const inp = document.getElementById('customScore');
+        if(val === 'Khác') {
+            inp.classList.remove('d-none');
+            inp.required = true;
+            inp.focus();
+        } else {
+            inp.classList.add('d-none');
+            inp.required = false;
+        }
+    }
+
+    // Load Data
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch(SCRIPT_URL + '?action=getData')
+            .then(res => res.json())
+            .then(data => {
+                // 1. NGÀNH HỌC
+                const listNganh = data.nganh || [];
+                let htmlNganh = `<option value="" class="lang-text" data-vn="-- Chọn ngành học --" data-en="-- Select Major --">${msgs[lang].optMajor}</option>`;
+                let inGroup = false;
+                listNganh.forEach(item => {
+                    if (item.isGroup) {
+                        if (inGroup) htmlNganh += '</optgroup>';
+                        htmlNganh += `<optgroup label="${item.name}">`;
+                        inGroup = true;
+                    } else {
+                        htmlNganh += `<option value="${item.name}">${item.name}</option>`;
+                    }
+                });
+                if (inGroup) htmlNganh += '</optgroup>';
+                document.getElementById('majorSelect').innerHTML = htmlNganh;
+
+                // 2. TVV
+                const listTVV = data.tuvan || []; 
+                document.getElementById('counselorSelect').innerHTML = `<option value="" class="lang-text" data-vn="-- Chọn Thầy/Cô hướng dẫn --" data-en="-- Select Counselor --">${msgs[lang].optTvv}</option>` + 
+                    listTVV.map(t => `<option value="${t}">${t}</option>`).join('');
+
+                // 3. HỆ ĐÀO TẠO (Đã thêm dòng "-- Chọn hệ đào tạo --" bắt buộc)
+                const listSystems = data.systems || [];
+                const sysSelect = document.getElementsByName('eduSystem')[0];
+                if (sysSelect && listSystems.length > 0) {
+                    // Chèn thêm option rỗng (value="") vào đầu danh sách
+                    let htmlSys = `<option value="" class="lang-text" data-vn="-- Chọn hệ đào tạo --" data-en="-- Select Education System --">-- Chọn hệ đào tạo --</option>`;
+                    htmlSys += listSystems.map(s => `<option value="${s}">${s}</option>`).join('');
+                    sysSelect.innerHTML = htmlSys;
+                }
+            })
+            .catch(err => {
+                console.error("Lỗi tải dữ liệu:", err);
+                document.getElementById('majorSelect').innerHTML = '<option value="">Lỗi kết nối / Connection Error</option>';
+            });
+    });
+
+    // Handle Submit
+    document.getElementById('regForm').onsubmit = async (e) => {
+        e.preventDefault();
+        
+        // --- KIỂM TRA NGHIÊM NGẶT TRƯỚC KHI GỬI (VALIDATION SONG NGỮ) ---
+        const dobVal = dobInput.value.trim();
+        const cccdVal = document.getElementById('cccdInput').value.trim();
+        const phoneVal = document.getElementById('phoneInput').value.trim();
+        const t = msgs[lang]; // Gọi bộ từ điển ngôn ngữ đang chọn
+
+        // 1. Kiểm tra Ngày sinh hợp lệ
+        let dobMatch = dobVal.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!dobMatch) return Swal.fire(t.errDobTitle, t.errDobFmt, 'error');
+        let day = parseInt(dobMatch[1]), month = parseInt(dobMatch[2]), year = parseInt(dobMatch[3]);
+        let dim = [31, (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if (year < 1900 || month < 1 || month > 12 || day < 1 || day > dim[month - 1]) {
+            return Swal.fire(t.errDobTitle, t.errDobInv, 'error');
+        }
+
+        // 2. Kiểm tra Điện thoại & CCCD (CHO PHÉP QUỐC TẾ & PASSPORT)
+        let phoneValid = /^(0\d{9}|\+\d{9,15})$/.test(phoneVal);
+        if (!phoneValid) {
+            return Swal.fire(t.errPhoneTitle, t.errPhoneInv, 'error');
+        }
+        
+       let idValid = (cccdVal === "CHƯA CÓ") || (/^\d+$/.test(cccdVal) && (cccdVal.length === 9 || cccdVal.length === 12)) || (/^[A-Z0-9]{7,15}$/.test(cccdVal) && !/^\d+$/.test(cccdVal));
+if (!idValid) {
+    return Swal.fire(t.errIdTitle, t.errIdInv, 'error');
+}
+        // --------------------------------------------------------
+
+        const formData = Object.fromEntries(new FormData(e.target));
+        
+        // Ép các trường tên thành IN HOA chuẩn trước khi đẩy lên Sheet
+        formData.fullName = String(formData.fullName).toUpperCase();
+        formData.fatherName = formData.fatherName ? String(formData.fatherName).toUpperCase() : "";
+        formData.motherName = formData.motherName ? String(formData.motherName).toUpperCase() : "";
+
+        const sVal = document.getElementById('scoreSelect').value;
+        formData.score = (sVal === 'Khác') ? document.getElementById('customScore').value : sVal;
+
+        Swal.fire({
+            title: t.loadingTitle,
+            text: t.loadingText,
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+    try {
+            // Ép trình duyệt đi theo luồng chuyển hướng của Google và giữ nguyên gói hàng
+            const response = await fetch(SCRIPT_URL, { 
+                method: 'POST', 
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: JSON.stringify(formData),
+                redirect: "follow"
+            });
+            
+            // Đọc dạng text trước để đề phòng Google trả về trang báo lỗi HTML
+            const textRes = await response.text(); 
+            let result;
+            try {
+                result = JSON.parse(textRes); // Thử ép sang JSON
+            } catch (jsonErr) {
+                console.error("Lỗi rớt mạng hoặc Google Server lỗi:", textRes);
+                return Swal.fire(t.errTitle, 'Máy chủ đang nghẽn hoặc kết nối mạng yếu. Vui lòng bấm GỬI lại!', 'error');
+            }
+
+            // Nếu xử lý mượt mà và thành công
+            if (result.result === 'success') {
+                Swal.fire({
+                    icon: 'success',
+                    title: t.successTitle,
+                    text: t.successText,
+                    confirmButtonColor: '#0056b3'
+                });
+                e.target.reset();
+                document.getElementById('customScore').classList.add('d-none');
+                
+                const cccdInp = document.getElementById('cccdInput');
+                cccdInp.readOnly = false;
+                cccdInp.style.backgroundColor = "#fafafa";
+                document.getElementById('checkNoCCCD_Public').checked = false;
+                
+            } else {
+                // Nếu bị từ chối do trùng lặp SĐT/CCCD
+                Swal.fire('Từ chối tiếp nhận', result.message || t.errText, 'warning');
+            }
+            
+        } catch (error) {
+            Swal.fire(t.errTitle, 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại Wifi/4G!', 'error');
+        }
+    };
+
+    function handleNoCCCD_Public(checkbox) {
+    const cccdInp = document.getElementById('cccdInput');
+    if (checkbox.checked) {
+        cccdInp.value = "CHƯA CÓ";
+        cccdInp.readOnly = true;
+        cccdInp.style.backgroundColor = "#e9ecef"; // Đổi màu xám
+    } else {
+        cccdInp.value = "";
+        cccdInp.readOnly = false;
+        cccdInp.style.backgroundColor = "#fafafa"; // Trả lại màu gốc
+    }
+}
+</script>
+</body>
+</html>

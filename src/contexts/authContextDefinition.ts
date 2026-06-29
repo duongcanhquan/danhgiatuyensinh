@@ -1,0 +1,59 @@
+import { createContext } from 'react'
+import type { User } from 'firebase/auth'
+import type { AuthState, Permission, UserRole } from '../types'
+
+export type AuthContextValue = AuthState & {
+  firebaseUser: User | null
+  can: (p: Permission) => boolean
+  /** Chạy LLM trên lead / AI Miner: cần `ai:use` + cờ nhân sự (Admin / Siêu quản trị luôn được). */
+  canRunLlmAnalysis: boolean
+  signOut: () => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<void>
+  /** Admin: tạo tài khoản Auth + hồ sơ Firestore (dùng app Auth phụ). */
+  createStaffAccount: (input: {
+    email: string
+    password: string
+    displayName: string
+    role: UserRole
+    managedCounselorIds?: string[]
+    omicallSipUser?: string
+    omicallSipPassword?: string
+    omicallAgentId?: string
+    omicallOutboundNumber?: string
+  }) => Promise<void>
+  /**
+   * Admin: cập nhật `users/{userId}` (tên, vai trò, hoạt động).
+   * Không xóa được tài khoản Firebase Auth từ trình duyệt — chỉ vô hiệu hóa trong danh bạ.
+   */
+  updateStaffProfile: (input: {
+    userId: string
+    displayName?: string
+    role?: UserRole
+    isActive?: boolean
+    /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
+    allowLlmAndAiTasks?: boolean
+    managedCounselorIds?: string[]
+    omicallSipUser?: string
+    omicallSipPassword?: string
+    omicallAgentId?: string
+    omicallOutboundNumber?: string
+  }) => Promise<void>
+  /** Admin: đặt mật khẩu mới trực tiếp (Cloud Function + Admin SDK). */
+  setStaffPassword: (userId: string, newPassword: string) => Promise<void>
+  /** Admin: gửi email đặt lại mật khẩu (tuỳ chọn, không bắt buộc). */
+  sendStaffPasswordResetEmail: (email: string) => Promise<void>
+  /** Cổng kế toán: tạo tài khoản role accountant. */
+  createAccountantStaff: (input: { email: string; password: string; displayName: string }) => Promise<void>
+  /** Cổng kế toán: sửa / vô hiệu kế toán viên. */
+  updateAccountantStaff: (input: { userId: string; displayName?: string; isActive?: boolean }) => Promise<void>
+  /** Khóa đăng nhập Firebase Auth (đồng bộ isActive=false). */
+  disableStaffLogin: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
+  /** Mở khóa đăng nhập (isActive=true). */
+  enableStaffLogin: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
+  /** Xóa hồ sơ Firestore + tài khoản Auth (không thể hoàn tác). */
+  deleteStaffAccount: (userId: string, opts?: { accountantPortalOnly?: boolean }) => Promise<void>
+  /** Tải lại `users/{uid}` sau khi server cập nhật (vd. đồng bộ OMICall). */
+  reloadProfile: () => Promise<void>
+}
+
+export const AuthContext = createContext<AuthContextValue | null>(null)

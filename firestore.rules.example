@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Bảng kê collection id (đồng bộ `FS_COLLECTIONS` trong src/types.ts) ---
+    // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux, masterData,
+    // consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
+    // omicallCalls, omicallSyncRuns, kpiDaily,
+    // leads/{id}/interactions, leads/{id}/aiInsightTasks
+    // (scoringRuleSets, routingPolicies: id dự phòng — app chưa ghi đọc.)
+    //
+    // Production: add rules for `auditLogs` (read/write scoped by role).
+    // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
+    // Index lịch sử gọi (omicallCalls): counselorUid/teamLeadUid + endedAt — xem firestore.indexes.json.
+    // Triển khai: `npm run deploy:firestore-indexes` (database `warmlist` trong firebase.json), hoặc bấm link «Tạo index» trên app.
+
+    // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
+    // write: admin only) — collection used by RAG / Settings → Kho tri thức.
+    //
+    // `scoringAux/callSessionChips`: bảng đánh giá trực tiếp khi gọi (v2 dimensions) — đọc: authenticated; ghi: admin (`config:ai_engine`).
+    // `scoringAux/orgAiIntegration`: khóa API LLM toàn trường — đọc: authenticated (TVV cần gọi LLM);
+    // ghi: super_admin (`config:llm_api`). Trường apiKey nhạy cảm — cân nhắc Cloud Function / proxy server-side.
+    // `scoringAux/omicallIntegration`: OMICall — đọc: authenticated; ghi: admin (`config:omicall`).
+    // Trường `defaultSipPassword` / `apiKey` nhạy cảm — cân nhắc Cloud Function thay vì Rules mở.
+    //
+    // `omicallCalls`, `omicallSyncRuns`, `kpiDaily`: Cloud Functions ghi bằng Admin SDK.
+    // Client chỉ đọc theo phạm vi:
+    // - TVV: doc có counselorUid == request.auth.uid hoặc kpiDaily/.../counselors/{uid của mình}.
+    // - Trưởng nhóm: doc có teamLeadUid == request.auth.uid.
+    // - Admin/Siêu quản trị: đọc toàn bộ.
+    //
+    // `scoringProfiles`: gợi ý — đọc: mọi user đã đăng nhập (để chọn profile chấm điểm).
+    // Ghi: admin (mọi doc); TVV chỉ doc có `createdBy == request.auth.uid` và không được
+    // ghi `isDefaultForImport` / batch gỡ cờ profile khác (chỉ quản trị).
+
+    // =====================================================================
+    // CHỈ MẪU CHO GIAI ĐOẠN DEV / GỠ LỖI "chưa có hồ sơ users/{uid}"
+    // Mọi user đã đăng nhập đọc/ghi toàn DB — KHÔNG dùng nguyên xi cho production.
+    // Sao chép vào Firebase Console → Firestore Database → chọn đúng database (vd. warmlist) → Rules → Publish.
+    // =====================================================================
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
