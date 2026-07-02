@@ -587,7 +587,7 @@ const CONFIG = {
           ktSheet.appendRow(rowToInsert);
         } catch (err) {}
       }
-  
+
   try {
           // ĐÃ SỬA: Lấy an toàn 71 cột để mảng luôn thừa chỗ, không bao giờ bị lỗi index out of bounds khi gọi r[69]
           const r = sheet.getRange(rowIndex, 1, 1, 71).getValues()[0].map(safe);
@@ -615,11 +615,12 @@ const CONFIG = {
           console.error("Lỗi Webhook Kế toán: " + err.message);
       }
   
-      return { status: "success" };
+      // Trả kèm bản ghi vừa cập nhật — client patch trực tiếp vào bảng thay vì tải lại toàn bộ students.json
+      return { status: "success", updatedRow: updatedRowForFirebase };
     } catch(e) { return { status: "error", message: e.message }; } finally { lock.releaseLock(); }
   }
-  
-  
+
+
   // =======================================================
   // LƯU HỒ SƠ TỪ TVV (BỘ LỌC CHỐNG SPAM MINH BẠCH TỐI ĐA)
   // =======================================================
@@ -747,9 +748,10 @@ const CONFIG = {
       else { if (r[65] === "YÊU CẦU FULL NE") r[65] = ""; }
   
       if(isNew) sheet.appendRow(r); else sheet.getRange(rowIndex, 1, 1, 70).setValues([r]);
-      
+
       // -- CẬP NHẬT GHI TRẠNG THÁI ĐỒNG BỘ --
-      const fbSuccess = writeToFirebase("students/" + payload.studentId, r.map(safe));
+      const safeRow = r.map(safe);
+      const fbSuccess = writeToFirebase("students/" + payload.studentId, safeRow);
       if (fbSuccess) {
         sheet.getRange(rowIndex, CONFIG.SYNC_COL_INDEX + 1).setValue("ĐÃ ĐỒNG BỘ");
       } else {
@@ -790,11 +792,12 @@ const CONFIG = {
           console.error("Lỗi Webhook TVV: " + e.message);
       }
   
-      SpreadsheetApp.flush(); 
-      return { status: "success", mode: isNew ? "create" : "update", id: payload.studentId };
+      SpreadsheetApp.flush();
+      // Trả kèm bản ghi vừa lưu — client patch trực tiếp vào bảng thay vì tải lại toàn bộ students.json
+      return { status: "success", mode: isNew ? "create" : "update", id: payload.studentId, updatedRow: safeRow };
     } catch(e) { return {status:"error", message: e.message}; } finally { lock.releaseLock(); }
   }
-  
+
   function savePublicForm(data) {
     const lock = LockService.getScriptLock();
     try {
@@ -1367,11 +1370,13 @@ const CONFIG = {
           sheet.getRange(lastRow + 1, CONFIG.SYNC_COL_INDEX + 1, statusUpdates.length, 1).setValues(statusUpdates);
       }
   
-      return { 
-          status: "success", 
-          message: `Đã nhập thành công ${successCount} hồ sơ mới. Bỏ qua ${failCount} hồ sơ bị trùng SĐT/CCCD.` 
+      // Trả kèm map id -> row của các hồ sơ vừa thêm — client append trực tiếp thay vì tải lại toàn bộ students.json
+      return {
+          status: "success",
+          message: `Đã nhập thành công ${successCount} hồ sơ mới. Bỏ qua ${failCount} hồ sơ bị trùng SĐT/CCCD.`,
+          insertedRows: firebaseUpdates,
       };
-  
+
     } catch (e) {
         return { status: "error", message: e.message };
     } finally {

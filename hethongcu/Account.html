@@ -285,13 +285,39 @@ function loadData() {
             });
 
             DATA = rawData;
-            renderData(); 
+            renderData();
         } else {
             Swal.fire('Lỗi', (res && res.message) || "Không tải được dữ liệu", 'error');
         }
     }).getAccountantData();
 }
-    
+
+// Còn khoản chờ duyệt? (đồng bộ với logic sắp xếp ở loadData)
+function accountantRowHasPending(r) {
+    const hasMoney = (idx) => parseInt(String(r[idx] || "0").replace(/\D/g, '')) > 0;
+    if ((hasMoney(30) && !String(r[50] || "").trim()) || (hasMoney(31) && !String(r[51] || "").trim()) ||
+        (hasMoney(44) && !String(r[52] || "").trim()) || (hasMoney(46) && !String(r[53] || "").trim()) ||
+        (hasMoney(48) && !String(r[54] || "").trim())) return true;
+    return String(r[65]).trim() === "YÊU CẦU FULL NE";
+}
+
+// Patch 1 bản ghi vào DATA đang có sẵn trên client — KHÔNG gọi lại getAccountantData (tránh tải lại toàn bộ students.json).
+// Dùng sau processPaymentDecision, vì server đã trả kèm updatedRow.
+function patchLocalAccountantRow(row) {
+    if (!row) return;
+    const clean = row.map(cell => (typeof cell === 'string' && cell.startsWith("'")) ? cell.substring(1) : cell);
+    const idx = DATA.findIndex(r => r[1] === clean[1]);
+    if (idx >= 0) DATA[idx] = clean; else DATA.push(clean);
+    DATA.sort((a, b) => {
+        const pendingA = accountantRowHasPending(a);
+        const pendingB = accountantRowHasPending(b);
+        if (pendingA && !pendingB) return -1;
+        if (!pendingA && pendingB) return 1;
+        return 0;
+    });
+    renderData();
+}
+
     function toNormal(str) { return String(str || "").normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim(); }
 
     function renderData() {
@@ -498,13 +524,14 @@ function loadData() {
                 google.script.run.withSuccessHandler(res => { 
                     isProcessingPayment = false; // Mở khóa
                     toggleLoader(false); 
-                    if(res.status==='success') { 
-                        Toast.fire({icon:'success', title:'Cập nhật thành công!'}); 
+                    if(res.status==='success') {
+                        Toast.fire({icon:'success', title:'Cập nhật thành công!'});
                         if (btnsContainer) {
                             const badgeClass = action === 'ĐỒNG Ý' ? 'st-ok' : 'st-no';
                             btnsContainer.outerHTML = `<div class="status-txt ${badgeClass} mt-2 w-100">${action}</div>`;
                         }
-                        loadData(); 
+                        // Server đã trả kèm bản ghi vừa duyệt — patch cục bộ, KHÔNG tải lại toàn bộ students.json
+                        patchLocalAccountantRow(res.updatedRow);
                     } else {
                         Swal.fire('Lỗi', res.message, 'error'); 
                         if (btnsContainer) {

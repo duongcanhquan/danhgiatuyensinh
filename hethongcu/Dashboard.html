@@ -964,6 +964,33 @@ function loadData() {
     refreshDataAndRender();
 }
 
+// Chuẩn hoá 1 row Firebase (bỏ dấu nháy đơn chống ép kiểu) — dùng chung khi patch cục bộ
+function normalizeFirebaseRow(row) {
+    return row.map(cell => (typeof cell === 'string' && cell.startsWith("'")) ? cell.substring(1) : cell);
+}
+
+// Patch 1 bản ghi vào ALL_STUDENTS đang có sẵn trên client — KHÔNG gọi lại Firebase.
+// Dùng sau saveOrUpdateStudent / processPaymentDecision, vì server đã trả kèm updatedRow.
+function patchLocalStudentRow(row) {
+    if (!row) return;
+    const clean = normalizeFirebaseRow(row);
+    const id = clean[1];
+    const idx = ALL_STUDENTS.findIndex(r => r[1] === id);
+    if (idx >= 0) ALL_STUDENTS[idx] = clean; else ALL_STUDENTS.push(clean);
+    filterTable();
+}
+
+// Thêm nhiều bản ghi mới (map id -> row) vào ALL_STUDENTS sau processBulkImport — KHÔNG gọi lại Firebase.
+function appendLocalStudentRows(rowsMap) {
+    if (!rowsMap) return;
+    Object.values(rowsMap).forEach(row => {
+        const clean = normalizeFirebaseRow(row);
+        const idx = ALL_STUDENTS.findIndex(r => r[1] === clean[1]);
+        if (idx >= 0) ALL_STUDENTS[idx] = clean; else ALL_STUDENTS.push(clean);
+    });
+    filterTable();
+}
+
 function toNormal(str) { return String(str || "").normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim(); }
 
 function checkDuplicate() {
@@ -2084,7 +2111,8 @@ async function submitForm() {
                     sHtml('display_studentId', res.id);
                     sHtml('modalTitle', "CẬP NHẬT HỒ SƠ");
                 }
-                refreshDataAndRender(); 
+                // Server đã trả kèm bản ghi vừa lưu — patch cục bộ, KHÔNG tải lại toàn bộ students.json
+                patchLocalStudentRow(res.updatedRow);
             } else Swal.fire("Lỗi", res.message, "error");
             btn.disabled = false; btn.innerHTML = 'LƯU HỒ SƠ';
         }).withFailureHandler(err => { 
@@ -2319,7 +2347,8 @@ function handleExcelUpload(e) {
                              toggleLoader(false);
                              if(serverRes.status === 'success') {
                                  Swal.fire('Hoàn tất!', serverRes.message, 'success');
-                                 refreshDataAndRender();
+                                 // Server đã trả kèm các bản ghi vừa thêm — patch cục bộ, KHÔNG tải lại toàn bộ students.json
+                                 appendLocalStudentRows(serverRes.insertedRows);
                              } else {
                                  Swal.fire('Lỗi', serverRes.message, 'error');
                              }
