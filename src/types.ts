@@ -1350,6 +1350,9 @@ export const SCORING_AUX_CALL_SESSION_DOC_ID = 'callSessionChips' as const
 /** Doc cố định: `scoringAux/leadClassificationConfig` — tỷ trọng hồ sơ vs gọi điện → HOT/WARM/COLD. */
 export const SCORING_AUX_LEAD_CLASSIFICATION_DOC_ID = 'leadClassificationConfig' as const
 
+/** Doc cố định: `scoringAux/publicRegistrationConfig` — cổng đăng ký sinh viên công khai + webhook n8n. */
+export const SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig' as const
+
 /** Khóa API LLM + provider/model — Siêu quản trị lưu một lần, mọi TVV được bật quyền AI dùng chung. */
 export const SCORING_AUX_ORG_AI_DOC_ID = 'orgAiIntegration' as const
 
@@ -1735,6 +1738,45 @@ export type OmicallIntegrationConfig = {
   webhookRegisteredAt?: string
   /** ISO — lần đồng bộ số nội bộ toàn hệ thống gần nhất. */
   lastInternalPhonesSyncAt?: string
+}
+
+/** Lưu Firestore — `scoringAux/publicRegistrationConfig` */
+export type PublicRegistrationConfig = {
+  schemaVersion: 1
+  /** Bật cổng `/dang-ky` và cho phép gửi form công khai. */
+  enabled: boolean
+  portalTitle: string
+  introText: string
+  /** Hiển thị sau khi đăng ký thành công (phương án A — không đăng nhập SV). */
+  successMessage: string
+  /** Gán vào `source1` khi sinh viên gửi form — dùng cho KPI OFF/MKT. */
+  defaultSource1: string
+  /** Tự gán TVV theo tải hồ sơ (counselor active). */
+  autoAssignCounselor: boolean
+  /** Gửi webhook n8n sau khi tạo hồ sơ (email SV + TVV do workflow n8n xử lý). */
+  n8nEnabled: boolean
+  n8nWebhookUrl: string
+  /** URL cổng công khai (tuỳ chọn — đưa vào payload n8n). */
+  portalPublicUrl?: string
+  updatedAt?: string
+  updatedBy?: string
+}
+
+export function defaultPublicRegistrationConfig(): PublicRegistrationConfig {
+  return {
+    schemaVersion: 1,
+    enabled: false,
+    portalTitle: 'Đăng ký tuyển sinh — Cao đẳng Việt Mỹ',
+    introText:
+      'Điền thông tin bên dưới. Sau khi gửi, bạn nhận mã hồ sơ — tư vấn viên sẽ liên hệ qua số điện thoại hoặc email đã khai báo.',
+    successMessage:
+      'Cảm ơn bạn đã đăng ký. Vui lòng ghi nhớ mã hồ sơ bên dưới — tư vấn viên sẽ liên hệ trong thời gian sớm nhất.',
+    defaultSource1: 'Web đăng ký',
+    autoAssignCounselor: true,
+    n8nEnabled: true,
+    n8nWebhookUrl: '',
+    portalPublicUrl: '',
+  }
 }
 
 /** Các trường hồ sơ dùng trong công thức điểm thông tin — đồng bộ 20 cột Excel + 2 trường mở rộng (legacy). */

@@ -42,6 +42,7 @@ import {
 } from './omicallCallCenterApi.js'
 import { omicallClick2Call as postOmicallClick2Call } from './omicallClick2CallApi.js'
 import { registerOmicallCallWebhook } from './omicallWebhookApi.js'
+import { registerPublicRegistrationFunctions } from './publicRegistration.js'
 import {
   normalizePhoneLocal,
   normalizePhoneIntl,
@@ -1955,5 +1956,9 @@ export const adminStaffAccountAction = onCall(async (request) => {
   }
   return { ok: true, action: 'delete', targetUserId }
 })
+
+const publicRegistrationFns = registerPublicRegistrationFunctions(db)
+export const getPublicRegistrationMeta = publicRegistrationFns.getPublicRegistrationMeta
+export const submitPublicLead = publicRegistrationFns.submitPublicLead
 
 export { fetchOmicallCallsForClient } from './fetchOmicallCallsForClient.js'

@@ -52,6 +52,7 @@ import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
+import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
 import { DataIntake } from '../components/DataIntake'
 import {
   enabledMainTabs,
@@ -240,6 +241,16 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Cấu hình tổng đài web: domain, số nội bộ mặc định, phiên bản SDK. TVV gọi từ hồ sơ; log cuộc gọi vào{' '}
             <strong>lịch sử tương tác</strong> khi kết thúc (nếu bật).
+          </p>
+        </>
+      )
+    case 'public_registration':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Cổng đăng ký sinh viên</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Form công khai tại <strong>/dang-ky</strong> — hồ sơ vào tab <strong>Hồ sơ</strong> chung. Sau khi gửi, workflow
+            n8n có thể gửi email cho sinh viên và tư vấn viên được gán.
           </p>
         </>
       )
@@ -1212,6 +1223,15 @@ export function SettingsView() {
             Gọi điện OMICall
           </h2>
           <OmicallSettingsTab />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'public_registration' && canMaster ? (
+        <div role="tabpanel" aria-labelledby="tab-public-registration" className="space-y-3">
+          <h2 id="tab-public-registration" className="sr-only">
+            Cổng đăng ký sinh viên
+          </h2>
+          <PublicRegistrationSettingsPanel />
         </div>
       ) : null}
 

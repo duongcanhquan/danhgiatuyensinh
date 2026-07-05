@@ -20,6 +20,8 @@ import { AccountantReportsView } from './views/accountant/AccountantReportsView'
 import { AccountantLayout } from './components/accountant/AccountantLayout'
 import { AccountantProtectedRoute } from './components/accountant/AccountantProtectedRoute'
 import { MyDayView } from './views/MyDayView'
+import { StudentRegistrationView } from './views/student/StudentRegistrationView'
+import { StudentRegistrationSuccessView } from './views/student/StudentRegistrationSuccessView'
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
@@ -36,6 +38,8 @@ export default function App() {
           <OmicallAutoBootstrap />
           <Routes>
             <Route path="/ke-toan/login" element={<AccountantLoginView />} />
+            <Route path="/dang-ky" element={<StudentRegistrationView />} />
+            <Route path="/dang-ky/thanh-cong" element={<StudentRegistrationSuccessView />} />
             <Route element={<AccountantProtectedRoute />}>
               <Route path="/ke-toan" element={<AccountantLayout />}>
                 <Route index element={<AccountantView portalMode />} />
