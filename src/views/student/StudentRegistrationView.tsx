@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { GraduationCap, Loader2, Send } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 import { isFirebaseConfigured } from '../../services/firebase'
@@ -303,13 +304,8 @@ export function StudentRegistrationView() {
           </div>
         )}
 
-        <p className="mt-8 text-center text-xs text-slate-500">
-          Nhân viên tuyển sinh?{' '}
-          <Link to="/login" className="font-semibold text-emerald-700 hover:underline">
-            Đăng nhập hệ thống quản trị
-          </Link>
-        </p>
       </main>
+      <StaffLoginCornerGate />
     </div>
   )
 }

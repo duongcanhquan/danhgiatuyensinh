@@ -1,4 +1,5 @@
 import { Link, useLocation, Navigate } from 'react-router-dom'
+import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { CheckCircle2, Copy, GraduationCap } from 'lucide-react'
 import { useState } from 'react'
 
@@ -86,6 +87,7 @@ export function StudentRegistrationSuccessView() {
           </Link>
         </div>
       </main>
+      <StaffLoginCornerGate />
     </div>
   )
 }
