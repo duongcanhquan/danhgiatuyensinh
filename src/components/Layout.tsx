@@ -24,6 +24,7 @@ import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
 import { LeadClassificationRulesProvider } from '../contexts/LeadClassificationRulesContext'
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
+import { SharedFirestoreDataProviders } from '../contexts/SharedFirestoreDataProviders'
 
 type NavGroup = 'work' | 'more'
 
@@ -252,6 +253,7 @@ export function Layout() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto bg-[var(--color-background)]">
             <main className="safe-area-pb-nav flex min-h-0 min-w-0 w-full flex-1 flex-col">
               <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-2.5 text-sm font-normal leading-relaxed text-slate-800 sm:px-4 sm:py-3 md:px-6 md:py-4 lg:px-8">
+                <SharedFirestoreDataProviders>
                 <InfoScoreRulesProvider>
                   <LeadClassificationRulesProvider>
                     <KpiEvaluationRulesProvider>
@@ -261,6 +263,7 @@ export function Layout() {
                     </KpiEvaluationRulesProvider>
                   </LeadClassificationRulesProvider>
                 </InfoScoreRulesProvider>
+                </SharedFirestoreDataProviders>
               </div>
             </main>
           </div>

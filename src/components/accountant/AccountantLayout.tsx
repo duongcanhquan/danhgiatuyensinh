@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { FileSpreadsheet, LogOut, Users, Wallet } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageAccountantStaff } from '../../auth/accountantPortal'
+import { SharedFirestoreDataProviders } from '../../contexts/SharedFirestoreDataProviders'
 
 function linkClass(isActive: boolean) {
   return [
@@ -52,7 +53,9 @@ export function AccountantLayout() {
         </div>
       </header>
       <main className="mx-auto max-w-[1800px] px-2 py-4 md:px-4">
-        <Outlet />
+        <SharedFirestoreDataProviders>
+          <Outlet />
+        </SharedFirestoreDataProviders>
       </main>
     </div>
   )

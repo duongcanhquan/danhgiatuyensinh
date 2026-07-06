@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
-import type { Lead, PriorityTag, ProfileCustomScoringSignal, ScoringProfile } from '../types'
+import { useMemo } from 'react'
+import type { Lead, PriorityTag, ProfileCustomScoringSignal } from '../types'
 import { evaluateLead, leadToEvaluationRecord, type EvaluateLeadOptions, type MasterDataBuckets } from '../utils/scoring'
 import type { InfoScoreRuntime } from '../utils/infoScoreRules'
 import { filterApplicableScoringProfiles } from '../utils/scoringProfileAccess'
-import { useScoringProfiles } from './useScoringProfiles'
+import { useScoringProfileSelection, useScoringProfiles } from './useScoringProfiles'
 import { useMasterData } from './useMasterData'
 import { useSchoolTvvSignalDefinitions } from './useSchoolTvvSignalDefinitions'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
@@ -12,8 +12,6 @@ import { useCounselorDirectory } from './useCounselorDirectory'
 import { useAuth } from './useAuth'
 
 export type LeadScorePreview = { calculatedScore: number; priorityTag: PriorityTag }
-
-const SCORING_PROFILE_LS = 'vietmy_selected_scoring_profile_id'
 
 export type UseLeadScoringOptions = {
   /** Dùng chung bucket với màn hình cha — tránh lệch thời điểm tải master data. */
@@ -29,12 +27,23 @@ export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
   const { profile, can } = useAuth()
   const { users: directoryUsers } = useCounselorDirectory()
   const { profiles: allScoringProfiles, loading: profilesLoading } = useScoringProfiles()
+  const {
+    scoringProfileId,
+    setScoringProfileId,
+    resolvedScoringProfileId,
+    activeScoringProfile,
+    profileScoringLive,
+  } = useScoringProfileSelection()
+
   const scoringProfiles = useMemo(
     () => filterApplicableScoringProfiles(allScoringProfiles, profile, directoryUsers, can),
     [allScoringProfiles, profile, directoryUsers, can],
   )
+
   const { items: hookSchoolDefs } = useSchoolTvvSignalDefinitions()
   const schoolTvvSignalDefs = options?.schoolTvvSignalDefs ?? hookSchoolDefs
+
+  const masterFromOptions = options?.masterBuckets
   const {
     regionLabels,
     highSchoolLabels,
@@ -58,7 +67,7 @@ export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
     [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
   )
 
-  const masterBuckets = options?.masterBuckets ?? internalBuckets
+  const masterBuckets = masterFromOptions ?? internalBuckets
   const { runtime: hookInfoScoreRuntime } = useInfoScoreRules()
   const infoScoreRuntime = options?.infoScoreRuntime ?? hookInfoScoreRuntime
   const { runtime: classificationRuntime } = useLeadClassificationRules()
@@ -71,38 +80,6 @@ export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
     }),
     [infoScoreRuntime, classificationRuntime],
   )
-
-  const [scoringProfileId, setScoringProfileIdState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(SCORING_PROFILE_LS)
-    } catch {
-      return null
-    }
-  })
-
-  const setScoringProfileId = useCallback((id: string | null) => {
-    setScoringProfileIdState(id)
-    try {
-      if (id) localStorage.setItem(SCORING_PROFILE_LS, id)
-      else localStorage.removeItem(SCORING_PROFILE_LS)
-    } catch {
-      /* ignore */
-    }
-  }, [])
-
-  const resolvedScoringProfileId = useMemo(() => {
-    if (!scoringProfiles.length) return null
-    if (scoringProfileId && scoringProfiles.some((p) => p.id === scoringProfileId)) {
-      return scoringProfileId
-    }
-    const globalDefault = scoringProfiles.find((p) => p.isDefaultForImport)
-    return (globalDefault ?? scoringProfiles[0]).id
-  }, [scoringProfiles, scoringProfileId])
-
-  const activeScoringProfile = useMemo((): ScoringProfile | null => {
-    if (!resolvedScoringProfileId) return null
-    return scoringProfiles.find((p) => p.id === resolvedScoringProfileId) ?? null
-  }, [scoringProfiles, resolvedScoringProfileId])
 
   const scoreByLeadId = useMemo(() => {
     const m = new Map<string, LeadScorePreview>()
@@ -133,6 +110,7 @@ export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
     setScoringProfileId,
     resolvedScoringProfileId,
     activeScoringProfile,
+    profileScoringLive,
     scoreByLeadId,
     schoolTvvSignalDefs,
     masterBuckets,

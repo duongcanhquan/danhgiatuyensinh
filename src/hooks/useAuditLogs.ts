@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, limit, onSnapshot, query, where, type Timestamp } from 'firebase/firestore'
+import { collection, limit, onSnapshot, orderBy, query, where, type Timestamp } from 'firebase/firestore'
 import type { AuditLog } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
@@ -10,17 +10,7 @@ export function extractFirestoreIndexUrl(message: string): string | null {
   return m?.[0] ?? null
 }
 
-/** Lấy tối đa bản ghi / lead rồi sort client — tránh composite index (where + orderBy). */
-const AUDIT_FETCH_CAP = 1000
 const AUDIT_DISPLAY_CAP = 120
-
-function tsMs(log: AuditLog): number {
-  try {
-    return log.timestamp.toMillis()
-  } catch {
-    return 0
-  }
-}
 
 function mapAudit(id: string, data: Record<string, unknown>): AuditLog | null {
   try {
@@ -42,9 +32,7 @@ function mapAudit(id: string, data: Record<string, unknown>): AuditLog | null {
 
 /**
  * Real-time audit entries for one lead (newest first).
- * Truy vấn chỉ `where('leadId')` + `limit` — dùng index đơn trường, không cần composite.
- * Sắp xếp theo `timestamp` trên client; nếu một lead có hơn 1000 bản ghi audit,
- * chỉ hiển thị 120 mục mới nhất trong tập đã tải.
+ * Dùng composite index `leadId + timestamp` — chỉ tải 120 bản ghi mới nhất.
  */
 export function useAuditLogs(leadId: string | null) {
   const [entries, setEntries] = useState<AuditLog[]>([])
@@ -79,7 +67,8 @@ export function useAuditLogs(leadId: string | null) {
     const q = query(
       collection(db, FS_COLLECTIONS.auditLogs),
       where('leadId', '==', leadId),
-      limit(AUDIT_FETCH_CAP),
+      orderBy('timestamp', 'desc'),
+      limit(AUDIT_DISPLAY_CAP),
     )
     const unsub = onSnapshot(
       q,
@@ -89,8 +78,7 @@ export function useAuditLogs(leadId: string | null) {
           const row = mapAudit(d.id, d.data() as Record<string, unknown>)
           if (row) next.push(row)
         })
-        next.sort((a, b) => tsMs(b) - tsMs(a))
-        setEntries(next.slice(0, AUDIT_DISPLAY_CAP))
+        setEntries(next)
         setLoading(false)
         setError(null)
         setMissingIndexUrl(null)

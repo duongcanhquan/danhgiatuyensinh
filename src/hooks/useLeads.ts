@@ -120,6 +120,9 @@ export const MAX_FULL_SCOPE_LEADS = 25_000
  */
 export const LEADS_UI_FULL_SCOPE_MAX = 4000
 
+/** Giới hạn đọc fullScope trên màn Phân tích nâng cao (thay vì 25k). */
+export const ANALYTICS_FULL_SCOPE_MAX = 5000
+
 /** Kích thước mỗi lần đọc Firestore trong `fullScope`. */
 export const FULL_SCOPE_CHUNK_SIZE = 400
 
@@ -801,6 +804,30 @@ export function useLeads(opts?: UseLeadsOptions) {
     setManualRefreshKey((k) => k + 1)
   }, [])
 
+  const fetchScopeSourceOptions = useCallback(async () => {
+    const firestore = getFirestoreDb()
+    if (!firestore || !profile) return
+    try {
+      const distFilters = serverFiltersOmitField(serverFilters, 'source')
+      const qy = query(
+        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters),
+        orderBy('updatedAt', 'desc'),
+        limit(SOURCE_CATALOG_BATCH),
+      )
+      const snap = await getDocs(qy)
+      const rows: Lead[] = []
+      snap.forEach((d) => {
+        const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+        if (row) rows.push(row)
+      })
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels)
+      setScopeSourceOptions(collectDistinctSources(filtered))
+    } catch (e) {
+      console.error(e)
+      setScopeSourceOptions([])
+    }
+  }, [profile, hoDQueryLabels, serverFilters])
+
   const configured = useMemo(() => isFirebaseConfigured(), [])
   const pageEndSnaps = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([])
   const searchBucketRef = useRef<Lead[] | null>(null)
@@ -1208,8 +1235,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeChunkSize,
     maxFullScopeLeads,
     filterKey,
-    serverFilters,
-    directoryLabels,
+    directoryLabelsKey,
     hoDQueryLabels,
     pagedFirestoreDep,
     includeScopeTagCounts,
@@ -1259,6 +1285,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     refetchLeads,
     scopeTagCounts,
     scopeSourceOptions,
+    fetchScopeSourceOptions,
     searchScanTruncated,
     searchHitTotal,
     scopeFetchTruncated,

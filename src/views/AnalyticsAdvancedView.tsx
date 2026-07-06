@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { MAX_FULL_SCOPE_LEADS, useLeads } from '../hooks/useLeads'
+import { ANALYTICS_FULL_SCOPE_MAX, useLeads } from '../hooks/useLeads'
 import { useAuth } from '../hooks/useAuth'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { Lead, LeadPipelineStatus, PriorityTag } from '../types'
@@ -67,7 +67,7 @@ export function AnalyticsAdvancedView() {
     scopeFetchTruncated,
   } = useLeads({
     dataMode: 'fullScope',
-    maxFullScopeLeads: MAX_FULL_SCOPE_LEADS,
+    maxFullScopeLeads: ANALYTICS_FULL_SCOPE_MAX,
     includeScopeTagCounts: true,
   })
   const { activeScoringProfile, scoreByLeadId } = useLeadScoring(leads)
@@ -161,7 +161,7 @@ export function AnalyticsAdvancedView() {
 
       {scopeFetchTruncated ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm backdrop-blur-xl">
-          Chỉ tải được tối đa <strong>{MAX_FULL_SCOPE_LEADS.toLocaleString('vi-VN')}</strong> hồ sơ — biểu đồ có thể
+          Chỉ tải được tối đa <strong>{ANALYTICS_FULL_SCOPE_MAX.toLocaleString('vi-VN')}</strong> hồ sơ gần nhất — biểu đồ có thể
           thiếu phần còn lại trên server.
         </div>
       ) : null}

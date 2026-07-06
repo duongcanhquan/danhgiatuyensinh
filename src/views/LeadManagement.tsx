@@ -100,6 +100,7 @@ import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
+import { useScoringProfileSelection } from '../hooks/useScoringProfiles'
 import { commitAuditLog } from '../services/auditLog'
 import {
   diffCounselorStatus,
@@ -245,6 +246,7 @@ export function LeadManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
+  const [sourceCatalogRequested, setSourceCatalogRequested] = useState(false)
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
   /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
   const [assigneeFilter, setAssigneeFilter] = useState<string>('')
@@ -254,10 +256,11 @@ export function LeadManagement() {
   const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
 
   /**
-   * Lọc nhãn theo profile (hoặc admin nhãn) trên client — tránh `where(priorityTag)` + index composite;
-   * cần quét gần đây (fullScope).
+   * Chỉ quét fullScope khi lọc nhãn theo profile chấm điểm đang bật.
+   * Nhãn đã lưu trên Firestore → lọc server (`priorityTag`) + phân trang.
    */
-  const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL'
+  const { profileScoringLive } = useScoringProfileSelection()
+  const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -321,6 +324,7 @@ export function LeadManagement() {
     scopeFetchTruncated,
     scopeTagCounts,
     scopeSourceOptions,
+    fetchScopeSourceOptions,
     applyLocalLeadPatch,
     refetchLeads,
   } = useLeads({
@@ -330,7 +334,7 @@ export function LeadManagement() {
     dataMode: tagClientEval ? 'fullScope' : 'paged',
     maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
-    includeScopeSourceOptions: true,
+    includeScopeSourceOptions: sourceCatalogRequested,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -371,9 +375,6 @@ export function LeadManagement() {
   } = useLeadScoring(leads, { masterBuckets: scoringMasterBuckets, infoScoreRuntime })
 
   const profileScoringActive = Boolean(activeScoringProfile)
-  const profileScoringLive = Boolean(
-    activeScoringProfile && profileHasActiveRules(activeScoringProfile),
-  )
 
   const effectiveLeadTag = useCallback(
     (l: Lead) => {
@@ -1639,6 +1640,10 @@ export function LeadManagement() {
             label="Nguồn"
             title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
             value={sourceFilter}
+            onFocus={() => {
+              if (!sourceCatalogRequested) setSourceCatalogRequested(true)
+              else void fetchScopeSourceOptions()
+            }}
             onChange={(v) => {
               setSourceFilter(v)
               setPage(1)
@@ -2627,6 +2632,7 @@ function FilterSelect({
   title,
   value,
   onChange,
+  onFocus,
   options,
   compact,
 }: {
@@ -2635,6 +2641,7 @@ function FilterSelect({
   title?: string
   value: string
   onChange: (v: string) => void
+  onFocus?: () => void
   options: { v: string; t: string }[]
   compact?: boolean
 }) {
@@ -2651,6 +2658,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={onFocus}
         className={
           compact
             ? 'mt-0.5 max-w-[7.25rem] min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
