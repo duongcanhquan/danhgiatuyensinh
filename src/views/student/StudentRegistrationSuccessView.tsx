@@ -1,4 +1,5 @@
 import { Link, useLocation, Navigate } from 'react-router-dom'
+import { AuthSessionExitBar } from '../../components/AuthSessionControls'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { CheckCircle2, Copy, GraduationCap } from 'lucide-react'
 import { useState } from 'react'
@@ -32,13 +33,16 @@ export function StudentRegistrationSuccessView() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-slate-50">
       <header className="border-b border-emerald-100/80 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
+        <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6">
+          <AuthSessionExitBar tone="onLight" />
+          <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
             <GraduationCap className="h-6 w-6" aria-hidden />
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
             <h1 className="text-lg font-extrabold text-slate-900">Đăng ký thành công</h1>
+          </div>
           </div>
         </div>
       </header>

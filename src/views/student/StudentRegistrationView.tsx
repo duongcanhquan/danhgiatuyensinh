@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
+import { AuthSessionExitBar } from '../../components/AuthSessionControls'
 import { GraduationCap, Loader2, Send } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 import { isFirebaseConfigured } from '../../services/firebase'
@@ -102,15 +103,18 @@ export function StudentRegistrationView() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-slate-50">
       <header className="border-b border-emerald-100/80 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-            <GraduationCap className="h-6 w-6" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
-            <h1 className="truncate text-lg font-extrabold text-slate-900 sm:text-xl">
-              {meta?.portalTitle ?? 'Đăng ký tuyển sinh'}
-            </h1>
+        <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6">
+          <AuthSessionExitBar tone="onLight" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+              <GraduationCap className="h-6 w-6" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
+              <h1 className="truncate text-lg font-extrabold text-slate-900 sm:text-xl">
+                {meta?.portalTitle ?? 'Đăng ký tuyển sinh'}
+              </h1>
+            </div>
           </div>
         </div>
       </header>
@@ -304,6 +308,12 @@ export function StudentRegistrationView() {
           </div>
         )}
 
+        <p className="mt-8 text-center text-xs text-slate-500">
+          Nhân viên tuyển sinh?{' '}
+          <Link to="/login" className="font-semibold text-emerald-700 hover:underline">
+            Đăng nhập hệ thống quản trị
+          </Link>
+        </p>
       </main>
       <StaffLoginCornerGate />
     </div>

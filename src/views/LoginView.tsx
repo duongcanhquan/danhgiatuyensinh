@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Wallet } from 'lucide-react'
+import { LoggedInPortalGate, AuthSessionExitBar } from '../components/AuthSessionControls'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
@@ -125,7 +126,14 @@ export function LoginView() {
     firebaseUser &&
     (status === 'authenticated' || status === 'authenticating')
   ) {
-    return <Navigate to={from} replace />
+    return (
+      <LoggedInPortalGate
+        continueTo={from}
+        portalTitle="VietMy Admissions"
+        continueLabel="Vào CRM tuyển sinh"
+        tone="onDark"
+      />
+    )
   }
 
   const submit = async (e: FormEvent) => {
@@ -160,6 +168,9 @@ export function LoginView() {
       />
 
       <div className="relative z-10 flex min-h-[100dvh] w-full max-w-7xl flex-col items-center justify-start px-4 pb-8 pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:px-8 md:pb-10 md:pt-6">
+        <div className="mb-4 w-full max-w-sm">
+          <AuthSessionExitBar tone="onDark" />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}

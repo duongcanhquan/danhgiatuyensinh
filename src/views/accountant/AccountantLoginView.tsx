@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, Lock, ShieldCheck, Wallet } from 'lucide-react'
+import { AuthSessionExitBar, LoggedInPortalGate } from '../../components/AuthSessionControls'
 import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../../services/firebase'
 import { mapFirebaseLoginError } from '../../utils/firebaseLoginErrors'
 
 export function AccountantLoginView() {
-  const { status, firebaseUser, profile, signInWithEmail, can } = useAuth()
+  const { status, firebaseUser, profile, signInWithEmail, can, signOut } = useAuth()
   const location = useLocation()
   const rawFrom = (location.state as { from?: string } | null)?.from
   const from =
@@ -41,7 +42,14 @@ export function AccountantLoginView() {
   }
 
   if (firebaseUser && status === 'authenticated' && profile && canAccessAccountantPortal(can, profile)) {
-    return <Navigate to={from} replace />
+    return (
+      <LoggedInPortalGate
+        continueTo={from}
+        portalTitle="Cổng kế toán"
+        continueLabel="Vào cổng kế toán"
+        tone="emerald"
+      />
+    )
   }
 
   const loggedInWithoutPortalAccess =
@@ -79,6 +87,7 @@ export function AccountantLoginView() {
         </div>
 
         <div className="space-y-4 px-6 py-6">
+          <AuthSessionExitBar tone="emerald" />
           <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden />
             <p>
@@ -123,12 +132,21 @@ export function AccountantLoginView() {
               </div>
             </label>
             {loggedInWithoutPortalAccess ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="alert">
-                Tài khoản này không có quyền cổng kế toán.{' '}
-                <Link to="/login" className="font-semibold underline">
-                  Đăng nhập CRM
-                </Link>{' '}
-                nếu bạn là TVV tuyển sinh.
+              <div className="space-y-2">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="alert">
+                  Tài khoản này không có quyền cổng kế toán.{' '}
+                  <Link to="/login" className="font-semibold underline">
+                    Đăng nhập CRM
+                  </Link>{' '}
+                  nếu bạn là TVV tuyển sinh.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Đăng xuất để đổi tài khoản
+                </button>
               </div>
             ) : null}
             {error ? (

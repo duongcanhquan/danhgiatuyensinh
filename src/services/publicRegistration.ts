@@ -1,4 +1,5 @@
 import { getFunctions, httpsCallable } from 'firebase/functions'
+import { callableErrorMessage } from '../utils/callableErrorMessage'
 import { getFirebaseApp } from './firebase'
 
 export type PublicRegistrationMeta = {
@@ -46,8 +47,12 @@ export async function fetchPublicRegistrationMeta(): Promise<PublicRegistrationM
     functionsRegion(),
     'getPublicRegistrationMeta',
   )
-  const res = await fn({})
-  return res.data
+  try {
+    const res = await fn({})
+    return res.data
+  } catch (e) {
+    throw new Error(callableErrorMessage(e, 'Không tải được cấu hình cổng đăng ký.'))
+  }
 }
 
 export async function submitPublicRegistration(
@@ -57,6 +62,10 @@ export async function submitPublicRegistration(
     functionsRegion(),
     'submitPublicLead',
   )
-  const res = await fn(input)
-  return res.data
+  try {
+    const res = await fn(input)
+    return res.data
+  } catch (e) {
+    throw new Error(callableErrorMessage(e, 'Không gửi được đăng ký — thử lại sau.'))
+  }
 }

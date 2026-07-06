@@ -43,6 +43,7 @@ import {
 import { omicallClick2Call as postOmicallClick2Call } from './omicallClick2CallApi.js'
 import { registerOmicallCallWebhook } from './omicallWebhookApi.js'
 import { registerPublicRegistrationFunctions } from './publicRegistration.js'
+import { isAuthUserNotFound, toStaffAuthHttpsError } from './authAdminErrors.js'
 import {
   normalizePhoneLocal,
   normalizePhoneIntl,
@@ -1784,7 +1785,7 @@ async function loadStaffUser(uid: string): Promise<StaffUserLite | null> {
   const d = snap.data() ?? {}
   return {
     id: uid,
-    role: str(d.role) || 'counselor',
+    role: normalizeStaffRole(str(d.role) || 'counselor'),
     email: str(d.email),
     isActive: d.isActive !== false,
     managedCounselorIds: Array.isArray(d.managedCounselorIds)
@@ -1793,8 +1794,15 @@ async function loadStaffUser(uid: string): Promise<StaffUserLite | null> {
   }
 }
 
+function normalizeStaffRole(role: string): string {
+  if (!role) return 'counselor'
+  if (role === 'head_of_profession' || role === 'head_of_department') return 'team_lead'
+  return role
+}
+
 function isAdminLikeRole(role: string): boolean {
-  return role === 'admin' || role === 'super_admin'
+  const r = normalizeStaffRole(role)
+  return r === 'admin' || r === 'super_admin'
 }
 
 function counselorInTeamRoster(counselorId: string, lead: StaffUserLite): boolean {
@@ -1813,7 +1821,7 @@ async function assertStaffManagementPermission(
   if (callerId === target.id) {
     throw new HttpsError('failed-precondition', 'Không thao tác trên chính tài khoản đang đăng nhập.')
   }
-  if (target.role === 'super_admin' && caller.role !== 'super_admin') {
+  if (normalizeStaffRole(target.role) === 'super_admin' && normalizeStaffRole(caller.role) !== 'super_admin') {
     throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới quản lý tài khoản Siêu quản trị khác.')
   }
 
@@ -1863,6 +1871,62 @@ async function removeCounselorFromTeamRosters(counselorId: string): Promise<void
   if (writes > 0) await batch.commit()
 }
 
+async function setStaffAuthPassword(
+  auth: ReturnType<typeof getAuth>,
+  targetUserId: string,
+  target: StaffUserLite,
+  newPassword: string,
+): Promise<void> {
+  try {
+    await auth.updateUser(targetUserId, { password: newPassword })
+    return
+  } catch (e) {
+    if (!isAuthUserNotFound(e)) throw toStaffAuthHttpsError(e, 'Không đặt được mật khẩu.')
+  }
+
+  const email = target.email.trim().toLowerCase()
+  if (!email) {
+    throw new HttpsError('failed-precondition', 'Hồ sơ thiếu email — không tạo được tài khoản Auth.')
+  }
+  try {
+    await auth.createUser({
+      uid: targetUserId,
+      email,
+      password: newPassword,
+      emailVerified: true,
+      disabled: !target.isActive,
+    })
+  } catch (e) {
+    throw toStaffAuthHttpsError(e, 'Không tạo được tài khoản Auth cho nhân viên.')
+  }
+}
+
+async function syncStaffAuthDisabled(
+  auth: ReturnType<typeof getAuth>,
+  targetUserId: string,
+  disabled: boolean,
+): Promise<void> {
+  try {
+    await auth.updateUser(targetUserId, { disabled })
+  } catch (e) {
+    if (isAuthUserNotFound(e)) return
+    throw toStaffAuthHttpsError(e, disabled ? 'Không khóa được đăng nhập Auth.' : 'Không mở lại được đăng nhập Auth.')
+  }
+}
+
+async function deleteStaffAuthUser(auth: ReturnType<typeof getAuth>, targetUserId: string): Promise<void> {
+  try {
+    await auth.deleteUser(targetUserId)
+  } catch (e) {
+    if (isAuthUserNotFound(e)) return
+    try {
+      await auth.updateUser(targetUserId, { disabled: true })
+    } catch {
+      throw toStaffAuthHttpsError(e, 'Không xóa được tài khoản Auth.')
+    }
+  }
+}
+
 type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete' | 'set_password'
 
 /** Khóa / mở / xóa / đặt mật khẩu tài khoản nhân sự (Firebase Auth + Firestore). */
@@ -1895,18 +1959,10 @@ export const adminStaffAccountAction = onCall(async (request) => {
     if (newPassword.length < 6) {
       throw new HttpsError('invalid-argument', 'Mật khẩu cần ít nhất 6 ký tự.')
     }
-    if (target.role === 'super_admin' && caller.role !== 'super_admin') {
+    if (normalizeStaffRole(target.role) === 'super_admin' && normalizeStaffRole(caller.role) !== 'super_admin') {
       throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới đổi mật khẩu Siêu quản trị khác.')
     }
-    try {
-      await auth.updateUser(targetUserId, { password: newPassword })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('user-not-found')) {
-        throw new HttpsError('not-found', 'Firebase Auth không có user này.')
-      }
-      throw new HttpsError('internal', msg)
-    }
+    await setStaffAuthPassword(auth, targetUserId, target, newPassword)
     return { ok: true, action, targetUserId }
   }
 
@@ -1915,12 +1971,7 @@ export const adminStaffAccountAction = onCall(async (request) => {
       isActive: false,
       updatedAt: Timestamp.now(),
     })
-    try {
-      await auth.updateUser(targetUserId, { disabled: true })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (!msg.includes('user-not-found')) throw new HttpsError('internal', msg)
-    }
+    await syncStaffAuthDisabled(auth, targetUserId, true)
     return { ok: true, action, targetUserId }
   }
 
@@ -1929,12 +1980,7 @@ export const adminStaffAccountAction = onCall(async (request) => {
       isActive: true,
       updatedAt: Timestamp.now(),
     })
-    try {
-      await auth.updateUser(targetUserId, { disabled: false })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (!msg.includes('user-not-found')) throw new HttpsError('internal', msg)
-    }
+    await syncStaffAuthDisabled(auth, targetUserId, false)
     return { ok: true, action, targetUserId }
   }
 
@@ -1942,18 +1988,7 @@ export const adminStaffAccountAction = onCall(async (request) => {
     await removeCounselorFromTeamRosters(targetUserId)
   }
   await db.collection(COLLECTIONS.users).doc(targetUserId).delete()
-  try {
-    await auth.deleteUser(targetUserId)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (!msg.includes('user-not-found')) {
-      try {
-        await auth.updateUser(targetUserId, { disabled: true })
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+  await deleteStaffAuthUser(auth, targetUserId)
   return { ok: true, action: 'delete', targetUserId }
 })
 

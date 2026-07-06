@@ -1,4 +1,5 @@
 import { getFunctions, httpsCallable } from 'firebase/functions'
+import { callableErrorMessage } from '../utils/callableErrorMessage'
 import { getFirebaseApp, isFirebaseConfigured } from './firebase'
 
 export type StaffAccountAction = 'disable_login' | 'enable_login' | 'delete' | 'set_password'
@@ -7,13 +8,6 @@ export type AdminStaffAccountResult = {
   ok: boolean
   action: StaffAccountAction
   targetUserId: string
-}
-
-function mapCallableError(err: unknown): Error {
-  if (err && typeof err === 'object' && 'message' in err) {
-    return new Error(String((err as { message: unknown }).message))
-  }
-  return err instanceof Error ? err : new Error('Không thực hiện được thao tác nhân sự.')
 }
 
 export async function adminStaffAccountAction(
@@ -42,6 +36,8 @@ export async function adminStaffAccountAction(
     })
     return res.data
   } catch (e) {
-    throw mapCallableError(e)
+    throw new Error(
+      callableErrorMessage(e, 'Không thực hiện được thao tác nhân sự — thử đăng nhập lại hoặc liên hệ quản trị deploy Functions.'),
+    )
   }
 }

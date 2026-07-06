@@ -1,4 +1,5 @@
 import { getFunctions, httpsCallable } from 'firebase/functions'
+import { callableErrorMessage } from '../utils/callableErrorMessage'
 import { getFirebaseApp, isFirebaseConfigured } from './firebase'
 
 export type TriggerOmicallSyncResult = {
@@ -18,6 +19,10 @@ export async function triggerOmicallHistorySync(lookbackMinutes?: number): Promi
     getFunctions(app, 'asia-southeast1'),
     'triggerOmicallHistorySync',
   )
-  const res = await fn({ lookbackMinutes })
-  return res.data
+  try {
+    const res = await fn({ lookbackMinutes })
+    return res.data
+  } catch (e) {
+    throw new Error(callableErrorMessage(e, 'Không đồng bộ được lịch sử OMICall.'))
+  }
 }

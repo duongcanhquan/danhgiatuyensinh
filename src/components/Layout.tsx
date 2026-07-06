@@ -236,6 +236,17 @@ export function Layout() {
               <User className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
               <span className="truncate">{profile?.displayName?.split(' ').pop() ?? '—'}</span>
             </div>
+            {showSignOut ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 lg:hidden"
+                aria-label="Đăng xuất"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">Thoát</span>
+              </button>
+            ) : null}
           </header>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto bg-[var(--color-background)]">
