@@ -4,9 +4,9 @@ import {
   FieldValue,
   Timestamp,
   getFirestore,
-  type DocumentData,
+  type DocumentReference,
+  type DocumentSnapshot,
   type Firestore,
-  type QuerySnapshot,
 } from 'firebase-admin/firestore'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -44,6 +44,15 @@ import { omicallClick2Call as postOmicallClick2Call } from './omicallClick2CallA
 import { registerOmicallCallWebhook } from './omicallWebhookApi.js'
 import { registerPublicRegistrationFunctions } from './publicRegistration.js'
 import { isAuthUserNotFound, toStaffAuthHttpsError } from './authAdminErrors.js'
+import {
+  getAllDocumentsChunked,
+  loadTeamLeadMap,
+  resolveCounselorUidForOmicall,
+} from './firestoreReads.js'
+import {
+  registerBackfillCounselorLoadsCallable,
+  registerCounselorLoadOnLeadWrite,
+} from './counselorLoadSync.js'
 import {
   normalizePhoneLocal,
   normalizePhoneIntl,
@@ -112,14 +121,6 @@ type NormalizedOmicallCall = {
   isAutoCall?: boolean
   evaluationScore?: number
   raw: Record<string, unknown>
-}
-
-type UserProfileLite = {
-  uid: string
-  role: string
-  email?: string
-  omicallSipUser?: string
-  omicallAgentId?: string
 }
 
 type LeadMatch = {
@@ -285,39 +286,10 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
   }
 }
 
-function buildTeamLeadMap(users: UserProfileLite[], rawDocs: QuerySnapshot<DocumentData>): Map<string, string> {
-  const out = new Map<string, string>()
-  for (const doc of rawDocs.docs) {
-    const d = doc.data()
-    const role = str(d.role)
-    if (role !== 'team_lead') continue
-    const managed = Array.isArray(d.managedCounselorIds) ? d.managedCounselorIds.map(str).filter(Boolean) : []
-    for (const uid of managed) out.set(uid, doc.id)
-  }
-  for (const u of users) {
-    if (u.role === 'team_lead' && !out.has(u.uid)) out.set(u.uid, u.uid)
-  }
-  return out
-}
-
 async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCall): Promise<LeadMatch> {
-  const usersSnap = await fs.collection(COLLECTIONS.users).get()
-  const users = usersSnap.docs.map((d) => {
-    const data = d.data()
-    return {
-      uid: d.id,
-      role: str(data.role) || 'counselor',
-      email: str(data.email).toLowerCase() || undefined,
-      omicallSipUser: str(data.omicallSipUser) || undefined,
-      omicallAgentId: str(data.omicallAgentId) || undefined,
-    }
-  })
-  const teamLeadMap = buildTeamLeadMap(users, usersSnap)
-  const byUserData =
-    call.userDataCounselorUid ? users.find((u) => u.uid === call.userDataCounselorUid) : undefined
-  const bySip = call.sipUser ? users.find((u) => u.omicallSipUser === call.sipUser) : undefined
-  const byAgent = call.agentId ? users.find((u) => u.omicallAgentId === call.agentId) : undefined
-  const counselorUid = byUserData?.uid || bySip?.uid || byAgent?.uid
+  const teamLeadMap = await loadTeamLeadMap(fs, COLLECTIONS.users)
+  const counselorCache = new Map<string, string | null>()
+  const counselorUid = await resolveCounselorUidForOmicall(fs, COLLECTIONS.users, call, counselorCache)
 
   let leadId: string | undefined = call.userDataLeadId
   if (!leadId) {
@@ -705,17 +677,10 @@ async function updateDailyKpi(
 
 async function updateDailyCrmKpiFromAuditLogs() {
   const since = Timestamp.fromMillis(Date.now() - 60 * 60_000)
-  const snap = await db.collection(COLLECTIONS.auditLogs).where('timestamp', '>=', since).get()
-  const usersSnap = await db.collection(COLLECTIONS.users).get()
-  const users = usersSnap.docs.map((d) => {
-    const u = d.data()
-    return {
-      uid: d.id,
-      role: str(u.role) || 'counselor',
-      omicallSipUser: str(u.omicallSipUser) || undefined,
-    }
-  })
-  const teamLeadMap = buildTeamLeadMap(users, usersSnap)
+  const [snap, teamLeadMap] = await Promise.all([
+    db.collection(COLLECTIONS.auditLogs).where('timestamp', '>=', since).get(),
+    loadTeamLeadMap(db, COLLECTIONS.users),
+  ])
   for (const docSnap of snap.docs) {
     const processedRef = db.collection(COLLECTIONS.kpiActivityEvents).doc(docSnap.id)
     await db.runTransaction(async (tx) => {
@@ -784,19 +749,10 @@ async function updateDailyFinanceKpiFromLeads(kpiCfg: Awaited<ReturnType<typeof 
   const fullNeOk = kpiCfg.finance.fullNeStatus
   const kpiV2 = await loadKpiV2Config(db)
   const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60_000)
-  const [leadSnap, usersSnap] = await Promise.all([
+  const [leadSnap, teamLeadMap] = await Promise.all([
     db.collection(COLLECTIONS.leads).where('updatedAt', '>=', since).get(),
-    db.collection(COLLECTIONS.users).get(),
+    loadTeamLeadMap(db, COLLECTIONS.users),
   ])
-  const users = usersSnap.docs.map((d) => {
-    const u = d.data()
-    return {
-      uid: d.id,
-      role: str(u.role) || 'counselor',
-      omicallSipUser: str(u.omicallSipUser) || undefined,
-    }
-  })
-  const teamLeadMap = buildTeamLeadMap(users, usersSnap)
 
   for (const leadDoc of leadSnap.docs) {
     const lead = leadDoc.data()
@@ -1109,13 +1065,38 @@ async function syncCallAnalyses(baseUrl: string, apiKey: string, transactionIds:
   const batch = db.batch()
   let processed = 0
   const now = Timestamp.now()
-  for (const row of rows) {
-    const compact = compactCallAnalysis(row)
+
+  const compacts = rows
+    .map((row) => compactCallAnalysis(row))
+    .filter((c) => Boolean(c.transactionId))
+
+  const callRefs = compacts.map((c) => db.collection(COLLECTIONS.omicallCalls).doc(c.transactionId))
+  const callSnaps = callRefs.length ? await getAllDocumentsChunked(db, callRefs) : []
+  const callByTxId = new Map(callSnaps.map((s) => [s.id, s]))
+
+  const interactionRefs: DocumentReference[] = []
+  const interactionTxIds: string[] = []
+  for (const compact of compacts) {
+    const callData = callByTxId.get(compact.transactionId)?.data()
+    const leadId = str(callData?.leadId)
+    const interactionId = str(callData?.interactionId)
+    if (!leadId || !interactionId) continue
+    interactionRefs.push(
+      db.collection(COLLECTIONS.leads).doc(leadId).collection(COLLECTIONS.interactions).doc(interactionId),
+    )
+    interactionTxIds.push(compact.transactionId)
+  }
+  const interactionSnaps = interactionRefs.length ? await getAllDocumentsChunked(db, interactionRefs) : []
+  const interactionByTxId = new Map<string, DocumentSnapshot>()
+  interactionSnaps.forEach((snap, i) => {
+    interactionByTxId.set(interactionTxIds[i]!, snap)
+  })
+
+  for (const compact of compacts) {
     if (!compact.transactionId) continue
     const analysisRef = db.collection(COLLECTIONS.omicallCallAnalyses).doc(compact.transactionId)
     const callRef = db.collection(COLLECTIONS.omicallCalls).doc(compact.transactionId)
-    const callSnap = await callRef.get()
-    const callData = callSnap.data()
+    const callData = callByTxId.get(compact.transactionId)?.data()
     const leadId = str(callData?.leadId)
     const interactionId = str(callData?.interactionId)
     const summary = analysisSummaryText(compact)
@@ -1144,13 +1125,13 @@ async function syncCallAnalyses(baseUrl: string, apiKey: string, transactionIds:
       { merge: true },
     )
     if (summary && leadId && interactionId) {
+      const interactionSnap = interactionByTxId.get(compact.transactionId)
+      const currentNote = str(interactionSnap?.data()?.counselorNote)
       const interactionRef = db
         .collection(COLLECTIONS.leads)
         .doc(leadId)
         .collection(COLLECTIONS.interactions)
         .doc(interactionId)
-      const interactionSnap = await interactionRef.get()
-      const currentNote = str(interactionSnap.data()?.counselorNote)
       batch.set(
         interactionRef,
         {
@@ -1995,5 +1976,16 @@ export const adminStaffAccountAction = onCall(async (request) => {
 const publicRegistrationFns = registerPublicRegistrationFunctions(db)
 export const getPublicRegistrationMeta = publicRegistrationFns.getPublicRegistrationMeta
 export const submitPublicLead = publicRegistrationFns.submitPublicLead
+
+export const syncCounselorLoadOnLeadWrite = registerCounselorLoadOnLeadWrite(
+  db,
+  FIRESTORE_DATABASE_ID,
+  COLLECTIONS.leads,
+)
+export const backfillCounselorLoads = registerBackfillCounselorLoadsCallable(
+  db,
+  COLLECTIONS.users,
+  COLLECTIONS.leads,
+)
 
 export { fetchOmicallCallsForClient } from './fetchOmicallCallsForClient.js'

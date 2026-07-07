@@ -66,6 +66,13 @@ const CONFIG = {
     } catch(e) { console.error("Firebase Read Error:", e); }
     return null;
   }
+
+  /** Đọc một hồ sơ — không tải cả node students. */
+  function readStudentById(studentId) {
+    const id = String(studentId || "").trim();
+    if (!id) return null;
+    return readFromFirebase("students/" + encodeURIComponent(id));
+  }
   
   // =======================================================
   // TOOL: ĐỒNG BỘ DỮ LIỆU TỪ SHEET SANG FIREBASE (MANUAL)
@@ -287,27 +294,26 @@ const CONFIG = {
       const emKey = encodeEmail(email);
       const pw = safe(password);
       
-      // 1. Đọc dữ liệu từ Firebase nhánh users
-      const allUsers = readFromFirebase("users");
-      if (!allUsers || !allUsers[emKey]) return { status: "error", message: "Tài khoản không tồn tại trên hệ thống!" };
-      
-      const user = allUsers[emKey];
+      // Chỉ đọc đúng user đang đăng nhập — không tải cả nhánh users.
+      const user = readFromFirebase("users/" + emKey);
+      if (!user) return { status: "error", message: "Tài khoản không tồn tại trên hệ thống!" };
       
       // 2. Kiểm tra mật khẩu
       if (String(user.password) !== pw) return { status: "error", message: "Sai mật khẩu đăng nhập!" };
   
       // 3. Xử lý danh sách team (Tầm nhìn của user)
       let teamMembers = [];
-      if (user.role === "admin") {
-          // Admin thấy tất cả
-          teamMembers = Object.values(allUsers).map(u => u.name).filter(String);
-      } else if (user.role === "teamlead") {
-          // Teamlead thấy mình và lính
-          teamMembers = Object.values(allUsers)
-              .filter(u => u.name === user.name || u.manager === user.name)
-              .map(u => u.name);
+      if (user.role === "admin" || user.role === "teamlead") {
+          const allUsers = readFromFirebase("users");
+          if (!allUsers) return { status: "error", message: "Không đọc được danh sách nhân sự." };
+          if (user.role === "admin") {
+              teamMembers = Object.values(allUsers).map(u => u.name).filter(String);
+          } else {
+              teamMembers = Object.values(allUsers)
+                  .filter(u => u.name === user.name || u.manager === user.name)
+                  .map(u => u.name);
+          }
       } else {
-          // TVV hoặc Marketing chỉ thấy mình (Marketing sẽ bị khóa UI sau)
           teamMembers = [user.name];
       }
   

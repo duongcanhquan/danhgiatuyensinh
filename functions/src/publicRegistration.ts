@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { pickCounselorByLoadInTransaction } from './firestoreReads.js'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 const COUNTERS_DOC_ID = 'systemLeadCodeCounters'
@@ -159,26 +160,9 @@ async function loadCounselors(db: Firestore): Promise<CounselorLite[]> {
 async function pickCounselorByLoad(db: Firestore): Promise<CounselorLite | null> {
   const counselors = (await loadCounselors(db)).filter((c) => c.isActive)
   if (!counselors.length) return null
-
-  const counts = new Map<string, number>()
-  for (const c of counselors) counts.set(c.id, 0)
-
-  const leadsSnap = await db.collection('leads').select('assignedCounselorId').get()
-  leadsSnap.forEach((d) => {
-    const id = str(d.get('assignedCounselorId'))
-    if (id && counts.has(id)) counts.set(id, (counts.get(id) ?? 0) + 1)
-  })
-
-  let best = counselors[0]!
-  let bestScore = counts.get(best.id) ?? 0
-  for (const c of counselors) {
-    const s = counts.get(c.id) ?? 0
-    if (s < bestScore) {
-      best = c
-      bestScore = s
-    }
-  }
-  return best
+  const picked = await pickCounselorByLoadInTransaction(db, counselors)
+  if (!picked) return null
+  return counselors.find((c) => c.id === picked.id) ?? null
 }
 
 function validatePublicLeadInput(input: PublicLeadInput, source1: string): string | null {

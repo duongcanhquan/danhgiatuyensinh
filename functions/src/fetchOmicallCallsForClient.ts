@@ -331,21 +331,20 @@ async function fetchInteractionsFallback(
   cap: number,
   counselorUids: string[],
 ): Promise<OmicallCallWire[]> {
-  if (counselorUids.length > 0) {
-    try {
-      const viaLeads = await fetchInteractionsViaLeads(db, fromTs, toTs, cap, counselorUids)
-      if (viaLeads.length > 0) return viaLeads
-    } catch (e) {
-      console.warn('[fetchOmicallCallsForClient] interactions via leads', e)
-    }
-  }
-
   for (const withProvider of [true, false]) {
     try {
       const rows = await fetchInteractionsCollectionGroup(db, fromTs, toTs, cap, withProvider)
       if (rows.length > 0) return rows
     } catch (e) {
       console.warn('[fetchOmicallCallsForClient] collectionGroup', e)
+    }
+  }
+
+  if (counselorUids.length > 0) {
+    try {
+      return await fetchInteractionsViaLeads(db, fromTs, toTs, cap, counselorUids)
+    } catch (e) {
+      console.warn('[fetchOmicallCallsForClient] interactions via leads', e)
     }
   }
 
