@@ -1,4 +1,4 @@
-import { Timestamp, type Firestore } from 'firebase-admin/firestore'
+import { FieldPath, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { adjustCounselorLoad } from './firestoreReads.js'
@@ -12,10 +12,17 @@ function leadAssignee(data: Record<string, unknown> | undefined): string {
   return str(data.assignedTo) || str(data.assignedCounselorId)
 }
 
+/** Database `warmlist` nằm asia-east1 — trigger phải cùng region (khác callable asia-southeast1). */
+const FIRESTORE_TRIGGER_REGION = process.env.FIRESTORE_TRIGGER_REGION || 'asia-east1'
+
 /** Đồng bộ `stats/counselorLoads` khi gán / đổi / xóa TVV trên hồ sơ. */
 export function registerCounselorLoadOnLeadWrite(db: Firestore, databaseId: string, leadsCollection: string) {
   return onDocumentWritten(
-    { document: `${leadsCollection}/{leadId}`, database: databaseId },
+    {
+      document: `${leadsCollection}/{leadId}`,
+      database: databaseId,
+      region: FIRESTORE_TRIGGER_REGION,
+    },
     async (event) => {
       const before = event.data?.before
       const after = event.data?.after
@@ -44,7 +51,25 @@ export function registerCounselorLoadOnLeadWrite(db: Firestore, databaseId: stri
   )
 }
 
-/** Đếm hồ sơ theo TVV bằng aggregate count — chạy một lần sau deploy (admin). */
+/** Hợp nhất đếm theo assignedCounselorId và assignedTo — tránh bỏ sót hồ sơ legacy. */
+export async function countLeadsAssignedToCounselor(
+  db: Firestore,
+  leadsCollection: string,
+  counselorId: string,
+): Promise<number> {
+  const ids = new Set<string>()
+  for (const field of ['assignedCounselorId', 'assignedTo'] as const) {
+    const snap = await db
+      .collection(leadsCollection)
+      .where(field, '==', counselorId)
+      .select(FieldPath.documentId())
+      .get()
+    for (const d of snap.docs) ids.add(d.id)
+  }
+  return ids.size
+}
+
+/** Đếm hồ sơ theo TVV — chạy một lần sau deploy (admin). */
 export async function backfillCounselorLoads(
   db: Firestore,
   usersCollection: string,
@@ -58,11 +83,7 @@ export async function backfillCounselorLoads(
     const data = doc.data()
     if (data.isActive === false) continue
     const id = doc.id
-    let n = (await db.collection(leadsCollection).where('assignedCounselorId', '==', id).count().get()).data()
-      .count
-    if (n === 0) {
-      n = (await db.collection(leadsCollection).where('assignedTo', '==', id).count().get()).data().count
-    }
+    const n = await countLeadsAssignedToCounselor(db, leadsCollection, id)
     counts[id] = n
     totalAssigned += n
   }

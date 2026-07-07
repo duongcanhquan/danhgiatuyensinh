@@ -272,25 +272,22 @@ async function fetchInteractionsViaLeads(
   for (const counselorUid of targets) {
     if (merged.size >= cap) break
     try {
-      let leadsSnap = await db
-        .collection(COLLECTIONS.leads)
-        .where('assignedCounselorId', '==', counselorUid)
-        .limit(80)
-        .get()
-      if (leadsSnap.empty) {
-        leadsSnap = await db
+      const leadIds = new Set<string>()
+      for (const field of ['assignedCounselorId', 'assignedTo'] as const) {
+        const leadsSnap = await db
           .collection(COLLECTIONS.leads)
-          .where('assignedTo', '==', counselorUid)
+          .where(field, '==', counselorUid)
           .limit(80)
           .get()
+        for (const d of leadsSnap.docs) leadIds.add(d.id)
       }
-      for (const leadDoc of leadsSnap.docs) {
+      for (const leadId of leadIds) {
         if (merged.size >= cap) break
         try {
-          const batch = await fetchInteractionsForLead(db, leadDoc.id, fromTs, toTs, 30)
+          const batch = await fetchInteractionsForLead(db, leadId, fromTs, toTs, 30)
           for (const row of batch) merged.set(row.id, row)
         } catch (e) {
-          console.warn('[fetchOmicallCallsForClient] lead interactions', leadDoc.id, e)
+          console.warn('[fetchOmicallCallsForClient] lead interactions', leadId, e)
         }
       }
     } catch (e) {

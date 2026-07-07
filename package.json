@@ -19,7 +19,7 @@
     "seed:script-snippets": "node scripts/seed-script-snippets.mjs",
     "migrate:strip-import-description": "node scripts/strip-lead-import-description.mjs",
     "functions:build": "npm --prefix functions run build",
-    "deploy:functions": "firebase deploy --only functions",
+    "deploy:functions": "firebase deploy --only functions --project tvts-8f713",
     "deploy:omicall": "firebase deploy --only functions:omicallCallWebhook,functions:omicallCallCenterProbe,functions:omicallSyncInternalPhones,functions:omicallResolveCallContext,functions:omicallClick2Call,functions:omicallRegisterWebhook,functions:syncOmicallCallHistory",
     "deploy:firestore-indexes": "npx firebase-tools deploy --only firestore:indexes --project tvts-8f713",
     "deploy:fetch-calls": "npx firebase-tools deploy --only functions:fetchOmicallCallsForClient --project tvts-8f713",
