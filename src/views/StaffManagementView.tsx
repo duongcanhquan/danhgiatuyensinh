@@ -345,7 +345,9 @@ export function StaffManagementView({
         !isSuperAdminRole(editRole) &&
         editRole !== 'accountant'
           ? { extraPermissions: editExtraPerms, deniedPermissions: editDeniedPerms }
-          : {}),
+          : canStaffAll && (isAdminLikeRole(editRole) || editRole === 'accountant')
+            ? { extraPermissions: [], deniedPermissions: [] }
+            : {}),
         ...(canOmicallConfig
           ? {
               omicallSipUser: editOmicallUser,

@@ -30,7 +30,7 @@ import type {
   VietMyUserProfile,
 } from '../types'
 import { FS_COLLECTIONS } from '../types'
-import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
+import { isAdminLikeRole, isFieldStaffRole, isSuperAdminRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { useOrg } from './useOrg'
@@ -488,8 +488,16 @@ export type UseLeadsOptions = {
   includeScopeSourceOptions?: boolean
 }
 
-function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryFilterConstraint | null {
-  if (isAdminLikeRole(profile.role)) return null
+function rbacConstraint(
+  profile: VietMyUserProfile,
+  hoDLabels: string[],
+  canReadGlobal: boolean,
+): QueryFilterConstraint | null {
+  if (isSuperAdminRole(profile.role)) return null
+  if (isAdminLikeRole(profile.role)) {
+    if (canReadGlobal) return null
+    return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
+  }
 
   if (isFieldStaffRole(profile.role)) {
     return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
@@ -509,7 +517,11 @@ function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryF
   return null
 }
 
-function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMyUserProfile): QueryFilterConstraint[] {
+function filterConstraints(
+  f: LeadListServerFilters | undefined,
+  profile: VietMyUserProfile,
+  canReadGlobal: boolean,
+): QueryFilterConstraint[] {
   if (!f) return []
   const c: QueryFilterConstraint[] = []
   if (f.pipelineStatus) {
@@ -546,12 +558,15 @@ function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMy
     if (p.length === 1) c.push(where('province', '==', p[0]))
     else if (p.length > 1) c.push(where('province', 'in', p))
   }
-  if (f.assignedCounselorIn?.length && isAdminLikeRole(profile.role)) {
-    const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
-    if (ids.length === 1) {
-      c.push(or(where('assignedTo', '==', ids[0]), where('assignedCounselorId', '==', ids[0])))
-    } else if (ids.length > 1) {
-      c.push(or(where('assignedTo', 'in', ids), where('assignedCounselorId', 'in', ids)))
+  if (f.assignedCounselorIn?.length) {
+    const canFilterByAssignee = isSuperAdminRole(profile.role) || canReadGlobal
+    if (canFilterByAssignee) {
+      const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
+      if (ids.length === 1) {
+        c.push(or(where('assignedTo', '==', ids[0]), where('assignedCounselorId', '==', ids[0])))
+      } else if (ids.length > 1) {
+        c.push(or(where('assignedTo', 'in', ids), where('assignedCounselorId', 'in', ids)))
+      }
     }
   }
   const fromMs = f.adminDateFromMs
@@ -582,12 +597,13 @@ function buildListDataQuery(
   firestore: Firestore,
   profile: VietMyUserProfile,
   hoDLabels: string[],
-  filters?: LeadListServerFilters,
-  orgId?: string,
+  filters: LeadListServerFilters | undefined,
+  orgId: string | undefined,
+  canReadGlobal: boolean,
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const rbac = rbacConstraint(profile, hoDLabels)
-  const extras = filterConstraints(filters, profile)
+  const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
+  const extras = filterConstraints(filters, profile, canReadGlobal)
   const parts: QueryFilterConstraint[] = []
   if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
@@ -601,11 +617,12 @@ function buildPriorityTagCountQuery(
   hoDLabels: string[],
   filters: LeadListServerFilters | undefined,
   tag: PriorityTag,
-  orgId?: string,
+  orgId: string | undefined,
+  canReadGlobal: boolean,
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const rbac = rbacConstraint(profile, hoDLabels)
-  const extras = [...filterConstraints(filters, profile), where('priorityTag', '==', tag)]
+  const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
+  const extras = [...filterConstraints(filters, profile, canReadGlobal), where('priorityTag', '==', tag)]
   const parts: QueryFilterConstraint[] = []
   if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
@@ -613,7 +630,12 @@ function buildPriorityTagCountQuery(
   return composeQuery(col, parts)
 }
 
-function applyRoleClientFilter(rows: Lead[], profile: VietMyUserProfile, hoDQueryLabels: string[]): Lead[] {
+function applyRoleClientFilter(
+  rows: Lead[],
+  profile: VietMyUserProfile,
+  hoDQueryLabels: string[],
+  canReadGlobal: boolean,
+): Lead[] {
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
   if (isTeamLeadRole(profile.role)) {
     const team = new Set(profile.managedCounselorIds ?? [])
@@ -629,6 +651,13 @@ function applyRoleClientFilter(rows: Lead[], profile: VietMyUserProfile, hoDQuer
     return []
   }
   if (isFieldStaffRole(profile.role) && profile.id) {
+    return rows.filter((l) => {
+      const u = l.assignedTo ?? l.assignedCounselorId
+      return u === profile.id
+    })
+  }
+  // Admin không còn module hồ sơ toàn trường → chỉ hồ sơ gán cho mình
+  if (isAdminLikeRole(profile.role) && !isSuperAdminRole(profile.role) && !canReadGlobal && profile.id) {
     return rows.filter((l) => {
       const u = l.assignedTo ?? l.assignedCounselorId
       return u === profile.id
@@ -706,11 +735,12 @@ export async function fetchLeadsInScopeForRescore(
   profile: VietMyUserProfile,
   hoDQueryLabels: string[],
   filters: LeadListServerFilters | undefined,
-  opts?: { maxLeads?: number; chunkSize?: number; orgId?: string },
+  opts?: { maxLeads?: number; chunkSize?: number; orgId?: string; canReadGlobal?: boolean },
 ): Promise<{ leads: Lead[]; truncated: boolean }> {
   const maxLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxLeads ?? LEADS_UI_FULL_SCOPE_MAX))
   const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
-  const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, filters, opts?.orgId)
+  const canReadGlobal = Boolean(opts?.canReadGlobal)
+  const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, filters, opts?.orgId, canReadGlobal)
   let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
   const acc: Lead[] = []
   let hitCap = false
@@ -736,13 +766,14 @@ export async function fetchLeadsInScopeForRescore(
     }
   }
 
-  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels)
+  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal)
   leads.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
   return { leads, truncated: hitCap }
 }
 
 export function useLeads(opts?: UseLeadsOptions) {
-  const { profile } = useAuth()
+  const { profile, can } = useAuth()
+  const canReadGlobal = Boolean(profile && (can('leads:read:global') || profile.role === 'super_admin'))
   const { effectiveOrgId } = useOrg()
   const { byKind } = useMasterData()
   const serverFilters = opts?.serverFilters
@@ -773,7 +804,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       .join('|')
   }, [directoryLabels])
   const filterKey = useMemo(() => {
-    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}`
+    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}|g:${canReadGlobal ? 1 : 0}`
     if (dataMode === 'fullScope') return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}`
     return b
   }, [
@@ -785,6 +816,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     directoryLabelsKey,
     fullScopeChunkSize,
     maxFullScopeLeads,
+    canReadGlobal,
   ])
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -818,7 +850,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     try {
       const distFilters = serverFiltersOmitField(serverFilters, 'source')
       const qy = query(
-        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId),
+        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId, canReadGlobal),
         orderBy('updatedAt', 'desc'),
         limit(SOURCE_CATALOG_BATCH),
       )
@@ -828,13 +860,13 @@ export function useLeads(opts?: UseLeadsOptions) {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) rows.push(row)
       })
-      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels)
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal)
       setScopeSourceOptions(collectDistinctSources(filtered))
     } catch (e) {
       console.error(e)
       setScopeSourceOptions([])
     }
-  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId])
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
 
   const configured = useMemo(() => isFirebaseConfigured(), [])
   const pageEndSnaps = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([])
@@ -905,7 +937,7 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const fetchTotalOnly = async (): Promise<number | null> => {
       try {
-        const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
+        const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
         const total = (await getCountFromServer(base)).data().count
         if (cancelled) return null
         setTotalLeadCount(total)
@@ -928,7 +960,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         const distFilters = serverFiltersForTagDistribution(serverFilters)
         const tagEntries = await Promise.all(
           TAG_KEYS.map(async (t) => {
-            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t, effectiveOrgId)
+            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t, effectiveOrgId, canReadGlobal)
             const n = (await getCountFromServer(qTag)).data().count
             return [t, n] as const
           }),
@@ -950,7 +982,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       try {
         const distFilters = serverFiltersOmitField(serverFilters, 'source')
         const qy = query(
-          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId),
+          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId, canReadGlobal),
           orderBy('updatedAt', 'desc'),
           limit(SOURCE_CATALOG_BATCH),
         )
@@ -961,7 +993,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           const row = mapDoc(d.id, d.data() as Record<string, unknown>)
           if (row) rows.push(row)
         })
-        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels)
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal)
         setScopeSourceOptions(collectDistinctSources(filtered))
       } catch (e) {
         console.error(e)
@@ -980,7 +1012,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadFirestorePage = async (page: number, total: number | null) => {
-      const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
+      const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       const snaps = pageEndSnaps.current
       const pg = Math.max(1, Math.floor(page))
 
@@ -1000,7 +1032,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) mapped.push(row)
         })
         mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels))
+        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal))
         snaps[pg - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
       }
 
@@ -1026,7 +1058,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) pageRows.push(row)
         })
         pageRows.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels))
+        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels, canReadGlobal))
       } else {
         for (let p = 1; p < pg; p++) {
           if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
@@ -1049,7 +1081,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const rebuildSearchBucket = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
+      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       const qy = query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN))
       const snap = await getDocs(qy)
       if (cancelled) return
@@ -1058,7 +1090,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) mapped.push(row)
       })
-      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels)
+      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal)
       setSearchScanTruncated(snap.docs.length >= MAX_LEAD_SEARCH_SCAN)
       if (searchText) {
         mapped = mapped.filter((l) => leadMatchesClientSearch(l, searchText, directoryLabels))
@@ -1085,7 +1117,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadBatch = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
+      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       const qy = query(base, orderBy('updatedAt', 'desc'), limit(batchLimit))
       const snap = await getDocs(qy)
       if (cancelled) return
@@ -1095,12 +1127,12 @@ export function useLeads(opts?: UseLeadsOptions) {
         if (row) mapped.push(row)
       })
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels))
+      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal))
       setTotalPages(1)
     }
 
     const loadFullScope = async () => {
-      const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
+      const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
       const acc: Lead[] = []
       let hitCap = false
@@ -1126,7 +1158,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         }
       }
       if (cancelled) return
-      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels)
+      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal)
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       setScopeFetchTruncated(hitCap)
       setSearchScanTruncated(false)
@@ -1250,13 +1282,14 @@ export function useLeads(opts?: UseLeadsOptions) {
     includeScopeSourceOptions,
     manualRefreshKey,
     effectiveOrgId,
+    canReadGlobal,
   ])
 
   const refreshTotalLeadCount = useCallback(async () => {
     const firestore = getFirestoreDb()
     if (!firestore || !profile) return
     try {
-      const cq = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
+      const cq = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       const agg = await getCountFromServer(cq)
       setTotalLeadCount(agg.data().count)
       setTotalLeadCountError(null)
@@ -1266,7 +1299,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       setTotalLeadCount(null)
       setTotalLeadCountError(e instanceof Error ? e.message : 'Không đếm được tổng hồ sơ')
     }
-  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId])
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
 
   const applyLocalLeadPatch = useCallback((id: string, patch: Partial<Lead>) => {
     setLeads((rows) => {

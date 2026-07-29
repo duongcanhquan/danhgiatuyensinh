@@ -13,7 +13,7 @@ import {
 } from '../utils/manualLeadCreate'
 import { commitAuditLog } from '../services/auditLog'
 import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
-import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
+import { isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import type { MasterDataBuckets } from '../utils/scoring'
 import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
@@ -27,6 +27,7 @@ import { getDoc, doc } from 'firebase/firestore'
 import { FS_COLLECTIONS } from '../types'
 import { mapDoc } from '../hooks/useLeads'
 import { useOrg } from '../hooks/useOrg'
+import { useAuth } from '../hooks/useAuth'
 
 export function CreateLeadModal({
   open,
@@ -62,12 +63,13 @@ export function CreateLeadModal({
   const bodyScrollRef = useRef<HTMLDivElement>(null)
   const { active: leadSources } = useLeadSources()
   const { items: scholarships } = useScholarships()
+  const { can } = useAuth()
   const { catalogs, onEnsureCatalogEntry } = useLeadProfileCatalogs()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { effectiveOrgId } = useOrg()
 
-  const elevated = isAdminLikeRole(profile?.role)
+  const elevated = can('leads:read:global')
   const teamLead = isTeamLeadRole(profile?.role)
 
   const pickList = useMemo(() => {

@@ -13,10 +13,8 @@ import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from 'firebase/
 import type { AuthState, Permission, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
-import {
-  loadRoleCapabilities,
-  type OrgRoleCapabilities,
-} from '../utils/roleCapabilitiesConfig'
+import { type OrgRoleCapabilities } from '../utils/roleCapabilitiesConfig'
+import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
 import { normalizeUserRole } from '../auth/roleUtils'
 import { isUserInManagerTeamScope } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
@@ -296,13 +294,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const db = getFirestoreDb()
     if (!db) return
-    let cancelled = false
-    void loadRoleCapabilities(db, orgId).then((caps) => {
-      if (!cancelled) setOrgCaps(caps)
-    })
-    return () => {
-      cancelled = true
-    }
+    return subscribeRoleCapabilities(db, orgId, setOrgCaps)
   }, [profile?.orgId, profile?.role])
 
   const permissions = useMemo(() => resolveEffectivePermissions(profile, orgCaps), [profile, orgCaps])

@@ -149,10 +149,6 @@ const EVALUATION_TAGS = [
 const ML_WIN_COLUMN_HINT =
   'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
 
-function isElevatedForAdminFilters(role: string | undefined): boolean {
-  return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
-}
-
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
   const uid = l.assignedTo ?? l.assignedCounselorId
   if (!uid) return '—'
@@ -236,7 +232,7 @@ export function LeadManagement() {
   >('none')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  const showAdminGlobalFilters = isElevatedForAdminFilters(profile?.role)
+  const showAdminGlobalFilters = can('leads:read:global')
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
 
@@ -416,7 +412,7 @@ export function LeadManagement() {
 
   const reassignPickList = useMemo(() => {
     const base = fieldStaffUsers
-    const elevated = isAdminLikeRole(profile?.role)
+    const elevated = can('leads:read:global')
     const teamLead = isTeamLeadRole(profile?.role)
 
     if (teamLead && profile) {
@@ -444,7 +440,7 @@ export function LeadManagement() {
     }
 
     return base
-  }, [fieldStaffUsers, directoryUsers, profile])
+  }, [fieldStaffUsers, directoryUsers, profile, can])
 
   const schoolOptions = useMemo(() => {
     if (showAdminGlobalFilters && highSchoolLabels.length) {
@@ -532,7 +528,7 @@ export function LeadManagement() {
     }
   }, [openLeadIdFromUrl, db, configured, setSearchParams])
 
-  const isElevatedLeadScope = isElevatedForAdminFilters(profile?.role)
+  const isElevatedLeadScope = can('leads:read:global') || can('leads:reassign:team')
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
@@ -977,7 +973,7 @@ export function LeadManagement() {
           profile,
           hoDQueryLabels,
           rescoreServerFilters,
-          { maxLeads: LEADS_UI_FULL_SCOPE_MAX },
+          { maxLeads: LEADS_UI_FULL_SCOPE_MAX, canReadGlobal: can('leads:read:global') },
         )
         setRescoreMsg(`Đang chấm ${scopeLeads.length.toLocaleString('vi-VN')} hồ sơ…`)
         const results = rescoreLeadList(
@@ -1035,6 +1031,7 @@ export function LeadManagement() {
     [
       db,
       profile,
+      can,
       activeScoringProfile,
       hoDQueryLabels,
       rescoreServerFilters,
