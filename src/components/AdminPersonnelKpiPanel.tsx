@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BarChart3, ClipboardList, PhoneCall, Users } from 'lucide-react'
+import { BarChart3, ClipboardList, Download, PhoneCall, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { currentMonthKey, useCounselorMonthlyKpi } from '../hooks/useCounselorMonthlyKpi'
@@ -13,6 +13,7 @@ import { KPI_V2_SCORE_LABELS } from '../utils/kpiV2Score'
 import { aggregateMonthlyKpiByTeam } from '../utils/kpiTeamAggregate'
 import { PeriodKpiReportSection } from './PeriodKpiReportSection'
 import { KpiGuideDialog } from './KpiGuideDialog'
+import { buildMonthlyKpiCsv, downloadTextCsv } from '../utils/kpiCsvExport'
 
 function canAccessPersonnelSummary(can: (p: import('../types').Permission) => boolean): boolean {
   return can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead')
@@ -124,16 +125,42 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
               />
             </label>
           ) : null}
+          {reportTab === 'monthly' && enriched.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const csv = buildMonthlyKpiCsv(
+                  enriched.map((r) => ({
+                    rank: r.displayRank,
+                    name: r.name,
+                    teamName: r.teamName,
+                    compositeScore: r.compositeScore,
+                    tierLabel: tierLabels[r.displayTier],
+                    validCalls: r.validCalls,
+                    depositPaidCount: r.depositPaidCount,
+                    approvedRevenueVnd: r.approvedRevenueVnd,
+                    fullNeCount: r.fullNeCount,
+                  })),
+                  month,
+                )
+                downloadTextCsv(csv, `VietMy_KPI_thang_${month}.csv`)
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Xuất CSV
+            </button>
+          ) : null}
         </div>
       </div>
 
       {variant === 'full' ? (
         <div className="flex flex-wrap gap-2">
           {[
-            { to: '/command', label: 'Điều hành (ngày)', icon: BarChart3 },
-            { to: '/kpi', label: 'KPI kỳ', icon: PhoneCall },
-            { to: '/scorecard', label: 'Bảng điểm tháng', icon: ClipboardList },
-            { to: '/call-history', label: 'Lịch sử gọi', icon: Users },
+            { to: '/?tab=van-hanh', label: 'Điều hành (ngày)', icon: BarChart3 },
+            { to: '/?tab=kpi-nhan-su', label: 'KPI kỳ', icon: PhoneCall },
+            { to: '/?tab=bang-diem', label: 'Bảng điểm tháng', icon: ClipboardList },
+            { to: '/?tab=lich-goi', label: 'Lịch sử gọi', icon: Users },
           ].map(({ to, label, icon: Icon }) => (
             <Link
               key={to}

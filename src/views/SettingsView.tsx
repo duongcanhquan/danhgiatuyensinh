@@ -53,6 +53,8 @@ import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
+import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
+import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
 import {
   enabledMainTabs,
@@ -241,6 +243,16 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Cấu hình tổng đài web: domain, số nội bộ mặc định, phiên bản SDK. TVV gọi từ hồ sơ; log cuộc gọi vào{' '}
             <strong>lịch sử tương tác</strong> khi kết thúc (nếu bật).
+          </p>
+        </>
+      )
+    case 'webhooks':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Webhook n8n theo trường</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Gắn đầu mối ngoài: giấy mời, CTSV/tài chính, báo cáo ngày và tháng. Lưu xong áp dụng ngay — ưu tiên hơn cấu
+            hình chung trên máy chủ.
           </p>
         </>
       )
@@ -665,6 +677,7 @@ export function SettingsView() {
   return (
     <div className={`min-w-0 max-w-full space-y-2 ${settingsCopy}`}>
       <h1 className="sr-only">Cài đặt hệ thống</h1>
+      {activeMainTab === 'connect' ? <IntegrationsStatusStrip /> : null}
       {!configured || !db ? (
         <div className={`rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2.5 text-rose-900 ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
@@ -1225,6 +1238,15 @@ export function SettingsView() {
             Gọi điện OMICall
           </h2>
           <OmicallSettingsTab />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'webhooks' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-webhooks" className="space-y-3">
+          <h2 id="tab-webhooks" className="sr-only">
+            Webhook n8n
+          </h2>
+          <N8nWebhooksSettingsPanel />
         </div>
       ) : null}
 

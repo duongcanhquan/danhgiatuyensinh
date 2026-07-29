@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Building2, Settings2, Users } from 'lucide-react'
+import { Building2, Plug, Settings2, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { canAccessSettingsPage } from '../auth/permissions'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
@@ -19,7 +19,7 @@ export function CrmAdminShortcuts() {
       <p className="mt-1 text-xs text-slate-600">
         {isPlatform
           ? 'Siêu quản trị: trường · nhân sự · cấu hình toàn hệ thống.'
-          : 'Quản lý trong trường: nhân sự · chỉ tiêu · cấu hình.'}
+          : 'Quản lý trong trường: nhân sự · chỉ tiêu · cấu hình · kết nối ngoài.'}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {isPlatform ? (
@@ -49,6 +49,15 @@ export function CrmAdminShortcuts() {
             className="vm-btn vm-btn-secondary inline-flex items-center gap-2 text-sm"
           >
             Chỉ tiêu KPI
+          </Link>
+        ) : null}
+        {can('config:master_data') || can('config:omicall') ? (
+          <Link
+            to="/settings?tab=connect&sub=webhooks"
+            className="vm-btn vm-btn-secondary inline-flex items-center gap-2 text-sm"
+          >
+            <Plug className="h-4 w-4" aria-hidden />
+            Kết nối ngoài
           </Link>
         ) : null}
       </div>
