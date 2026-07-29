@@ -25,6 +25,7 @@
     "deploy:omicall": "firebase deploy --only functions:omicallCallWebhook,functions:omicallCallCenterProbe,functions:omicallSyncInternalPhones,functions:omicallResolveCallContext,functions:omicallClick2Call,functions:omicallRegisterWebhook,functions:syncOmicallCallHistory",
     "deploy:firestore-rules": "npx firebase-tools deploy --only firestore:rules --project tvts-8f713",
     "deploy:firestore-indexes": "npx firebase-tools deploy --only firestore:indexes --project tvts-8f713",
+    "deploy:auth-claims-functions": "npm run functions:build && npx firebase-tools deploy --only functions:syncAuthClaimsOnUserWrite,functions:refreshOwnAuthClaims --project tvts-8f713",
     "deploy:fetch-calls": "npx firebase-tools deploy --only functions:fetchOmicallCallsForClient --project tvts-8f713",
     "deploy:receipt-r2": "npm run deploy --prefix workers/receipt-r2"
   },

@@ -21,6 +21,7 @@ import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { claimsMatchProfile } from '../tenancy/authClaims'
+import { refreshOwnAuthClaims } from '../services/refreshOwnAuthClaims'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
   if (!import.meta.env.DEV) return null
@@ -174,9 +175,14 @@ async function ensureAuthClaimsFresh(
       orgId: typeof token.claims.orgId === 'string' ? token.claims.orgId : '',
       platform: token.claims.platform === true,
     }
-    if (!claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) {
-      await user.getIdToken(true)
+    if (claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) return
+    try {
+      await refreshOwnAuthClaims()
+    } catch (e) {
+      // Function may not be deployed yet — still try local token refresh
+      console.warn('[ensureAuthClaimsFresh] refreshOwnAuthClaims', e)
     }
+    await user.getIdToken(true)
   } catch (e) {
     console.warn('[ensureAuthClaimsFresh]', e)
   }
