@@ -1,7 +1,7 @@
 # Phân tích hệ thống cũ `hethongcu` (Google Apps Script + Firebase RTDB + n8n)
 
 Tài liệu tham chiếu khi thiết kế CRM mới (`danhgiatuyensinh`), migration, hoặc tích hợp từng phần.  
-**Nguồn:** `hethongcu/Main.js`, `index.html`, `Dashboard.html`, `Account.html`, `appscript.json`, export `tuyensinh-ea675-default-rtdb-export.json` (snapshot ~603 hồ sơ SV, 21 user).
+**Nguồn:** `hethongcu/Main.js`, `index.html`, `Dashboard.html`, `Account.html`, `appscript.json`, export `tuyensinh-ea675-default-rtdb-export.json` (snapshot live 1580 hồ sơ SV, 21 user — 2026-07-29).
 
 > **Bảo mật:** `Main.js` chứa `FIREBASE_SECRET` và mật khẩu user dạng plaintext trong RTDB. Không commit secret lên Git công khai; khi migrate nên xoay secret và chuyển auth sang Firebase Auth + Rules.
 
@@ -144,7 +144,7 @@ Thí sinh điền form → POST Main.js → append Sheet (70 cột)
     └── ...
 ```
 
-**Export mẫu:** 603 keys `students`, 21 keys `users`.
+**Export mẫu:** 1580 keys `students`, 21 keys `users` (snapshot live 2026-07-29).
 
 **Lưu ý đọc dữ liệu:**
 
