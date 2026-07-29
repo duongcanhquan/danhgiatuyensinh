@@ -1,0 +1,35 @@
+7488ec6 Merge lint fixes: eslint --quiet clean
+e41b0ce Fix remaining ESLint errors so eslint --quiet exits 0.
+b7f25d6 Merge UX polish: icon hub + chart reports
+de2f08d Polish CRM UX: icon-first setup hub, compact status tiles, chart summaries + CSV download.
+21f3411 Merge branch 'cursor/crm-integration-hub-3c2e' — Integration Hub Phase 1
+051eef9 Add modern CRM Integration Hub: connector catalog, event bus, partner API keys.
+3835609 Merge branch 'cursor/bento-ui-phase0-3c2e' — CRM integrations settings & deep reporting
+426ca4b Add CRM settings for external integrations and deepen unit/individual reporting.
+83d0833 Merge multi-tenant CRM completeness fixes.
+9f261e4 Harden multi-tenant CRM: staff/users/dashboard/portal scoped by orgId.
+4decb18 Merge superadmin login bootstrap and CRM management UX.
+f45989c Expose CRM admin shortcuts and self-service password change for superadmin.
+88761d9 Merge branch 'cursor/bento-ui-phase0-3c2e': bento UI + multi-tenant Phase 0–4.
+8494f34 Wire refreshOwnAuthClaims on login and add Firebase deploy runbook.
+c0dbaf5 Phase 4: Auth custom claims sync and production Firestore Rules.
+605135b Phase 3: platform audit, org health, settings export, suspend gate.
+c5cf38e Mark Phase 2 plan verification complete.
+275e458 Phase 2: superadmin create school, provision admin, seed orgSettings.
+89c83d5 Phase 1: org-scoped CRM reads/writes and Superadmin org switcher.
+f067a71 Stop tracking ui-ux-pro-max __pycache__ artifacts.
+82502ff Ship bento design system and Phase 0 multi-tenant foundation.
+afcf2e5 Link multi-tenant design to CRM platform north-star doc.
+e35092d Add CRM platform north-star: full system & function catalog.
+044e145 Clarify superadmin platform scope vs school admin CRUD.
+0df5474 Add multi-tenant school (org) design spec.
+a594bd3 Export full GitHub repo metadata into github-export/.
+d11e3bf Pull full live RTDB export (1576 students, 21 users).
+68e5ec5 fix: counselor load sync region, backfill đếm đúng và Firebase project
+f128327 Cut backend Firestore/RTDB bandwidth with targeted reads and load counters.
+9d7de0d Reduce Firestore reads via shared data providers and query tuning.
+2382d8f fix: đăng xuất trên cổng login, sửa đổi MK nhân sự và RBAC
+35cbca6 feat: cổng ẩn sư tử góc màn đăng ký SV → login quản trị
+a2b8703 feat: cổng đăng ký sinh viên công khai + webhook n8n
+9451cae fix: giảm băng thông RTDB hệ thống cũ — patch cục bộ thay vì tải lại toàn bộ students.json
+1b07ad9 Initial commit: danhgiatuyensinh và hethongcu
