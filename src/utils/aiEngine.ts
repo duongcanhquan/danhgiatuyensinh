@@ -106,7 +106,7 @@ export function getAiIntegrationDiagnostics(): AiIntegrationDiagnostics {
     }
   }
   const source = resolveAiConfigSource()
-  let chatEndpoint: string | null = null
+  let chatEndpoint: string | null
   let usesSameOriginProxy = false
   let warning: string | null = null
 

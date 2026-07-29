@@ -38,6 +38,7 @@ export async function adminStaffAccountAction(
   } catch (e) {
     throw new Error(
       callableErrorMessage(e, 'Không thực hiện được thao tác nhân sự — thử đăng nhập lại hoặc liên hệ quản trị deploy Functions.'),
+      { cause: e },
     )
   }
 }

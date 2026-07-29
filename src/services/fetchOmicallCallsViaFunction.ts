@@ -102,6 +102,8 @@ export async function fetchOmicallCallsViaFunction(input: FetchOmicallCallsInput
       calls: (res.data.calls ?? []).map(mapWireToCall),
     }
   } catch (e) {
-    throw new Error(callableErrorMessage(e, 'Không đọc được lịch sử gọi từ server — thử đăng nhập lại.'))
+    throw new Error(callableErrorMessage(e, 'Không đọc được lịch sử gọi từ server — thử đăng nhập lại.'), {
+      cause: e,
+    })
   }
 }

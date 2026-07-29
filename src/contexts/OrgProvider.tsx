@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'

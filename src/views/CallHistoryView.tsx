@@ -125,7 +125,8 @@ function CallRow({
   )
 }
 
-export function CallHistoryView({ embedded: _embedded = false }: { embedded?: boolean }) {
+export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
+  void embedded
   const { can, profile, firebaseUser } = useAuth()
   const [searchParams] = useSearchParams()
   const { users, counselors } = useCounselorDirectory()

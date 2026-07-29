@@ -88,7 +88,7 @@ function mergeRemote(raw: Record<string, unknown>): KpiEvalConfig {
   const lowConnect = w.lowConnect ?? {}
   const ms = (raw.monthlyScore ?? {}) as Record<string, unknown>
   const bt = (raw.bonusTiers ?? {}) as Record<string, unknown>
-  let goldMaxPercentile = clamp(Number(bt.goldMaxPercentile ?? d.bonusTiers.goldMaxPercentile), 0.01, 0.5)
+  const goldMaxPercentile = clamp(Number(bt.goldMaxPercentile ?? d.bonusTiers.goldMaxPercentile), 0.01, 0.5)
   let silverMaxPercentile = clamp(Number(bt.silverMaxPercentile ?? d.bonusTiers.silverMaxPercentile), 0.05, 0.9)
   let bronzeMaxPercentile = clamp(Number(bt.bronzeMaxPercentile ?? d.bonusTiers.bronzeMaxPercentile), 0.1, 1)
   if (silverMaxPercentile <= goldMaxPercentile) silverMaxPercentile = goldMaxPercentile + 0.05

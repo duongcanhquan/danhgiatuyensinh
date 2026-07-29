@@ -142,6 +142,45 @@ export function StaffManagementView({
     </p>
   ) : null
 
+  const canManageUser = (u: VietMyUserProfile) => {
+    if (canStaffAll) return true
+    if (!profile || !teamScopeOnly) return false
+    return isUserInManagerTeamScope(profile, u, users)
+  }
+
+  const enableAiForTeam = async () => {
+    const targets = sortedUsers.filter((u) => {
+      if (isSuperAdminRole(u.role) || isAdminLikeRole(u.role)) return false
+      if (u.isActive === false) return false
+      if (u.allowLlmAndAiTasks === true) return false
+      return canManageUser(u)
+    })
+    if (!targets.length) {
+      setMsg('Không có TVV / Trưởng nhóm nào trong phạm vi cần bật AI.')
+      return
+    }
+    if (
+      !window.confirm(
+        `Bật «Cho phép dùng AI trên hồ sơ» cho ${targets.length} tài khoản trong phạm vi của bạn?`,
+      )
+    ) {
+      return
+    }
+    setBulkAiBusy(true)
+    setEditErr(null)
+    setMsg(null)
+    try {
+      for (const u of targets) {
+        await updateStaffProfile({ userId: u.id, allowLlmAndAiTasks: true })
+      }
+      setMsg(`Đã bật quyền AI cho ${targets.length} tài khoản. Cấu hình API/tác vụ toàn trường đã áp dụng tự động.`)
+    } catch (e: unknown) {
+      setEditErr(e instanceof Error ? e.message : 'Không bật hàng loạt được')
+    } finally {
+      setBulkAiBusy(false)
+    }
+  }
+
   const aiPermissionBanner = (
     <div className="rounded-xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm leading-relaxed text-violet-950">
       <p className="font-semibold text-violet-900">Phân quyền AI — cấu hình toàn trường vs từng nhân sự</p>
@@ -262,45 +301,6 @@ export function StaffManagementView({
         setResetPwdBusy(false)
       }
     })()
-  }
-
-  const canManageUser = (u: VietMyUserProfile) => {
-    if (canStaffAll) return true
-    if (!profile || !teamScopeOnly) return false
-    return isUserInManagerTeamScope(profile, u, users)
-  }
-
-  const enableAiForTeam = async () => {
-    const targets = sortedUsers.filter((u) => {
-      if (isSuperAdminRole(u.role) || isAdminLikeRole(u.role)) return false
-      if (u.isActive === false) return false
-      if (u.allowLlmAndAiTasks === true) return false
-      return canManageUser(u)
-    })
-    if (!targets.length) {
-      setMsg('Không có TVV / Trưởng nhóm nào trong phạm vi cần bật AI.')
-      return
-    }
-    if (
-      !window.confirm(
-        `Bật «Cho phép dùng AI trên hồ sơ» cho ${targets.length} tài khoản trong phạm vi của bạn?`,
-      )
-    ) {
-      return
-    }
-    setBulkAiBusy(true)
-    setEditErr(null)
-    setMsg(null)
-    try {
-      for (const u of targets) {
-        await updateStaffProfile({ userId: u.id, allowLlmAndAiTasks: true })
-      }
-      setMsg(`Đã bật quyền AI cho ${targets.length} tài khoản. Cấu hình API/tác vụ toàn trường đã áp dụng tự động.`)
-    } catch (e: unknown) {
-      setEditErr(e instanceof Error ? e.message : 'Không bật hàng loạt được')
-    } finally {
-      setBulkAiBusy(false)
-    }
   }
 
   const openEdit = (u: VietMyUserProfile) => {

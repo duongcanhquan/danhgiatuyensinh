@@ -7,7 +7,7 @@ export function digitsOnly(raw: string): string {
 }
 
 export function normalizePhoneLocal(raw: unknown): string {
-  let d = digitsOnly(String(raw ?? ''))
+  const d = digitsOnly(String(raw ?? ''))
   if (!d) return ''
   if (d.startsWith('84') && d.length >= 11) return `0${d.slice(2)}`
   if (!d.startsWith('0') && d.length === 9) return `0${d}`

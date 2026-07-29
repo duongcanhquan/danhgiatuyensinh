@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
 import { normalizeUserRole } from '../auth/roleUtils'

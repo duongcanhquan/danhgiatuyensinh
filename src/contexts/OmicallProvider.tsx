@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useCallback,
@@ -389,7 +390,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         setActiveCall((prev) => {
           const durationSec = call.callingDuration?.value ?? prev?.durationSec ?? 0
           let leadId = prev?.leadId ?? display?.leadId
-          let leadName = prev?.leadName ?? display?.leadName
+          const leadName = prev?.leadName ?? display?.leadName
           let phone = prev?.phone ?? (call.displayNumber || call.remoteNumber || pending?.phone || '')
           if (call.userData) {
             try {
@@ -435,7 +436,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const pending = pendingCallMetaRef.current
       const display = pendingCallDisplayRef.current
       let leadId = display?.leadId
-      let leadName = display?.leadName
+      const leadName = display?.leadName
       let target = display?.target ?? pending?.target
       let phone = call.displayNumber || call.remoteNumber || pending?.phone || ''
       if (call.userData) {
@@ -524,7 +525,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         const s = sdkRef.current
         const c = sipCredsRef.current
         if (!s || !c) {
-          scheduleAutoReconnect(true)
+          scheduleAutoReconnectRef.current(true)
           return
         }
 
@@ -544,7 +545,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
                 setConnectionStatus('error')
                 setConnectionLabel(reg.message || 'Chưa kết nối được tổng đài')
                 setLastError(reg.error || reg.message || 'Đăng ký tổng đài thất bại — thử «Kết nối lại».')
-                scheduleAutoReconnect(true)
+                scheduleAutoReconnectRef.current(true)
               } else {
                 scheduleAutoReconnectRef.current()
               }
