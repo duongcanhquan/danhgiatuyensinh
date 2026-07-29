@@ -1,7 +1,8 @@
 # Thiết kế multi-tenant theo trường (org)
 
 **Ngày:** 2026-07-29  
-**Phạm vi:** Một sản phẩm CRM tuyển sinh — **mỗi trường (org) dùng CRM tách biệt**. Không chia campus/cơ sở.  
+**Cập nhật:** 2026-07-29 — làm rõ mô hình **superadmin toàn hệ** + **admin trường toàn quyền trong org**.  
+**Phạm vi:** Một sản phẩm CRM tuyển sinh — **mỗi trường là đơn vị độc lập**. Không chia campus bên trong trường.  
 **Trạng thái:** Spec chờ duyệt trước khi viết implementation plan.
 
 ---
@@ -11,23 +12,35 @@
 ### Mục tiêu
 
 - Nhiều trường dùng cùng một codebase / cùng hạ tầng Firebase.
-- **Trường A không đọc/ghi được** lead, user, KPI, config, chứng từ, báo cáo của trường B.
-- VietMy hiện tại trở thành **org đầu tiên** (`orgId = vietmy`), không big-bang rewrite.
-- Giữ nguyên thế mạnh vertical: scoring, OMICall/KPI, 5 đợt thu, kế toán, cổng đăng ký, n8n giấy tờ.
+- **Mỗi trường độc lập:** data, nhân sự, cấu hình, cổng đăng ký, KPI, tổng đài, n8n của trường A **tách** khỏi trường B.
+- **Một Superadmin nền tảng** quản lý chung toàn bộ: tạo/sửa/tạm ngưng trường, vào bất kỳ trường nào để hỗ trợ / cấu hình / xem vận hành.
+- **Admin từng trường** được **setup và CRUD toàn bộ** thông tin của trường mình (nhân sự, danh mục, scoring, KPI, OMICall, portal, playbook, tri thức, tài chính/kế toán trong phạm vi org…).
+- VietMy hiện tại = **org đầu tiên** (`orgId = vietmy`), migrate dần, không big-bang rewrite.
+- Giữ thế mạnh vertical: scoring, OMICall/KPI, 5 đợt thu, kế toán, cổng đăng ký, n8n giấy tờ.
+
+### Ranh giới quyền (tóm tắt)
+
+| Ai | Phạm vi |
+|----|---------|
+| **Superadmin** (`super_admin`) | Toàn platform: mọi org. Tạo/xóa/suspend trường; impersonate hoặc “chọn trường đang làm việc”; CRUD data mọi trường khi đang ở ngữ cảnh đó. |
+| **Admin trường** (`admin`) | Chỉ `orgId` của mình: toàn quyền setup + thêm/xóa/sửa mọi dữ liệu & cấu hình **trong trường**. Không thấy trường khác. |
+| TVV / CTV / TL / Kế toán | Như hiện tại, luôn trong đúng 1 `orgId`. |
 
 ### Không thuộc phạm vi (YAGNI)
 
-- Tầng campus / nhiều cơ sở trong một trường.
-- Marketplace, billing SaaS phức tạp (có thể thêm sau khi đã có `organizations`).
-- Tách mỗi trường một Firebase project (chỉ xét như phương án loại).
-- Viết lại toàn bộ UI thành “Salesforce clone”.
+- Tầng campus / nhiều điểm trong một trường (user đã loại).
+- Marketplace, billing SaaS phức tạp (có thể thêm sau).
+- Tách mỗi trường một Firebase project.
+- Self-serve đăng ký trường công khai trên internet (superadmin tạo trường).
+- Viết lại toàn bộ UI thành CRM generic.
 
 ### Thành công khi
 
-1. Rules + claim `orgId` khiến user trường A **không** query được data trường B (kể cả đoán `leadId`).
-2. Tạo org thứ hai (staging) chạy độc lập: config KPI/scoring/OMICall/portal riêng.
-3. VietMy production backfill xong, hành vi TVV/KT **không đổi** so với hiện tại.
-4. SĐT trùng giữa hai trường **không** gộp nhầm lead / chặn đăng ký nhầm.
+1. User `admin` trường A **không** đọc/ghi được data trường B (Rules + claim).
+2. `super_admin` **có thể** liệt kê mọi org, chọn org, thao tác như admin (hoặc mạnh hơn) trên org đó.
+3. Admin trường tự setup đầy đủ CRM trường mình mà không cần đụng code.
+4. Tạo org thứ hai (staging) chạy độc lập; VietMy backfill không đổi hành vi TVV/KT.
+5. SĐT trùng giữa hai trường không gộp/chặn nhầm.
 
 ---
 
@@ -37,15 +50,15 @@
 |-----------|-------------------|
 | Database | 1 Firestore DB `warmlist`, collection phẳng |
 | Config | Nhiều **singleton** `scoringAux/{fixedId}` (KPI, OMICall, portal, info score…) |
-| User | `users/{uid}` — role, SIP; **không** `orgId` |
+| User | `users/{uid}` — có role `super_admin` / `admin`…; **không** `orgId` |
 | Lead query | RBAC assignee/team/global — **không** filter trường |
 | Rules mẫu | Auth user đọc/ghi gần như toàn DB (`firestore.rules.example`) |
 | Public portal | `/dang-ky` → 1 config + counter mã SV global |
 | OMICall | 1 webhook URL project + 1 config doc; match SĐT global |
 | n8n | Default `VITE_N8N_*` trỏ host VietMy |
-| `tenantId` | Chỉ field mirror từ API phân tích OMICall — **không** phải CRM tenant |
+| `tenantId` | Chỉ field mirror API OMICall — **không** phải CRM tenant |
 
-Kết luận: đây là **single-tenant sẵn sàng migrate**, chưa phải multi-tenant.
+Kết luận: single-tenant; role `super_admin` hiện là “admin mạnh trong một trường”, chưa phải “điều hành nhiều trường”.
 
 ---
 
@@ -53,42 +66,20 @@ Kết luận: đây là **single-tenant sẵn sàng migrate**, chưa phải mult
 
 ### Hướng 1 — Mỗi trường một Firebase project
 
-**Ý:** VietMy = project A; Trường X = project B; build app theo env.
-
-| Ưu | Nhược |
-|----|--------|
-| Cô lập hạ tầng tuyệt đối | Nhân bản Functions, indexes, secrets, CI; không “tạo trường” trong UI |
-| Rules đơn giản | Không có super-admin nền tảng thật sự; chi phí ops cao |
-
-**Không chọn** cho giai đoạn tới: trái mục tiêu “một sản phẩm, nhiều trường”, trừ khi khách enterprise đòi.
+Cô lập hạ tầng tuyệt đối nhưng **khó** có một superadmin quản lý chung trên một UI → **loại** (trái yêu cầu superadmin toàn hệ).
 
 ### Hướng 2 — Subcollection `orgs/{orgId}/leads/...`
 
-**Ý:** Mọi data nghiệp vụ nằm dưới path org.
+Rules path đẹp; rewrite client/Functions/index quá lớn → **không chọn làm bước đầu**.
 
-| Ưu | Nhược |
-|----|--------|
-| Rules theo path rõ | Đụng **mọi** path client + trigger Functions (`leads/{id}` → `orgs/{orgId}/leads/{id}`) |
-| Singleton config tự nhiên | Index / collectionGroup OMICall–KPI phức tạp hơn nhiều |
+### Hướng 3 — Collection phẳng + `orgId` + `orgSettings/{orgId}` (**khuyến nghị**)
 
-**Không chọn làm bước đầu:** chi phí rewrite lớn so với lợi ích khi mới 1–N trường vừa phải.
+- Data nghiệp vụ giữ collection hiện tại + field `orgId`.
+- Config theo trường trong `orgSettings/{orgId}/…`.
+- Claim: school user có `orgId`; superadmin có flag `platform: true` (không gắn một org cứng).
+- Superadmin chọn **activeOrgId** (context) khi làm việc.
 
-### Hướng 3 — Collection phẳng + `orgId` + config theo org (khuyến nghị)
-
-**Ý:**
-
-- `leads`, `users`, `omicallCalls`, KPI events… giữ collection hiện tại, **bắt buộc** field `orgId`.
-- Config trường chuyển sang `orgSettings/{orgId}/…` (hoặc `orgs/{orgId}/settings/{docId}`).
-- Auth custom claim `orgId` + Firestore Rules enforce.
-- Portal: `/dang-ky/:orgSlug`.
-
-| Ưu | Nhược |
-|----|--------|
-| Khớp SDK/hooks/Functions hiện tại | Dễ sót query nếu Rules yếu — **Rules là hàng rào bắt buộc** |
-| Migrate dần: backfill `vietmy` | Cần thêm composite index (`orgId` + field sort/filter) |
-| Tạo trường mới = tạo doc org + copy settings | Phone/hash phải unique **trong org** |
-
-**Chọn hướng 3** làm chuẩn cho VietMy CRM.
+**Chọn hướng 3.**
 
 ---
 
@@ -99,11 +90,11 @@ Kết luận: đây là **single-tenant sẵn sàng migrate**, chưa phải mult
 ```
 organizations/{orgId}
   - id, name, slug (unique), status: active|suspended
-  - createdAt, createdBy
-  - (sau) plan / notes
+  - createdAt, createdBy (superadmin uid)
+  - (sau) notes
 
 orgSettings/{orgId}/docs/{docId}
-  # thay thế scoringAux singletons theo trường
+  # toàn bộ setup của trường — admin trường CRUD
   - kpiV2Config
   - kpiEvaluationConfig
   - omicallIntegration
@@ -113,101 +104,144 @@ orgSettings/{orgId}/docs/{docId}
   - callSessionChips
   - tvvSignalDefinitions
   - orgAiIntegration
-  - n8nWebhooks          # giaymoi, ctsv, daily, monthly
+  - n8nWebhooks
   - systemLeadCodeCounters
   - studentCodeCounters
 
 users/{uid}
-  - orgId               # bắt buộc (trừ platform_super_admin)
-  - role, … (như hiện tại)
+  - role: super_admin | admin | team_lead | counselor | ctv | accountant
+  - orgId: string | null
+      # null chỉ khi role === super_admin (platform)
+      # admin/TVV/KT: bắt buộc đúng 1 orgId
 ```
 
-**Platform role (mới, hẹp):** `platform_admin` — chỉ quản lý danh sách org + tạo admin trường đầu; **không** đọc lead các trường trừ khi có quy trình support có audit (mặc định: không đọc lead).
+Catalogs & nội dung trường (masterData, scoringProfiles, playbooks, scripts, knowledge, scholarships, leadSources…) đều gắn `orgId` — admin trường CRUD trong org mình.
 
-**School roles:** giữ `admin | team_lead | counselor | ctv | accountant` như hiện tại, luôn trong đúng 1 `orgId`.
+### 4.2. Hai tầng quản trị (chi tiết)
 
-Một user Auth = **một org** (giai đoạn 1). Không multi-org membership.
+#### Superadmin (`super_admin`) — quản lý chung toàn bộ
 
-### 4.2. Dữ liệu nghiệp vụ
+**Được:**
+
+| Nhóm | Việc |
+|------|------|
+| Tổ chức | Tạo / đổi tên / suspend / (tuỳ chọn) xóa mềm trường; xem danh sách org |
+| Ngữ cảnh | Chọn **trường đang làm việc** (`activeOrgId`) — UI giống vào CRM trường đó |
+| Trong ngữ cảnh org | Toàn quyền như admin trường (và hơn nếu cần): nhân sự, config, lead, KPI, KT… |
+| Nhân sự cross-org | Tạo admin trường đầu khi onboard; reset/khóa tài khoản mọi org |
+| Hệ thống | Theo dõi org suspended; (sau) audit thao tác superadmin |
+
+**Không bắt buộc trong phase đầu:** “nhìn một màn hình merge mọi lead mọi trường” — mặc định làm việc **theo từng org đã chọn** (tránh nhầm lẫn). Có thể thêm dashboard tổng số org / health sau.
+
+**Claim gợi ý:** `{ role: 'super_admin', platform: true }` — Rules: nếu `platform == true` thì bypass so khớp `orgId`.
+
+#### Admin trường (`admin`) — toàn quyền trong cơ sở (org) của mình
+
+**Được (trong `orgId` mình):**
+
+- Nhân sự: thêm / sửa / xóa (hoặc vô hiệu) TVV, CTV, TL, kế toán; gán quyền phụ.
+- Danh mục & master data, nguồn lead, học bổng.
+- Bộ chấm điểm, % thông tin, phân loại HOT/WARM, KPI Sale, tín hiệu TVV, call chips.
+- Playbook, script, tri thức, AI org (trong quyền đã có).
+- OMICall, cổng đăng ký SV, webhook n8n của trường.
+- Hồ sơ / tài chính / báo cáo trong trường (như admin hiện tại).
+- Không tạo org mới; không xem/sửa org khác.
+
+Map với sản phẩm hiện tại: hầu hết màn **Cài đặt** + quản trị lead/KT mà `admin` đã có → chỉ cần **khóa theo `orgId`**.
+
+#### Các role khác
+
+Giữ hành vi hiện tại, luôn `orgId` bắt buộc; query/Rules không vượt org.
+
+### 4.3. Dữ liệu nghiệp vụ
 
 Mọi document nghiệp vụ gắn `orgId`:
 
-- `leads` (+ denormalize `orgId` xuống `interactions` nếu dùng collectionGroup)
+- `leads` (+ `orgId` trên `interactions` nếu collectionGroup)
 - `omicallCalls`, `omicallCallAnalyses`
-- `kpiDaily` / `kpiMonthly` / dedupe windows: **đổi ID hoặc path** để không đụng giữa org  
-  Ví dụ: `kpiDaily/{orgId}_{yyyyMMdd}` hoặc field `orgId` + doc id có prefix.
-- `financeReports`, `ai_tasks`, playbooks, scripts, knowledge, scholarships, leadSources, masterData catalogs
-- `stats/counselorLoads` → `stats/counselorLoads_{orgId}` hoặc map theo org
+- KPI docs: prefix hoặc field `orgId` (tránh đụng `kpiDaily/{date}` giữa trường)
+- `financeReports`, `ai_tasks`, playbooks, scripts, knowledge, scholarships, leadSources, masterData
+- `stats/counselorLoads` theo org
 
-**Uniqueness trong org:**
+**Uniqueness trong org:** `(orgId, uniqueHash)` / SĐT; counter mã SV trong `orgSettings/{orgId}`.
 
-- `uniqueHash` / SĐT: query `where orgId==X && uniqueHash==Y` (không global).
-- Mã `systemCode`: counter trong `orgSettings/{orgId}/…/systemLeadCodeCounters`.
+### 4.4. Auth & Rules
 
-### 4.3. Auth & Rules
-
-1. Khi tạo/sửa user trường: set custom claim `{ orgId, role }`.
-2. Client đọc `orgId` từ profile + claim; mọi list query kèm `orgId`.
-3. Rules (bắt buộc trước khi mở trường 2):
+**School user**
 
 ```
-match /leads/{id} {
-  allow read, write: if request.auth != null
-    && resource.data.orgId == request.auth.token.orgId;
-  allow create: if request.auth != null
-    && request.resource.data.orgId == request.auth.token.orgId;
-}
+allow read, write: if request.auth != null
+  && request.auth.token.platform != true
+  && resource.data.orgId == request.auth.token.orgId;
 ```
 
-Tương tự cho các collection có `orgId`.  
-`organizations` / tạo org: chỉ `platform_admin`.  
-Callable public (unauth): **không** dùng user token — Functions Admin SDK kiểm `orgSlug` → `orgId` rồi ghi đúng org.
+**Superadmin**
 
-### 4.4. Luồng công khai & tích hợp
+```
+allow read, write: if request.auth != null
+  && request.auth.token.platform == true
+  && request.auth.token.role == 'super_admin';
+```
+
+- Tạo/sửa `organizations`: chỉ superadmin.
+- Admin trường: CRUD `orgSettings/{ownOrgId}/**` và data `orgId == own`.
+- Client school: mọi query có `where('orgId','==', profile.orgId)`.
+- Client superadmin: sau khi chọn `activeOrgId`, query `where('orgId','==', activeOrgId)` (UX); Rules vẫn cho phép đọc mọi org nhờ `platform`.
+
+Callable public (`/dang-ky/:orgSlug`): Admin SDK; không dùng token user.
+
+### 4.5. UX superadmin
+
+1. Đăng nhập → màn **Chọn trường** (danh sách `organizations`) + nút **Tạo trường**.
+2. Chọn trường → vào app như admin (sidebar có badge tên trường); nút **Đổi trường**.
+3. Tạo trường: form tên + slug + email admin đầu → Cloud Function tạo Auth user, `users` doc `role: admin`, `orgId`, copy `orgSettings` từ template (hoặc clone từ VietMy defaults).
+
+Admin trường: đăng nhập → thẳng vào CRM org mình (không màn chọn trường).
+
+### 4.6. Luồng công khai & tích hợp
 
 | Luồng | Thiết kế |
 |-------|----------|
-| Đăng ký SV | `/dang-ky/:orgSlug` → `getPublicRegistrationMeta({ orgSlug })` → config + masterData **của org** |
-| OMICall webhook | Map `sip`/`agentId` → `users` → `orgId`; hoặc webhook path/secret **per org**; không match SĐT cross-org |
-| n8n | URL lưu trong `orgSettings`; payload luôn có `orgId`, `orgSlug` |
-| R2/Storage | Prefers `receipts/{orgId}/leads/{leadId}/…` |
-| Seed / bootstrap | `ensureDefaultFirestoreData(orgId)` — mỗi org một lần |
+| Đăng ký SV | `/dang-ky/:orgSlug` → config + masterData **đúng org** |
+| OMICall | Config trong orgSettings; resolve org từ SIP→user; không match SĐT cross-org |
+| n8n | URL theo org; payload có `orgId`, `orgSlug` |
+| R2/Storage | `receipts/{orgId}/leads/{leadId}/…` |
+| Seed | `ensureDefaultFirestoreData(orgId)` mỗi trường một lần (admin hoặc lúc superadmin tạo org) |
 
-### 4.5. Index
+### 4.7. Index
 
-Mọi query list hiện tại thêm equality `orgId` đứng đầu (hoặc gần đầu) composite index. Cập nhật `firestore.indexes.json` theo từng hook (leads, accountant, omicallCalls, KPI…).
+Composite index dẫn đầu `orgId` cho mọi list query (leads, accountant, omicall, KPI…).
 
 ---
 
-## 5. Chiến lược migrate (không downtime ý nghĩa với 1 trường)
+## 5. Chiến lược migrate
 
-### Phase 0 — Coi VietMy là org duy nhất (bắt buộc trước trường 2)
+### Phase 0 — VietMy = org duy nhất
 
-1. Tạo `organizations/vietmy` + `orgSettings/vietmy/...` copy từ `scoringAux/*` hiện có.
-2. Backfill `orgId: 'vietmy'` cho leads, users, calls, KPI docs, catalogs…
-3. App **đọc dual**: ưu tiên `orgSettings`, fallback `scoringAux` (compat).
-4. Ghi mới **chỉ** vào `orgSettings` + luôn set `orgId` trên lead/user.
-5. Bật Rules theo `orgId` (claim gắn cho user VietMy).
-6. Đổi portal nội bộ sang `/dang-ky/vietmy` (redirect từ `/dang-ky`).
+1. `organizations/vietmy` + copy `scoringAux/*` → `orgSettings/vietmy/...`.
+2. Backfill `orgId: 'vietmy'` cho data hiện có.
+3. User hiện tại: gán `orgId: vietmy`; **một** tài khoản giữ `super_admin` + `platform: true` (orgId null).
+4. Dual-read settings; ghi mới theo orgSettings + `orgId`.
+5. Rules: school theo orgId; superadmin platform bypass.
+6. Portal `/dang-ky/vietmy` (+ redirect `/dang-ky`).
 
-### Phase 1 — Cứng hóa single-org multi-tenant-ready
+### Phase 1 — Cứng hóa
 
-1. Gỡ fallback `scoringAux` singleton (hoặc chỉ còn đọc-only archive).
-2. Mọi query client/Functions có `orgId`.
-3. Dedup SĐT / hash theo org.
-4. Test checklist: TVV, KT, KPI, OMICall, portal, giấy mời.
+1. Gỡ fallback singleton global.
+2. Mọi query có orgId (superadmin dùng activeOrgId).
+3. Dedup SĐT theo org.
+4. QA: admin trường CRUD settings; superadmin đổi trường / tạo org staging.
 
-### Phase 2 — Trường thứ hai (staging rồi production)
+### Phase 2 — Trường thứ hai
 
-1. UI / script: `createOrganization({ name, slug, adminEmail })` → Auth user + claim + copy default settings từ template.
-2. OMICall: config riêng hoặc tắt cho đến khi có số tổng đài.
-3. n8n: webhook riêng (hoặc workflow route theo `orgId`).
-4. Không share `VITE_N8N_*` hardcode cho mọi trường trên cùng một bản build đa tenant — lấy từ orgSettings.
+1. Superadmin tạo org + admin trường.
+2. Admin trường tự setup (OMICall/n8n có thể trống đến khi cấu hình).
+3. Không phụ thuộc `VITE_N8N_*` global cho đa trường — lấy orgSettings.
 
-### Phase 3 — Ops (sau khi đã có ≥2 trường thật)
+### Phase 3 — Ops
 
-- Suspend org, audit platform_admin, backup export theo org, monitoring Functions theo `orgId` label.
-- (Tuỳ chọn) billing — ngoài spec này.
+- Suspend org, audit log thao tác superadmin, backup theo org.
+- (Tuỳ) dashboard sức khỏe nhiều trường.
 
 ---
 
@@ -215,43 +249,45 @@ Mọi query list hiện tại thêm equality `orgId` đứng đầu (hoặc gầ
 
 | Rủi ro | Mức | Xử lý |
 |--------|-----|--------|
-| Sóot một query → lộ data | Cao | Rules claim-based là cổng chính; code review checklist `orgId`; test Rules |
-| Trùng SĐT hai trường | Cao | Unique trong `(orgId, uniqueHash)` chỉ |
-| OMICall 1 webhook chung | Cao | Resolve org từ SIP user; hoặc webhook/secret per org |
-| KPI doc id đụng ngày | Trung | Prefix `orgId` trong doc id |
-| Counter mã SV global | Trung | Counter trong orgSettings |
-| n8n Chat nhầm trường | Trung | URL + `orgId` trong payload |
-| Dual-read lâu → lệch config | Trung | Phase 0 có deadline gỡ fallback |
-| Platform_admin quá mạnh | Trung | Mặc định không đọc leads |
+| Sóot query school → lộ data | Cao | Rules theo claim; checklist `orgId` |
+| Superadmin nhầm trường khi thao tác | Cao | Bắt buộc chọn `activeOrgId`; badge tên trường rõ trên UI |
+| Lạm dụng tài khoản superadmin | Cao | Ít user; MFA (sau); audit viết/xóa cross-org |
+| Trùng SĐT hai trường | Cao | Unique trong `(orgId, hash)` |
+| OMICall webhook chung | Cao | Resolve org từ user SIP; secret/config per org |
+| Admin trường xóa nhầm config | Trung | Soft-delete / xác nhận UI; (sau) backup settings |
+| Dual-read lệch | Trung | Deadline gỡ fallback Phase 1 |
 
 ---
 
-## 7. Quyết định đã chốt trong spec
+## 7. Quyết định đã chốt
 
-1. Tenant = **trường (`orgId`)**, không campus.  
-2. Kiến trúc = **collection phẳng + `orgId` + `orgSettings/{orgId}`**.  
-3. User ∈ đúng 1 org (phase 1–2).  
-4. VietMy = org `vietmy`, migrate trước khi onboard trường khác.  
-5. Không tách Firebase project/trường.  
-6. Security = **custom claim + Rules**, không chỉ filter client.
+1. Tenant = **trường (`orgId`)** — mỗi trường độc lập; **không** campus.  
+2. Kiến trúc = collection phẳng + `orgId` + `orgSettings/{orgId}`.  
+3. **`super_admin` = quản lý chung toàn bộ trường** (platform claim + chọn active org).  
+4. **`admin` = toàn quyền CRUD/setup trong đúng một trường**.  
+5. School user ∈ đúng 1 org; superadmin không gắn một org cứng.  
+6. VietMy = `vietmy` migrate trước.  
+7. Một Firebase project; Rules + claim là hàng rào bảo mật.  
+8. Tạo trường mới: chỉ superadmin (không self-serve công khai ở phase đầu).
 
 ---
 
-## 8. Việc không làm trong spec / plan đầu
+## 8. Việc không làm trong plan đầu
 
-- UI marketing đa trường, self-serve signup công khai trên internet.
-- Multi-org cho một email.
-- Viết lại n8n toàn bộ workflow (chỉ thêm `orgId` + URL per org).
+- Self-serve signup trường trên internet.
+- Một email thuộc nhiều org (trừ superadmin context switch).
+- Viết lại toàn bộ workflow n8n.
 - Native mobile.
+- Màn “all-schools merged lead grid” (có thể thêm sau).
 
 ---
 
 ## 9. Bước tiếp theo sau khi duyệt spec
 
-1. Viết **implementation plan** (Phase 0 → 1 chi tiết file/hook/Functions).  
-2. Implement Phase 0 trên nhánh riêng + test với data `vietmy`.  
-3. Chỉ khi Phase 1 xanh mới tạo org staging thứ hai.
+1. Implementation plan Phase 0 → 1 (roles/claims, orgSettings, backfill, Rules, UI chọn trường cho superadmin).  
+2. Implement + test trên `vietmy`.  
+3. Superadmin tạo org staging thứ hai khi Phase 1 xanh.
 
 ---
 
-*Spec dựa trên audit codebase `danhgiatuyensinh` (types `FS_COLLECTIONS` / `scoringAux`, Functions OMICall–KPI–publicRegistration, hooks leads/accountant, `n8nIntegration`, rules example).*
+*Spec dựa trên audit `danhgiatuyensinh` + yêu cầu: trường độc lập, superadmin quản lý chung, admin trường setup/CRUD toàn bộ trong trường.*
