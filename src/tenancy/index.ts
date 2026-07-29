@@ -8,8 +8,10 @@ export { ACTIVE_ORG_STORAGE_KEY, readStoredActiveOrgId, writeStoredActiveOrgId }
 export {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,
   buildOrganizationRecord,
+  buildOrganizationUpdatePatch,
   orgIdFromSlug,
   validateCreateOrganizationInput,
+  validateUpdateOrganizationInput,
 } from './createOrganization'
 export {
   PLATFORM_AUDIT_ACTIONS,

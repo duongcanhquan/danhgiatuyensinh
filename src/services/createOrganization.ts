@@ -14,8 +14,10 @@ import { getStaffCreatorAuth } from './firebase'
 import {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,
   buildOrganizationRecord,
+  buildOrganizationUpdatePatch,
   orgIdFromSlug,
   validateCreateOrganizationInput,
+  validateUpdateOrganizationInput,
   type CreateOrganizationInput,
 } from '../tenancy/createOrganization'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
@@ -162,6 +164,56 @@ export async function provisionOrganization(
     adminEmail: email,
     copiedSettings,
   }
+}
+
+export async function updateOrganization(
+  db: Firestore,
+  actor: { uid: string; displayName?: string; isPlatformSuperAdmin: boolean },
+  orgId: string,
+  input: { name: string; slug: string; notes?: string },
+): Promise<{ orgId: string; name: string; slug: string; notes: string }> {
+  if (!actor.isPlatformSuperAdmin) {
+    throw new Error('Chỉ Siêu quản trị nền tảng mới được sửa trường.')
+  }
+  const id = orgId.trim()
+  if (!id) throw new Error('Thiếu mã trường.')
+
+  const ref = doc(db, FS_COLLECTIONS.organizations, id)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Không tìm thấy trường.')
+
+  const current = snap.data() as { slug?: string; name?: string }
+  const currentSlug = String(current.slug ?? id)
+  const reserved = await listExistingSlugs(db)
+  const err = validateUpdateOrganizationInput({
+    name: input.name,
+    slug: input.slug,
+    notes: input.notes,
+    currentSlug,
+    reservedSlugs: reserved,
+  })
+  if (err) throw new Error(err)
+
+  const patch = buildOrganizationUpdatePatch(input)
+  await updateDoc(ref, {
+    ...patch,
+    updatedAt: Timestamp.now(),
+  })
+
+  try {
+    await commitPlatformAudit(db, {
+      action: 'ORG_UPDATED',
+      orgId: id,
+      orgName: patch.name,
+      performedBy: actor.uid,
+      performedByName: actor.displayName,
+      detail: `slug ${currentSlug} → ${patch.slug}`,
+    })
+  } catch (e) {
+    console.warn('[updateOrganization] platform audit', e)
+  }
+
+  return { orgId: id, ...patch }
 }
 
 export async function setOrganizationStatus(

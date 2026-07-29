@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,
   buildOrganizationRecord,
+  buildOrganizationUpdatePatch,
   orgIdFromSlug,
   validateCreateOrganizationInput,
+  validateUpdateOrganizationInput,
 } from './createOrganization'
 
 describe('orgIdFromSlug', () => {
@@ -81,5 +83,77 @@ describe('ORG_SETTINGS_TEMPLATE_DOC_IDS', () => {
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('kpiV2Config')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('publicRegistrationConfig')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('integrationHub')
+  })
+})
+
+describe('validateUpdateOrganizationInput', () => {
+  it('rejects empty name and invalid slug', () => {
+    expect(
+      validateUpdateOrganizationInput({
+        name: '',
+        slug: 'demo',
+        notes: '',
+        currentSlug: 'demo',
+        reservedSlugs: ['demo'],
+      }),
+    ).toMatch(/tên/i)
+    expect(
+      validateUpdateOrganizationInput({
+        name: 'Demo',
+        slug: '',
+        notes: '',
+        currentSlug: 'demo',
+        reservedSlugs: ['demo'],
+      }),
+    ).toMatch(/slug/i)
+  })
+
+  it('allows keeping the same slug but rejects collision with another school', () => {
+    expect(
+      validateUpdateOrganizationInput({
+        name: 'Demo',
+        slug: 'demo',
+        notes: '',
+        currentSlug: 'demo',
+        reservedSlugs: ['demo', 'other'],
+      }),
+    ).toBeNull()
+    expect(
+      validateUpdateOrganizationInput({
+        name: 'Demo',
+        slug: 'other',
+        notes: '',
+        currentSlug: 'demo',
+        reservedSlugs: ['demo', 'other'],
+      }),
+    ).toMatch(/đã dùng|tồn tại/i)
+  })
+
+  it('rejects notes longer than 2000 characters', () => {
+    expect(
+      validateUpdateOrganizationInput({
+        name: 'Demo',
+        slug: 'demo',
+        notes: 'x'.repeat(2001),
+        currentSlug: 'demo',
+        reservedSlugs: ['demo'],
+      }),
+    ).toMatch(/ghi chú|2000/i)
+  })
+})
+
+describe('buildOrganizationUpdatePatch', () => {
+  it('trims name/notes and normalizes slug', () => {
+    expect(
+      buildOrganizationUpdatePatch({
+        name: '  Cao đẳng Demo  ',
+        slug: 'Cao Dang Demo',
+        notes: '  nội bộ  ',
+      }),
+    ).toEqual({
+      name: 'Cao đẳng Demo',
+      slug: 'cao-dang-demo',
+      notes: 'nội bộ',
+    })
   })
 })

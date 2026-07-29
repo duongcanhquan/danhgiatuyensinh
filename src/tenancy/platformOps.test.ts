@@ -45,9 +45,13 @@ describe('buildPlatformAuditRecord', () => {
 describe('platformAuditActionLabel', () => {
   it('returns Vietnamese labels', () => {
     expect(platformAuditActionLabel('ORG_CREATED')).toMatch(/tạo/i)
+    expect(platformAuditActionLabel('ORG_UPDATED')).toMatch(/sửa/i)
     expect(platformAuditActionLabel('ORG_SUSPENDED')).toMatch(/ngưng/i)
     expect(platformAuditActionLabel('ORG_REACTIVATED')).toMatch(/mở/i)
     expect(platformAuditActionLabel('ORG_SETTINGS_EXPORT')).toMatch(/tải|xuất|cấu hình/i)
+    expect(platformAuditActionLabel('ORG_ADMIN_ADDED')).toMatch(/thêm|quản lý/i)
+    expect(platformAuditActionLabel('ORG_ADMIN_DISABLED')).toMatch(/vô hiệu/i)
+    expect(platformAuditActionLabel('ORG_ADMIN_ENABLED')).toMatch(/bật/i)
   })
 })
 

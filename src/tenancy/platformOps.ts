@@ -1,8 +1,12 @@
 export const PLATFORM_AUDIT_ACTIONS = [
   'ORG_CREATED',
+  'ORG_UPDATED',
   'ORG_SUSPENDED',
   'ORG_REACTIVATED',
   'ORG_SETTINGS_EXPORT',
+  'ORG_ADMIN_ADDED',
+  'ORG_ADMIN_DISABLED',
+  'ORG_ADMIN_ENABLED',
 ] as const
 
 export type PlatformAuditAction = (typeof PLATFORM_AUDIT_ACTIONS)[number]
@@ -40,12 +44,20 @@ export function platformAuditActionLabel(action: PlatformAuditAction): string {
   switch (action) {
     case 'ORG_CREATED':
       return 'Tạo trường'
+    case 'ORG_UPDATED':
+      return 'Sửa thông tin trường'
     case 'ORG_SUSPENDED':
       return 'Tạm ngưng trường'
     case 'ORG_REACTIVATED':
       return 'Mở lại trường'
     case 'ORG_SETTINGS_EXPORT':
       return 'Tải cấu hình trường'
+    case 'ORG_ADMIN_ADDED':
+      return 'Thêm quản lý trường'
+    case 'ORG_ADMIN_DISABLED':
+      return 'Vô hiệu quản lý trường'
+    case 'ORG_ADMIN_ENABLED':
+      return 'Bật lại quản lý trường'
     default: {
       const _exhaustive: never = action
       return String(_exhaustive)

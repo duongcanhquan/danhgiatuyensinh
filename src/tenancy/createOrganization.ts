@@ -71,3 +71,50 @@ export function buildOrganizationRecord(input: {
     createdBy: input.createdBy,
   }
 }
+
+export type UpdateOrganizationInput = {
+  name: string
+  slug: string
+  notes?: string
+  /** Slug hiện tại của trường đang sửa — được phép giữ nguyên. */
+  currentSlug: string
+  /** Tất cả slug đang có (kể cả slug của chính trường này). */
+  reservedSlugs?: string[]
+}
+
+const NOTES_MAX = 2000
+
+export function validateUpdateOrganizationInput(input: UpdateOrganizationInput): string | null {
+  const name = input.name.trim()
+  if (!name) return 'Nhập tên trường.'
+  if (name.length > 120) return 'Tên trường tối đa 120 ký tự.'
+
+  const rawSlug = input.slug.trim()
+  if (!rawSlug) return 'Slug không hợp lệ.'
+  const slug = normalizeOrgSlug(rawSlug)
+  if (!slug || slug === 'thanh-cong') return 'Slug không hợp lệ.'
+  if (slug.length < 2) return 'Slug tối thiểu 2 ký tự.'
+
+  const current = normalizeOrgSlug(input.currentSlug)
+  const reserved = (input.reservedSlugs ?? [])
+    .map((s) => normalizeOrgSlug(s))
+    .filter((s) => s && s !== current)
+  if (reserved.includes(slug)) return 'Slug đã tồn tại — chọn slug khác.'
+
+  const notes = (input.notes ?? '').trim()
+  if (notes.length > NOTES_MAX) return `Ghi chú tối đa ${NOTES_MAX} ký tự.`
+
+  return null
+}
+
+export function buildOrganizationUpdatePatch(input: {
+  name: string
+  slug: string
+  notes?: string
+}): { name: string; slug: string; notes: string } {
+  return {
+    name: input.name.trim(),
+    slug: normalizeOrgSlug(input.slug),
+    notes: (input.notes ?? '').trim(),
+  }
+}

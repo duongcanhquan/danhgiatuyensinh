@@ -1353,6 +1353,8 @@ export interface Organization {
   name: string
   slug: string
   status: OrganizationStatus
+  /** Ghi chú nội bộ Siêu quản trị — không hiện cho TVV. */
+  notes?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
   createdBy?: UserId
