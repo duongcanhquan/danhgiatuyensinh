@@ -80,5 +80,6 @@ describe('ORG_SETTINGS_TEMPLATE_DOC_IDS', () => {
   it('includes kpi and portal docs', () => {
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('kpiV2Config')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('publicRegistrationConfig')
+    expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('integrationHub')
   })
 })

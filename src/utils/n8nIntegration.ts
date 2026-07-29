@@ -8,11 +8,29 @@ import {
 } from './accountantN8nPayload'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
 import { pickOrgWebhook } from './n8nWebhooksConfig'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { dispatchOutboundEvent } from '../integrations/dispatchOutbound'
+import type { OutboundEventId } from '../integrations/outboundEvents'
 
 const DEFAULT_WEBHOOK = 'https://apchn-host.lapage.vn/webhook/giaymoits'
 const DEFAULT_WEBHOOK_CTSV = 'https://apchn-host.lapage.vn/webhook/testctsv'
 const DEFAULT_WEBHOOK_DAILY = 'https://apchn-host.lapage.vn/webhook/baocao-ngay'
 const DEFAULT_WEBHOOK_MONTHLY = 'https://apchn-host.lapage.vn/webhook/baocao-thang'
+
+function resolveLeadOrgId(lead?: { orgId?: string | null }): string {
+  return String(lead?.orgId ?? '').trim() || DEFAULT_ORG_ID
+}
+
+/** Fan-out sang Hub (Zapier/Make/Slack…) — không làm fail luồng n8n chính. */
+function fanOutHubQuietly(
+  orgId: string,
+  event: OutboundEventId,
+  payload: Record<string, unknown>,
+): void {
+  void dispatchOutboundEvent({ orgId, event, payload }).catch((e) => {
+    console.warn('[integrationHub dispatch]', event, e)
+  })
+}
 
 function webhookGiayMoi(): string {
   const fromOrg = pickOrgWebhook('giayMoi')
@@ -172,6 +190,7 @@ export async function triggerProfileFinanceN8n(opts: {
     console.warn('n8n testctsv:', res.status, text)
     throw new Error(text || `n8n báo thu trả về ${res.status}`)
   }
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'finance.submitted', pl as Record<string, unknown>)
 }
 
 /** Kế toán duyệt / từ chối một đợt — `accountant_decision` (webhook n8n / Chat). */
@@ -188,6 +207,7 @@ export async function triggerAccountantDecisionN8n(opts: AccountantDecisionN8nCo
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n kế toán trả về ${res.status}`)
   }
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'finance.decision', pl as Record<string, unknown>)
 }
 
 export async function triggerAccountantFullNeN8n(opts: {
@@ -221,6 +241,7 @@ export async function triggerAccountantFullNeN8n(opts: {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n Full NE trả về ${res.status}`)
   }
+  fanOutHubQuietly(resolveLeadOrgId(opts.lead), 'finance.full_ne', pl as Record<string, unknown>)
 }
 
 export async function triggerDailyReportN8n(payload: Record<string, unknown>): Promise<void> {
@@ -229,6 +250,8 @@ export async function triggerDailyReportN8n(payload: Record<string, unknown>): P
     const text = await res.text().catch(() => '')
     throw new Error(text || `Báo cáo ngày — n8n trả về ${res.status}`)
   }
+  const orgId = String(payload.orgId ?? '').trim() || DEFAULT_ORG_ID
+  fanOutHubQuietly(orgId, 'report.daily', payload)
 }
 
 export async function triggerMonthlyReportN8n(payload: Record<string, unknown>): Promise<void> {
@@ -237,6 +260,8 @@ export async function triggerMonthlyReportN8n(payload: Record<string, unknown>):
     const text = await res.text().catch(() => '')
     throw new Error(text || `Báo cáo tháng — n8n trả về ${res.status}`)
   }
+  const orgId = String(payload.orgId ?? '').trim() || DEFAULT_ORG_ID
+  fanOutHubQuietly(orgId, 'report.monthly', payload)
 }
 
 export async function triggerInvitationN8n(opts: {
@@ -281,6 +306,7 @@ export async function triggerInvitationN8n(opts: {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n trả về ${res.status}`)
   }
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'document.requested', payload as Record<string, unknown>)
   try {
     const json = (await res.json()) as { folderUrl?: string }
     if (json?.folderUrl) return { folderUrl: json.folderUrl }

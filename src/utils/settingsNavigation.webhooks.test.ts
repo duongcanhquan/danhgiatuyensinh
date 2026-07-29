@@ -24,16 +24,25 @@ describe('settingsNavigation webhooks', () => {
   it('exposes webhooks under connect for master or omicall', () => {
     expect(isSettingsSubEnabled('webhooks', fullAccess)).toBe(true)
     expect(enabledSubsForMain('connect', fullAccess)).toContain('webhooks')
+    expect(enabledSubsForMain('connect', fullAccess)).toContain('hub')
     expect(resolveSettingsRoute('connect', 'webhooks', fullAccess)).toEqual({
       main: 'connect',
       sub: 'webhooks',
     })
     expect(resolveSettingsRoute('n8n', null, fullAccess).sub).toBe('webhooks')
+    expect(resolveSettingsRoute('integrations', null, fullAccess).sub).toBe('hub')
   })
 
   it('hides webhooks without master/omicall', () => {
     expect(
       isSettingsSubEnabled('webhooks', {
+        ...fullAccess,
+        canMaster: false,
+        canOmicall: false,
+      }),
+    ).toBe(false)
+    expect(
+      isSettingsSubEnabled('hub', {
         ...fullAccess,
         canMaster: false,
         canOmicall: false,

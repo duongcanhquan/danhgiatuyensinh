@@ -54,6 +54,7 @@ import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
 import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
+import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
 import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
 import {
@@ -243,6 +244,16 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Cấu hình tổng đài web: domain, số nội bộ mặc định, phiên bản SDK. TVV gọi từ hồ sơ; log cuộc gọi vào{' '}
             <strong>lịch sử tương tác</strong> khi kết thúc (nếu bật).
+          </p>
+        </>
+      )
+    case 'hub':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Hub kết nối</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Danh mục đầu nối sẵn với ứng dụng ngoài (Zalo, WhatsApp, Slack, API đối tác, Zapier/Make…). Bật và điền cấu
+            hình theo trường; đăng ký webhook theo sự kiện CRM.
           </p>
         </>
       )
@@ -1229,6 +1240,15 @@ export function SettingsView() {
           >
             <AISettingsTab db={db} />
           </div>
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'hub' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-hub" className="space-y-3">
+          <h2 id="tab-hub" className="sr-only">
+            Hub kết nối
+          </h2>
+          <IntegrationHubPanel />
         </div>
       ) : null}
 
