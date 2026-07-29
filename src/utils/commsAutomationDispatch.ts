@@ -37,7 +37,10 @@ export async function runCommsAutomationRules(input: {
   fetchImpl?: typeof fetch
   now?: Date
 }): Promise<CommsDispatchResult> {
-  const cfg = input.config ?? getCommsAutomationConfigCache().config
+  const cached = getCommsAutomationConfigCache()
+  const cfg =
+    input.config ??
+    (cached.orgId === input.orgId ? cached.config : null)
   const result: CommsDispatchResult = {
     trigger: input.trigger,
     attempted: 0,

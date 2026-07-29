@@ -21,11 +21,19 @@ describe('leadAccess capability-aware admin', () => {
     expect(canWriteLead(p, { assignedTo: 'other' }, can, [])).toBe(true)
   })
 
-  it('admin with leads:read:global can write any lead', () => {
+  it('admin with global read+write can write any lead', () => {
+    const p = profile({ id: 'ad', role: 'admin' })
+    const can = (perm: string) =>
+      perm === 'leads:read:global' || perm === 'leads:write:team_scope'
+    expect(canCreateLead(p, can)).toBe(true)
+    expect(canWriteLead(p, { assignedTo: 'other' }, can, [])).toBe(true)
+  })
+
+  it('admin with only global read cannot write other leads', () => {
     const p = profile({ id: 'ad', role: 'admin' })
     const can = (perm: string) => perm === 'leads:read:global'
     expect(canCreateLead(p, can)).toBe(true)
-    expect(canWriteLead(p, { assignedTo: 'other' }, can, [])).toBe(true)
+    expect(canWriteLead(p, { assignedTo: 'other' }, can, [])).toBe(false)
   })
 
   it('admin without global only writes self-assigned when granted', () => {

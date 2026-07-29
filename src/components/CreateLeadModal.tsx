@@ -172,6 +172,7 @@ export function CreateLeadModal({
   }, [
     db,
     profile,
+    effectiveOrgId,
     activeScoringProfile,
     draft,
     financeDraft,

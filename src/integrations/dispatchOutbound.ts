@@ -57,7 +57,10 @@ export async function dispatchOutboundEvent(input: {
   hub?: OrgIntegrationHubConfig | null
   fetchImpl?: typeof fetch
 }): Promise<OutboundDispatchResult> {
-  const hub = input.hub ?? getOrgIntegrationHubCache()?.config ?? null
+  const cached = getOrgIntegrationHubCache()
+  const hub =
+    input.hub ??
+    (cached && cached.orgId === input.orgId ? cached.config : null)
   const result: OutboundDispatchResult = {
     event: input.event,
     attempted: 0,

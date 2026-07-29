@@ -136,6 +136,35 @@ function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrat
   }
 }
 
+async function resolveActiveOrgId(db: Firestore, slugOrId: string): Promise<string> {
+  const key = normalizeOrgSlugParam(slugOrId)
+  const byId = await db.collection('organizations').doc(key).get()
+  if (byId.exists) {
+    const status = str(byId.get('status')) || 'active'
+    if (status === 'suspended') {
+      throw new HttpsError('failed-precondition', 'Trường đang tạm ngưng — cổng đăng ký không nhận hồ sơ.')
+    }
+    return byId.id
+  }
+  try {
+    const bySlug = await db.collection('organizations').where('slug', '==', key).limit(1).get()
+    if (!bySlug.empty) {
+      const d = bySlug.docs[0]!
+      const status = str(d.get('status')) || 'active'
+      if (status === 'suspended') {
+        throw new HttpsError('failed-precondition', 'Trường đang tạm ngưng — cổng đăng ký không nhận hồ sơ.')
+      }
+      return d.id
+    }
+  } catch (e) {
+    if (e instanceof HttpsError) throw e
+    console.warn('[publicRegistration] slug query', key, e)
+  }
+  // Bootstrap VietMy trước khi có doc organizations
+  if (key === 'vietmy') return 'vietmy'
+  throw new HttpsError('not-found', 'Không tìm thấy trường tương ứng với đường dẫn đăng ký.')
+}
+
 async function loadPublicRegistrationConfig(
   db: Firestore,
   orgId?: string,
@@ -154,11 +183,15 @@ async function loadPublicRegistrationConfig(
   } catch (e) {
     console.warn('[publicRegistration] orgSettings read', resolvedOrg, e)
   }
-  const snap = await db.collection('scoringAux').doc(PUBLIC_REGISTRATION_DOC_ID).get()
-  return {
-    ...parseConfig(snap.exists ? (snap.data() as Record<string, unknown>) : undefined),
-    orgId: resolvedOrg,
+  // Legacy fallback chỉ cho VietMy
+  if (resolvedOrg === 'vietmy') {
+    const snap = await db.collection('scoringAux').doc(PUBLIC_REGISTRATION_DOC_ID).get()
+    return {
+      ...parseConfig(snap.exists ? (snap.data() as Record<string, unknown>) : undefined),
+      orgId: resolvedOrg,
+    }
   }
+  return { ...parseConfig(undefined), orgId: resolvedOrg, enabled: false }
 }
 
 async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLite[]> {
@@ -282,7 +315,8 @@ function normalizeOrgSlugParam(raw: unknown): string {
 
 export function registerPublicRegistrationFunctions(db: Firestore) {
   const getPublicRegistrationMeta = onCall(async (request) => {
-    const orgId = normalizeOrgSlugParam((request.data as { orgSlug?: string } | undefined)?.orgSlug)
+    const slug = normalizeOrgSlugParam((request.data as { orgSlug?: string } | undefined)?.orgSlug)
+    const orgId = await resolveActiveOrgId(db, slug)
     const config = await loadPublicRegistrationConfig(db, orgId)
     let provinces: string[] = []
     try {
@@ -309,7 +343,8 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
 
   const submitPublicLead = onCall(async (request) => {
     const data = (request.data ?? {}) as PublicLeadInput & { orgSlug?: string }
-    const orgId = normalizeOrgSlugParam(data.orgSlug)
+    const slug = normalizeOrgSlugParam(data.orgSlug)
+    const orgId = await resolveActiveOrgId(db, slug)
     const config = await loadPublicRegistrationConfig(db, orgId)
     if (!config.enabled) {
       throw new HttpsError('failed-precondition', 'Cổng đăng ký đang tắt. Vui lòng liên hệ trường.')

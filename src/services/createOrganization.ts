@@ -24,6 +24,7 @@ import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { getDefaultKpiV2Config, KPI_V2_FIRESTORE_DOC_ID } from '../utils/kpiV2Config'
 import { commitPlatformAudit } from './platformAudit'
+import { sanitizeCopiedOrgSettingsDoc } from '../tenancy/sanitizeCopiedOrgSettings'
 
 export type ProvisionOrganizationResult = {
   orgId: string
@@ -52,26 +53,8 @@ async function copyOrgSettingsTemplate(
     const toRef = doc(db, ...orgSettingsDocSegments(toOrgId, docId))
     const snap = await getDoc(fromRef)
     if (snap.exists()) {
-      const data: Record<string, unknown> = {
-        ...(snap.data() as Record<string, unknown>),
-        orgId: toOrgId,
-      }
-      // New schools should not inherit production API secrets blindly — strip sensitive keys
-      if (docId === 'omicallIntegration' || docId === 'orgAiIntegration') {
-        delete data.apiKey
-        delete data.defaultSipPassword
-        delete data.apiToken
-      }
-      if (docId === 'publicRegistrationConfig') {
-        data.enabled = false
-        data.n8nWebhookUrl = ''
-      }
-      if (docId === 'n8nWebhooks') {
-        data.giayMoi = ''
-        data.ctsv = ''
-        data.daily = ''
-        data.monthly = ''
-      }
+      const raw = snap.data() as Record<string, unknown>
+      const data = sanitizeCopiedOrgSettingsDoc(docId, raw, toOrgId)
       await setDoc(toRef, data)
       copied += 1
       continue

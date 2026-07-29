@@ -51,8 +51,10 @@ export function canWriteLead(
 ): boolean {
   if (!profile) return false
   if (isSuperAdminRole(profile.role)) return true
-  // Admin (hoặc ai có global) — toàn trường
-  if (can('leads:read:global')) return true
+  // Admin toàn trường: cần quyền ghi phạm vi nhóm (đi kèm module hồ sơ) hoặc ghi cá nhân
+  if (can('leads:read:global') && (can('leads:write:team_scope') || can('leads:write:self_assigned'))) {
+    return true
+  }
   const assigned = leadAssignedUid(lead)
   if (can('leads:write:self_assigned') && assigned === profile.id) return true
   if (can('leads:write:team_scope') && isLeadInManagerTeam(profile, lead, directory)) return true

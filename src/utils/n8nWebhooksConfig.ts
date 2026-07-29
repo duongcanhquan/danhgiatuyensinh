@@ -46,7 +46,9 @@ export function getOrgN8nWebhookOverrides(): { orgId: string | null; hooks: OrgN
 
 export function pickOrgWebhook(
   kind: keyof Pick<OrgN8nWebhooks, 'giayMoi' | 'ctsv' | 'daily' | 'monthly'>,
+  expectedOrgId?: string,
 ): string {
+  if (expectedOrgId && orgWebhookOrgId && orgWebhookOrgId !== expectedOrgId) return ''
   const u = orgWebhookOverrides?.[kind]?.trim() ?? ''
   return u.startsWith('http') ? u : ''
 }

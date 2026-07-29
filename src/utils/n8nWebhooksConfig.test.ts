@@ -27,14 +27,15 @@ describe('parseOrgN8nWebhooks', () => {
 })
 
 describe('pickOrgWebhook', () => {
-  it('returns http override only', () => {
+  it('returns http override only for matching org', () => {
     setOrgN8nWebhookOverrides('demo', {
       ...emptyOrgN8nWebhooks(),
       ctsv: 'https://hook.example/ctsv',
       giayMoi: 'not-a-url',
     })
-    expect(pickOrgWebhook('ctsv')).toBe('https://hook.example/ctsv')
-    expect(pickOrgWebhook('giayMoi')).toBe('')
+    expect(pickOrgWebhook('ctsv', 'demo')).toBe('https://hook.example/ctsv')
+    expect(pickOrgWebhook('ctsv', 'other')).toBe('')
+    expect(pickOrgWebhook('giayMoi', 'demo')).toBe('')
     setOrgN8nWebhookOverrides('demo', null)
   })
 })

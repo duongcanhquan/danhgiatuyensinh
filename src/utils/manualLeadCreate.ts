@@ -204,12 +204,14 @@ export async function createManualLead(
 
   const { dispatchOutboundEvent } = await import('../integrations/dispatchOutbound')
   const { triggerCommsAutomation } = await import('./commsAutomationDispatch')
-  const emailGuess = customerId.includes('@') ? customerId : undefined
+  const email =
+    String(input.draft.studentEmail ?? '').trim() ||
+    (customerId.includes('@') ? customerId : undefined)
   const payload = {
     leadId: ref.id,
     fullName: input.draft.fullName,
     phone: input.draft.phone,
-    email: emailGuess,
+    email,
     assignedTo: input.assignedCounselorId,
   }
   void dispatchOutboundEvent({
@@ -221,7 +223,7 @@ export async function createManualLead(
     id: ref.id,
     fullName: input.draft.fullName,
     phone: input.draft.phone,
-    email: emailGuess,
+    email,
     parentPhone: input.draft.parentPhone,
     majorInterest: input.draft.majorInterest,
     province: input.draft.province,

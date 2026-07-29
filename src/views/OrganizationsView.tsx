@@ -72,7 +72,6 @@ export function OrganizationsView() {
 
   const [detailId, setDetailId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
-  const [editSlug, setEditSlug] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const [admins, setAdmins] = useState<AdminRow[]>([])
   const [adminsLoading, setAdminsLoading] = useState(false)
@@ -188,13 +187,11 @@ export function OrganizationsView() {
   useEffect(() => {
     if (!detailOrg) {
       setEditName('')
-      setEditSlug('')
       setEditNotes('')
       setAdmins([])
       return
     }
     setEditName(detailOrg.name)
-    setEditSlug(detailOrg.slug)
     setEditNotes(detailOrg.notes ?? '')
   }, [detailOrg])
 
@@ -347,7 +344,7 @@ export function OrganizationsView() {
     try {
       const result = await updateOrganization(db, actor, detailOrg.id, {
         name: editName,
-        slug: editSlug,
+        slug: detailOrg.slug,
         notes: editNotes,
       })
       setBanner(`Đã lưu thông tin trường «${result.name}».`)
@@ -673,8 +670,7 @@ export function OrganizationsView() {
                       <div>
                         <h3 className="text-sm font-semibold text-slate-900">Thông tin trường</h3>
                         <p className="mt-0.5 text-xs text-slate-500">
-                          Mã trường cố định: <span className="font-mono">{org.id}</span> (không đổi). Đổi đường dẫn
-                          cổng đăng ký ảnh hưởng link công khai.
+                          Mã trường và đường dẫn cổng đăng ký cố định khi tạo — đổi sẽ lệch hồ sơ công khai.
                         </p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <label className="block text-xs font-semibold text-slate-600">
@@ -689,11 +685,12 @@ export function OrganizationsView() {
                             Đường dẫn cổng đăng ký
                             <input
                               className="vm-input mt-1 w-full font-mono text-sm"
-                              value={editSlug}
-                              onChange={(e) => setEditSlug(e.target.value)}
+                              value={detailOrg.slug}
+                              disabled
+                              readOnly
                             />
                             <span className="mt-1 block font-normal text-slate-500">
-                              /dang-ky/{normalizeOrgSlug(editSlug) || '…'}
+                              /dang-ky/{detailOrg.slug} · mã: {org.id}
                             </span>
                           </label>
                           <label className="block text-xs font-semibold text-slate-600 sm:col-span-2">

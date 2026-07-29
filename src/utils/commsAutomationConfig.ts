@@ -442,8 +442,8 @@ export function parseCommsAutomationConfig(
     sms: parseSms(data.sms),
     zalo: parseZalo(data.zalo),
     whatsapp: parseWhatsapp(data.whatsapp),
-    templates: templates.length ? templates : base.templates,
-    rules: rules.length ? rules : base.rules,
+    templates: Array.isArray(data.templates) ? templates : base.templates,
+    rules: Array.isArray(data.rules) ? rules : base.rules,
     consent: {
       requireOptInBeforeMarketing: consentRaw.requireOptInBeforeMarketing !== false,
       honorDoNotContact: consentRaw.honorDoNotContact !== false,
