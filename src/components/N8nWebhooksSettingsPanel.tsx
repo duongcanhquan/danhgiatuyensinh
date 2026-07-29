@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Save } from 'lucide-react'
+import { FileText, Save, ScrollText, CalendarDays, CalendarRange } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
 import { getFirestoreDb } from '../services/firebase'
@@ -13,31 +13,18 @@ import {
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100'
 
-const FIELDS: Array<{ key: keyof Pick<OrgN8nWebhooks, 'giayMoi' | 'ctsv' | 'daily' | 'monthly'>; label: string; hint: string }> =
-  [
-    {
-      key: 'giayMoi',
-      label: 'Giấy mời / trúng tuyển',
-      hint: 'Tạo Docs giấy mời, giấy trúng tuyển từ hồ sơ.',
-    },
-    {
-      key: 'ctsv',
-      label: 'CTSV / cập nhật tài chính',
-      hint: 'Thông báo Chat khi đổi tiền, bill, duyệt đợt thu.',
-    },
-    {
-      key: 'daily',
-      label: 'Báo cáo ngày',
-      hint: 'Gửi tổng hợp ngày từ cổng kế toán / báo cáo.',
-    },
-    {
-      key: 'monthly',
-      label: 'Báo cáo tháng',
-      hint: 'Gửi tổng hợp tháng.',
-    },
-  ]
+const FIELDS: Array<{
+  key: keyof Pick<OrgN8nWebhooks, 'giayMoi' | 'ctsv' | 'daily' | 'monthly'>
+  label: string
+  icon: typeof FileText
+}> = [
+  { key: 'giayMoi', label: 'Giấy mời', icon: FileText },
+  { key: 'ctsv', label: 'CTSV / tài chính', icon: ScrollText },
+  { key: 'daily', label: 'Báo cáo ngày', icon: CalendarDays },
+  { key: 'monthly', label: 'Báo cáo tháng', icon: CalendarRange },
+]
 
-/** Cài đặt webhook n8n theo từng trường — ưu tiên hơn biến môi trường VITE_N8N_*. */
+/** Webhook n8n — form gọn icon + URL. */
 export function N8nWebhooksSettingsPanel() {
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
@@ -78,52 +65,55 @@ export function N8nWebhooksSettingsPanel() {
         profile?.email ?? profile?.id ?? 'admin',
       )
       setDraft(saved)
-      setMsg('Đã lưu — webhook trường áp dụng ngay cho giấy tờ / CTSV / báo cáo.')
+      setMsg('Đã lưu')
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Không lưu được webhook.')
+      setMsg(e instanceof Error ? e.message : 'Không lưu được.')
     } finally {
       setBusy(false)
     }
   }
 
   if (!loaded) {
-    return <p className="text-sm text-slate-600">Đang tải webhook n8n…</p>
+    return <p className="text-sm text-slate-600">Đang tải…</p>
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-teal-100 bg-teal-50/70 px-4 py-3 text-sm text-teal-950">
-        <p className="font-semibold">Kết nối n8n theo trường</p>
-        <p className="mt-1 text-teal-900/90">
-          Trường hiện tại: <strong>{currentOrgLabel}</strong>. URL lưu ở đây ưu tiên hơn cấu hình chung trên máy chủ.
-          Để trống một ô thì hệ thống dùng giá trị mặc định / biến môi trường.
-        </p>
+    <div className="space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold text-slate-900">Webhook n8n</h2>
+        <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
       </div>
 
-      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2">
-        {FIELDS.map((f) => (
-          <label key={f.key} className="block sm:col-span-2">
-            <span className="text-sm font-semibold text-slate-800">{f.label}</span>
-            <span className="mt-0.5 block text-xs text-slate-500">{f.hint}</span>
-            <input
-              className={`mt-1 ${INPUT}`}
-              value={draft[f.key] ?? ''}
-              disabled={!canEdit}
-              onChange={(e) => patch(f.key, e.target.value)}
-              placeholder="https://…/webhook/…"
-              inputMode="url"
-              autoComplete="off"
-            />
-          </label>
-        ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {FIELDS.map((f) => {
+          const Icon = f.icon
+          const ok = String(draft[f.key] ?? '').trim().startsWith('http')
+          return (
+            <label key={f.key} className="block rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-800">
+                  <Icon className="h-4 w-4" aria-hidden />
+                </span>
+                {f.label}
+                {ok ? (
+                  <span className="ml-auto h-2 w-2 rounded-full bg-emerald-500" title="Có URL" />
+                ) : (
+                  <span className="ml-auto h-2 w-2 rounded-full bg-slate-300" title="Trống" />
+                )}
+              </span>
+              <input
+                className={`mt-2 ${INPUT}`}
+                value={draft[f.key] ?? ''}
+                disabled={!canEdit}
+                onChange={(e) => patch(f.key, e.target.value)}
+                placeholder="https://…/webhook/…"
+                inputMode="url"
+                autoComplete="off"
+              />
+            </label>
+          )
+        })}
       </div>
-
-      {draft.updatedAt ? (
-        <p className="text-xs text-slate-500">
-          Lần lưu gần nhất: {draft.updatedAt}
-          {draft.updatedBy ? ` · ${draft.updatedBy}` : ''}
-        </p>
-      ) : null}
 
       {canEdit ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -131,15 +121,15 @@ export function N8nWebhooksSettingsPanel() {
             type="button"
             disabled={busy}
             onClick={() => void onSave()}
-            className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
           >
             <Save className="h-4 w-4" aria-hidden />
-            {busy ? 'Đang lưu…' : 'Lưu webhook'}
+            {busy ? '…' : 'Lưu'}
           </button>
-          {msg ? <p className="text-sm text-slate-700">{msg}</p> : null}
+          {msg ? <p className="text-sm text-slate-600">{msg}</p> : null}
         </div>
       ) : (
-        <p className="text-sm text-amber-800">Bạn chỉ xem — cần quyền cấu hình danh mục hoặc gọi điện để lưu.</p>
+        <p className="text-sm text-amber-800">Chỉ xem</p>
       )}
     </div>
   )
