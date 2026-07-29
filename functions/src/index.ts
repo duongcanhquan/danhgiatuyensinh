@@ -54,6 +54,10 @@ import {
   registerCounselorLoadOnLeadWrite,
 } from './counselorLoadSync.js'
 import {
+  registerRefreshOwnAuthClaimsCallable,
+  registerSyncAuthClaimsOnUserWrite,
+} from './syncAuthClaims.js'
+import {
   normalizePhoneLocal,
   normalizePhoneIntl,
   normalizeHotlineNumber,
@@ -1987,5 +1991,11 @@ export const backfillCounselorLoads = registerBackfillCounselorLoadsCallable(
   COLLECTIONS.users,
   COLLECTIONS.leads,
 )
+
+export const syncAuthClaimsOnUserWrite = registerSyncAuthClaimsOnUserWrite(
+  FIRESTORE_DATABASE_ID,
+  COLLECTIONS.users,
+)
+export const refreshOwnAuthClaims = registerRefreshOwnAuthClaimsCallable(db, COLLECTIONS.users)
 
 export { fetchOmicallCallsForClient } from './fetchOmicallCallsForClient.js'

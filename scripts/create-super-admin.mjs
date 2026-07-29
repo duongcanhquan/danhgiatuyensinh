@@ -125,13 +125,20 @@ try {
     {
       email,
       displayName: 'Super Admin',
-      role: 'admin',
+      role: 'super_admin',
+      orgId: null,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     },
     { merge: true },
   )
+  await auth.setCustomUserClaims(uid, {
+    role: 'super_admin',
+    orgId: '',
+    platform: true,
+  })
+  console.log('Đã gán custom claims platform super_admin cho', uid)
 } catch (e) {
   const grpc = e?.code
   const msg = String(e?.message ?? e ?? '')

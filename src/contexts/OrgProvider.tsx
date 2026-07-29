@@ -1,0 +1,126 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { useAuth } from '../hooks/useAuth'
+import { FS_COLLECTIONS, type Organization } from '../types'
+import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
+import { isPlatformSuperAdminRole } from '../tenancy/orgId'
+import { readStoredActiveOrgId, writeStoredActiveOrgId } from '../tenancy/activeOrgStorage'
+
+export type OrgOption = { id: string; name: string; slug: string; status: 'active' | 'suspended' }
+
+type OrgContextValue = {
+  effectiveOrgId: string
+  activeOrgId: string | null
+  setActiveOrgId: (orgId: string) => void
+  isPlatformSuperAdmin: boolean
+  organizations: OrgOption[]
+  organizationsLoading: boolean
+  currentOrgLabel: string
+}
+
+const OrgContext = createContext<OrgContextValue | null>(null)
+
+const FALLBACK_ORGS: OrgOption[] = [
+  { id: DEFAULT_ORG_ID, name: 'Cao đẳng Việt Mỹ', slug: DEFAULT_ORG_ID, status: 'active' },
+]
+
+export function OrgProvider({ children }: { children: ReactNode }) {
+  const { profile } = useAuth()
+  const [activeOrgId, setActiveOrgIdState] = useState<string | null>(() => readStoredActiveOrgId())
+  const [organizations, setOrganizations] = useState<OrgOption[]>(FALLBACK_ORGS)
+  const [organizationsLoading, setOrganizationsLoading] = useState(false)
+
+  const isPlatformSuperAdmin = isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)
+
+  const setActiveOrgId = useCallback((orgId: string) => {
+    const next = orgId.trim()
+    setActiveOrgIdState(next || null)
+    writeStoredActiveOrgId(next)
+  }, [])
+
+  const effectiveOrgId = useMemo(
+    () =>
+      resolveEffectiveOrgId({
+        role: profile?.role,
+        profileOrgId: profile?.orgId,
+        activeOrgId,
+      }),
+    [profile?.role, profile?.orgId, activeOrgId],
+  )
+
+  useEffect(() => {
+    if (!isPlatformSuperAdmin) return
+    if (!isFirebaseConfigured()) return
+    const db = getFirestoreDb()
+    if (!db) return
+    setOrganizationsLoading(true)
+    const qy = query(collection(db, FS_COLLECTIONS.organizations), where('status', '==', 'active'))
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const rows: OrgOption[] = snap.docs.map((d) => {
+          const data = d.data() as Partial<Organization>
+          return {
+            id: d.id,
+            name: String(data.name ?? d.id),
+            slug: String(data.slug ?? d.id),
+            status: data.status === 'suspended' ? 'suspended' : 'active',
+          }
+        })
+        setOrganizations(rows.length ? rows : FALLBACK_ORGS)
+        setOrganizationsLoading(false)
+      },
+      () => {
+        setOrganizations(FALLBACK_ORGS)
+        setOrganizationsLoading(false)
+      },
+    )
+    return () => unsub()
+  }, [isPlatformSuperAdmin])
+
+  const currentOrgLabel = useMemo(() => {
+    const hit = organizations.find((o) => o.id === effectiveOrgId)
+    return hit?.name ?? effectiveOrgId
+  }, [organizations, effectiveOrgId])
+
+  const value = useMemo(
+    (): OrgContextValue => ({
+      effectiveOrgId,
+      activeOrgId,
+      setActiveOrgId,
+      isPlatformSuperAdmin,
+      organizations,
+      organizationsLoading,
+      currentOrgLabel,
+    }),
+    [
+      effectiveOrgId,
+      activeOrgId,
+      setActiveOrgId,
+      isPlatformSuperAdmin,
+      organizations,
+      organizationsLoading,
+      currentOrgLabel,
+    ],
+  )
+
+  return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>
+}
+
+export function useOrg(): OrgContextValue {
+  const ctx = useContext(OrgContext)
+  if (!ctx) {
+    return {
+      effectiveOrgId: DEFAULT_ORG_ID,
+      activeOrgId: null,
+      setActiveOrgId: () => {},
+      isPlatformSuperAdmin: false,
+      organizations: FALLBACK_ORGS,
+      organizationsLoading: false,
+      currentOrgLabel: 'Cao đẳng Việt Mỹ',
+    }
+  }
+  return ctx
+}

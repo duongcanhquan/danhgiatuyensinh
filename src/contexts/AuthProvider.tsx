@@ -19,6 +19,9 @@ import { ensureDefaultCounselingAiTask } from '../services/ensureDefaultCounseli
 import { defaultAccountantEmailFromEnv } from '../auth/accountantPortal'
 import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { claimsMatchProfile } from '../tenancy/authClaims'
+import { refreshOwnAuthClaims } from '../services/refreshOwnAuthClaims'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
   if (!import.meta.env.DEV) return null
@@ -32,6 +35,7 @@ function devSyntheticProfile(): VietMyUserProfile | null {
     email: 'dev@local',
     displayName: 'Dev User',
     role,
+    orgId: role === 'super_admin' ? null : DEFAULT_ORG_ID,
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -40,11 +44,19 @@ function devSyntheticProfile(): VietMyUserProfile | null {
 
 function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>): VietMyUserProfile {
   const now = Timestamp.now()
+  const rawOrg = d.orgId
+  const orgId =
+    rawOrg === null
+      ? null
+      : typeof rawOrg === 'string' && rawOrg.trim()
+        ? rawOrg.trim()
+        : undefined
   return {
     id: uid,
     email: String(d.email ?? user.email ?? ''),
     displayName: String(d.displayName ?? user.displayName ?? ''),
     role: normalizeUserRole(String(d.role ?? 'counselor')),
+    orgId: orgId === undefined ? undefined : orgId,
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
     managedMajorIds: d.managedMajorIds as string[] | undefined,
@@ -123,6 +135,7 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
       email: user.email ?? '',
       displayName: user.displayName || user.email?.split('@')[0] || 'Người dùng',
       role: isSuper ? 'super_admin' : isDefaultAccountant ? 'accountant' : 'counselor',
+      orgId: isSuper ? null : DEFAULT_ORG_ID,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -135,11 +148,44 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
   let role = normalizeUserRole(String(data.role ?? 'counselor'))
   if (isSuper && role !== 'super_admin') {
     role = 'super_admin'
-    await updateDoc(ref, { role: 'super_admin', updatedAt: now })
+    await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+    data.role = 'super_admin'
+    data.orgId = null
   } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {
     await updateDoc(ref, { role: 'team_lead', updatedAt: now })
+    data.role = 'team_lead'
+  }
+  // Phase 1: school users without orgId get vietmy backfill on login
+  if (!isSuper && role !== 'super_admin' && (data.orgId == null || data.orgId === '')) {
+    await updateDoc(ref, { orgId: DEFAULT_ORG_ID, updatedAt: now })
+    data.orgId = DEFAULT_ORG_ID
   }
   return mapProfileFromDoc(user.uid, user, { ...data, role })
+}
+
+/** Force ID token refresh when custom claims lag behind Firestore profile. */
+async function ensureAuthClaimsFresh(
+  user: User,
+  profile: Pick<VietMyUserProfile, 'role' | 'orgId'>,
+): Promise<void> {
+  try {
+    const token = await user.getIdTokenResult()
+    const claims = {
+      role: typeof token.claims.role === 'string' ? token.claims.role : undefined,
+      orgId: typeof token.claims.orgId === 'string' ? token.claims.orgId : '',
+      platform: token.claims.platform === true,
+    }
+    if (claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) return
+    try {
+      await refreshOwnAuthClaims()
+    } catch (e) {
+      // Function may not be deployed yet — still try local token refresh
+      console.warn('[ensureAuthClaimsFresh] refreshOwnAuthClaims', e)
+    }
+    await user.getIdToken(true)
+  } catch (e) {
+    console.warn('[ensureAuthClaimsFresh]', e)
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -197,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('unauthenticated')
           return
         }
+        await ensureAuthClaimsFresh(user, p)
         setStatus('authenticated')
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
@@ -263,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
       displayName: string
       role: UserRole
+      orgId?: string | null
       managedCounselorIds?: string[]
       omicallSipUser?: string
       omicallSipPassword?: string
@@ -295,10 +343,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const omicallSipPassword = input.omicallSipPassword?.trim()
       const omicallAgentId = input.omicallAgentId?.trim()
       const omicallOutboundNumber = input.omicallOutboundNumber?.trim()
+      const resolvedOrgId =
+        normalizedRole === 'super_admin'
+          ? null
+          : (input.orgId?.trim() || profile?.orgId || DEFAULT_ORG_ID)
       await setDoc(doc(db, FS_COLLECTIONS.users, cred.user.uid), {
         email,
         displayName: input.displayName.trim() || email.split('@')[0],
         role: normalizedRole,
+        orgId: resolvedOrgId,
         isActive: true,
         createdAt: now,
         updatedAt: now,

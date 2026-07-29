@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
   BookOpen,
+  Building2,
   CalendarDays,
   LayoutDashboard,
   LineChart,
@@ -25,6 +26,9 @@ import { LeadClassificationRulesProvider } from '../contexts/LeadClassificationR
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
 import { SharedFirestoreDataProviders } from '../contexts/SharedFirestoreDataProviders'
+import { OrgProvider } from '../contexts/OrgProvider'
+import { OrgSwitcher } from './OrgSwitcher'
+import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 
 type NavGroup = 'work' | 'more'
 
@@ -67,6 +71,14 @@ const mainNav: NavDef[] = [
     group: 'more',
     perm: 'analytics:advanced',
   },
+  {
+    to: '/organizations',
+    label: 'Quản lý trường',
+    shortLabel: 'Trường',
+    icon: Building2,
+    group: 'more',
+    show: () => false, // filled in Layout via platform check
+  },
   { to: '/settings', label: 'Cài đặt', shortLabel: 'Cài đặt', icon: Settings2, group: 'more', bottomPrimary: true },
 ]
 
@@ -75,8 +87,8 @@ function sidebarLinkClass(isActive: boolean) {
     'flex w-full min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition duration-150',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400',
     isActive
-      ? 'bg-[var(--color-primary)] text-white shadow-sm'
-      : 'text-slate-300 hover:bg-white/8 hover:text-white',
+      ? 'bg-[var(--vm-accent)] text-white shadow-sm'
+      : 'text-slate-300 hover:bg-white/10 hover:text-white',
   ].join(' ')
 }
 
@@ -94,7 +106,16 @@ export function Layout() {
     setSidebarOpen(false)
   }, [location.pathname])
 
-  const navItems = mainNav.filter((item) => navAllowed(item, can, permissions))
+  const navItems = mainNav
+    .map((item) =>
+      item.to === '/organizations'
+        ? {
+            ...item,
+            show: () => isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null),
+          }
+        : item,
+    )
+    .filter((item) => navAllowed(item, can, permissions))
 
   const mobileBottomItems = useMemo(() => {
     const primary = navItems.filter(
@@ -163,6 +184,7 @@ export function Layout() {
       </nav>
 
       <div className="shrink-0 border-t border-white/10 px-3 py-3">
+        <OrgSwitcher className="mb-3" />
         <div className="flex items-center gap-2.5 rounded-xl bg-white/5 px-3 py-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
             <User className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -187,6 +209,7 @@ export function Layout() {
   )
 
   return (
+    <OrgProvider>
     <div className="relative min-h-[100dvh] text-slate-800 antialiased">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="absolute -left-[10%] -top-[15%] h-[420px] w-[480px] rounded-full bg-blue-400/6 blur-[100px]" />
@@ -205,8 +228,8 @@ export function Layout() {
 
         <aside
           className={[
-            'safe-area-pt fixed inset-y-0 left-0 z-50 flex w-[min(17rem,88vw)] shrink-0 flex-col',
-            'border-r border-slate-800/80 bg-slate-900',
+            'app-shell-sidebar safe-area-pt fixed inset-y-0 left-0 z-50 flex w-[min(17rem,88vw)] shrink-0 flex-col',
+            'border-r',
             'shadow-xl transition-transform duration-200 ease-out lg:shadow-none',
             'lg:static lg:z-auto lg:h-auto lg:min-h-[100dvh] lg:w-56 lg:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
@@ -250,9 +273,9 @@ export function Layout() {
             ) : null}
           </header>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto bg-[var(--color-background)]">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto bg-[var(--vm-canvas)]">
             <main className="safe-area-pb-nav flex min-h-0 min-w-0 w-full flex-1 flex-col">
-              <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-2.5 text-sm font-normal leading-relaxed text-slate-800 sm:px-4 sm:py-3 md:px-6 md:py-4 lg:px-8">
+              <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-2.5 text-sm font-normal leading-relaxed text-[var(--vm-text)] sm:px-4 sm:py-3 md:px-6 md:py-4 lg:px-8">
                 <SharedFirestoreDataProviders>
                 <InfoScoreRulesProvider>
                   <LeadClassificationRulesProvider>
@@ -300,5 +323,6 @@ export function Layout() {
         </button>
       </nav>
     </div>
+    </OrgProvider>
   )
 }

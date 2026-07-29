@@ -61,6 +61,11 @@ export interface VietMyUserProfile {
   email: string
   displayName: string
   role: UserRole
+  /**
+   * School tenant id. Required for school users.
+   * Platform `super_admin` may omit / null and use activeOrgId context instead.
+   */
+  orgId?: string | null
   /** Legacy / tùy chọn: khoa (fallback lọc TVV nếu chưa có `managedCounselorIds`). */
   departmentId?: DocumentId
   /** Legacy / tùy chọn: đơn vị ngành. */
@@ -295,6 +300,8 @@ export type InviteDocumentType =
  */
 export interface Lead {
   id: DocumentId
+  /** School tenant — required after Phase 0 backfill (default `vietmy`). */
+  orgId?: string | null
   /** Mã KH */
   customerId: string
   /** Mã hệ thống — YYMMDD + 4 số thứ tự/ngày (tự sinh khi tạo hồ sơ). */
@@ -1154,6 +1161,12 @@ export const FS_COLLECTIONS = {
   scoringRuleTemplates: 'scoringRuleTemplates',
   /** Cấu hình phụ chấm điểm (vd. tín hiệu TVV toàn trường — doc cố định). */
   scoringAux: 'scoringAux',
+  /** Per-school config root: orgSettings/{orgId}/settings/{docId} */
+  orgSettings: 'orgSettings',
+  /** School tenants registry */
+  organizations: 'organizations',
+  /** Superadmin platform ops trail (create/suspend/export org) */
+  platformAuditLogs: 'platformAuditLogs',
   masterData: 'masterData',
   consultingPlaybooks: 'consultingPlaybooks',
   /** Smart Script Hub — modular consulting snippets */
@@ -1331,6 +1344,19 @@ export const SCHOLARSHIP_AUDIENCE_LABELS: Record<ScholarshipAudienceTag, string>
 }
 
 export type FsCollectionKey = keyof typeof FS_COLLECTIONS
+
+/** School tenant registry — `organizations/{orgId}` */
+export type OrganizationStatus = 'active' | 'suspended'
+
+export interface Organization {
+  id: DocumentId
+  name: string
+  slug: string
+  status: OrganizationStatus
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
+  createdBy?: UserId
+}
 
 /** Doc cố định: `scoringAux/tvvSignalDefinitions` — checklist tùy chỉnh (Hành vi / Rủi ro) cho chi tiết hồ sơ. */
 export const SCORING_AUX_TVV_SIGNALS_DOC_ID = 'tvvSignalDefinitions' as const

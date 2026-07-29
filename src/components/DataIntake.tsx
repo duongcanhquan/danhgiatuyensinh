@@ -31,6 +31,7 @@ import { useSchoolTvvSignalDefinitions } from '../hooks/useSchoolTvvSignalDefini
 import { useMasterData } from '../hooks/useMasterData'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 /** Giới hạn Firestore mỗi batch commit. */
@@ -88,6 +89,7 @@ function omitUndefined<T extends Record<string, unknown>>(o: T): Record<string, 
 async function fetchExistingIdsByHash(
   db: NonNullable<ReturnType<typeof getFirestoreDb>>,
   hashes: string[],
+  orgId: string,
   onWaveDone?: (waveIndex: number, waveCount: number) => void,
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>()
@@ -99,7 +101,13 @@ async function fetchExistingIdsByHash(
     const group = parts.slice(i, i + EXISTING_HASH_QUERY_CONCURRENCY)
     const snaps = await Promise.all(
       group.map((part) =>
-        getDocs(query(collection(db, FS_COLLECTIONS.leads), where('uniqueHash', 'in', part))),
+        getDocs(
+          query(
+            collection(db, FS_COLLECTIONS.leads),
+            where('orgId', '==', orgId),
+            where('uniqueHash', 'in', part),
+          ),
+        ),
       ),
     )
     for (const snap of snaps) {
@@ -142,6 +150,7 @@ export function DataIntake() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
   const { profile, can } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const { profiles } = useScoringProfiles()
   const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
   const { regionLabels, highSchoolLabels, majorLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
@@ -284,7 +293,7 @@ export function DataIntake() {
           `Đang kiểm tra trùng trên hệ thống (${uniqQueryCount.toLocaleString('vi-VN')} mã, ~${waveTotal} nhóm truy vấn)…`,
         )
 
-        const existingByHash = await fetchExistingIdsByHash(db, hashesForQuery, (wave, waves) => {
+        const existingByHash = await fetchExistingIdsByHash(db, hashesForQuery, effectiveOrgId, (wave, waves) => {
           setBanner(
             `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
           )
@@ -305,7 +314,7 @@ export function DataIntake() {
         setBusy(false)
       }
     },
-    [db, profiles, canIntake, profile],
+    [db, profiles, canIntake, profile, effectiveOrgId],
   )
 
   const cancelPreview = () => {
@@ -405,6 +414,7 @@ export function DataIntake() {
           ref,
           data: omitUndefined({
             ...base,
+            orgId: effectiveOrgId,
             calculatedScore,
             priorityTag,
             ...pillarPatch,
@@ -453,6 +463,7 @@ export function DataIntake() {
     schoolTvvSignalDefs,
     infoScoreRuntime,
     classificationRuntime,
+    effectiveOrgId,
   ])
 
   const onDrop = (e: DragEvent) => {

@@ -3,11 +3,13 @@ import { ProfileSyncBlocked } from '../ProfileSyncBlocked'
 import { getFirebaseAuth, isFirebaseConfigured } from '../../services/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
+import { useOrgAccessGate } from '../../hooks/useOrgAccessGate'
 
 export function AccountantProtectedRoute() {
-  const { status, firebaseUser, profile, can } = useAuth()
+  const { status, firebaseUser, profile, can, signOut } = useAuth()
   const location = useLocation()
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
+  const orgGate = useOrgAccessGate(profile)
 
   if (!hasAuth) {
     return <Outlet />
@@ -56,6 +58,28 @@ export function AccountantProtectedRoute() {
             đăng nhập CRM
           </a>{' '}
           nếu bạn là TVV / quản trị.
+        </div>
+      </div>
+    )
+  }
+
+  if (orgGate.state === 'loading') {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-emerald-50 text-slate-600">
+        <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang kiểm tra quyền truy cập…</div>
+      </div>
+    )
+  }
+
+  if (orgGate.state === 'blocked') {
+    return (
+      <div className="mx-auto max-w-lg p-8">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-950">
+          <p className="font-semibold">Trường đang tạm ngưng</p>
+          <p className="mt-2 text-sm">Không gian «{orgGate.orgName}» đang tạm dừng. Liên hệ Siêu quản trị nếu cần mở lại.</p>
+          <button type="button" className="vm-btn vm-btn-secondary mt-4" onClick={() => void signOut()}>
+            Đăng xuất
+          </button>
         </div>
       </div>
     )

@@ -89,11 +89,18 @@ export type CreateManualLeadInput = {
   assignedCounselorId: string | null
   createdByUid: string
   createdByName: string
+  /** School tenant — required Phase 1 */
+  orgId: string
 }
 
-async function findExistingLeadIdByHash(db: Firestore, hash: string): Promise<string | null> {
+async function findExistingLeadIdByHash(db: Firestore, hash: string, orgId: string): Promise<string | null> {
   const snap = await getDocs(
-    query(collection(db, FS_COLLECTIONS.leads), where('uniqueHash', '==', hash), limit(1)),
+    query(
+      collection(db, FS_COLLECTIONS.leads),
+      where('orgId', '==', orgId),
+      where('uniqueHash', '==', hash),
+      limit(1),
+    ),
   )
   return snap.docs[0]?.id ?? null
 }
@@ -117,7 +124,7 @@ export async function createManualLead(
   const systemCode = await allocateSystemCodeForNewLead(db)
   const rowWithCode = { ...row, customerId }
   const hash = computeLeadUniqueHash(rowWithCode)
-  const existingId = await findExistingLeadIdByHash(db, hash)
+  const existingId = await findExistingLeadIdByHash(db, hash, input.orgId)
   if (existingId) throw new DuplicateLeadError(existingId)
 
   const record = evaluationRecordFromLeadLike({
@@ -185,6 +192,7 @@ export async function createManualLead(
   await setDoc(ref, {
     ...base,
     ...leadCoreDraftToFirestoreFields({ ...input.draft, customerId, systemCode }),
+    orgId: input.orgId,
     calculatedScore,
     priorityTag,
     ...pillarPatch,
