@@ -20,6 +20,7 @@ export type SettingsSubTabId =
   | 'invite_docs'
   | 'receipts'
   | 'public_registration'
+  | 'comms'
 
 export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = ['data', 'rules', 'people', 'connect']
 
@@ -50,13 +51,14 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   invite_docs: 'Giấy mời & mẫu',
   receipts: 'Chứng từ & lưu trữ',
   public_registration: 'Cổng đăng ký SV',
+  comms: 'Email & tin nhắn',
 }
 
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
   data: ['intake', 'master', 'lead_profile'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
   people: ['kpi', 'staff', 'permissions'],
-  connect: ['hub', 'consulting', 'knowledge', 'llm', 'omicall', 'webhooks', 'invite_docs', 'receipts', 'public_registration'],
+  connect: ['hub', 'comms', 'consulting', 'knowledge', 'llm', 'omicall', 'webhooks', 'invite_docs', 'receipts', 'public_registration'],
 }
 
 const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: SettingsSubTabId }>> = {
@@ -90,6 +92,10 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   receipts: { main: 'connect', sub: 'receipts' },
   chung_tu: { main: 'connect', sub: 'receipts' },
   public_registration: { main: 'connect', sub: 'public_registration' },
+  comms: { main: 'connect', sub: 'comms' },
+  email: { main: 'connect', sub: 'comms' },
+  sms: { main: 'connect', sub: 'comms' },
+  messaging: { main: 'connect', sub: 'comms' },
 }
 
 export type SettingsAccessContext = {
@@ -131,6 +137,7 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
     case 'webhooks':
     case 'invite_docs':
     case 'receipts':
+    case 'comms':
       return ctx.canMaster || ctx.canOmicall
     case 'public_registration':
       return ctx.canMaster

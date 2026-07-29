@@ -52,7 +52,20 @@ Key lưu dạng hash SHA-256; thu hồi trên UI.
 
 ## Zalo OA / WhatsApp / Email / SMS
 
-Điền token / webhook sẵn trong Hub. **Gửi tin nhắn từ timeline** = Phase 2 (adapter). Cấu hình không mất khi gắn adapter.
+**Cài đặt → Tích hợp → Email & tin nhắn** (`/settings?tab=connect&sub=comms`)
+
+1. Bật kênh + dán URL webhook gửi (n8n/Make).  
+2. Chỉnh mẫu tin (biến `{{fullName}}`, `{{phone}}`…).  
+3. Bật luật (vd. Email khi tạo hồ sơ).  
+4. (Tuỳ chọn) Đồng ý marketing + giờ im lặng.
+
+CRM POST `action: send_comms` tới webhook kênh khi sự kiện khớp. Hub vẫn lưu token phụ và deep-link sang tab này.
+
+Sự kiện thêm: `followup.due`, `comms.sent`.
+
+## Thu thập quảng cáo / form
+
+Hub: Meta Lead Ads, TikTok Lead Ads, Google Forms/Sheets, đặt lịch Calendly — điền token/webhook; ingest thật qua n8n.
 
 ## n8n 4 slot cố định
 
@@ -61,7 +74,8 @@ Vẫn tại **Cài đặt → Webhook n8n** (giấy mời / CTSV / ngày / thán
 ## Checklist triển khai trường mới
 
 1. Hub: bật cổng ĐK + OMICall + n8n (tab riêng).  
-2. Tạo API key nếu có đối tác đẩy lead.  
-3. Thêm 1–2 webhook Zapier/Make cho `lead.created` và `finance.decision` để kiểm thử.  
-4. (Tuỳ chọn) Slack incoming cho Ban tuyển sinh.  
-5. Điền sẵn Zalo/WA nếu trường đã có OA — chờ Phase 2 gửi tin.
+2. **Email & tin nhắn**: bật ít nhất 1 kênh + 1 luật `lead.created` để thử.  
+3. Tạo API key nếu có đối tác đẩy lead.  
+4. Thêm 1–2 webhook Zapier/Make cho `lead.created` và `finance.decision`.  
+5. (Tuỳ chọn) Slack / Telegram / Meta Ads / lịch hẹn.  
+6. Điền Zalo/WA nếu trường đã có OA.

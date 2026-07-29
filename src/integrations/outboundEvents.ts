@@ -13,6 +13,8 @@ export type OutboundEventId =
   | 'report.daily'
   | 'report.monthly'
   | 'registration.public'
+  | 'followup.due'
+  | 'comms.sent'
 
 export type OutboundEventDef = {
   id: OutboundEventId
@@ -89,6 +91,16 @@ export const OUTBOUND_EVENT_CATALOG: readonly OutboundEventDef[] = [
     label: 'Đăng ký cổng công khai',
     description: 'Sinh viên gửi form /dang-ky.',
     n8nSlot: 'portal',
+  },
+  {
+    id: 'followup.due',
+    label: 'Đến hạn follow-up',
+    description: 'Nhắc theo nextFollowUpDate (n8n schedule hoặc nút tay).',
+  },
+  {
+    id: 'comms.sent',
+    label: 'Đã đẩy tin nhắn/email',
+    description: 'Sau khi CRM gửi payload send_comms tới webhook kênh.',
   },
 ] as const
 

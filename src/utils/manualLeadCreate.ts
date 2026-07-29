@@ -202,5 +202,32 @@ export async function createManualLead(
     lastTouchedAt: now,
   })
 
+  const { dispatchOutboundEvent } = await import('../integrations/dispatchOutbound')
+  const { triggerCommsAutomation } = await import('./commsAutomationDispatch')
+  const emailGuess = customerId.includes('@') ? customerId : undefined
+  const payload = {
+    leadId: ref.id,
+    fullName: input.draft.fullName,
+    phone: input.draft.phone,
+    email: emailGuess,
+    assignedTo: input.assignedCounselorId,
+  }
+  void dispatchOutboundEvent({
+    orgId: input.orgId,
+    event: 'lead.created',
+    payload,
+  }).catch((e) => console.warn('[lead.created hub]', e))
+  triggerCommsAutomation(input.orgId, 'lead.created', {
+    id: ref.id,
+    fullName: input.draft.fullName,
+    phone: input.draft.phone,
+    email: emailGuess,
+    parentPhone: input.draft.parentPhone,
+    majorInterest: input.draft.majorInterest,
+    province: input.draft.province,
+    highSchool: input.draft.highSchool,
+    source: input.draft.source1 || input.draft.source,
+  })
+
   return { id: ref.id }
 }

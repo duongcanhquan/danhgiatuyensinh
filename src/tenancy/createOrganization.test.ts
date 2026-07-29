@@ -85,6 +85,7 @@ describe('ORG_SETTINGS_TEMPLATE_DOC_IDS', () => {
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('integrationHub')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('inviteDocumentsConfig')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('receiptStorageConfig')
+    expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('commsAutomationConfig')
   })
 })
 

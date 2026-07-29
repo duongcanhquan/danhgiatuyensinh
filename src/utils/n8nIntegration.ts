@@ -16,6 +16,8 @@ import {
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { dispatchOutboundEvent } from '../integrations/dispatchOutbound'
 import type { OutboundEventId } from '../integrations/outboundEvents'
+import { triggerCommsAutomation } from './commsAutomationDispatch'
+import type { CommsLeadContext } from './commsAutomationConfig'
 
 const DEFAULT_WEBHOOK_CTSV = 'https://apchn-host.lapage.vn/webhook/testctsv'
 const DEFAULT_WEBHOOK_DAILY = 'https://apchn-host.lapage.vn/webhook/baocao-ngay'
@@ -25,15 +27,57 @@ function resolveLeadOrgId(lead?: { orgId?: string | null }): string {
   return String(lead?.orgId ?? '').trim() || DEFAULT_ORG_ID
 }
 
-/** Fan-out sang Hub (Zapier/Make/Slack…) — không làm fail luồng n8n chính. */
+function leadToCommsContext(lead: Lead, extras?: { assigneeName?: string; schoolName?: string }): CommsLeadContext {
+  const customerId = String(lead.customerId ?? '').trim()
+  const followUp = lead.nextFollowUpDate
+  let nextFollowUpDate: string | undefined
+  if (followUp && typeof followUp === 'object' && 'toDate' in followUp && typeof followUp.toDate === 'function') {
+    try {
+      nextFollowUpDate = followUp.toDate().toISOString().slice(0, 10)
+    } catch {
+      nextFollowUpDate = undefined
+    }
+  }
+  return {
+    id: lead.id,
+    fullName: lead.fullName,
+    phone: lead.phone,
+    email: customerId.includes('@') ? customerId : undefined,
+    parentPhone: lead.parentPhone,
+    majorInterest: lead.majorInterest,
+    province: lead.province,
+    highSchool: lead.highSchool,
+    assigneeName: extras?.assigneeName,
+    schoolName: extras?.schoolName,
+    source: lead.source,
+    pipelineStatus: lead.pipelineStatus,
+    nextFollowUpDate,
+    doNotContact: Boolean((lead as { doNotContact?: boolean }).doNotContact),
+    commsOptIn: Boolean((lead as { commsOptIn?: boolean }).commsOptIn),
+  }
+}
+
+/** Fan-out Hub + luật email/tin nhắn — không làm fail luồng n8n chính. */
 function fanOutHubQuietly(
   orgId: string,
   event: OutboundEventId,
   payload: Record<string, unknown>,
+  lead?: Lead,
 ): void {
   void dispatchOutboundEvent({ orgId, event, payload }).catch((e) => {
     console.warn('[integrationHub dispatch]', event, e)
   })
+  if (lead) {
+    triggerCommsAutomation(orgId, event, leadToCommsContext(lead))
+  } else if (payload && typeof payload === 'object') {
+    const data = payload as Record<string, unknown>
+    triggerCommsAutomation(orgId, event, {
+      id: data.leadId != null ? String(data.leadId) : undefined,
+      fullName: data.fullName != null ? String(data.fullName) : undefined,
+      phone: data.phone != null ? String(data.phone) : undefined,
+      email: data.email != null ? String(data.email) : undefined,
+    })
+  }
 }
 
 function webhookGiayMoi(): string {
@@ -194,7 +238,7 @@ export async function triggerProfileFinanceN8n(opts: {
     console.warn('n8n testctsv:', res.status, text)
     throw new Error(text || `n8n báo thu trả về ${res.status}`)
   }
-  fanOutHubQuietly(resolveLeadOrgId(lead), 'finance.submitted', pl as Record<string, unknown>)
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'finance.submitted', pl as Record<string, unknown>, lead)
 }
 
 /** Kế toán duyệt / từ chối một đợt — `accountant_decision` (webhook n8n / Chat). */
@@ -211,7 +255,7 @@ export async function triggerAccountantDecisionN8n(opts: AccountantDecisionN8nCo
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n kế toán trả về ${res.status}`)
   }
-  fanOutHubQuietly(resolveLeadOrgId(lead), 'finance.decision', pl as Record<string, unknown>)
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'finance.decision', pl as Record<string, unknown>, lead)
 }
 
 export async function triggerAccountantFullNeN8n(opts: {
@@ -245,7 +289,7 @@ export async function triggerAccountantFullNeN8n(opts: {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n Full NE trả về ${res.status}`)
   }
-  fanOutHubQuietly(resolveLeadOrgId(opts.lead), 'finance.full_ne', pl as Record<string, unknown>)
+  fanOutHubQuietly(resolveLeadOrgId(opts.lead), 'finance.full_ne', pl as Record<string, unknown>, opts.lead)
 }
 
 export async function triggerDailyReportN8n(payload: Record<string, unknown>): Promise<void> {
@@ -319,7 +363,7 @@ export async function triggerInvitationN8n(opts: {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n trả về ${res.status}`)
   }
-  fanOutHubQuietly(resolveLeadOrgId(lead), 'document.requested', payload as Record<string, unknown>)
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'document.requested', payload as Record<string, unknown>, lead)
   try {
     const json = (await res.json()) as { folderUrl?: string }
     if (json?.folderUrl) return { folderUrl: json.folderUrl }

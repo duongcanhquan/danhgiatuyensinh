@@ -15,6 +15,7 @@ export const ORG_SETTINGS_TEMPLATE_DOC_IDS = [
   'inviteDocumentsConfig',
   'receiptStorageConfig',
   'roleCapabilities',
+  'commsAutomationConfig',
 ] as const
 
 export type CreateOrganizationInput = {

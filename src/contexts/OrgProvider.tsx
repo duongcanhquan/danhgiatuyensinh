@@ -13,6 +13,7 @@ import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
 import { loadInviteDocumentsConfig } from '../utils/inviteDocumentsConfig'
 import { loadReceiptStorageConfig } from '../utils/receiptStorageConfig'
 import { loadRoleCapabilities } from '../utils/roleCapabilitiesConfig'
+import { loadCommsAutomationConfig } from '../utils/commsAutomationConfig'
 
 export type OrgOption = { id: string; name: string; slug: string; status: 'active' | 'suspended' }
 
@@ -86,7 +87,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     return () => unsub()
   }, [isPlatformSuperAdmin])
 
-  /** Nạp webhook n8n + hub kết nối + giấy mời + chứng từ theo trường đang chọn. */
+  /** Nạp webhook n8n + hub + giấy mời + chứng từ + email/tin nhắn theo trường đang chọn. */
   useEffect(() => {
     if (!profile) return
     if (!isFirebaseConfigured()) return
@@ -97,6 +98,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     void loadInviteDocumentsConfig(db, effectiveOrgId)
     void loadReceiptStorageConfig(db, effectiveOrgId)
     void loadRoleCapabilities(db, effectiveOrgId)
+    void loadCommsAutomationConfig(db, effectiveOrgId)
   }, [profile, effectiveOrgId])
 
   const currentOrgLabel = useMemo(() => {

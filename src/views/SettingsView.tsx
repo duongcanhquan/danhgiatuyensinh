@@ -58,6 +58,7 @@ import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel
 import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSettingsPanel'
 import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
 import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
+import { CommsAutomationSettingsPanel } from '../components/CommsAutomationSettingsPanel'
 import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
 import {
@@ -255,6 +256,16 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Hub kết nối</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>Chọn icon → điền URL/key → Lưu.</p>
+        </>
+      )
+    case 'comms':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Email &amp; tin nhắn tự động</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Cấu hình email, SMS, Zalo, WhatsApp: mẫu tin, khi nào gửi, đồng ý liên hệ và giờ im lặng. CRM đẩy sang webhook
+            (n8n) để gửi thật — xem thêm tab <strong>Hub kết nối</strong>.
+          </p>
         </>
       )
     case 'webhooks':
@@ -1281,6 +1292,15 @@ export function SettingsView() {
             Hub kết nối
           </h2>
           <IntegrationHubPanel />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'comms' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-comms" className="space-y-3">
+          <h2 id="tab-comms" className="sr-only">
+            Email và tin nhắn tự động
+          </h2>
+          <CommsAutomationSettingsPanel />
         </div>
       ) : null}
 
