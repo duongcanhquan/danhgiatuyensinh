@@ -305,8 +305,10 @@ export function useOmicallCalls({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const fromTs = useMemo(() => Timestamp.fromDate(from), [from.getTime()])
-  const toTs = useMemo(() => Timestamp.fromDate(to), [to.getTime()])
+  const fromMs = from.getTime()
+  const toMs = to.getTime()
+  const fromTs = useMemo(() => Timestamp.fromDate(new Date(fromMs)), [fromMs])
+  const toTs = useMemo(() => Timestamp.fromDate(new Date(toMs)), [toMs])
 
   useEffect(() => {
     const db = getFirestoreDb()

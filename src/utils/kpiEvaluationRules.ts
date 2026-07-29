@@ -229,7 +229,8 @@ export function mergeKpiEvaluationRules(
 
 export function buildKpiEvaluationRuntime(merged: KpiEvaluationConfigPersisted): KpiEvaluationRuntime {
   const m = mergeKpiEvaluationRules(merged)
-  let { goldMaxPercentile, silverMaxPercentile, bronzeMaxPercentile } = m.bonusTiers
+  const { goldMaxPercentile } = m.bonusTiers
+  let { silverMaxPercentile, bronzeMaxPercentile } = m.bonusTiers
   if (silverMaxPercentile <= goldMaxPercentile) silverMaxPercentile = goldMaxPercentile + 0.05
   if (bronzeMaxPercentile <= silverMaxPercentile) bronzeMaxPercentile = silverMaxPercentile + 0.05
   return {

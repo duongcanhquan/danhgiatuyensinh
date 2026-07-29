@@ -318,7 +318,6 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
         teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
       }
     }
-    leadId = undefined
   }
 
   const phoneVariants = phoneLookupVariants(call.phoneNumber)
@@ -410,7 +409,8 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     endedAt: storedEndedAt ?? mergedCall.endedAt,
   }
   const validity = evaluateValidCall(mergedForStore, match, kpiCfg)
-  const { raw: _raw, ...callFields } = mergedForStore
+  const { raw, ...callFields } = mergedForStore
+  void raw
   const payload = {
     ...callFields,
     leadId: match.leadId ?? str(existingData?.leadId) ?? null,

@@ -51,7 +51,7 @@ export async function fetchPublicRegistrationMeta(orgSlug?: string): Promise<Pub
     const res = await fn(orgSlug ? { orgSlug } : {})
     return res.data
   } catch (e) {
-    throw new Error(callableErrorMessage(e, 'Không tải được cấu hình cổng đăng ký.'))
+    throw new Error(callableErrorMessage(e, 'Không tải được cấu hình cổng đăng ký.'), { cause: e })
   }
 }
 
@@ -66,6 +66,6 @@ export async function submitPublicRegistration(
     const res = await fn(input)
     return res.data
   } catch (e) {
-    throw new Error(callableErrorMessage(e, 'Không gửi được đăng ký — thử lại sau.'))
+    throw new Error(callableErrorMessage(e, 'Không gửi được đăng ký — thử lại sau.'), { cause: e })
   }
 }

@@ -60,7 +60,7 @@ export async function omicallClick2Call(
     body: JSON.stringify({ extension, hotline, phone_number }),
   })
   const text = await res.text()
-  let data: Record<string, unknown> = {}
+  let data: Record<string, unknown>
   try {
     data = text ? (JSON.parse(text) as Record<string, unknown>) : {}
   } catch {
