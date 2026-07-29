@@ -28,6 +28,7 @@ import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
 import { SharedFirestoreDataProviders } from '../contexts/SharedFirestoreDataProviders'
 import { OrgProvider } from '../contexts/OrgProvider'
 import { OrgSwitcher } from './OrgSwitcher'
+import { ChangePasswordPanel } from './ChangePasswordPanel'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 
 type NavGroup = 'work' | 'more'
@@ -43,7 +44,7 @@ type NavDef = {
   bottomPrimary?: boolean
 }
 
-const MOBILE_BOTTOM_ROUTES = ['/', '/leads', '/my-day', '/settings'] as const
+const MOBILE_BOTTOM_ROUTES = ['/', '/leads', '/my-day', '/organizations', '/settings'] as const
 
 function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: readonly Permission[]) {
   if (item.to === '/settings') return canAccessSettingsPage(permissions)
@@ -76,7 +77,8 @@ const mainNav: NavDef[] = [
     label: 'Quản lý trường',
     shortLabel: 'Trường',
     icon: Building2,
-    group: 'more',
+    group: 'work',
+    bottomPrimary: true,
     show: () => false, // filled in Layout via platform check
   },
   { to: '/settings', label: 'Cài đặt', shortLabel: 'Cài đặt', icon: Settings2, group: 'more', bottomPrimary: true },
@@ -194,6 +196,7 @@ export function Layout() {
             <p className="truncate text-xs text-slate-400">{profile ? USER_ROLE_LABELS[profile.role] : '—'}</p>
           </div>
         </div>
+        {showSignOut ? <ChangePasswordPanel compact /> : null}
         {showSignOut ? (
           <button
             type="button"
