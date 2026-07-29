@@ -36,7 +36,7 @@ export function StudentRegistrationView() {
       return
     }
     let cancelled = false
-    void fetchPublicRegistrationMeta()
+    void fetchPublicRegistrationMeta(orgSlug)
       .then((m) => {
         if (cancelled) return
         setMeta(m)
@@ -54,7 +54,7 @@ export function StudentRegistrationView() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [orgSlug])
 
   const patch = useCallback((partial: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...partial }))
@@ -72,6 +72,7 @@ export function StudentRegistrationView() {
     try {
       const result = await submitPublicRegistration({
         ...form,
+        orgSlug,
         fullName: form.fullName.trim(),
         phone: form.phone.trim(),
         studentEmail: form.studentEmail.trim(),

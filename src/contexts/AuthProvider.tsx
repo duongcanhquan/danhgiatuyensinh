@@ -392,7 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const resolvedOrgId =
         normalizedRole === 'super_admin'
           ? null
-          : (input.orgId?.trim() || profile?.orgId || DEFAULT_ORG_ID)
+          : (input.orgId?.trim() || profile?.orgId?.trim() || DEFAULT_ORG_ID)
       await setDoc(doc(db, FS_COLLECTIONS.users, cred.user.uid), {
         email,
         displayName: input.displayName.trim() || email.split('@')[0],

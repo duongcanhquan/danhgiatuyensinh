@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { USER_ROLE_LABELS, type UserRole, type VietMyUserProfile } from '../types'
 import { isSuperAdminRole, isAdminLikeRole } from '../auth/roleUtils'
@@ -37,6 +38,7 @@ export function StaffManagementView({
     firebaseUser,
     reloadProfile,
   } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const canStaffAll = can('config:users')
   const canStaffTeam = can('config:users:team')
   const canAccessStaff = canStaffAll || canStaffTeam
@@ -219,6 +221,7 @@ export function StaffManagementView({
         password,
         displayName,
         role,
+        orgId: role === 'super_admin' ? null : effectiveOrgId,
         ...(role === 'team_lead' ? { managedCounselorIds: createTeamIds } : {}),
         ...omicallPayload,
       })

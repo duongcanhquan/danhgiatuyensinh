@@ -1,19 +1,31 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore'
+import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
 import { normalizeUserRole } from '../auth/roleUtils'
 import type { VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { useAuth } from '../hooks/useAuth'
+import { useOrg } from './OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 
 function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile | null {
   try {
     const now = Timestamp.now()
     const role = normalizeUserRole(String(data.role ?? 'counselor'))
+    const rawOrg = data.orgId
+    const orgId =
+      role === 'super_admin'
+        ? null
+        : typeof rawOrg === 'string' && rawOrg.trim()
+          ? rawOrg.trim()
+          : DEFAULT_ORG_ID
     return {
       id,
       email: String(data.email ?? ''),
       displayName: String(data.displayName ?? ''),
       role,
+      orgId,
       departmentId: data.departmentId ? String(data.departmentId) : undefined,
       professionUnitId: data.professionUnitId ? String(data.professionUnitId) : undefined,
       managedMajorIds: Array.isArray(data.managedMajorIds) ? data.managedMajorIds.map(String) : undefined,
@@ -46,10 +58,19 @@ type CounselorDirectoryState = {
 const CounselorDirectoryContext = createContext<CounselorDirectoryState | null>(null)
 
 export function CounselorDirectoryProvider({ children }: { children: ReactNode }) {
+  const { profile } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const [users, setUsers] = useState<VietMyUserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const configured = useMemo(() => isFirebaseConfigured(), [])
+
+  const scopeOrgId = useMemo(() => {
+    if (isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)) {
+      return effectiveOrgId || DEFAULT_ORG_ID
+    }
+    return (profile?.orgId?.trim() || DEFAULT_ORG_ID)
+  }, [profile?.role, profile?.orgId, effectiveOrgId])
 
   const counselors = useMemo(
     () => users.filter((u) => u.role === 'counselor' && u.isActive),
@@ -72,30 +93,36 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       return
     }
 
-    const q = query(collection(firestore, FS_COLLECTIONS.users))
+    setLoading(true)
+    const qy = query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
     const unsub = onSnapshot(
-      q,
+      qy,
       (snap) => {
         const next: VietMyUserProfile[] = []
         snap.forEach((d) => {
-          const u = mapUser(d.id, d.data() as Record<string, unknown>)
-          if (u) next.push(u)
+          const row = mapUser(d.id, d.data() as Record<string, unknown>)
+          if (row) next.push(row)
         })
+        // Legacy vietmy: hồ sơ thiếu orgId vẫn hiện khi đang làm việc tại vietmy
+        if (scopeOrgId === DEFAULT_ORG_ID) {
+          // Keep only query results for now; backfill Phase 0 should set orgId.
+        }
         setUsers(next)
         setLoading(false)
         setError(null)
       },
-      (err) => {
-        console.error(err)
-        setError(err.message || 'Lỗi đọc users')
+      (e) => {
+        console.error(e)
+        setUsers([])
         setLoading(false)
+        setError(e instanceof Error ? e.message : 'Không đọc được danh bạ nhân sự.')
       },
     )
     return () => unsub()
-  }, [configured])
+  }, [configured, scopeOrgId])
 
   const value = useMemo(
-    () => ({ users, counselors, fieldStaff, loading, error }),
+    (): CounselorDirectoryState => ({ users, counselors, fieldStaff, loading, error }),
     [users, counselors, fieldStaff, loading, error],
   )
 

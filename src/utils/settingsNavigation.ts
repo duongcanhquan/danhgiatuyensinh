@@ -81,6 +81,7 @@ export type SettingsAccessContext = {
   canMaster: boolean
   canScoringRules: boolean
   canScoringProfilesTeam: boolean
+  canScoringProfilesOwn: boolean
   canPlaybooks: boolean
   canAiEngine: boolean
   canOmicall: boolean
@@ -97,7 +98,7 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
     case 'lead_profile':
       return ctx.canMaster
     case 'scoring_profiles':
-      return ctx.canScoringRules || ctx.canScoringProfilesTeam
+      return ctx.canScoringRules || ctx.canScoringProfilesTeam || ctx.canScoringProfilesOwn
     case 'scoring':
     case 'classification':
     case 'rule_templates':
