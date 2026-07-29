@@ -25,6 +25,8 @@ import { LeadClassificationRulesProvider } from '../contexts/LeadClassificationR
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
 import { SharedFirestoreDataProviders } from '../contexts/SharedFirestoreDataProviders'
+import { OrgProvider } from '../contexts/OrgProvider'
+import { OrgSwitcher } from './OrgSwitcher'
 
 type NavGroup = 'work' | 'more'
 
@@ -163,6 +165,7 @@ export function Layout() {
       </nav>
 
       <div className="shrink-0 border-t border-white/10 px-3 py-3">
+        <OrgSwitcher className="mb-3" />
         <div className="flex items-center gap-2.5 rounded-xl bg-white/5 px-3 py-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
             <User className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -187,6 +190,7 @@ export function Layout() {
   )
 
   return (
+    <OrgProvider>
     <div className="relative min-h-[100dvh] text-slate-800 antialiased">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="absolute -left-[10%] -top-[15%] h-[420px] w-[480px] rounded-full bg-blue-400/6 blur-[100px]" />
@@ -300,5 +304,6 @@ export function Layout() {
         </button>
       </nav>
     </div>
+    </OrgProvider>
   )
 }

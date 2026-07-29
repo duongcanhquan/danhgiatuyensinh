@@ -7,11 +7,11 @@ import { getDefaultKpiV2Config, KPI_V2_FIRESTORE_DOC_ID, mergeKpiV2Config } from
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { pickOrgSettingsSnapshot } from '../tenancy/dualReadOrgSettings'
+import { useOrg } from './OrgProvider'
 
 type Ctx = {
   config: KpiV2ConfigPersisted
   docExists: boolean
-  /** Phase 0: orgSettings | legacy scoringAux | none */
   configSource: 'orgSettings' | 'legacy' | 'none'
   loading: boolean
   error: string | null
@@ -35,6 +35,8 @@ function fallbackCtx(): Ctx {
 }
 
 export function KpiV2ConfigProvider({ children }: { children: ReactNode }) {
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId || DEFAULT_ORG_ID
   const [config, setConfig] = useState<KpiV2ConfigPersisted>(() => getDefaultKpiV2Config())
   const [docExists, setDocExists] = useState(false)
   const [configSource, setConfigSource] = useState<'orgSettings' | 'legacy' | 'none'>('none')
@@ -72,7 +74,7 @@ export function KpiV2ConfigProvider({ children }: { children: ReactNode }) {
     setOrgReady(false)
     setLegacyReady(false)
 
-    const orgRef = doc(db, ...orgSettingsDocSegments(DEFAULT_ORG_ID, KPI_V2_FIRESTORE_DOC_ID))
+    const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, KPI_V2_FIRESTORE_DOC_ID))
     const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, KPI_V2_FIRESTORE_DOC_ID)
 
     const unsubOrg = onSnapshot(
@@ -111,7 +113,7 @@ export function KpiV2ConfigProvider({ children }: { children: ReactNode }) {
       unsubOrg()
       unsubLegacy()
     }
-  }, [])
+  }, [orgKey])
 
   useEffect(() => {
     if (!orgReady || !legacyReady) return
@@ -127,24 +129,32 @@ export function KpiV2ConfigProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }, [orgReady, legacyReady, orgSnap, legacySnap])
 
-  const saveConfig = useCallback(async (next: KpiV2ConfigPersisted) => {
-    const db = getFirestoreDb()
-    if (!db) throw new Error('Chưa kết nối Firestore.')
-    const payload = { ...mergeKpiV2Config(next), updatedAt: Timestamp.now(), orgId: DEFAULT_ORG_ID }
-    const orgRef = doc(db, ...orgSettingsDocSegments(DEFAULT_ORG_ID, KPI_V2_FIRESTORE_DOC_ID))
-    const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, KPI_V2_FIRESTORE_DOC_ID)
-    // Phase 0: write orgSettings primary + mirror legacy for old readers
-    await setDoc(orgRef, payload)
-    await setDoc(legacyRef, payload)
-  }, [])
+  const saveConfig = useCallback(
+    async (next: KpiV2ConfigPersisted) => {
+      const db = getFirestoreDb()
+      if (!db) throw new Error('Chưa kết nối Firestore.')
+      const payload = { ...mergeKpiV2Config(next), updatedAt: Timestamp.now(), orgId: orgKey }
+      const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, KPI_V2_FIRESTORE_DOC_ID))
+      const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, KPI_V2_FIRESTORE_DOC_ID)
+      await setDoc(orgRef, payload)
+      // Mirror only for default org during Phase 1 transition
+      if (orgKey === DEFAULT_ORG_ID) {
+        await setDoc(legacyRef, payload)
+      }
+    },
+    [orgKey],
+  )
 
   const resetToBuiltin = useCallback(async () => {
     const db = getFirestoreDb()
     if (!db) throw new Error('Chưa kết nối Firestore.')
-    const orgRef = doc(db, ...orgSettingsDocSegments(DEFAULT_ORG_ID, KPI_V2_FIRESTORE_DOC_ID))
-    const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, KPI_V2_FIRESTORE_DOC_ID)
-    await Promise.allSettled([deleteDoc(orgRef), deleteDoc(legacyRef)])
-  }, [])
+    const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, KPI_V2_FIRESTORE_DOC_ID))
+    const ops = [deleteDoc(orgRef)]
+    if (orgKey === DEFAULT_ORG_ID) {
+      ops.push(deleteDoc(doc(db, FS_COLLECTIONS.scoringAux, KPI_V2_FIRESTORE_DOC_ID)))
+    }
+    await Promise.allSettled(ops)
+  }, [orgKey])
 
   const value = useMemo(
     (): Ctx => ({ config, docExists, configSource, loading, error, saveConfig, resetToBuiltin }),

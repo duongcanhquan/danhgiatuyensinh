@@ -26,6 +26,7 @@ import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { getDoc, doc } from 'firebase/firestore'
 import { FS_COLLECTIONS } from '../types'
 import { mapDoc } from '../hooks/useLeads'
+import { useOrg } from '../hooks/useOrg'
 
 export function CreateLeadModal({
   open,
@@ -64,6 +65,7 @@ export function CreateLeadModal({
   const { catalogs, onEnsureCatalogEntry } = useLeadProfileCatalogs()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
+  const { effectiveOrgId } = useOrg()
 
   const elevated = isAdminLikeRole(profile?.role)
   const teamLead = isTeamLeadRole(profile?.role)
@@ -123,6 +125,7 @@ export function CreateLeadModal({
           assignedCounselorId: counselorId,
           createdByUid: profile.id,
           createdByName: performer,
+          orgId: effectiveOrgId,
         },
         {
           profile: activeScoringProfile,

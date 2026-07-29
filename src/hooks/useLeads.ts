@@ -33,7 +33,9 @@ import { FS_COLLECTIONS } from '../types'
 import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
+import { useOrg } from './useOrg'
 import { useMasterData } from './useMasterData'
+import { orgIdEqualityConstraint } from '../tenancy/orgQuery'
 import {
   coerceLeadCounselorStatus,
   counselorStatusToPipeline,
@@ -257,6 +259,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
 
     return {
       id,
+      orgId: data.orgId != null && String(data.orgId).trim() ? String(data.orgId).trim() : undefined,
       customerId,
       ...(systemCode ? { systemCode } : {}),
       fullName,
@@ -580,11 +583,13 @@ function buildListDataQuery(
   profile: VietMyUserProfile,
   hoDLabels: string[],
   filters?: LeadListServerFilters,
+  orgId?: string,
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
   const rbac = rbacConstraint(profile, hoDLabels)
   const extras = filterConstraints(filters, profile)
   const parts: QueryFilterConstraint[] = []
+  if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
@@ -596,11 +601,13 @@ function buildPriorityTagCountQuery(
   hoDLabels: string[],
   filters: LeadListServerFilters | undefined,
   tag: PriorityTag,
+  orgId?: string,
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
   const rbac = rbacConstraint(profile, hoDLabels)
   const extras = [...filterConstraints(filters, profile), where('priorityTag', '==', tag)]
   const parts: QueryFilterConstraint[] = []
+  if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
@@ -699,11 +706,11 @@ export async function fetchLeadsInScopeForRescore(
   profile: VietMyUserProfile,
   hoDQueryLabels: string[],
   filters: LeadListServerFilters | undefined,
-  opts?: { maxLeads?: number; chunkSize?: number },
+  opts?: { maxLeads?: number; chunkSize?: number; orgId?: string },
 ): Promise<{ leads: Lead[]; truncated: boolean }> {
   const maxLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxLeads ?? LEADS_UI_FULL_SCOPE_MAX))
   const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
-  const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, filters)
+  const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, filters, opts?.orgId)
   let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
   const acc: Lead[] = []
   let hitCap = false
@@ -736,6 +743,7 @@ export async function fetchLeadsInScopeForRescore(
 
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const { byKind } = useMasterData()
   const serverFilters = opts?.serverFilters
   const searchText = (opts?.searchText ?? '').trim().toLowerCase()
@@ -810,7 +818,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     try {
       const distFilters = serverFiltersOmitField(serverFilters, 'source')
       const qy = query(
-        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters),
+        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId),
         orderBy('updatedAt', 'desc'),
         limit(SOURCE_CATALOG_BATCH),
       )
@@ -826,7 +834,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       console.error(e)
       setScopeSourceOptions([])
     }
-  }, [profile, hoDQueryLabels, serverFilters])
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId])
 
   const configured = useMemo(() => isFirebaseConfigured(), [])
   const pageEndSnaps = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([])
@@ -897,7 +905,7 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const fetchTotalOnly = async (): Promise<number | null> => {
       try {
-        const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+        const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
         const total = (await getCountFromServer(base)).data().count
         if (cancelled) return null
         setTotalLeadCount(total)
@@ -920,7 +928,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         const distFilters = serverFiltersForTagDistribution(serverFilters)
         const tagEntries = await Promise.all(
           TAG_KEYS.map(async (t) => {
-            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t)
+            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t, effectiveOrgId)
             const n = (await getCountFromServer(qTag)).data().count
             return [t, n] as const
           }),
@@ -942,7 +950,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       try {
         const distFilters = serverFiltersOmitField(serverFilters, 'source')
         const qy = query(
-          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters),
+          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId),
           orderBy('updatedAt', 'desc'),
           limit(SOURCE_CATALOG_BATCH),
         )
@@ -972,7 +980,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadFirestorePage = async (page: number, total: number | null) => {
-      const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+      const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
       const snaps = pageEndSnaps.current
       const pg = Math.max(1, Math.floor(page))
 
@@ -1041,7 +1049,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const rebuildSearchBucket = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
       const qy = query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN))
       const snap = await getDocs(qy)
       if (cancelled) return
@@ -1077,7 +1085,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadBatch = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
       const qy = query(base, orderBy('updatedAt', 'desc'), limit(batchLimit))
       const snap = await getDocs(qy)
       if (cancelled) return
@@ -1092,7 +1100,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadFullScope = async () => {
-      const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+      const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
       let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
       const acc: Lead[] = []
       let hitCap = false
@@ -1241,13 +1249,14 @@ export function useLeads(opts?: UseLeadsOptions) {
     includeScopeTagCounts,
     includeScopeSourceOptions,
     manualRefreshKey,
+    effectiveOrgId,
   ])
 
   const refreshTotalLeadCount = useCallback(async () => {
     const firestore = getFirestoreDb()
     if (!firestore || !profile) return
     try {
-      const cq = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+      const cq = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId)
       const agg = await getCountFromServer(cq)
       setTotalLeadCount(agg.data().count)
       setTotalLeadCountError(null)
@@ -1257,7 +1266,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       setTotalLeadCount(null)
       setTotalLeadCountError(e instanceof Error ? e.message : 'Không đếm được tổng hồ sơ')
     }
-  }, [profile, hoDQueryLabels, serverFilters])
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId])
 
   const applyLocalLeadPatch = useCallback((id: string, patch: Partial<Lead>) => {
     setLeads((rows) => {

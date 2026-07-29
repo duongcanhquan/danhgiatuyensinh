@@ -19,6 +19,7 @@ import { ensureDefaultCounselingAiTask } from '../services/ensureDefaultCounseli
 import { defaultAccountantEmailFromEnv } from '../auth/accountantPortal'
 import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
   if (!import.meta.env.DEV) return null
@@ -32,6 +33,7 @@ function devSyntheticProfile(): VietMyUserProfile | null {
     email: 'dev@local',
     displayName: 'Dev User',
     role,
+    orgId: role === 'super_admin' ? null : DEFAULT_ORG_ID,
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -40,11 +42,19 @@ function devSyntheticProfile(): VietMyUserProfile | null {
 
 function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>): VietMyUserProfile {
   const now = Timestamp.now()
+  const rawOrg = d.orgId
+  const orgId =
+    rawOrg === null
+      ? null
+      : typeof rawOrg === 'string' && rawOrg.trim()
+        ? rawOrg.trim()
+        : undefined
   return {
     id: uid,
     email: String(d.email ?? user.email ?? ''),
     displayName: String(d.displayName ?? user.displayName ?? ''),
     role: normalizeUserRole(String(d.role ?? 'counselor')),
+    orgId: orgId === undefined ? undefined : orgId,
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
     managedMajorIds: d.managedMajorIds as string[] | undefined,
@@ -123,6 +133,7 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
       email: user.email ?? '',
       displayName: user.displayName || user.email?.split('@')[0] || 'Người dùng',
       role: isSuper ? 'super_admin' : isDefaultAccountant ? 'accountant' : 'counselor',
+      orgId: isSuper ? null : DEFAULT_ORG_ID,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -135,9 +146,17 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
   let role = normalizeUserRole(String(data.role ?? 'counselor'))
   if (isSuper && role !== 'super_admin') {
     role = 'super_admin'
-    await updateDoc(ref, { role: 'super_admin', updatedAt: now })
+    await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+    data.role = 'super_admin'
+    data.orgId = null
   } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {
     await updateDoc(ref, { role: 'team_lead', updatedAt: now })
+    data.role = 'team_lead'
+  }
+  // Phase 1: school users without orgId get vietmy backfill on login
+  if (!isSuper && role !== 'super_admin' && (data.orgId == null || data.orgId === '')) {
+    await updateDoc(ref, { orgId: DEFAULT_ORG_ID, updatedAt: now })
+    data.orgId = DEFAULT_ORG_ID
   }
   return mapProfileFromDoc(user.uid, user, { ...data, role })
 }

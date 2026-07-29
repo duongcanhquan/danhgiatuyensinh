@@ -1,4 +1,7 @@
 export { DEFAULT_ORG_ID, DEFAULT_ORG_SLUG, normalizeOrgSlug } from './orgConstants'
-export { orgSettingsDocPath, orgSettingsDocSegments } from './orgSettingsPaths'
+export { orgSettingsDocPath, orgSettingsDocSegments, ORG_SETTINGS_SUBCOLLECTION } from './orgSettingsPaths'
 export { ensureOrgId, isPlatformSuperAdminRole, resolveWriteOrgId } from './orgId'
 export { pickOrgSettingsSnapshot } from './dualReadOrgSettings'
+export { resolveEffectiveOrgId } from './effectiveOrgId'
+export { orgIdEqualityConstraint } from './orgQuery'
+export { ACTIVE_ORG_STORAGE_KEY, readStoredActiveOrgId, writeStoredActiveOrgId } from './activeOrgStorage'
