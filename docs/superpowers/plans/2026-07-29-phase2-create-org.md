@@ -49,5 +49,5 @@
 ## Task 4: Rules notes + indexes if needed
 
 - [x] Update firestore.rules.example for organizations write = platform
-- [ ] Verify build/tests
-- [ ] Commit / PR update
+- [x] Verify build/tests
+- [x] Commit / PR update
