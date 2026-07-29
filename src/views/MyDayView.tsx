@@ -6,6 +6,7 @@ import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { AppPageHeader } from '../components/AppPageHeader'
+import { BentoGrid, BentoStat } from '../components/bento'
 import { KpiCallHint } from '../components/KpiCallHint'
 import { KpiMetricsSections } from '../components/KpiMetricsSections'
 import { fmtKpiNum, todayDateKey } from '../utils/kpiDisplay'
@@ -147,6 +148,21 @@ export function MyDayView() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <AppPageHeader title="Ngày của tôi" meta={today} />
+
+      <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
+        <BentoStat label="Hôm nay" value={today.slice(8)} hint={today} tone="ink" />
+        <BentoStat
+          label="Cuộc gọi"
+          value={loading ? '…' : mine ? fmtKpiNum(mine.totalCalls) : '0'}
+          hint={mine ? `HL hợp lệ: ${fmtKpiNum(mine.validCalls)}` : 'Đồng bộ OMICall'}
+        />
+        <BentoStat
+          label="Lead chạm"
+          value={loading ? '…' : mine ? fmtKpiNum(mine.leadCham) : '0'}
+          hint="Theo cấu hình KPI trường"
+          tone="accent"
+        />
+      </BentoGrid>
 
       <div
         className="app-tab-segmented scroll-touch flex flex-wrap gap-0.5"

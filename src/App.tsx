@@ -38,8 +38,9 @@ export default function App() {
           <OmicallAutoBootstrap />
           <Routes>
             <Route path="/ke-toan/login" element={<AccountantLoginView />} />
-            <Route path="/dang-ky" element={<StudentRegistrationView />} />
+            <Route path="/dang-ky" element={<Navigate to="/dang-ky/vietmy" replace />} />
             <Route path="/dang-ky/thanh-cong" element={<StudentRegistrationSuccessView />} />
+            <Route path="/dang-ky/:orgSlug" element={<StudentRegistrationView />} />
             <Route element={<AccountantProtectedRoute />}>
               <Route path="/ke-toan" element={<AccountantLayout />}>
                 <Route index element={<AccountantView portalMode />} />

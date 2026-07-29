@@ -3,11 +3,18 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // --- Bảng kê collection id (đồng bộ `FS_COLLECTIONS` trong src/types.ts) ---
-    // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux, masterData,
-    // consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
+    // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux,
+    // orgSettings/{orgId}/settings/{docId}, organizations,
+    // masterData, consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
     // omicallCalls, omicallSyncRuns, kpiDaily,
     // leads/{id}/interactions, leads/{id}/aiInsightTasks
-    // (scoringRuleSets, routingPolicies: id dự phòng — app chưa ghi đọc.)
+    //
+    // --- Phase 0 multi-tenant (school = orgId) ---
+    // 1) School users: resource.data.orgId == request.auth.token.orgId
+    // 2) Platform super_admin: request.auth.token.platform == true (bypass org match)
+    // 3) organizations: read authenticated; write platform super_admin only
+    // 4) orgSettings/{orgId}/settings/{docId}: school admin of that orgId; or platform
+    // Until claims/backfill land, DEV catch-all below still applies — replace before school #2.
     //
     // Production: add rules for `auditLogs` (read/write scoped by role).
     // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.

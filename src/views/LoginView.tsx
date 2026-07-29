@@ -151,9 +151,9 @@ export function LoginView() {
   }
 
   return (
-    <main className="relative flex min-h-[100dvh] w-full flex-col items-center overflow-x-hidden pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] font-sans selection:bg-white/20 selection:text-white">
+    <main className="relative flex min-h-[100dvh] w-full flex-col items-center overflow-x-hidden bg-[var(--vm-canvas)] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] font-sans">
       <video
-        className="fixed inset-0 z-[0] h-full w-full object-cover"
+        className="fixed inset-0 z-[0] h-full w-full object-cover opacity-40"
         src={VIDEO_SRC}
         autoPlay
         loop
@@ -163,72 +163,85 @@ export function LoginView() {
         aria-hidden
       />
       <div
-        className="pointer-events-none fixed inset-0 z-[1] bg-gradient-to-b from-black/55 via-black/40 to-black/70"
+        className="pointer-events-none fixed inset-0 z-[1] bg-[radial-gradient(ellipse_at_20%_0%,rgba(13,148,136,0.35),transparent_50%),linear-gradient(180deg,#0b1220f2_0%,#0b1220cc_45%,#e8eef5_100%)]"
         aria-hidden
       />
 
-      <div className="relative z-10 flex min-h-[100dvh] w-full max-w-7xl flex-col items-center justify-start px-4 pb-8 pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:px-8 md:pb-10 md:pt-6">
-        <div className="mb-4 w-full max-w-sm">
+      <div className="relative z-10 flex min-h-[100dvh] w-full flex-col items-center justify-center px-4 py-8 md:px-8">
+        <div className="mb-4 w-full max-w-4xl">
           <AuthSessionExitBar tone="onDark" />
         </div>
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
-          className="liquid-glass mx-auto w-full max-w-sm rounded-2xl border border-white/20 bg-slate-900/75 p-6 text-white shadow-2xl shadow-black/30 backdrop-blur-xl md:p-8"
+          transition={{ duration: 0.55, ease: 'easeOut' }}
+          className="bento-login-board"
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200/80">
-            VietMy Admissions
-          </p>
-          <VietMyAccentHeading as="h1" tone="onDark" size="xl" className="mt-2 block">
-            Đăng nhập
-          </VietMyAccentHeading>
+          <section className="bento-cell bento-cell--hero flex flex-col justify-between !p-7 sm:!p-9">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-100/80">
+                VietMy Admissions
+              </p>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                CRM tuyển sinh
+              </h1>
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-teal-50/90">
+                Hồ sơ · gọi điện · KPI · thu phí — mỗi trường một không gian riêng, dễ nhìn và thao tác nhanh.
+              </p>
+            </div>
+            <p className="mt-8 text-xs text-teal-100/55">Siêu quản trị điều hành nhiều trường · Admin setup trong trường mình</p>
+          </section>
 
-          <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4">
-            <label className="block text-xs font-medium uppercase tracking-[0.14em] text-amber-100/45">
-              Email
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="vm-input mt-2 border-white/20 bg-white/10 text-white placeholder:text-white/40 focus:border-blue-400/60 focus:ring-blue-500/25"
-                placeholder="ten@caodangvietmy.edu.vn"
-              />
-            </label>
-            <label className="block text-xs font-medium uppercase tracking-[0.14em] text-amber-100/45">
-              Mật khẩu
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="vm-input mt-2 border-white/20 bg-white/10 text-white placeholder:text-white/40 focus:border-blue-400/60 focus:ring-blue-500/25"
-              />
-            </label>
-            {error ? (
-              <p className="whitespace-pre-line text-sm leading-relaxed text-rose-200">{error}</p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={busy}
-              className="vm-btn vm-btn-primary w-full py-3 text-base"
-            >
-              {busy ? 'Đang đăng nhập…' : 'Đăng nhập CRM'}
-            </button>
-            <Link
-              to="/ke-toan/login"
-              className="vm-btn vm-btn-secondary w-full border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-            >
-              <Wallet className="h-4 w-4" aria-hidden />
-              Cổng kế toán — truy cập nhanh
-            </Link>
-            <p className="text-center text-xs text-white/45">
-              Chỉ dành tài khoản có quyền kế toán. TVV dùng nút đăng nhập CRM phía trên.
-            </p>
-          </form>
+          <section className="bento-cell !bg-white !p-6 text-[var(--vm-text)] shadow-lg sm:!p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Đăng nhập</p>
+            <VietMyAccentHeading as="h2" tone="onLight" size="lg" className="mt-1 block text-slate-900">
+              Vào làm việc
+            </VietMyAccentHeading>
+
+            <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Email
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="vm-input mt-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:ring-teal-600/20"
+                  placeholder="ten@caodangvietmy.edu.vn"
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Mật khẩu
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="vm-input mt-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:ring-teal-600/20"
+                />
+              </label>
+              {error ? (
+                <p className="whitespace-pre-line rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-900">
+                  {error}
+                </p>
+              ) : null}
+              <button type="submit" disabled={busy} className="vm-btn vm-btn-primary w-full py-3 text-base">
+                {busy ? 'Đang đăng nhập…' : 'Đăng nhập CRM'}
+              </button>
+              <Link
+                to="/ke-toan/login"
+                className="vm-btn vm-btn-secondary w-full border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+              >
+                <Wallet className="h-4 w-4" aria-hidden />
+                Cổng kế toán — truy cập nhanh
+              </Link>
+              <p className="text-center text-xs text-slate-500">
+                Chỉ dành tài khoản có quyền kế toán. TVV dùng nút đăng nhập CRM phía trên.
+              </p>
+            </form>
+          </section>
         </motion.div>
       </div>
     </main>

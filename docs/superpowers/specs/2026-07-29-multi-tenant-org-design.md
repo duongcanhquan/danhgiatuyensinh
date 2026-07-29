@@ -93,8 +93,8 @@ organizations/{orgId}
   - createdAt, createdBy (superadmin uid)
   - (sau) notes
 
-orgSettings/{orgId}/docs/{docId}
-  # toàn bộ setup của trường — admin trường CRUD
+orgSettings/{orgId}/settings/{docId}
+  # thay thế scoringAux singletons theo trường (Firestore even path)
   - kpiV2Config
   - kpiEvaluationConfig
   - omicallIntegration
