@@ -2,7 +2,7 @@
   "firestore": [
     {
       "database": "warmlist",
-      "rules": "firestore.rules.example",
+      "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     }
   ],

@@ -20,3 +20,8 @@ export {
   orgHealthBandLabel,
   platformAuditActionLabel,
 } from './platformOps'
+export {
+  authClaimsNeedUpdate,
+  buildAuthCustomClaims,
+  claimsMatchProfile,
+} from './authClaims'

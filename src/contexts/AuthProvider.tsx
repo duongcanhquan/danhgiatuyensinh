@@ -20,6 +20,7 @@ import { defaultAccountantEmailFromEnv } from '../auth/accountantPortal'
 import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { claimsMatchProfile } from '../tenancy/authClaims'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
   if (!import.meta.env.DEV) return null
@@ -161,6 +162,26 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
   return mapProfileFromDoc(user.uid, user, { ...data, role })
 }
 
+/** Force ID token refresh when custom claims lag behind Firestore profile. */
+async function ensureAuthClaimsFresh(
+  user: User,
+  profile: Pick<VietMyUserProfile, 'role' | 'orgId'>,
+): Promise<void> {
+  try {
+    const token = await user.getIdTokenResult()
+    const claims = {
+      role: typeof token.claims.role === 'string' ? token.claims.role : undefined,
+      orgId: typeof token.claims.orgId === 'string' ? token.claims.orgId : '',
+      platform: token.claims.platform === true,
+    }
+    if (!claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) {
+      await user.getIdToken(true)
+    }
+  } catch (e) {
+    console.warn('[ensureAuthClaimsFresh]', e)
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthState['status']>('unknown')
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
@@ -216,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('unauthenticated')
           return
         }
+        await ensureAuthClaimsFresh(user, p)
         setStatus('authenticated')
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)

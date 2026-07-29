@@ -4,51 +4,28 @@ service cloud.firestore {
 
     // --- Bảng kê collection id (đồng bộ `FS_COLLECTIONS` trong src/types.ts) ---
     // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux,
-    // orgSettings/{orgId}/settings/{docId}, organizations,
+    // orgSettings/{orgId}/settings/{docId}, organizations, platformAuditLogs,
     // masterData, consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
     // omicallCalls, omicallSyncRuns, kpiDaily,
     // leads/{id}/interactions, leads/{id}/aiInsightTasks
     //
-    // --- Phase 0–2 multi-tenant (school = orgId) ---
-    // 1) School users: resource.data.orgId == request.auth.token.orgId
-    // 2) Platform super_admin: request.auth.token.platform == true (bypass org match)
-    // 3) organizations: read authenticated; create/update/suspend: platform super_admin only
-    // 4) orgSettings/{orgId}/settings/{docId}: school admin of that orgId; or platform
-    // 5) Phase 2–3: creating a school seeds orgSettings; platformAuditLogs for create/suspend/export
-    // 6) Suspended org: school users blocked in app (ProtectedRoute); Rules should deny when claims land
-    // Until custom claims land, DEV catch-all below still applies — replace before production multi-school.
+    // --- Phase 0–4 multi-tenant (school = orgId) ---
+    // Production rules live in `firestore.rules` (firebase.json).
+    // Dev open rules: `firestore.rules.dev.example`.
     //
-    // Production: add rules for `auditLogs` (read/write scoped by role).
-    // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.
-    // Index lịch sử gọi (omicallCalls): counselorUid/teamLeadUid + endedAt — xem firestore.indexes.json.
-    // Triển khai: `npm run deploy:firestore-indexes` (database `warmlist` trong firebase.json), hoặc bấm link «Tạo index» trên app.
+    // Auth custom claims (synced by functions/syncAuthClaimsOnUserWrite):
+    //   school: { role, orgId, platform: false }
+    //   platform super_admin: { role: 'super_admin', orgId: '', platform: true }
+    //
+    // Deploy order:
+    //   1) firebase deploy --only functions:syncAuthClaimsOnUserWrite,functions:refreshOwnAuthClaims
+    //   2) APPLY=1 npm run migrate:sync-auth-claims
+    //   3) npm run deploy:firestore-rules
+    //
+    // This file is a pointer stub — copy production or open the real files above.
 
-    // Production: add explicit rules for `knowledgeDocuments` (read: authenticated;
-    // write: admin only) — collection used by RAG / Settings → Kho tri thức.
-    //
-    // `scoringAux/callSessionChips`: bảng đánh giá trực tiếp khi gọi (v2 dimensions) — đọc: authenticated; ghi: admin (`config:ai_engine`).
-    // `scoringAux/orgAiIntegration`: khóa API LLM toàn trường — đọc: authenticated (TVV cần gọi LLM);
-    // ghi: super_admin (`config:llm_api`). Trường apiKey nhạy cảm — cân nhắc Cloud Function / proxy server-side.
-    // `scoringAux/omicallIntegration`: OMICall — đọc: authenticated; ghi: admin (`config:omicall`).
-    // Trường `defaultSipPassword` / `apiKey` nhạy cảm — cân nhắc Cloud Function thay vì Rules mở.
-    //
-    // `omicallCalls`, `omicallSyncRuns`, `kpiDaily`: Cloud Functions ghi bằng Admin SDK.
-    // Client chỉ đọc theo phạm vi:
-    // - TVV: doc có counselorUid == request.auth.uid hoặc kpiDaily/.../counselors/{uid của mình}.
-    // - Trưởng nhóm: doc có teamLeadUid == request.auth.uid.
-    // - Admin/Siêu quản trị: đọc toàn bộ.
-    //
-    // `scoringProfiles`: gợi ý — đọc: mọi user đã đăng nhập (để chọn profile chấm điểm).
-    // Ghi: admin (mọi doc); TVV chỉ doc có `createdBy == request.auth.uid` và không được
-    // ghi `isDefaultForImport` / batch gỡ cờ profile khác (chỉ quản trị).
-
-    // =====================================================================
-    // CHỈ MẪU CHO GIAI ĐOẠN DEV / GỠ LỖI "chưa có hồ sơ users/{uid}"
-    // Mọi user đã đăng nhập đọc/ghi toàn DB — KHÔNG dùng nguyên xi cho production.
-    // Sao chép vào Firebase Console → Firestore Database → chọn đúng database (vd. warmlist) → Rules → Publish.
-    // =====================================================================
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }
