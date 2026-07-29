@@ -1,0 +1,9 @@
+d11e3bf9e57a1ba5006577b38843e2f8d15b478a|Cursor Agent|cursoragent@cursor.com|2026-07-29 01:31:44 +0000|Pull full live RTDB export (1576 students, 21 users).
+68e5ec5e7b316618cbd1d11ca4f951aa30eeaef4|duongcanhquan|kelvinduong.necor@gmail.com|2026-07-07 13:25:09 +0700|fix: counselor load sync region, backfill đếm đúng và Firebase project
+f128327e2b4957a4fecd81f58c8403f8cf7a3303|duongcanhquan|kelvinduong.necor@gmail.com|2026-07-07 13:15:02 +0700|Cut backend Firestore/RTDB bandwidth with targeted reads and load counters.
+9d7de0d561f59a7c85d64c94756ed5b7e389a2d9|duongcanhquan|kelvinduong.necor@gmail.com|2026-07-06 19:31:07 +0700|Reduce Firestore reads via shared data providers and query tuning.
+2382d8f4639a1679ce749725b4a06af39f70ba51|duongcanhquan|kelvinduong.necor@gmail.com|2026-07-06 09:54:56 +0700|fix: đăng xuất trên cổng login, sửa đổi MK nhân sự và RBAC
+35cbca69f9aeba2499e42f4a0d969fbd6ffab60d|duongcanhquan|kelvinduong.necor@gmail.com|2026-07-06 09:41:09 +0700|feat: cổng ẩn sư tử góc màn đăng ký SV → login quản trị
+a2b87032a1bae0a22a7b2e4a1364b93c859033c7|Cursor Agent|cursoragent@cursor.com|2026-07-05 09:50:51 +0000|feat: cổng đăng ký sinh viên công khai + webhook n8n
+9451cae9a4adf6037a0ad2661c7db60676fc7066|duongcanhquan|kelvinduong.necor@gmail.com|2026-07-02 09:48:39 +0700|fix: giảm băng thông RTDB hệ thống cũ — patch cục bộ thay vì tải lại toàn bộ students.json
+1b07ad9f97e20a2d0e29c0d9a05718ab1328104b|duongcanhquan|kelvinduong.necor@gmail.com|2026-06-29 23:14:07 +0700|Initial commit: danhgiatuyensinh và hethongcu

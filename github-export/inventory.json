@@ -1,0 +1,125 @@
+{
+  "pulledAt": "2026-07-29T01:33:30.568067Z",
+  "repo": "duongcanhquan/danhgiatuyensinh",
+  "url": "https://github.com/duongcanhquan/danhgiatuyensinh",
+  "defaultBranch": "main",
+  "visibility": "PUBLIC",
+  "counts": {
+    "branches": 3,
+    "remoteRefs": 3,
+    "tags": 0,
+    "releases": 0,
+    "pullRequests": 2,
+    "issues_pure": 0,
+    "commits_all_git": 9,
+    "files_on_main": 518,
+    "collaborators": 1,
+    "contributors": 2,
+    "labels": 9,
+    "workflow_runs": 163
+  },
+  "branches": [
+    {
+      "name": "cursor/pull-rtdb-full-export-3c2e",
+      "sha": "d11e3bf9e57a1ba5006577b38843e2f8d15b478a",
+      "protected": false
+    },
+    {
+      "name": "cursor/student-registration-portal-a390",
+      "sha": "a2b87032a1bae0a22a7b2e4a1364b93c859033c7",
+      "protected": false
+    },
+    {
+      "name": "main",
+      "sha": "68e5ec5e7b316618cbd1d11ca4f951aa30eeaef4",
+      "protected": false
+    }
+  ],
+  "pullRequests": [
+    {
+      "number": 2,
+      "title": "Pull full live RTDB export (1576 students)",
+      "state": "open",
+      "draft": true,
+      "user": "duongcanhquan",
+      "created_at": "2026-07-29T01:31:53Z",
+      "updated_at": "2026-07-29T01:32:18Z",
+      "merged_at": null,
+      "head": "cursor/pull-rtdb-full-export-3c2e",
+      "base": "main",
+      "html_url": "https://github.com/duongcanhquan/danhgiatuyensinh/pull/2",
+      "comments": 1,
+      "review_comments": 0,
+      "reviews": 0,
+      "files_changed": 3,
+      "commits": 1,
+      "additions": 72163,
+      "deletions": 1561
+    },
+    {
+      "number": 1,
+      "title": "feat: Cổng đăng ký sinh viên công khai + n8n email",
+      "state": "closed",
+      "draft": true,
+      "user": "duongcanhquan",
+      "created_at": "2026-07-05T09:51:09Z",
+      "updated_at": "2026-07-05T09:56:10Z",
+      "merged_at": "2026-07-05T09:56:10Z",
+      "head": "cursor/student-registration-portal-a390",
+      "base": "main",
+      "html_url": "https://github.com/duongcanhquan/danhgiatuyensinh/pull/1",
+      "comments": 1,
+      "review_comments": 0,
+      "reviews": 0,
+      "files_changed": 14,
+      "commits": 1,
+      "additions": 1318,
+      "deletions": 1
+    }
+  ],
+  "collaborators": [
+    {
+      "login": "duongcanhquan",
+      "permissions": {
+        "admin": true,
+        "maintain": true,
+        "push": true,
+        "triage": true,
+        "pull": true
+      },
+      "role_name": "admin"
+    }
+  ],
+  "contributors": [
+    {
+      "login": "duongcanhquan",
+      "contributions": 7
+    },
+    {
+      "login": "cursoragent",
+      "contributions": 1
+    }
+  ],
+  "workflowRunConclusions": {
+    "failure": 100,
+    "success": 63
+  },
+  "files": {
+    "repo.json": "metadata gh repo view",
+    "repo-raw.json": "REST repos/{owner}/{repo}",
+    "branches.json": "all branches",
+    "pulls.json": "PR list",
+    "pulls/{n}.json": "PR detail + comments + reviews + files + commits",
+    "pulls-summary.json": "PR summary",
+    "issues-and-prs.json": "issues API (includes PRs)",
+    "commits-main.json": "API commits on default branch",
+    "commits-all-git.txt": "git log --all",
+    "files-main.txt": "file tree on HEAD",
+    "workflow-runs.json": "Actions runs (slim)",
+    "workflows.json": "Actions workflows",
+    "collaborators.json": "collaborators",
+    "contributors.json": "contributors",
+    "labels.json": "labels",
+    "inventory.json": "this file"
+  }
+}
