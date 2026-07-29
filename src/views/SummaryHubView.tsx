@@ -49,7 +49,7 @@ export function SummaryHubView() {
       <BentoCell variant="hero" colSpan={4} className="!p-4 sm:!p-5">
         <AppPageHeader
           title="Tổng kết"
-          meta="Số liệu vận hành · KPI · bảng điểm · lịch gọi"
+          meta="KPI · bảng điểm · lịch gọi"
           className="[&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
         >
           <TabStrip

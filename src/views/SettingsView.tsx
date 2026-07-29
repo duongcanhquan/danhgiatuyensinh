@@ -251,20 +251,14 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
       return (
         <>
           <p className="font-semibold text-slate-900">Hub kết nối</p>
-          <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Danh mục đầu nối sẵn với ứng dụng ngoài (Zalo, WhatsApp, Slack, API đối tác, Zapier/Make…). Bật và điền cấu
-            hình theo trường; đăng ký webhook theo sự kiện CRM.
-          </p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>Chọn icon → điền URL/key → Lưu.</p>
         </>
       )
     case 'webhooks':
       return (
         <>
-          <p className="font-semibold text-slate-900">Webhook n8n theo trường</p>
-          <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Gắn đầu mối ngoài: giấy mời, CTSV/tài chính, báo cáo ngày và tháng. Lưu xong áp dụng ngay — ưu tiên hơn cấu
-            hình chung trên máy chủ.
-          </p>
+          <p className="font-semibold text-slate-900">Webhook n8n</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>Bốn URL: giấy mời, CTSV, báo cáo ngày/tháng.</p>
         </>
       )
     case 'public_registration':

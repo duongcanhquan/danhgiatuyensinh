@@ -1,5 +1,14 @@
 import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { BarChart3, ClipboardList, Download, PhoneCall, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -82,7 +91,7 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">KPI &amp; đánh giá nhân sự</h2>
+          <h2 className="text-base font-semibold text-slate-900">KPI nhân sự</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {variant === 'full' ? (
@@ -148,7 +157,7 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
               className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100"
             >
               <Download className="h-3.5 w-3.5" aria-hidden />
-              Xuất CSV
+              Tải CSV
             </button>
           ) : null}
         </div>
@@ -182,21 +191,50 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
 
       {reportTab === 'monthly' ? (
         <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-2 grid-cols-2 lg:grid-cols-5">
         <StatTile label="Phạm vi" value={scopeLabel} hint={month} />
-        <StatTile label="TVV có KPI" value={loading ? '…' : String(enriched.length)} hint={`${teamRows.length} nhóm`} />
+        <StatTile label="TVV" value={loading ? '…' : String(enriched.length)} hint={`${teamRows.length} nhóm`} />
         <StatTile
-          label="Gọi HL (tháng)"
+          label="Gọi HL"
           value={loading ? '…' : fmtKpiNum(totals.validCalls)}
           hint={`${fmtKpiNum(totals.totalCalls)} tổng`}
         />
-        <StatTile label="Cọc duyệt" value={loading ? '…' : fmtKpiNum(totals.depositPaidCount)} />
-        <StatTile label="Doanh thu duyệt" value={loading ? '…' : fmtKpiVnd(totals.approvedRevenueVnd)} hint={`NE: ${fmtKpiNum(totals.fullNeCount)}`} />
+        <StatTile label="Cọc" value={loading ? '…' : fmtKpiNum(totals.depositPaidCount)} />
+        <StatTile label="Doanh thu" value={loading ? '…' : fmtKpiVnd(totals.approvedRevenueVnd)} hint={`NE: ${fmtKpiNum(totals.fullNeCount)}`} />
       </div>
+
+      {teamRows.length > 0 ? (
+        <section className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Biểu đồ nhóm</h3>
+          <div className="h-[220px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={teamRows.slice(0, 10).map((t) => ({
+                  name: t.teamLeadUid
+                    ? (labels.get(t.teamLeadUid) ?? t.teamLeadUid).slice(0, 14)
+                    : 'Chưa nhóm',
+                  HL: t.validCalls,
+                  Cọc: t.depositPaidCount,
+                  Điểm: t.avgCompositeScore,
+                }))}
+                margin={{ top: 4, right: 8, left: 0, bottom: 4 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
+                <Bar dataKey="HL" fill="#0d9488" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Cọc" fill="#0284c7" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Điểm" fill="#d97706" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 shadow-sm">
         <div className="border-b border-slate-200/80 px-4 py-3">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800">Theo nhóm (Trưởng nhóm)</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800">Theo nhóm</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
