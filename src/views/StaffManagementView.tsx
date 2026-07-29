@@ -2,8 +2,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
-import { USER_ROLE_LABELS, type UserRole, type VietMyUserProfile } from '../types'
+import { USER_ROLE_LABELS, type Permission, type UserRole, type VietMyUserProfile } from '../types'
 import { isSuperAdminRole, isAdminLikeRole } from '../auth/roleUtils'
+import { STAFF_ASSIGNABLE_PERMISSIONS } from '../utils/roleCapabilitiesConfig'
+import { defaultPermissionsForRole } from '../auth/permissions'
 import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import { isTeamLeadRole } from '../auth/roleUtils'
 import {
@@ -68,6 +70,8 @@ export function StaffManagementView({
   const [editRole, setEditRole] = useState<UserRole>('counselor')
   const [editActive, setEditActive] = useState(true)
   const [editAllowLlm, setEditAllowLlm] = useState(false)
+  const [editExtraPerms, setEditExtraPerms] = useState<Permission[]>([])
+  const [editDeniedPerms, setEditDeniedPerms] = useState<Permission[]>([])
   const [editOmicallUser, setEditOmicallUser] = useState('')
   const [editOmicallPassword, setEditOmicallPassword] = useState('')
   const [editOmicallAgentId, setEditOmicallAgentId] = useState('')
@@ -310,6 +314,8 @@ export function StaffManagementView({
     setEditRole(u.role)
     setEditActive(u.isActive !== false)
     setEditAllowLlm(u.allowLlmAndAiTasks === true)
+    setEditExtraPerms([...(u.extraPermissions ?? [])])
+    setEditDeniedPerms([...(u.deniedPermissions ?? [])])
     setEditOmicallUser(u.omicallSipUser ?? '')
     setEditOmicallPassword(u.omicallSipPassword ?? '')
     setEditOmicallAgentId(u.omicallAgentId ?? '')
@@ -334,6 +340,12 @@ export function StaffManagementView({
         userId: editing.id,
         displayName: editDisplayName,
         ...(!isSuperAdminRole(editing.role) ? { allowLlmAndAiTasks: editAllowLlm } : {}),
+        ...(canStaffAll &&
+        !isAdminLikeRole(editRole) &&
+        !isSuperAdminRole(editRole) &&
+        editRole !== 'accountant'
+          ? { extraPermissions: editExtraPerms, deniedPermissions: editDeniedPerms }
+          : {}),
         ...(canOmicallConfig
           ? {
               omicallSipUser: editOmicallUser,
@@ -901,6 +913,54 @@ export function StaffManagementView({
                   </span>
                 </label>
               )}
+              {canStaffAll &&
+              !isAdminLikeRole(editRole) &&
+              !isSuperAdminRole(editRole) &&
+              editRole !== 'accountant' ? (
+                <div className="rounded-lg border border-violet-200/80 bg-violet-50/40 px-3 py-2.5 space-y-2">
+                  <p className="text-xs font-semibold text-violet-950">Phân quyền trong trường</p>
+                  <p className="text-[11px] leading-snug text-slate-600">
+                    Bật = giao thêm so với vai trò. Tắt «Thu hồi» = giữ quyền mặc định của vai trò.
+                  </p>
+                  <ul className="space-y-2">
+                    {STAFF_ASSIGNABLE_PERMISSIONS.map((item) => {
+                      const roleHas = defaultPermissionsForRole(editRole).includes(item.permission)
+                      const grantedExtra = editExtraPerms.includes(item.permission)
+                      const denied = editDeniedPerms.includes(item.permission)
+                      const effectiveOn = denied ? false : roleHas || grantedExtra
+                      return (
+                        <li key={item.permission} className="rounded-md border border-white/80 bg-white/80 px-2 py-1.5">
+                          <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-800">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={effectiveOn}
+                              onChange={(e) => {
+                                const on = e.target.checked
+                                setEditDeniedPerms((prev) => prev.filter((p) => p !== item.permission))
+                                setEditExtraPerms((prev) => {
+                                  const without = prev.filter((p) => p !== item.permission)
+                                  if (on && !roleHas) return [...without, item.permission]
+                                  return without
+                                })
+                                if (!on && roleHas) {
+                                  setEditDeniedPerms((prev) =>
+                                    prev.includes(item.permission) ? prev : [...prev, item.permission],
+                                  )
+                                }
+                              }}
+                            />
+                            <span>
+                              <span className="font-medium">{item.label}</span>
+                              <span className="mt-0.5 block text-[11px] text-slate-500">{item.hint}</span>
+                            </span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              ) : null}
               {canOmicallConfig ? (
                 <div className="rounded-lg border border-sky-200/80 bg-sky-50/50 px-3 py-2.5 space-y-2">
                   <p className="text-xs font-semibold text-sky-950">OMICall — số nội bộ (tuỳ chọn)</p>

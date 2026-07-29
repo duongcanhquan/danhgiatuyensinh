@@ -14,6 +14,7 @@ export const ORG_SETTINGS_TEMPLATE_DOC_IDS = [
   'integrationHub',
   'inviteDocumentsConfig',
   'receiptStorageConfig',
+  'roleCapabilities',
 ] as const
 
 export type CreateOrganizationInput = {

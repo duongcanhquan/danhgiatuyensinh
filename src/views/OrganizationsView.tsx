@@ -23,6 +23,13 @@ import {
   type PlatformAuditAction,
 } from '../tenancy/platformOps'
 import { normalizeUserRole } from '../auth/roleUtils'
+import {
+  defaultRoleCapabilities,
+  loadRoleCapabilities,
+  saveRoleCapabilities,
+  SCHOOL_ADMIN_CAPABILITY_MODULES,
+  type OrgRoleCapabilities,
+} from '../utils/roleCapabilitiesConfig'
 
 type OrgRow = Organization & { id: string }
 
@@ -73,6 +80,8 @@ export function OrganizationsView() {
   const [newAdminPassword, setNewAdminPassword] = useState('')
   const [newAdminName, setNewAdminName] = useState('')
   const [pwdDraftByUid, setPwdDraftByUid] = useState<Record<string, string>>({})
+  const [capsDraft, setCapsDraft] = useState<OrgRoleCapabilities>(defaultRoleCapabilities())
+  const [capsLoaded, setCapsLoaded] = useState(false)
 
   const detailOrg = useMemo(() => rows.find((r) => r.id === detailId) ?? null, [rows, detailId])
 
@@ -188,6 +197,25 @@ export function OrganizationsView() {
     setEditSlug(detailOrg.slug)
     setEditNotes(detailOrg.notes ?? '')
   }, [detailOrg])
+
+  useEffect(() => {
+    if (!detailId || !isPlatform || !isFirebaseConfigured()) {
+      setCapsLoaded(false)
+      return
+    }
+    const db = getFirestoreDb()
+    if (!db) return
+    setCapsLoaded(false)
+    let cancelled = false
+    void loadRoleCapabilities(db, detailId).then((caps) => {
+      if (cancelled) return
+      setCapsDraft(caps)
+      setCapsLoaded(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [detailId, isPlatform])
 
   useEffect(() => {
     if (!detailId || !isPlatform || !isFirebaseConfigured()) {
@@ -328,6 +356,40 @@ export function OrganizationsView() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const onSaveCaps = async () => {
+    const db = getFirestoreDb()
+    if (!db || !detailOrg || !actor.uid) return
+    setBusy(true)
+    setError(null)
+    try {
+      await saveRoleCapabilities(
+        db,
+        detailOrg.id,
+        capsDraft,
+        actor.displayName || actor.uid,
+      )
+      setBanner(`Đã lưu phân quyền Admin cho «${detailOrg.name}».`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không lưu được phân quyền trường.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleCapModule = (moduleId: string, on: boolean) => {
+    const mod = SCHOOL_ADMIN_CAPABILITY_MODULES.find((m) => m.id === moduleId)
+    if (mod?.required) return
+    setCapsDraft((prev) => {
+      const set = new Set(prev.adminEnabledModuleIds)
+      if (on) set.add(moduleId)
+      else set.delete(moduleId)
+      for (const m of SCHOOL_ADMIN_CAPABILITY_MODULES) {
+        if (m.required) set.add(m.id)
+      }
+      return { ...prev, adminEnabledModuleIds: [...set] }
+    })
   }
 
   const onOpenSettings = (org: OrgRow) => {
@@ -651,6 +713,53 @@ export function OrganizationsView() {
                           onClick={() => void onSaveDetail()}
                         >
                           Lưu thông tin trường
+                        </button>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4">
+                        <h3 className="text-sm font-semibold text-slate-900">Phân quyền Admin trường</h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Siêu quản trị giao module nào Admin trường được dùng. Admin trường sẽ tự phân quyền nhân sự
+                          vận hành và setup cài đặt trong phạm vi này.
+                        </p>
+                        {!capsLoaded ? (
+                          <p className="mt-2 text-xs text-slate-600">Đang tải phân quyền…</p>
+                        ) : (
+                          <ul className="mt-3 space-y-2">
+                            {SCHOOL_ADMIN_CAPABILITY_MODULES.map((m) => {
+                              const on = capsDraft.adminEnabledModuleIds.includes(m.id)
+                              return (
+                                <li key={m.id}>
+                                  <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-1"
+                                      checked={on}
+                                      disabled={busy || m.required}
+                                      onChange={(e) => toggleCapModule(m.id, e.target.checked)}
+                                    />
+                                    <span>
+                                      <span className="font-semibold text-slate-900">{m.label}</span>
+                                      {m.required ? (
+                                        <span className="ml-1 text-[10px] font-bold uppercase text-teal-700">
+                                          Bắt buộc
+                                        </span>
+                                      ) : null}
+                                      <span className="mt-0.5 block text-xs text-slate-500">{m.hint}</span>
+                                    </span>
+                                  </label>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                        <button
+                          type="button"
+                          className="vm-btn vm-btn-primary mt-3 text-xs"
+                          disabled={busy || !capsLoaded}
+                          onClick={() => void onSaveCaps()}
+                        >
+                          Lưu phân quyền Admin
                         </button>
                       </div>
 

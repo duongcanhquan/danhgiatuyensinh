@@ -35,6 +35,8 @@ export type AuthContextValue = AuthState & {
     isActive?: boolean
     /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
     allowLlmAndAiTasks?: boolean
+    extraPermissions?: Permission[]
+    deniedPermissions?: Permission[]
     managedCounselorIds?: string[]
     omicallSipUser?: string
     omicallSipPassword?: string

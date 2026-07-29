@@ -311,11 +311,11 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'permissions':
       return (
         <>
-          <p className="font-semibold text-slate-900">Phân Quyền</p>
+          <p className="font-semibold text-slate-900">Phân quyền</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Ba tầng: Tư vấn viên → Trưởng nhóm → Quản trị. Trưởng nhóm được mẫu tư vấn (Thông tin TV), profile nhóm, đổi TVV
-            trong nhóm. Siêu quản trị có thể bổ sung <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">extraPermissions</code>{' '}
-            trên document user (Firestore Rules phải khớp).
+            Bảng tham chiếu quyền theo vai trò. <strong>Siêu quản trị</strong> giao module cho Admin từng trường tại{' '}
+            <strong>Quản lý trường → Chi tiết</strong>. <strong>Admin trường</strong> phân quyền nhân sự vận hành tại{' '}
+            <strong>Quản lý nhân sự → Sửa</strong> và setup cài đặt trong phạm vi đã được giao.
           </p>
         </>
       )

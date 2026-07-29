@@ -13,6 +13,10 @@ import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from 'firebase/
 import type { AuthState, Permission, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
+import {
+  loadRoleCapabilities,
+  type OrgRoleCapabilities,
+} from '../utils/roleCapabilitiesConfig'
 import { normalizeUserRole } from '../auth/roleUtils'
 import { isUserInManagerTeamScope } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
@@ -282,7 +286,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
   }, [firebaseUser, status])
 
-  const permissions = useMemo(() => resolveEffectivePermissions(profile), [profile])
+  const [orgCaps, setOrgCaps] = useState<OrgRoleCapabilities | null>(null)
+
+  useEffect(() => {
+    const orgId = profile?.orgId?.trim()
+    if (!orgId || profile?.role === 'super_admin') {
+      setOrgCaps(null)
+      return
+    }
+    const db = getFirestoreDb()
+    if (!db) return
+    let cancelled = false
+    void loadRoleCapabilities(db, orgId).then((caps) => {
+      if (!cancelled) setOrgCaps(caps)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.orgId, profile?.role])
+
+  const permissions = useMemo(() => resolveEffectivePermissions(profile, orgCaps), [profile, orgCaps])
 
   const can = useCallback((p: Permission) => hasPermission(permissions, p), [permissions])
 
@@ -423,6 +446,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role?: UserRole
       isActive?: boolean
       allowLlmAndAiTasks?: boolean
+      extraPermissions?: Permission[]
+      deniedPermissions?: Permission[]
       managedCounselorIds?: string[]
       omicallSipUser?: string
       omicallSipPassword?: string
@@ -491,6 +516,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (input.role !== undefined) patch.role = normalizeUserRole(input.role)
       if (input.isActive !== undefined) patch.isActive = input.isActive
       if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
+      if (input.extraPermissions !== undefined) {
+        if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới phân quyền chi tiết.')
+        patch.extraPermissions = input.extraPermissions
+      }
+      if (input.deniedPermissions !== undefined) {
+        if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới thu hồi quyền chi tiết.')
+        patch.deniedPermissions = input.deniedPermissions
+      }
       if (input.managedCounselorIds !== undefined) {
         patch.managedCounselorIds = input.managedCounselorIds.filter(Boolean).slice(0, 60)
       }
