@@ -9,6 +9,8 @@ import {
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
 import { FS_COLLECTIONS } from '../types'
+import { useOrg } from './useOrg'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 const PIPELINE_STACK: LeadPipelineStatus[] = [
   'NEW',
@@ -23,8 +25,8 @@ const PIPELINE_STACK: LeadPipelineStatus[] = [
 const TAG_KEYS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
 const AGG_CACHE_TTL_MS = 5 * 60_000
-let aggCache: { at: number; data: AdminDashboardAggregateData } | null = null
-let aggInflight: Promise<AdminDashboardAggregateData> | null = null
+let aggCache: { at: number; orgId: string; data: AdminDashboardAggregateData } | null = null
+let aggInflight: { orgId: string; promise: Promise<AdminDashboardAggregateData> } | null = null
 
 export type AdminDashboardAggregateData = {
   pipeline: Record<LeadPipelineStatus, number>
@@ -37,12 +39,15 @@ export type AdminDashboardAggregateData = {
 
 async function loadAdminDashboardAggregates(
   firestore: NonNullable<ReturnType<typeof getFirestoreDb>>,
+  orgId: string,
 ): Promise<AdminDashboardAggregateData> {
   const col = collection(firestore, FS_COLLECTIONS.leads)
+  const orgW = where('orgId', '==', orgId)
 
   const pipelineEntries = await Promise.all(
     PIPELINE_STACK.map(async (s) => {
-      const n = (await getCountFromServer(query(col, where('pipelineStatus', '==', s)))).data().count
+      const n = (await getCountFromServer(query(col, orgW, where('pipelineStatus', '==', s)))).data()
+        .count
       return [s, n] as const
     }),
   )
@@ -50,15 +55,18 @@ async function loadAdminDashboardAggregates(
 
   const tagEntries = await Promise.all(
     TAG_KEYS.map(async (t) => {
-      const n = (await getCountFromServer(query(col, where('priorityTag', '==', t)))).data().count
+      const n = (await getCountFromServer(query(col, orgW, where('priorityTag', '==', t)))).data().count
       return [t, n] as const
     }),
   )
   const tags = Object.fromEntries(tagEntries) as Record<PriorityTag, number>
 
-  const enrolled = (await getCountFromServer(query(col, where('status', '==', 'ENROLLED')))).data().count
+  const enrolled = (await getCountFromServer(query(col, orgW, where('status', '==', 'ENROLLED')))).data()
+    .count
   const committed = (
-    await getCountFromServer(query(col, where('status', 'in', ['DEPOSIT_PAID', 'ENROLLED', 'SUMMER_MELT'])))
+    await getCountFromServer(
+      query(col, orgW, where('status', 'in', ['DEPOSIT_PAID', 'ENROLLED', 'SUMMER_MELT'])),
+    )
   ).data().count
   const pct = committed ? Math.round((enrolled / committed) * 1000) / 10 : 0
   const yieldGauge = [{ name: 'Tỷ lệ nhập học', value: Math.min(100, pct), fill: '#c9a227' }]
@@ -74,7 +82,13 @@ async function loadAdminDashboardAggregates(
       const end = Timestamp.fromDate(new Date(y, m + 1, 1))
       const melt = (
         await getCountFromServer(
-          query(col, where('status', '==', 'SUMMER_MELT'), where('updatedAt', '>=', start), where('updatedAt', '<', end)),
+          query(
+            col,
+            orgW,
+            where('status', '==', 'SUMMER_MELT'),
+            where('updatedAt', '>=', start),
+            where('updatedAt', '<', end),
+          ),
         )
       ).data().count
       summerMeltSeries.push({
@@ -93,19 +107,23 @@ async function loadAdminDashboardAggregates(
     }
   }
 
-  const row: Record<string, string | number> = { monthLabel: 'Toàn hệ thống' }
+  const row: Record<string, string | number> = { monthLabel: 'Theo trường đang chọn' }
   for (const p of PIPELINE_STACK) row[p] = pipeline[p] ?? 0
 
   return { pipeline, tags, yieldGauge, summerMeltSeries, cohortStack: [row] }
 }
 
 /**
- * Đếm tổng hợp báo cáo admin trên toàn collection `leads` (không pagination).
- * Cache RAM 5 phút — tránh ~25 count queries mỗi lần chuyển tab Tổng kết.
+ * Đếm tổng hợp báo cáo admin theo `orgId` đang làm việc.
+ * Cache RAM 5 phút theo org — tránh ~25 count queries mỗi lần chuyển tab Tổng kết.
  */
 export function useAdminDashboardAggregates(enabled: boolean) {
+  const { effectiveOrgId } = useOrg()
+  const orgId = effectiveOrgId || DEFAULT_ORG_ID
   const [data, setData] = useState<AdminDashboardAggregateData | null>(() =>
-    enabled && aggCache && Date.now() - aggCache.at < AGG_CACHE_TTL_MS ? aggCache.data : null,
+    enabled && aggCache && aggCache.orgId === orgId && Date.now() - aggCache.at < AGG_CACHE_TTL_MS
+      ? aggCache.data
+      : null,
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -126,7 +144,7 @@ export function useAdminDashboardAggregates(enabled: boolean) {
       return
     }
 
-    if (aggCache && Date.now() - aggCache.at < AGG_CACHE_TTL_MS) {
+    if (aggCache && aggCache.orgId === orgId && Date.now() - aggCache.at < AGG_CACHE_TTL_MS) {
       setData(aggCache.data)
       setError(null)
       setLoading(false)
@@ -139,13 +157,14 @@ export function useAdminDashboardAggregates(enabled: boolean) {
       setLoading(true)
       setError(null)
       try {
-        if (!aggInflight) {
-          aggInflight = loadAdminDashboardAggregates(firestore).finally(() => {
-            aggInflight = null
+        if (!aggInflight || aggInflight.orgId !== orgId) {
+          const promise = loadAdminDashboardAggregates(firestore, orgId).finally(() => {
+            if (aggInflight?.orgId === orgId) aggInflight = null
           })
+          aggInflight = { orgId, promise }
         }
-        const next = await aggInflight
-        aggCache = { at: Date.now(), data: next }
+        const next = await aggInflight.promise
+        aggCache = { at: Date.now(), orgId, data: next }
         if (cancelled) return
         setData(next)
         setError(null)
@@ -163,7 +182,7 @@ export function useAdminDashboardAggregates(enabled: boolean) {
     return () => {
       cancelled = true
     }
-  }, [enabled])
+  }, [enabled, orgId])
 
   return { data, loading, error }
 }

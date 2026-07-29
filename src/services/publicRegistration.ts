@@ -42,13 +42,13 @@ function functionsRegion() {
   return getFunctions(app, 'asia-southeast1')
 }
 
-export async function fetchPublicRegistrationMeta(): Promise<PublicRegistrationMeta> {
-  const fn = httpsCallable<Record<string, never>, PublicRegistrationMeta>(
+export async function fetchPublicRegistrationMeta(orgSlug?: string): Promise<PublicRegistrationMeta> {
+  const fn = httpsCallable<{ orgSlug?: string }, PublicRegistrationMeta>(
     functionsRegion(),
     'getPublicRegistrationMeta',
   )
   try {
-    const res = await fn({})
+    const res = await fn(orgSlug ? { orgSlug } : {})
     return res.data
   } catch (e) {
     throw new Error(callableErrorMessage(e, 'Không tải được cấu hình cổng đăng ký.'))
@@ -56,9 +56,9 @@ export async function fetchPublicRegistrationMeta(): Promise<PublicRegistrationM
 }
 
 export async function submitPublicRegistration(
-  input: PublicRegistrationFormInput,
+  input: PublicRegistrationFormInput & { orgSlug?: string },
 ): Promise<SubmitPublicLeadResult> {
-  const fn = httpsCallable<PublicRegistrationFormInput, SubmitPublicLeadResult>(
+  const fn = httpsCallable<PublicRegistrationFormInput & { orgSlug?: string }, SubmitPublicLeadResult>(
     functionsRegion(),
     'submitPublicLead',
   )

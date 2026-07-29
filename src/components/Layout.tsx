@@ -44,7 +44,7 @@ type NavDef = {
   bottomPrimary?: boolean
 }
 
-const MOBILE_BOTTOM_ROUTES = ['/', '/leads', '/my-day', '/organizations', '/settings'] as const
+const MOBILE_BOTTOM_ROUTES = ['/', '/leads', '/my-day', '/settings'] as const
 
 function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: readonly Permission[]) {
   if (item.to === '/settings') return canAccessSettingsPage(permissions)
@@ -78,7 +78,6 @@ const mainNav: NavDef[] = [
     shortLabel: 'Trường',
     icon: Building2,
     group: 'work',
-    bottomPrimary: true,
     show: () => false, // filled in Layout via platform check
   },
   { to: '/settings', label: 'Cài đặt', shortLabel: 'Cài đặt', icon: Settings2, group: 'more', bottomPrimary: true },

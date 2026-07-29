@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import type { Lead } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb } from '../services/firebase'
 import { mapDoc } from './useLeads'
 import { leadHasFinanceActivity } from '../utils/accountantFinanceFilter'
+import { useAuth } from './useAuth'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 /** Quét hồ sơ mới cập nhật — chỉ giữ bản ghi có phát sinh thu (lọc client). */
 const ACCOUNTANT_LEAD_LIMIT = 1500
 
 export function useAccountantLeads(enabled: boolean) {
+  const { profile } = useAuth()
+  const orgId = profile?.orgId?.trim() || DEFAULT_ORG_ID
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +26,7 @@ export function useAccountantLeads(enabled: boolean) {
     try {
       const q = query(
         collection(db, FS_COLLECTIONS.leads),
+        where('orgId', '==', orgId),
         orderBy('updatedAt', 'desc'),
         limit(ACCOUNTANT_LEAD_LIMIT),
       )
@@ -38,7 +43,7 @@ export function useAccountantLeads(enabled: boolean) {
     } finally {
       setLoading(false)
     }
-  }, [enabled])
+  }, [enabled, orgId])
 
   useEffect(() => {
     void reload()
