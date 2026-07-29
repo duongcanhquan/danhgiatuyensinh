@@ -35,7 +35,7 @@ import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { useOrg } from './useOrg'
 import { useMasterData } from './useMasterData'
-import { orgIdEqualityConstraint } from '../tenancy/orgQuery'
+import { orgIdQueryConstraint, leadBelongsToOrg } from '../tenancy/orgQuery'
 import {
   coerceLeadCounselorStatus,
   counselorStatusToPipeline,
@@ -605,7 +605,10 @@ function buildListDataQuery(
   const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
   const extras = filterConstraints(filters, profile, canReadGlobal)
   const parts: QueryFilterConstraint[] = []
-  if (orgId) parts.push(orgIdEqualityConstraint(orgId))
+  if (orgId) {
+    const orgConstraint = orgIdQueryConstraint(orgId)
+    if (orgConstraint) parts.push(orgConstraint)
+  }
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
@@ -624,7 +627,10 @@ function buildPriorityTagCountQuery(
   const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
   const extras = [...filterConstraints(filters, profile, canReadGlobal), where('priorityTag', '==', tag)]
   const parts: QueryFilterConstraint[] = []
-  if (orgId) parts.push(orgIdEqualityConstraint(orgId))
+  if (orgId) {
+    const orgConstraint = orgIdQueryConstraint(orgId)
+    if (orgConstraint) parts.push(orgConstraint)
+  }
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
@@ -635,35 +641,37 @@ function applyRoleClientFilter(
   profile: VietMyUserProfile,
   hoDQueryLabels: string[],
   canReadGlobal: boolean,
+  orgId?: string,
 ): Lead[] {
+  const scoped = orgId ? rows.filter((l) => leadBelongsToOrg(l, orgId)) : rows
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
   if (isTeamLeadRole(profile.role)) {
     const team = new Set(profile.managedCounselorIds ?? [])
     if (team.size) {
-      return rows.filter((l) => {
+      return scoped.filter((l) => {
         const u = l.assignedTo ?? l.assignedCounselorId
         return Boolean(u && team.has(u))
       })
     }
     if (labelSet.size) {
-      return rows.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
+      return scoped.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
     }
     return []
   }
   if (isFieldStaffRole(profile.role) && profile.id) {
-    return rows.filter((l) => {
+    return scoped.filter((l) => {
       const u = l.assignedTo ?? l.assignedCounselorId
       return u === profile.id
     })
   }
   // Admin không còn module hồ sơ toàn trường → chỉ hồ sơ gán cho mình
   if (isAdminLikeRole(profile.role) && !isSuperAdminRole(profile.role) && !canReadGlobal && profile.id) {
-    return rows.filter((l) => {
+    return scoped.filter((l) => {
       const u = l.assignedTo ?? l.assignedCounselorId
       return u === profile.id
     })
   }
-  return rows
+  return scoped
 }
 
 /** So khớp ô tìm (chuỗi đã lowercase) với các trường lead — dùng chung Pipeline & Quản lý hồ sơ. */
@@ -766,7 +774,7 @@ export async function fetchLeadsInScopeForRescore(
     }
   }
 
-  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal)
+  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal, opts?.orgId)
   leads.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
   return { leads, truncated: hitCap }
 }
@@ -804,7 +812,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       .join('|')
   }, [directoryLabels])
   const filterKey = useMemo(() => {
-    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}|g:${canReadGlobal ? 1 : 0}`
+    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}`
     if (dataMode === 'fullScope') return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}`
     return b
   }, [
@@ -817,6 +825,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeChunkSize,
     maxFullScopeLeads,
     canReadGlobal,
+    effectiveOrgId,
   ])
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -860,7 +869,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) rows.push(row)
       })
-      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal)
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
       setScopeSourceOptions(collectDistinctSources(filtered))
     } catch (e) {
       console.error(e)
@@ -993,7 +1002,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           const row = mapDoc(d.id, d.data() as Record<string, unknown>)
           if (row) rows.push(row)
         })
-        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal)
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
         setScopeSourceOptions(collectDistinctSources(filtered))
       } catch (e) {
         console.error(e)
@@ -1032,7 +1041,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) mapped.push(row)
         })
         mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal))
+        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
         snaps[pg - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
       }
 
@@ -1058,7 +1067,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) pageRows.push(row)
         })
         pageRows.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels, canReadGlobal))
+        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
       } else {
         for (let p = 1; p < pg; p++) {
           if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
@@ -1090,7 +1099,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) mapped.push(row)
       })
-      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal)
+      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
       setSearchScanTruncated(snap.docs.length >= MAX_LEAD_SEARCH_SCAN)
       if (searchText) {
         mapped = mapped.filter((l) => leadMatchesClientSearch(l, searchText, directoryLabels))
@@ -1127,7 +1136,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         if (row) mapped.push(row)
       })
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal))
+      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
       setTotalPages(1)
     }
 
@@ -1158,7 +1167,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         }
       }
       if (cancelled) return
-      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal)
+      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       setScopeFetchTruncated(hitCap)
       setSearchScanTruncated(false)

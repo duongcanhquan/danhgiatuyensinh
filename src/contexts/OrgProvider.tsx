@@ -78,6 +78,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         })
         setOrganizations(rows.length ? rows : FALLBACK_ORGS)
         setOrganizationsLoading(false)
+        // Nếu activeOrgId lưu local không còn trong danh sách → về VietMy
+        setActiveOrgIdState((prev) => {
+          if (!prev) return prev
+          const ok = rows.some((r) => r.id === prev) || prev === DEFAULT_ORG_ID
+          if (ok) return prev
+          writeStoredActiveOrgId(DEFAULT_ORG_ID)
+          return DEFAULT_ORG_ID
+        })
       },
       () => {
         setOrganizations(FALLBACK_ORGS)

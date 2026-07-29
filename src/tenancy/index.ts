@@ -3,7 +3,7 @@ export { orgSettingsDocPath, orgSettingsDocSegments, ORG_SETTINGS_SUBCOLLECTION 
 export { ensureOrgId, isPlatformSuperAdminRole, resolveWriteOrgId } from './orgId'
 export { pickOrgSettingsSnapshot } from './dualReadOrgSettings'
 export { resolveEffectiveOrgId } from './effectiveOrgId'
-export { orgIdEqualityConstraint } from './orgQuery'
+export { orgIdEqualityConstraint, leadBelongsToOrg, orgIdQueryConstraint, shouldUseLegacyMissingOrgIdRead } from './orgQuery'
 export { ACTIVE_ORG_STORAGE_KEY, readStoredActiveOrgId, writeStoredActiveOrgId } from './activeOrgStorage'
 export {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,

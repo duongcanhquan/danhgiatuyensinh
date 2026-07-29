@@ -165,6 +165,16 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
     await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
     data.role = 'super_admin'
     data.orgId = null
+  } else if (isSuper || role === 'super_admin') {
+    // Siêu quản trị nền tảng: không gắn orgId trường (backfill Phase 0 từng gắn nhầm → mất switcher)
+    role = 'super_admin'
+    if (data.orgId != null && String(data.orgId).trim() !== '') {
+      await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+      data.orgId = null
+    } else if (String(data.role) !== 'super_admin') {
+      await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+    }
+    data.role = 'super_admin'
   } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {
     await updateDoc(ref, { role: 'team_lead', updatedAt: now })
     data.role = 'team_lead'

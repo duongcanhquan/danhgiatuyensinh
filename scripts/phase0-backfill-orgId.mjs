@@ -99,6 +99,21 @@ async function main() {
     }
   }
 
+  // Clear orgId nhầm trên tài khoản super_admin (khôi phục platform)
+  {
+    const snap = await db.collection('users').where('role', '==', 'super_admin').get()
+    let cleared = 0
+    for (const doc of snap.docs) {
+      const data = doc.data() || {}
+      if (data.orgId == null || data.orgId === '') continue
+      cleared++
+      if (apply) await doc.ref.update({ orgId: null })
+    }
+    console.log(
+      `[phase0] super_admin with orgId bound=${cleared}${apply ? ' (cleared)' : ' (dry-run — will clear)'}`,
+    )
+  }
+
   // backfill orgId on collections
   for (const col of collections) {
     const snap = await db.collection(col).get()
@@ -110,6 +125,11 @@ async function main() {
     for (const doc of snap.docs) {
       const data = doc.data() || {}
       if (data.orgId) continue
+      // Không gắn orgId trường cho Siêu quản trị nền tảng
+      if (col === 'users' && String(data.role ?? '') === 'super_admin') {
+        console.log(`[phase0] skip super_admin user ${doc.id}`)
+        continue
+      }
       would++
       if (!apply) continue
       batch.update(doc.ref, { orgId })
