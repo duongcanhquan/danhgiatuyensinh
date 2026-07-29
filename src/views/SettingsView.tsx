@@ -27,6 +27,7 @@ import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
 import { USER_ROLE_LABELS } from '../types'
 import { evaluateLead, resolveTagBands } from '../utils/scoring'
 import {
@@ -322,6 +323,7 @@ export function SettingsView() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
   const { can, permissions, status: authStatus, firebaseUser, profile } = useAuth()
+  const { currentOrgLabel, effectiveOrgId, isPlatformSuperAdmin } = useOrg()
   const [searchParams, setSearchParams] = useSearchParams()
   const { profiles } = useScoringProfiles()
   const { catalogs, byKind, loading: mdLoading, error: mdError } = useMasterData()
@@ -682,6 +684,21 @@ export function SettingsView() {
   return (
     <div className={`min-w-0 max-w-full space-y-2 ${settingsCopy}`}>
       <h1 className="sr-only">Cài đặt hệ thống</h1>
+      {isPlatformSuperAdmin ? (
+        <div className="rounded-xl border border-teal-200/80 bg-teal-50/90 px-3 py-2.5 text-sm text-teal-950">
+          <p className="font-semibold">
+            Đang cấu hình: <span className="text-teal-900">{currentOrgLabel}</span>
+            <span className="ml-1 font-mono text-xs font-normal text-teal-800/80">({effectiveOrgId})</span>
+          </p>
+          <p className="mt-0.5 text-xs text-teal-900/80">
+            Đổi trường trên thanh bên, hoặc vào{' '}
+            <Link to="/organizations" className="font-medium underline-offset-2 hover:underline">
+              Quản lý trường
+            </Link>
+            .
+          </p>
+        </div>
+      ) : null}
       {activeMainTab === 'connect' ? <IntegrationsStatusStrip /> : null}
       {!configured || !db ? (
         <div className={`rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2.5 text-rose-900 ${settingsCopy}`}>
