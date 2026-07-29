@@ -42,9 +42,9 @@ describe('orgId helpers', () => {
     expect(resolveWriteOrgId({})).toBe('vietmy')
   })
 
-  it('platform super admin is role super_admin without school orgId', () => {
+  it('platform super admin is any role super_admin (ignores leftover orgId)', () => {
     expect(isPlatformSuperAdminRole('super_admin', null)).toBe(true)
-    expect(isPlatformSuperAdminRole('super_admin', 'vietmy')).toBe(false)
+    expect(isPlatformSuperAdminRole('super_admin', 'vietmy')).toBe(true)
     expect(isPlatformSuperAdminRole('admin', null)).toBe(false)
   })
 })

@@ -9,7 +9,7 @@ import {
   updatePassword,
   type User,
 } from 'firebase/auth'
-import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc, deleteField } from 'firebase/firestore'
 import type { AuthState, Permission, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
@@ -53,18 +53,22 @@ function devSyntheticProfile(): VietMyUserProfile | null {
 
 function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>): VietMyUserProfile {
   const now = Timestamp.now()
+  const role = normalizeUserRole(String(d.role ?? 'counselor'))
   const rawOrg = d.orgId
+  // Superadmin nền tảng: luôn coi như không gắn trường (dù Firestore còn orgId cũ)
   const orgId =
-    rawOrg === null
+    role === 'super_admin'
       ? null
-      : typeof rawOrg === 'string' && rawOrg.trim()
-        ? rawOrg.trim()
-        : undefined
+      : rawOrg === null
+        ? null
+        : typeof rawOrg === 'string' && rawOrg.trim()
+          ? rawOrg.trim()
+          : undefined
   return {
     id: uid,
     email: String(d.email ?? user.email ?? ''),
     displayName: String(d.displayName ?? user.displayName ?? ''),
-    role: normalizeUserRole(String(d.role ?? 'counselor')),
+    role,
     orgId: orgId === undefined ? undefined : orgId,
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
@@ -160,19 +164,35 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
 
   const data = snap.data() as Record<string, unknown>
   let role = normalizeUserRole(String(data.role ?? 'counselor'))
+
+  /** Clear orgId trên Firestore — cần claim platform; nếu Rules từ chối vẫn cho đăng nhập (UI đã coi super_admin = null). */
+  const clearSuperAdminOrgBinding = async (alsoSetRole: boolean) => {
+    try {
+      const patch: Record<string, unknown> = { orgId: deleteField(), updatedAt: now }
+      if (alsoSetRole) patch.role = 'super_admin'
+      await updateDoc(ref, patch)
+    } catch (e) {
+      console.warn('[syncUserProfile] không xóa được orgId super_admin (cần claim platform)', e)
+    }
+  }
+
   if (isSuper && role !== 'super_admin') {
     role = 'super_admin'
-    await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+    await clearSuperAdminOrgBinding(true)
     data.role = 'super_admin'
     data.orgId = null
   } else if (isSuper || role === 'super_admin') {
     // Siêu quản trị nền tảng: không gắn orgId trường (backfill Phase 0 từng gắn nhầm → mất switcher)
     role = 'super_admin'
     if (data.orgId != null && String(data.orgId).trim() !== '') {
-      await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+      await clearSuperAdminOrgBinding(String(data.role) !== 'super_admin')
       data.orgId = null
     } else if (String(data.role) !== 'super_admin') {
-      await updateDoc(ref, { role: 'super_admin', orgId: null, updatedAt: now })
+      try {
+        await updateDoc(ref, { role: 'super_admin', updatedAt: now })
+      } catch (e) {
+        console.warn('[syncUserProfile] không gán role super_admin', e)
+      }
     }
     data.role = 'super_admin'
   } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {

@@ -24,6 +24,7 @@ import { studyFormatFromParts } from './studyFormatMerge'
 import { validateNationalIdInput } from './leadProfileCatalog'
 import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
+import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
 
 function norm(s: string): string {
   return s.trim()
@@ -94,15 +95,19 @@ export type CreateManualLeadInput = {
 }
 
 async function findExistingLeadIdByHash(db: Firestore, hash: string, orgId: string): Promise<string | null> {
+  const col = collection(db, FS_COLLECTIONS.leads)
   const snap = await getDocs(
-    query(
-      collection(db, FS_COLLECTIONS.leads),
-      where('orgId', '==', orgId),
-      where('uniqueHash', '==', hash),
-      limit(1),
-    ),
+    query(col, where('orgId', '==', orgId), where('uniqueHash', '==', hash), limit(1)),
   )
-  return snap.docs[0]?.id ?? null
+  if (!snap.empty) return snap.docs[0]!.id
+  // VietMy: hồ sơ cũ có thể thiếu orgId
+  if (shouldUseLegacyMissingOrgIdRead(orgId)) {
+    const legacy = await getDocs(query(col, where('uniqueHash', '==', hash), limit(10)))
+    for (const d of legacy.docs) {
+      if (leadBelongsToOrg(d.data() as { orgId?: string | null }, orgId)) return d.id
+    }
+  }
+  return null
 }
 
 export async function createManualLead(

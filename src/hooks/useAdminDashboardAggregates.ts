@@ -42,6 +42,8 @@ async function loadAdminDashboardAggregates(
   orgId: string,
 ): Promise<AdminDashboardAggregateData> {
   const col = collection(firestore, FS_COLLECTIONS.leads)
+  // Luôn lọc orgId trên server — không bỏ filter (tránh lẫn số liệu trường khác).
+  // Hồ sơ VietMy thiếu orgId chưa vào count cho đến Phase 0 backfill; list Hồ sơ đã lọc client.
   const orgW = where('orgId', '==', orgId)
 
   const pipelineEntries = await Promise.all(

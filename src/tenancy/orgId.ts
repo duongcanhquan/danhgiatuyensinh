@@ -27,7 +27,7 @@ export function resolveWriteOrgId(input: {
   return DEFAULT_ORG_ID
 }
 
-/** Platform superadmin: role super_admin and no school orgId bound. */
-export function isPlatformSuperAdminRole(role: UserRole | null | undefined, orgId: string | null | undefined): boolean {
-  return role === 'super_admin' && (orgId == null || String(orgId).trim() === '')
+/** Platform superadmin: mọi tài khoản role `super_admin` (không gắn vào một trường vận hành). */
+export function isPlatformSuperAdminRole(role: UserRole | null | undefined, _orgId?: string | null | undefined): boolean {
+  return role === 'super_admin'
 }

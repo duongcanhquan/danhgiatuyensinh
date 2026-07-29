@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
 import type { Lead } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb } from '../services/firebase'
 import { mapDoc } from './useLeads'
 import { leadHasFinanceActivity } from '../utils/accountantFinanceFilter'
 import { useAuth } from './useAuth'
+import { useOrg } from './useOrg'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { leadBelongsToOrg, orgIdQueryConstraint } from '../tenancy/orgQuery'
 
 /** Quét hồ sơ mới cập nhật — chỉ giữ bản ghi có phát sinh thu (lọc client). */
 const ACCOUNTANT_LEAD_LIMIT = 1500
 
 export function useAccountantLeads(enabled: boolean) {
   const { profile } = useAuth()
-  const orgId = profile?.orgId?.trim() || DEFAULT_ORG_ID
+  const { effectiveOrgId } = useOrg()
+  const orgId =
+    (profile?.role === 'super_admin' ? effectiveOrgId : profile?.orgId?.trim()) || DEFAULT_ORG_ID
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,17 +28,16 @@ export function useAccountantLeads(enabled: boolean) {
     setLoading(true)
     setError(null)
     try {
-      const q = query(
-        collection(db, FS_COLLECTIONS.leads),
-        where('orgId', '==', orgId),
-        orderBy('updatedAt', 'desc'),
-        limit(ACCOUNTANT_LEAD_LIMIT),
-      )
+      const col = collection(db, FS_COLLECTIONS.leads)
+      const orgC = orgIdQueryConstraint(orgId)
+      const q = orgC
+        ? query(col, orgC, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT))
+        : query(col, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT))
       const snap = await getDocs(q)
       const rows: Lead[] = []
       for (const d of snap.docs) {
         const lead = mapDoc(d.id, d.data() as Record<string, unknown>)
-        if (lead) rows.push(lead)
+        if (lead && leadBelongsToOrg(lead, orgId)) rows.push(lead)
       }
       setLeads(rows.filter(leadHasFinanceActivity))
     } catch (e) {

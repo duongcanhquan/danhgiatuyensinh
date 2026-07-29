@@ -20,7 +20,7 @@ describe('resolveEffectiveOrgId', () => {
     ).toBe('vietmy')
   })
 
-  it('platform super_admin uses activeOrgId then default', () => {
+  it('platform super_admin always uses activeOrgId (even if profile still has orgId leftover)', () => {
     expect(
       resolveEffectiveOrgId({
         role: 'super_admin',
@@ -35,16 +35,13 @@ describe('resolveEffectiveOrgId', () => {
         activeOrgId: null,
       }),
     ).toBe('vietmy')
-  })
-
-  it('super_admin bound to a school orgId behaves like school admin', () => {
     expect(
       resolveEffectiveOrgId({
         role: 'super_admin',
         profileOrgId: 'vietmy',
         activeOrgId: 'other',
       }),
-    ).toBe('vietmy')
+    ).toBe('other')
   })
 })
 

@@ -26,6 +26,7 @@ import { computeLeadUniqueHash } from '../utils/leadIdentity'
 import { FS_COLLECTIONS, type Lead, type PriorityTag, type VietMyUserProfile } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
 import { pickProfileForImport, useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useSchoolTvvSignalDefinitions } from '../hooks/useSchoolTvvSignalDefinitions'
 import { useMasterData } from '../hooks/useMasterData'
@@ -115,6 +116,21 @@ async function fetchExistingIdsByHash(
         const h = d.data().uniqueHash
         if (h && !map.has(String(h))) map.set(String(h), d.id)
       })
+    }
+    if (shouldUseLegacyMissingOrgIdRead(orgId)) {
+      const legacySnaps = await Promise.all(
+        group.map((part) =>
+          getDocs(query(collection(db, FS_COLLECTIONS.leads), where('uniqueHash', 'in', part))),
+        ),
+      )
+      for (const snap of legacySnaps) {
+        snap.forEach((d) => {
+          const data = d.data() as { uniqueHash?: string; orgId?: string | null }
+          if (!leadBelongsToOrg(data, orgId)) return
+          const h = data.uniqueHash
+          if (h && !map.has(String(h))) map.set(String(h), d.id)
+        })
+      }
     }
     waveIndex += 1
     onWaveDone?.(waveIndex, waveCount)

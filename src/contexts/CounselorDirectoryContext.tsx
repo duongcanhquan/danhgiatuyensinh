@@ -104,10 +104,6 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
           const row = mapUser(d.id, d.data() as Record<string, unknown>)
           if (row) next.push(row)
         })
-        // Legacy vietmy: hồ sơ thiếu orgId vẫn hiện khi đang làm việc tại vietmy
-        if (scopeOrgId === DEFAULT_ORG_ID) {
-          // Keep only query results for now; backfill Phase 0 should set orgId.
-        }
         setUsers(next)
         setLoading(false)
         setError(null)
