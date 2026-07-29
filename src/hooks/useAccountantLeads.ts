@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import type { Lead } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb } from '../services/firebase'
@@ -8,7 +8,7 @@ import { leadHasFinanceActivity } from '../utils/accountantFinanceFilter'
 import { useAuth } from './useAuth'
 import { useOrg } from './useOrg'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
-import { leadBelongsToOrg, orgIdQueryConstraint } from '../tenancy/orgQuery'
+import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
 
 /** Quét hồ sơ mới cập nhật — chỉ giữ bản ghi có phát sinh thu (lọc client). */
 const ACCOUNTANT_LEAD_LIMIT = 1500
@@ -29,10 +29,14 @@ export function useAccountantLeads(enabled: boolean) {
     setError(null)
     try {
       const col = collection(db, FS_COLLECTIONS.leads)
-      const orgC = orgIdQueryConstraint(orgId)
-      const q = orgC
-        ? query(col, orgC, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT))
-        : query(col, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT))
+      const q = shouldUseLegacyMissingOrgIdRead(orgId)
+        ? query(col, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT))
+        : query(
+            col,
+            where('orgId', '==', orgId),
+            orderBy('updatedAt', 'desc'),
+            limit(ACCOUNTANT_LEAD_LIMIT),
+          )
       const snap = await getDocs(q)
       const rows: Lead[] = []
       for (const d of snap.docs) {
