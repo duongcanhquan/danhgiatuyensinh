@@ -47,6 +47,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     writeStoredActiveOrgId(next)
   }, [])
 
+  // Superadmin: mặc định làm việc tại VietMy (chỗ chứa dữ liệu cũ) nếu chưa chọn trường
+  useEffect(() => {
+    if (!isPlatformSuperAdmin) return
+    if (activeOrgId && activeOrgId.trim()) return
+    setActiveOrgIdState(DEFAULT_ORG_ID)
+    writeStoredActiveOrgId(DEFAULT_ORG_ID)
+  }, [isPlatformSuperAdmin, activeOrgId])
+
   const effectiveOrgId = useMemo(
     () =>
       resolveEffectiveOrgId({

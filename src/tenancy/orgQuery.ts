@@ -8,8 +8,8 @@ export function orgIdEqualityConstraint(orgId: string): QueryFilterConstraint {
 
 /**
  * Trường mặc định (VietMy) còn nhiều hồ sơ cũ thiếu `orgId`.
- * Không gắn `where(orgId==)` trên query — lọc client bằng {@link leadBelongsToOrg}.
- * Trường khác: luôn lọc server `orgId ==`.
+ * Chỉ Superadmin (Rules `isPlatform`) mới được bỏ lọc server — school user phải
+ * `where(orgId==)` nếu không query bị permission-denied dưới multi-tenant Rules.
  */
 export function shouldUseLegacyMissingOrgIdRead(orgId: string | null | undefined): boolean {
   return String(orgId ?? '').trim() === DEFAULT_ORG_ID
@@ -27,11 +27,12 @@ export function leadBelongsToOrg(
 }
 
 /**
- * Constraint gắn vào query list. `null` = không lọc org trên server (legacy VietMy).
+ * Constraint gắn vào query list.
+ * Luôn lọc `orgId ==` khi có id — tương thích Firestore Rules (query phải bị ràng buộc).
+ * Superadmin + VietMy legacy: caller chủ động bỏ constraint (xem useLeads).
  */
 export function orgIdQueryConstraint(orgId: string | null | undefined): QueryFilterConstraint | null {
   const id = String(orgId ?? '').trim()
   if (!id) return null
-  if (shouldUseLegacyMissingOrgIdRead(id)) return null
   return orgIdEqualityConstraint(id)
 }

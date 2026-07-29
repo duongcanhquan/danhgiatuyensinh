@@ -35,7 +35,11 @@ import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { useOrg } from './useOrg'
 import { useMasterData } from './useMasterData'
-import { orgIdQueryConstraint, leadBelongsToOrg } from '../tenancy/orgQuery'
+import {
+  orgIdEqualityConstraint,
+  leadBelongsToOrg,
+  shouldUseLegacyMissingOrgIdRead,
+} from '../tenancy/orgQuery'
 import {
   coerceLeadCounselorStatus,
   counselorStatusToPipeline,
@@ -593,6 +597,20 @@ function composeQuery(col: ReturnType<typeof collection>, parts: QueryFilterCons
   return query(col, composed as unknown as Parameters<typeof query>[1])
 }
 
+/**
+ * Superadmin xem VietMy: bỏ where(orgId) để lấy cả hồ sơ cũ thiếu orgId (Rules isPlatform).
+ * Mọi trường hợp khác: luôn where(orgId==) — nếu bỏ lọc, multi-tenant Rules từ chối cả query.
+ */
+function shouldOmitOrgServerFilter(
+  profile: VietMyUserProfile,
+  orgId: string | undefined,
+  orgFilter: 'auto' | 'strict',
+): boolean {
+  if (orgFilter === 'strict') return false
+  if (!orgId || !shouldUseLegacyMissingOrgIdRead(orgId)) return false
+  return isSuperAdminRole(profile.role)
+}
+
 function buildListDataQuery(
   firestore: Firestore,
   profile: VietMyUserProfile,
@@ -600,14 +618,14 @@ function buildListDataQuery(
   filters: LeadListServerFilters | undefined,
   orgId: string | undefined,
   canReadGlobal: boolean,
+  orgFilter: 'auto' | 'strict' = 'auto',
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
   const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
   const extras = filterConstraints(filters, profile, canReadGlobal)
   const parts: QueryFilterConstraint[] = []
-  if (orgId) {
-    const orgConstraint = orgIdQueryConstraint(orgId)
-    if (orgConstraint) parts.push(orgConstraint)
+  if (orgId && !shouldOmitOrgServerFilter(profile, orgId, orgFilter)) {
+    parts.push(orgIdEqualityConstraint(orgId))
   }
   if (rbac) parts.push(rbac)
   parts.push(...extras)
@@ -627,13 +645,64 @@ function buildPriorityTagCountQuery(
   const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
   const extras = [...filterConstraints(filters, profile, canReadGlobal), where('priorityTag', '==', tag)]
   const parts: QueryFilterConstraint[] = []
-  if (orgId) {
-    const orgConstraint = orgIdQueryConstraint(orgId)
-    if (orgConstraint) parts.push(orgConstraint)
-  }
+  // Count luôn strict — tránh đếm lẫn trường khác khi Superadmin bỏ lọc list
+  if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
+}
+
+function isFsPermissionDenied(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const code = 'code' in e ? String((e as { code: unknown }).code) : ''
+  return code === 'permission-denied' || code === 'permissions-denied'
+}
+
+/** List query: Superadmin+VietMy thử đọc không lọc org (legacy); luôn có đường orgId== dự phòng. */
+async function getDocsListWithOrgFallback(
+  firestore: Firestore,
+  profile: VietMyUserProfile,
+  hoDLabels: string[],
+  filters: LeadListServerFilters | undefined,
+  orgId: string | undefined,
+  canReadGlobal: boolean,
+  withConstraints: (base: Query) => Query,
+): Promise<QuerySnapshot<DocumentData>> {
+  const allowLegacy = shouldOmitOrgServerFilter(profile, orgId, 'auto')
+  const scopedQ = withConstraints(
+    buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'strict'),
+  )
+
+  let scopedSnap: QuerySnapshot<DocumentData> | null = null
+  let scopedErr: unknown
+  try {
+    scopedSnap = await getDocs(scopedQ)
+  } catch (e) {
+    scopedErr = e
+    if (!isFsPermissionDenied(e)) throw e
+  }
+
+  if (!allowLegacy) {
+    if (scopedSnap) return scopedSnap
+    throw scopedErr instanceof Error ? scopedErr : new Error('Không đọc được danh sách hồ sơ.')
+  }
+
+  try {
+    const legacyQ = withConstraints(
+      buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'auto'),
+    )
+    const legacySnap = await getDocs(legacyQ)
+    // Unscoped gồm cả thiếu orgId; ưu tiên khi có ít nhất bằng số bản ghi đã gắn org
+    if (legacySnap.docs.length >= (scopedSnap?.docs.length ?? 0)) {
+      return legacySnap
+    }
+    if (scopedSnap && scopedSnap.docs.length > 0) return scopedSnap
+    return legacySnap
+  } catch (e) {
+    console.warn('[useLeads] legacy VietMy unscoped failed — dùng orgId==', orgId, e)
+    if (scopedSnap) return scopedSnap
+    throw e
+  }
 }
 
 function applyRoleClientFilter(
@@ -748,19 +817,23 @@ export async function fetchLeadsInScopeForRescore(
   const maxLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxLeads ?? LEADS_UI_FULL_SCOPE_MAX))
   const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
   const canReadGlobal = Boolean(opts?.canReadGlobal)
-  const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, filters, opts?.orgId, canReadGlobal)
   let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
   const acc: Lead[] = []
   let hitCap = false
 
   while (acc.length < maxLeads) {
-    let qy: Query
-    if (lastSnap === null) {
-      qy = query(baseQy, orderBy('updatedAt', 'desc'), limit(chunkSize))
-    } else {
-      qy = query(baseQy, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize))
-    }
-    const snap: QuerySnapshot<DocumentData> = await getDocs(qy)
+    const snap: QuerySnapshot<DocumentData> = await getDocsListWithOrgFallback(
+      firestore,
+      profile,
+      hoDQueryLabels,
+      filters,
+      opts?.orgId,
+      canReadGlobal,
+      (base) =>
+        lastSnap === null
+          ? query(base, orderBy('updatedAt', 'desc'), limit(chunkSize))
+          : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize)),
+    )
     if (!snap.docs.length) break
     for (const d of snap.docs) {
       const row = mapDoc(d.id, d.data() as Record<string, unknown>)
@@ -858,12 +931,15 @@ export function useLeads(opts?: UseLeadsOptions) {
     if (!firestore || !profile) return
     try {
       const distFilters = serverFiltersOmitField(serverFilters, 'source')
-      const qy = query(
-        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId, canReadGlobal),
-        orderBy('updatedAt', 'desc'),
-        limit(SOURCE_CATALOG_BATCH),
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        distFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
       )
-      const snap = await getDocs(qy)
       const rows: Lead[] = []
       snap.forEach((d) => {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
@@ -946,7 +1022,15 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const fetchTotalOnly = async (): Promise<number | null> => {
       try {
-        const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
+        const base = buildListDataQuery(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          'strict',
+        )
         const total = (await getCountFromServer(base)).data().count
         if (cancelled) return null
         setTotalLeadCount(total)
@@ -990,12 +1074,15 @@ export function useLeads(opts?: UseLeadsOptions) {
     const fetchSourceCatalog = async () => {
       try {
         const distFilters = serverFiltersOmitField(serverFilters, 'source')
-        const qy = query(
-          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters, effectiveOrgId, canReadGlobal),
-          orderBy('updatedAt', 'desc'),
-          limit(SOURCE_CATALOG_BATCH),
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          distFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
         )
-        const snap = await getDocs(qy)
         if (cancelled) return
         const rows: Lead[] = []
         snap.forEach((d) => {
@@ -1021,7 +1108,6 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadFirestorePage = async (page: number, total: number | null) => {
-      const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       const snaps = pageEndSnaps.current
       const pg = Math.max(1, Math.floor(page))
 
@@ -1029,11 +1115,18 @@ export function useLeads(opts?: UseLeadsOptions) {
       const canSingleStep = pg === 1 || (prev !== undefined && prev !== null)
 
       const fetchOnePage = async (after: QueryDocumentSnapshot<DocumentData> | null) => {
-        const qy =
-          after === null
-            ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-            : query(base(), orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE))
-        const snap = await getDocs(qy)
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) =>
+            after === null
+              ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+              : query(base, orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE)),
+        )
         if (cancelled) return
         const mapped: Lead[] = []
         snap.forEach((d) => {
@@ -1049,8 +1142,15 @@ export function useLeads(opts?: UseLeadsOptions) {
         await fetchOnePage(pg <= 1 ? null : (prev as QueryDocumentSnapshot<DocumentData>))
       } else if (pg * LEADS_PAGE_SIZE <= MAX_LIST_BULK_FETCH) {
         const bulkLimit = pg * LEADS_PAGE_SIZE
-        const qy = query(base(), orderBy('updatedAt', 'desc'), limit(bulkLimit))
-        const snap = await getDocs(qy)
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) => query(base, orderBy('updatedAt', 'desc'), limit(bulkLimit)),
+        )
         if (cancelled) return
         const docs = snap.docs
         for (let p = 1; p <= pg; p++) {
@@ -1072,11 +1172,18 @@ export function useLeads(opts?: UseLeadsOptions) {
         for (let p = 1; p < pg; p++) {
           if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
           const prevEnd = p === 1 ? null : snaps[p - 2] ?? null
-          const qy =
-            prevEnd === null
-              ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-              : query(base(), orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE))
-          const snap = await getDocs(qy)
+          const snap = await getDocsListWithOrgFallback(
+            firestore,
+            profile,
+            hoDQueryLabels,
+            serverFilters,
+            effectiveOrgId,
+            canReadGlobal,
+            (base) =>
+              prevEnd === null
+                ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+                : query(base, orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE)),
+          )
           if (cancelled) return
           snaps[p - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
           if (!snap.docs.length) break
@@ -1090,9 +1197,15 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const rebuildSearchBucket = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
-      const qy = query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN))
-      const snap = await getDocs(qy)
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        serverFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN)),
+      )
       if (cancelled) return
       let mapped: Lead[] = []
       snap.forEach((d) => {
@@ -1126,9 +1239,15 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadBatch = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
-      const qy = query(base, orderBy('updatedAt', 'desc'), limit(batchLimit))
-      const snap = await getDocs(qy)
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        serverFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(batchLimit)),
+      )
       if (cancelled) return
       const mapped: Lead[] = []
       snap.forEach((d) => {
@@ -1141,18 +1260,22 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadFullScope = async () => {
-      const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
       let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
       const acc: Lead[] = []
       let hitCap = false
       while (acc.length < maxFullScopeLeads) {
-        let qy: Query
-        if (lastSnap === null) {
-          qy = query(baseQy, orderBy('updatedAt', 'desc'), limit(fullScopeChunkSize))
-        } else {
-          qy = query(baseQy, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize))
-        }
-        const snap: QuerySnapshot<DocumentData> = await getDocs(qy)
+        const snap: QuerySnapshot<DocumentData> = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) =>
+            lastSnap === null
+              ? query(base, orderBy('updatedAt', 'desc'), limit(fullScopeChunkSize))
+              : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize)),
+        )
         if (cancelled) return
         if (!snap.docs.length) break
         for (const d of snap.docs) {
@@ -1298,7 +1421,15 @@ export function useLeads(opts?: UseLeadsOptions) {
     const firestore = getFirestoreDb()
     if (!firestore || !profile) return
     try {
-      const cq = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal)
+      const cq = buildListDataQuery(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        serverFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        'strict',
+      )
       const agg = await getCountFromServer(cq)
       setTotalLeadCount(agg.data().count)
       setTotalLeadCountError(null)

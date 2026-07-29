@@ -39,6 +39,8 @@ import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/us
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { canCreateLead, canWriteLead } from '../auth/leadAccess'
@@ -208,6 +210,7 @@ export function LeadManagement() {
     catalogs: scoringCatalogDefs,
   } = useMasterData()
   const { profile, can, canRunLlmAnalysis } = useAuth()
+  const { currentOrgLabel, effectiveOrgId, isPlatformSuperAdmin, setActiveOrgId } = useOrg()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { users: directoryUsers, fieldStaff: fieldStaffUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
@@ -1970,7 +1973,30 @@ export function LeadManagement() {
               {!loading && !sortedFiltered.length ? (
                 <tr>
                   <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
-                    Không có hồ sơ khớp bộ lọc.
+                    <p>Không có hồ sơ khớp bộ lọc.</p>
+                    {isPlatformSuperAdmin ? (
+                      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+                        Đang xem trường <span className="font-semibold text-slate-800">{currentOrgLabel}</span>
+                        {effectiveOrgId !== DEFAULT_ORG_ID ? (
+                          <>
+                            . Dữ liệu cũ nằm ở Việt Mỹ —{' '}
+                            <button
+                              type="button"
+                              className="font-semibold text-teal-700 underline underline-offset-2 hover:text-teal-900"
+                              onClick={() => setActiveOrgId(DEFAULT_ORG_ID)}
+                            >
+                              chuyển về Cao đẳng Việt Mỹ
+                            </button>
+                            .
+                          </>
+                        ) : (
+                          <>
+                            . Nếu vẫn trống: đăng xuất/đăng nhập lại, và deploy Firestore Rules (super_admin được đọc
+                            toàn hệ thống).
+                          </>
+                        )}
+                      </p>
+                    ) : null}
                   </td>
                 </tr>
               ) : null}

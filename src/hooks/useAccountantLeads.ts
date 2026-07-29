@@ -9,6 +9,7 @@ import { useAuth } from './useAuth'
 import { useOrg } from './useOrg'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
+import { isSuperAdminRole } from '../auth/roleUtils'
 
 /** Quét hồ sơ mới cập nhật — chỉ giữ bản ghi có phát sinh thu (lọc client). */
 const ACCOUNTANT_LEAD_LIMIT = 1500
@@ -29,15 +30,26 @@ export function useAccountantLeads(enabled: boolean) {
     setError(null)
     try {
       const col = collection(db, FS_COLLECTIONS.leads)
-      const q = shouldUseLegacyMissingOrgIdRead(orgId)
-        ? query(col, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT))
-        : query(
-            col,
-            where('orgId', '==', orgId),
-            orderBy('updatedAt', 'desc'),
-            limit(ACCOUNTANT_LEAD_LIMIT),
-          )
-      const snap = await getDocs(q)
+      const scoped = query(
+        col,
+        where('orgId', '==', orgId),
+        orderBy('updatedAt', 'desc'),
+        limit(ACCOUNTANT_LEAD_LIMIT),
+      )
+      let snap = await getDocs(scoped)
+      // Superadmin + VietMy: nếu chưa có bản ghi gắn orgId, thử đọc legacy thiếu orgId
+      if (
+        snap.empty &&
+        profile &&
+        isSuperAdminRole(profile.role) &&
+        shouldUseLegacyMissingOrgIdRead(orgId)
+      ) {
+        try {
+          snap = await getDocs(query(col, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT)))
+        } catch (legacyErr) {
+          console.warn('[useAccountantLeads] legacy read skipped', legacyErr)
+        }
+      }
       const rows: Lead[] = []
       for (const d of snap.docs) {
         const lead = mapDoc(d.id, d.data() as Record<string, unknown>)
@@ -50,7 +62,7 @@ export function useAccountantLeads(enabled: boolean) {
     } finally {
       setLoading(false)
     }
-  }, [enabled, orgId])
+  }, [enabled, orgId, profile])
 
   useEffect(() => {
     void reload()

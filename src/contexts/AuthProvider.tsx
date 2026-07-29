@@ -219,7 +219,10 @@ async function ensureAuthClaimsFresh(
       orgId: typeof token.claims.orgId === 'string' ? token.claims.orgId : '',
       platform: token.claims.platform === true,
     }
-    if (claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) return
+    const isSuper = profile.role === 'super_admin'
+    // Superadmin: luôn gọi refresh ít nhất một lần nếu thiếu platform — tránh mất quyền đọc leads
+    if (!isSuper && claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) return
+    if (isSuper && claims.platform === true && claims.role === 'super_admin') return
     try {
       await refreshOwnAuthClaims()
     } catch (e) {

@@ -7,11 +7,13 @@ import {
 import { DEFAULT_ORG_ID } from './orgConstants'
 
 describe('orgQuery legacy VietMy', () => {
-  it('uses legacy read only for default org', () => {
+  it('flags VietMy for legacy reads but still returns org equality constraint', () => {
     expect(shouldUseLegacyMissingOrgIdRead(DEFAULT_ORG_ID)).toBe(true)
     expect(shouldUseLegacyMissingOrgIdRead('demo')).toBe(false)
-    expect(orgIdQueryConstraint(DEFAULT_ORG_ID)).toBeNull()
+    // Luôn gắn where(orgId==) — bỏ lọc chỉ ở useLeads cho Superadmin
+    expect(orgIdQueryConstraint(DEFAULT_ORG_ID)).toBeTruthy()
     expect(orgIdQueryConstraint('demo')).toBeTruthy()
+    expect(orgIdQueryConstraint('')).toBeNull()
   })
 
   it('leadBelongsToOrg accepts missing orgId on VietMy only', () => {
