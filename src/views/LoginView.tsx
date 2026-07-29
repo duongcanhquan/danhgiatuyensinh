@@ -6,6 +6,7 @@ import { LoggedInPortalGate, AuthSessionExitBar } from '../components/AuthSessio
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
+import { defaultSuperAdminEmailFromEnv } from '../tenancy/superAdminBootstrap'
 
 const VIDEO_SRC =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260429_114316_1c7889ad-2885-410e-b493-98119fee0ddb.mp4'
@@ -49,7 +50,7 @@ function mapFirebaseLoginError(err: unknown): string {
 
 /**
  * Cổng đăng nhập thống nhất (admin / quản lý / nhân viên) — Firebase Email-Password.
- * Super admin: `VITE_SUPER_ADMIN_EMAIL` → role admin trong Firestore `users/{uid}`.
+ * Email khớp `VITE_SUPER_ADMIN_EMAIL` → role `super_admin` (orgId null). Lần đầu có thể tự tạo Auth user.
  */
 export function LoginView() {
   const { status, firebaseUser, signInWithEmail } = useAuth()
@@ -58,7 +59,8 @@ export function LoginView() {
   const from =
     rawFrom && rawFrom !== '/login' && rawFrom.startsWith('/') ? rawFrom : '/'
 
-  const [email, setEmail] = useState('')
+  const superEmailHint = defaultSuperAdminEmailFromEnv()
+  const [email, setEmail] = useState(superEmailHint)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -208,7 +210,7 @@ export function LoginView() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="vm-input mt-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:ring-teal-600/20"
-                  placeholder="ten@caodangvietmy.edu.vn"
+                  placeholder={superEmailHint || 'ten@caodangvietmy.edu.vn'}
                 />
               </label>
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -219,7 +221,9 @@ export function LoginView() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                   className="vm-input mt-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:ring-teal-600/20"
+                  placeholder="Tối thiểu 6 ký tự"
                 />
               </label>
               {error ? (
@@ -230,6 +234,12 @@ export function LoginView() {
               <button type="submit" disabled={busy} className="vm-btn vm-btn-primary w-full py-3 text-base">
                 {busy ? 'Đang đăng nhập…' : 'Đăng nhập CRM'}
               </button>
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+                Siêu quản trị: dùng email <span className="font-mono text-[11px] text-slate-800">{superEmailHint}</span>.
+                Lần đầu hệ thống có thể tạo tài khoản với mật khẩu bạn nhập (vd. <span className="font-mono">123456</span>),
+                rồi vào menu bên trái chọn <strong>Đổi mật khẩu</strong>. Sau khi vào: <strong>Quản lý trường</strong> và{' '}
+                <strong>Cài đặt</strong> (nhân sự, KPI…).
+              </p>
               <Link
                 to="/ke-toan/login"
                 className="vm-btn vm-btn-secondary w-full border-slate-300 bg-white text-slate-800 hover:bg-slate-50"

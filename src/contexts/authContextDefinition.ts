@@ -9,6 +9,8 @@ export type AuthContextValue = AuthState & {
   canRunLlmAnalysis: boolean
   signOut: () => Promise<void>
   signInWithEmail: (email: string, password: string) => Promise<void>
+  /** Đổi mật khẩu tài khoản đang đăng nhập (cần mật khẩu hiện tại). */
+  changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<void>
   /** Admin: tạo tài khoản Auth + hồ sơ Firestore (dùng app Auth phụ). */
   createStaffAccount: (input: {
     email: string

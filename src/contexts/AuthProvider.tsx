@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  updatePassword,
   type User,
 } from 'firebase/auth'
 import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
@@ -21,6 +24,10 @@ import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { claimsMatchProfile } from '../tenancy/authClaims'
+import {
+  defaultSuperAdminEmailFromEnv,
+  shouldAttemptSuperAdminBootstrap,
+} from '../tenancy/superAdminBootstrap'
 import { refreshOwnAuthClaims } from '../services/refreshOwnAuthClaims'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
@@ -118,11 +125,16 @@ async function syncUserProfileWithRetry(
   throw last instanceof Error ? last : new Error(String(last))
 }
 
+function firebaseAuthErrorCode(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err && typeof (err as { code: unknown }).code === 'string') {
+    return (err as { code: string }).code
+  }
+  return ''
+}
+
 async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>>, user: User) {
   const ref = doc(db, FS_COLLECTIONS.users, user.uid)
-  const superEmail = String(import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? 'quan.duong@caodangvietmy.edu.vn')
-    .trim()
-    .toLowerCase()
+  const superEmail = defaultSuperAdminEmailFromEnv()
   const accountantEmail = defaultAccountantEmailFromEnv()
   const isSuper = Boolean(user.email && superEmail && user.email.toLowerCase() === superEmail)
   const isDefaultAccountant = Boolean(user.email && user.email.toLowerCase() === accountantEmail)
@@ -301,7 +313,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getFirebaseAuth()
     if (!auth) throw new Error('Firebase Auth chưa cấu hình.')
     const normalized = email.trim().toLowerCase()
-    await signInWithEmailAndPassword(auth, normalized, password)
+    try {
+      await signInWithEmailAndPassword(auth, normalized, password)
+    } catch (err) {
+      const code = firebaseAuthErrorCode(err)
+      const superEmail = defaultSuperAdminEmailFromEnv()
+      if (
+        !shouldAttemptSuperAdminBootstrap({
+          email: normalized,
+          password,
+          errorCode: code,
+          superAdminEmail: superEmail,
+        })
+      ) {
+        throw err
+      }
+      try {
+        // Lần đầu: tạo tài khoản Auth cho đúng email Siêu quản trị (mật khẩu do người dùng nhập).
+        await createUserWithEmailAndPassword(auth, normalized, password)
+      } catch (createErr) {
+        const createCode = firebaseAuthErrorCode(createErr)
+        if (createCode === 'auth/email-already-in-use') throw err
+        throw createErr
+      }
+    }
+  }, [])
+
+  const changeOwnPassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const auth = getFirebaseAuth()
+    const user = auth?.currentUser
+    if (!auth || !user?.email) throw new Error('Bạn cần đăng nhập lại để đổi mật khẩu.')
+    const next = newPassword.trim()
+    if (next.length < 6) throw new Error('Mật khẩu mới tối thiểu 6 ký tự.')
+    const cred = EmailAuthProvider.credential(user.email, currentPassword)
+    await reauthenticateWithCredential(user, cred)
+    await updatePassword(user, next)
   }, [])
 
   const createStaffAccount = useCallback(
@@ -591,6 +637,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       reloadProfile,
       signInWithEmail,
+      changeOwnPassword,
       createStaffAccount,
       updateStaffProfile,
       setStaffPassword,
@@ -611,6 +658,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       reloadProfile,
       signInWithEmail,
+      changeOwnPassword,
       createStaffAccount,
       updateStaffProfile,
       setStaffPassword,
