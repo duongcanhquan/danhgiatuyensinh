@@ -25,11 +25,15 @@ describe('settingsNavigation webhooks', () => {
     expect(isSettingsSubEnabled('webhooks', fullAccess)).toBe(true)
     expect(enabledSubsForMain('connect', fullAccess)).toContain('webhooks')
     expect(enabledSubsForMain('connect', fullAccess)).toContain('hub')
+    expect(enabledSubsForMain('connect', fullAccess)).toContain('invite_docs')
+    expect(enabledSubsForMain('connect', fullAccess)).toContain('receipts')
     expect(resolveSettingsRoute('connect', 'webhooks', fullAccess)).toEqual({
       main: 'connect',
       sub: 'webhooks',
     })
     expect(resolveSettingsRoute('n8n', null, fullAccess).sub).toBe('webhooks')
+    expect(resolveSettingsRoute('giay_moi', null, fullAccess).sub).toBe('invite_docs')
+    expect(resolveSettingsRoute('chung_tu', null, fullAccess).sub).toBe('receipts')
     expect(resolveSettingsRoute('integrations', null, fullAccess).sub).toBe('hub')
   })
 

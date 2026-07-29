@@ -55,6 +55,8 @@ import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
 import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
+import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSettingsPanel'
+import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
 import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
 import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
@@ -260,6 +262,25 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Webhook n8n</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>Bốn URL: giấy mời, CTSV, báo cáo ngày/tháng.</p>
+        </>
+      )
+    case 'invite_docs':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Giấy mời &amp; mẫu</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Bật/tắt loại giấy, nhãn nút, mã mẫu Google Docs, thư mục Drive gốc và tự tạo thư mục lần đầu. Dùng cùng webhook
+            giấy mời ở tab <strong>Webhook n8n</strong>.
+          </p>
+        </>
+      )
+    case 'receipts':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Chứng từ &amp; lưu trữ</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Chọn nơi lưu bill (R2 / Drive / Firebase) và điền URL/token theo từng trường — không chỉ phụ thuộc file .env.
+          </p>
         </>
       )
     case 'public_registration':
@@ -1278,6 +1299,24 @@ export function SettingsView() {
             Webhook n8n
           </h2>
           <N8nWebhooksSettingsPanel />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'invite_docs' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-invite-docs" className="space-y-3">
+          <h2 id="tab-invite-docs" className="sr-only">
+            Giấy mời và mẫu
+          </h2>
+          <InviteDocumentsSettingsPanel />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'receipts' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-receipts" className="space-y-3">
+          <h2 id="tab-receipts" className="sr-only">
+            Chứng từ và lưu trữ
+          </h2>
+          <ReceiptStorageSettingsPanel />
         </div>
       ) : null}
 

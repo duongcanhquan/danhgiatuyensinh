@@ -12,6 +12,8 @@ export const ORG_SETTINGS_TEMPLATE_DOC_IDS = [
   'orgAiIntegration',
   'n8nWebhooks',
   'integrationHub',
+  'inviteDocumentsConfig',
+  'receiptStorageConfig',
 ] as const
 
 export type CreateOrganizationInput = {

@@ -8,11 +8,15 @@ import {
 } from './accountantN8nPayload'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
 import { pickOrgWebhook } from './n8nWebhooksConfig'
+import {
+  findInviteTemplateFileId,
+  getInviteDocumentsConfigCache,
+  resolveInviteDocumentGroups,
+} from './inviteDocumentsConfig'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { dispatchOutboundEvent } from '../integrations/dispatchOutbound'
 import type { OutboundEventId } from '../integrations/outboundEvents'
 
-const DEFAULT_WEBHOOK = 'https://apchn-host.lapage.vn/webhook/giaymoits'
 const DEFAULT_WEBHOOK_CTSV = 'https://apchn-host.lapage.vn/webhook/testctsv'
 const DEFAULT_WEBHOOK_DAILY = 'https://apchn-host.lapage.vn/webhook/baocao-ngay'
 const DEFAULT_WEBHOOK_MONTHLY = 'https://apchn-host.lapage.vn/webhook/baocao-thang'
@@ -36,7 +40,7 @@ function webhookGiayMoi(): string {
   const fromOrg = pickOrgWebhook('giayMoi')
   if (fromOrg) return fromOrg
   const u = (import.meta.env.VITE_N8N_WEBHOOK as string | undefined)?.trim()
-  return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK
+  return u && u.startsWith('http') ? u : ''
 }
 
 function webhookCtsv(): string {
@@ -273,6 +277,8 @@ export async function triggerInvitationN8n(opts: {
 }): Promise<{ folderUrl?: string }> {
   const { lead, docType, scholarship, scholarship2Label, inviteFolderUrl } = opts
   const folderId = inviteFolderUrl ? extractDriveFolderId(inviteFolderUrl) : ''
+  const inviteCfg = getInviteDocumentsConfigCache().config
+  const templateFileId = findInviteTemplateFileId(docType, inviteCfg)
   const scholarshipName = scholarship?.label ?? ''
   const scholarshipValue = scholarship?.amountVnd ? String(scholarship.amountVnd) : ''
 
@@ -280,6 +286,9 @@ export async function triggerInvitationN8n(opts: {
     action: 'create_document',
     docType,
     folderId,
+    driveRootFolderId: inviteCfg?.driveRootFolderId ?? '',
+    autoCreateFolder: inviteCfg?.autoCreateFolder !== false,
+    templateFileId,
     studentData: {
       id: lead.customerId || lead.id,
       name: lead.fullName,
@@ -301,7 +310,11 @@ export async function triggerInvitationN8n(opts: {
     },
   }
 
-  const res = await postJson(webhookGiayMoi(), payload)
+  const webhook = webhookGiayMoi()
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook giấy mời — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, payload)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n trả về ${res.status}`)
@@ -321,37 +334,9 @@ export const INVITE_DOCUMENT_GROUPS: {
   title: string
   tone: string
   options: { docType: InviteDocumentType; label: string }[]
-}[] = [
-  {
-    title: '1. Thông báo Lệ phí xét tuyển',
-    tone: 'text-blue-700',
-    options: [
-      { docType: 'LE_PHI_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'LE_PHI_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-  {
-    title: '2. Thông báo Trúng tuyển (9+)',
-    tone: 'text-emerald-700',
-    options: [
-      { docType: 'TRUNG_TUYEN_9_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'TRUNG_TUYEN_9_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-  {
-    title: '3. Thông báo Trúng tuyển (CĐ)',
-    tone: 'text-amber-800',
-    options: [
-      { docType: 'TRUNG_TUYEN_CD_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'TRUNG_TUYEN_CD_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-  {
-    title: '4. Thư mời nhập học (CĐCQ)',
-    tone: 'text-rose-700',
-    options: [
-      { docType: 'THU_MOI_CD_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'THU_MOI_CD_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-]
+}[] = resolveInviteDocumentGroups()
+
+/** Nhóm giấy mời theo cấu hình trường (fallback mặc định nếu chưa nạp). */
+export function getInviteDocumentGroups() {
+  return resolveInviteDocumentGroups()
+}

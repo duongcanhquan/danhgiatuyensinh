@@ -83,6 +83,8 @@ describe('ORG_SETTINGS_TEMPLATE_DOC_IDS', () => {
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('kpiV2Config')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('publicRegistrationConfig')
     expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('integrationHub')
+    expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('inviteDocumentsConfig')
+    expect(ORG_SETTINGS_TEMPLATE_DOC_IDS).toContain('receiptStorageConfig')
   })
 })
 
