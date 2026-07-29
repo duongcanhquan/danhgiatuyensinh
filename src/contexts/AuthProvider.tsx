@@ -470,6 +470,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName?: string
       role?: UserRole
       isActive?: boolean
+      orgId?: string | null
       allowLlmAndAiTasks?: boolean
       extraPermissions?: Permission[]
       deniedPermissions?: Permission[]
@@ -540,6 +541,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (input.displayName !== undefined) patch.displayName = input.displayName.trim()
       if (input.role !== undefined) patch.role = normalizeUserRole(input.role)
       if (input.isActive !== undefined) patch.isActive = input.isActive
+      if (input.orgId !== undefined) {
+        if (profile?.role !== 'super_admin') {
+          throw new Error('Chỉ Siêu quản trị mới đổi trường gắn với nhân sự.')
+        }
+        const nextRole = input.role !== undefined ? normalizeUserRole(input.role) : normalizeUserRole(String(currentRole))
+        if (nextRole === 'super_admin') {
+          patch.orgId = deleteField()
+        } else {
+          const oid = input.orgId == null ? '' : String(input.orgId).trim()
+          if (!oid) throw new Error('Thiếu mã trường khi gán quản lý / nhân sự.')
+          patch.orgId = oid
+        }
+      }
       if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
       if (input.extraPermissions !== undefined) {
         if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới phân quyền chi tiết.')

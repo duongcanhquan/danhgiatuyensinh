@@ -33,6 +33,8 @@ export type AuthContextValue = AuthState & {
     displayName?: string
     role?: UserRole
     isActive?: boolean
+    /** Siêu quản trị: gắn / đổi trường của nhân sự. */
+    orgId?: string | null
     /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
     allowLlmAndAiTasks?: boolean
     extraPermissions?: Permission[]
