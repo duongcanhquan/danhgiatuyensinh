@@ -3,7 +3,7 @@
 **Ngày:** 2026-07-29  
 **Cập nhật:** 2026-07-29 — làm rõ mô hình **superadmin toàn hệ** + **admin trường toàn quyền trong org**.  
 **Phạm vi:** Một sản phẩm CRM tuyển sinh — **mỗi trường là đơn vị độc lập**. Không chia campus bên trong trường.  
-**Trạng thái:** Spec chờ duyệt trước khi viết implementation plan.
+**Trạng thái:** Spec kiến trúc tenant — dùng cùng **kim chỉ nam sản phẩm** `2026-07-29-crm-platform-north-star.md`.
 
 ---
 
