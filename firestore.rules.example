@@ -9,12 +9,13 @@ service cloud.firestore {
     // omicallCalls, omicallSyncRuns, kpiDaily,
     // leads/{id}/interactions, leads/{id}/aiInsightTasks
     //
-    // --- Phase 0 multi-tenant (school = orgId) ---
+    // --- Phase 0–2 multi-tenant (school = orgId) ---
     // 1) School users: resource.data.orgId == request.auth.token.orgId
     // 2) Platform super_admin: request.auth.token.platform == true (bypass org match)
-    // 3) organizations: read authenticated; write platform super_admin only
+    // 3) organizations: read authenticated; create/update/suspend: platform super_admin only
     // 4) orgSettings/{orgId}/settings/{docId}: school admin of that orgId; or platform
-    // Until claims/backfill land, DEV catch-all below still applies — replace before school #2.
+    // 5) Phase 2: creating a school seeds orgSettings from template and creates users/{admin} with orgId
+    // Until custom claims land, DEV catch-all below still applies — replace before production multi-school.
     //
     // Production: add rules for `auditLogs` (read/write scoped by role).
     // Composite index (timeline): `firestore.indexes.json` — auditLogs: leadId ASC + timestamp DESC.

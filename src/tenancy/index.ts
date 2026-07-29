@@ -5,3 +5,9 @@ export { pickOrgSettingsSnapshot } from './dualReadOrgSettings'
 export { resolveEffectiveOrgId } from './effectiveOrgId'
 export { orgIdEqualityConstraint } from './orgQuery'
 export { ACTIVE_ORG_STORAGE_KEY, readStoredActiveOrgId, writeStoredActiveOrgId } from './activeOrgStorage'
+export {
+  ORG_SETTINGS_TEMPLATE_DOC_IDS,
+  buildOrganizationRecord,
+  orgIdFromSlug,
+  validateCreateOrganizationInput,
+} from './createOrganization'

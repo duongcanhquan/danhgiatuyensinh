@@ -1,4 +1,5 @@
 /** Compact school switcher — Superadmin only. */
+import { NavLink } from 'react-router-dom'
 import { useOrg } from '../hooks/useOrg'
 
 export function OrgSwitcher({ className = '' }: { className?: string }) {
@@ -8,7 +9,7 @@ export function OrgSwitcher({ className = '' }: { className?: string }) {
   if (!isPlatformSuperAdmin) return null
 
   return (
-    <div className={`min-w-0 ${className}`.trim()}>
+    <div className={`min-w-0 space-y-2 ${className}`.trim()}>
       <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
         Đang làm việc tại
         <select
@@ -26,6 +27,12 @@ export function OrgSwitcher({ className = '' }: { className?: string }) {
           ))}
         </select>
       </label>
+      <NavLink
+        to="/organizations"
+        className="block text-center text-[11px] font-semibold text-teal-200/90 underline-offset-2 hover:text-white hover:underline"
+      >
+        Quản lý trường
+      </NavLink>
     </div>
   )
 }

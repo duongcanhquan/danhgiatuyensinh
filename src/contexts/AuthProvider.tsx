@@ -282,6 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
       displayName: string
       role: UserRole
+      orgId?: string | null
       managedCounselorIds?: string[]
       omicallSipUser?: string
       omicallSipPassword?: string
@@ -314,10 +315,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const omicallSipPassword = input.omicallSipPassword?.trim()
       const omicallAgentId = input.omicallAgentId?.trim()
       const omicallOutboundNumber = input.omicallOutboundNumber?.trim()
+      const resolvedOrgId =
+        normalizedRole === 'super_admin'
+          ? null
+          : (input.orgId?.trim() || profile?.orgId || DEFAULT_ORG_ID)
       await setDoc(doc(db, FS_COLLECTIONS.users, cred.user.uid), {
         email,
         displayName: input.displayName.trim() || email.split('@')[0],
         role: normalizedRole,
+        orgId: resolvedOrgId,
         isActive: true,
         createdAt: now,
         updatedAt: now,

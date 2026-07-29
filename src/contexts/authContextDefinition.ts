@@ -15,6 +15,7 @@ export type AuthContextValue = AuthState & {
     password: string
     displayName: string
     role: UserRole
+    orgId?: string | null
     managedCounselorIds?: string[]
     omicallSipUser?: string
     omicallSipPassword?: string

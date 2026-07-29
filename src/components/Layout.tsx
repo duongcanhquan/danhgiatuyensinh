@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
   BookOpen,
+  Building2,
   CalendarDays,
   LayoutDashboard,
   LineChart,
@@ -27,6 +28,7 @@ import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
 import { SharedFirestoreDataProviders } from '../contexts/SharedFirestoreDataProviders'
 import { OrgProvider } from '../contexts/OrgProvider'
 import { OrgSwitcher } from './OrgSwitcher'
+import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 
 type NavGroup = 'work' | 'more'
 
@@ -69,6 +71,14 @@ const mainNav: NavDef[] = [
     group: 'more',
     perm: 'analytics:advanced',
   },
+  {
+    to: '/organizations',
+    label: 'Quản lý trường',
+    shortLabel: 'Trường',
+    icon: Building2,
+    group: 'more',
+    show: () => false, // filled in Layout via platform check
+  },
   { to: '/settings', label: 'Cài đặt', shortLabel: 'Cài đặt', icon: Settings2, group: 'more', bottomPrimary: true },
 ]
 
@@ -96,7 +106,16 @@ export function Layout() {
     setSidebarOpen(false)
   }, [location.pathname])
 
-  const navItems = mainNav.filter((item) => navAllowed(item, can, permissions))
+  const navItems = mainNav
+    .map((item) =>
+      item.to === '/organizations'
+        ? {
+            ...item,
+            show: () => isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null),
+          }
+        : item,
+    )
+    .filter((item) => navAllowed(item, can, permissions))
 
   const mobileBottomItems = useMemo(() => {
     const primary = navItems.filter(

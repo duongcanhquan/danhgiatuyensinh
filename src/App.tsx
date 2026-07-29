@@ -20,6 +20,7 @@ import { AccountantReportsView } from './views/accountant/AccountantReportsView'
 import { AccountantLayout } from './components/accountant/AccountantLayout'
 import { AccountantProtectedRoute } from './components/accountant/AccountantProtectedRoute'
 import { MyDayView } from './views/MyDayView'
+import { OrganizationsView } from './views/OrganizationsView'
 import { StudentRegistrationView } from './views/student/StudentRegistrationView'
 import { StudentRegistrationSuccessView } from './views/student/StudentRegistrationSuccessView'
 
@@ -59,6 +60,7 @@ export default function App() {
                 <Route path="kpi" element={<Navigate to="/?tab=kpi-nhan-su" replace />} />
                 <Route path="command" element={<Navigate to="/?tab=van-hanh" replace />} />
                 <Route path="my-day" element={<MyDayView />} />
+                <Route path="organizations" element={<OrganizationsView />} />
                 <Route path="scorecard" element={<Navigate to="/?tab=bang-diem" replace />} />
                 <Route path="call-history" element={<Navigate to="/?tab=lich-goi" replace />} />
                 <Route path="ai" element={<Navigate to="/settings?tab=connect&sub=llm" replace />} />
