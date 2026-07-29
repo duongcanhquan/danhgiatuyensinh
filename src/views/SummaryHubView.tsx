@@ -5,6 +5,7 @@ import { AppPageHeader } from '../components/AppPageHeader'
 import { TabStrip } from '../components/TabStrip'
 import { BentoCell } from '../components/bento'
 import { CrmAdminShortcuts } from '../components/CrmAdminShortcuts'
+import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import {
   enabledSummaryTabs,
   resolveSummaryTab,
@@ -43,6 +44,7 @@ export function SummaryHubView() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <CrmAdminShortcuts />
+      <IntegrationsStatusStrip />
 
       <BentoCell variant="hero" colSpan={4} className="!p-4 sm:!p-5">
         <AppPageHeader

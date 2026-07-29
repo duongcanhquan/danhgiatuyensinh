@@ -7,27 +7,37 @@ import {
   type CounselorContact,
 } from './accountantN8nPayload'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
+import { pickOrgWebhook } from './n8nWebhooksConfig'
+
 const DEFAULT_WEBHOOK = 'https://apchn-host.lapage.vn/webhook/giaymoits'
 const DEFAULT_WEBHOOK_CTSV = 'https://apchn-host.lapage.vn/webhook/testctsv'
 const DEFAULT_WEBHOOK_DAILY = 'https://apchn-host.lapage.vn/webhook/baocao-ngay'
 const DEFAULT_WEBHOOK_MONTHLY = 'https://apchn-host.lapage.vn/webhook/baocao-thang'
 
 function webhookGiayMoi(): string {
+  const fromOrg = pickOrgWebhook('giayMoi')
+  if (fromOrg) return fromOrg
   const u = (import.meta.env.VITE_N8N_WEBHOOK as string | undefined)?.trim()
   return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK
 }
 
 function webhookCtsv(): string {
+  const fromOrg = pickOrgWebhook('ctsv')
+  if (fromOrg) return fromOrg
   const u = (import.meta.env.VITE_N8N_WEBHOOK_CTSV as string | undefined)?.trim()
   return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK_CTSV
 }
 
 function webhookDaily(): string {
+  const fromOrg = pickOrgWebhook('daily')
+  if (fromOrg) return fromOrg
   const u = (import.meta.env.VITE_N8N_WEBHOOK_DAILY as string | undefined)?.trim()
   return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK_DAILY
 }
 
 function webhookMonthly(): string {
+  const fromOrg = pickOrgWebhook('monthly')
+  if (fromOrg) return fromOrg
   const u = (import.meta.env.VITE_N8N_WEBHOOK_MONTHLY as string | undefined)?.trim()
   return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK_MONTHLY
 }

@@ -15,6 +15,7 @@ export type SettingsSubTabId =
   | 'staff'
   | 'permissions'
   | 'omicall'
+  | 'webhooks'
   | 'public_registration'
 
 export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = ['data', 'rules', 'people', 'connect']
@@ -41,6 +42,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   staff: 'Quản lý nhân sự',
   permissions: 'Phân quyền',
   omicall: 'Gọi điện',
+  webhooks: 'Webhook n8n',
   public_registration: 'Cổng đăng ký SV',
 }
 
@@ -48,7 +50,7 @@ export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> =
   data: ['intake', 'master', 'lead_profile'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
   people: ['kpi', 'staff', 'permissions'],
-  connect: ['consulting', 'knowledge', 'llm', 'omicall', 'public_registration'],
+  connect: ['consulting', 'knowledge', 'llm', 'omicall', 'webhooks', 'public_registration'],
 }
 
 const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: SettingsSubTabId }>> = {
@@ -73,6 +75,8 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   knowledge_advisory: { main: 'connect', sub: 'consulting' },
   system: { main: 'connect', sub: 'omicall' },
   omicall: { main: 'connect', sub: 'omicall' },
+  webhooks: { main: 'connect', sub: 'webhooks' },
+  n8n: { main: 'connect', sub: 'webhooks' },
   public_registration: { main: 'connect', sub: 'public_registration' },
 }
 
@@ -111,6 +115,8 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
       return ctx.canAiEngine
     case 'omicall':
       return ctx.canOmicall
+    case 'webhooks':
+      return ctx.canMaster || ctx.canOmicall
     case 'public_registration':
       return ctx.canMaster
     case 'staff':

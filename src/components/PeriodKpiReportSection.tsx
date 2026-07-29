@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Download } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
@@ -7,6 +8,7 @@ import { KpiCallHint } from './KpiCallHint'
 import { KpiMetricsSections } from './KpiMetricsSections'
 import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
 import { aggregateKpiSummariesByTeam } from '../utils/kpiTeamAggregate'
+import { buildPeriodKpiCsv, downloadTextCsv } from '../utils/kpiCsvExport'
 
 function defaultDateRange(): { from: string; to: string } {
   const to = new Date()
@@ -86,6 +88,32 @@ export function PeriodKpiReportSection() {
             ))}
           </select>
         </label>
+        {summaries.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              const csv = buildPeriodKpiCsv(
+                summaries.map((r) => ({
+                  name: labels.get(r.counselorUid) ?? r.counselorUid,
+                  teamName: r.teamLeadUid
+                    ? labels.get(r.teamLeadUid) ?? r.teamLeadUid
+                    : 'Chưa phân nhóm',
+                  validCalls: r.validCalls,
+                  totalCalls: r.totalCalls,
+                  depositPaidCount: r.depositPaidCount,
+                  approvedRevenueVnd: r.approvedRevenueVnd,
+                })),
+                range.from,
+                range.to,
+              )
+              downloadTextCsv(csv, `VietMy_KPI_ky_${range.from}_${range.to}.csv`)
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            Xuất CSV kỳ
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -177,7 +205,7 @@ export function PeriodKpiReportSection() {
                   <td className="px-3 py-2 text-right tabular-nums text-slate-600">{fmtKpiMinutes(r.talkSeconds)}</td>
                   <td className="px-3 py-2">
                     <Link
-                      to={`/call-history?from=${range.from}&to=${range.to}&counselor=${encodeURIComponent(r.counselorUid)}`}
+                      to={`/?tab=lich-goi&from=${range.from}&to=${range.to}&counselor=${encodeURIComponent(r.counselorUid)}`}
                       className="text-xs font-semibold text-violet-800 underline"
                     >
                       Lịch sử gọi
