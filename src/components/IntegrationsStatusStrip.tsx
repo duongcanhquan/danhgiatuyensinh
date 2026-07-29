@@ -129,10 +129,10 @@ export function IntegrationsStatusStrip() {
           </p>
         </div>
         <Link
-          to="/settings?tab=connect&sub=webhooks"
+          to="/settings?tab=connect&sub=hub"
           className="text-xs font-semibold text-teal-800 underline-offset-2 hover:underline"
         >
-          Cài đặt tích hợp
+          Hub kết nối
         </Link>
       </div>
       <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

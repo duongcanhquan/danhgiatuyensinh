@@ -8,6 +8,7 @@ import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 import { readStoredActiveOrgId, writeStoredActiveOrgId } from '../tenancy/activeOrgStorage'
 import { loadOrgN8nWebhooks } from '../utils/n8nWebhooksConfig'
+import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
 
 export type OrgOption = { id: string; name: string; slug: string; status: 'active' | 'suspended' }
 
@@ -81,13 +82,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     return () => unsub()
   }, [isPlatformSuperAdmin])
 
-  /** Nạp webhook n8n theo trường đang chọn — runtime ưu tiên hơn VITE_N8N_*. */
+  /** Nạp webhook n8n + hub kết nối theo trường đang chọn. */
   useEffect(() => {
     if (!profile) return
     if (!isFirebaseConfigured()) return
     const db = getFirestoreDb()
     if (!db) return
     void loadOrgN8nWebhooks(db, effectiveOrgId)
+    void loadOrgIntegrationHub(db, effectiveOrgId)
   }, [profile, effectiveOrgId])
 
   const currentOrgLabel = useMemo(() => {

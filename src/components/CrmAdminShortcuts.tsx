@@ -53,7 +53,7 @@ export function CrmAdminShortcuts() {
         ) : null}
         {can('config:master_data') || can('config:omicall') ? (
           <Link
-            to="/settings?tab=connect&sub=webhooks"
+            to="/settings?tab=connect&sub=hub"
             className="vm-btn vm-btn-secondary inline-flex items-center gap-2 text-sm"
           >
             <Plug className="h-4 w-4" aria-hidden />

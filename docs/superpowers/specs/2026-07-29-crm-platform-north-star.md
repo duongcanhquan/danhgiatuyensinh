@@ -244,7 +244,7 @@ Mỗi mục: **Mục đích · Ai · Hành vi · Dữ liệu · Ghi chú hiện 
 | **F-IN-01 Nhập Excel/CSV** | Map cột → Lead; gán TVV; áp profile mặc định; dedupe theo org. |
 | **F-IN-02 Tạo hồ sơ tay** | Form tối giản + validate SĐT/CCCD; mã hệ thống tự cấp theo org. |
 | **F-IN-03 Cổng đăng ký công khai** | `/dang-ky/:orgSlug`; bật/tắt; nguồn mặc định; auto-assign theo load; webhook email. |
-| **F-IN-04 API/Webhook inbound** (roadmap) | Đối tác đẩy lead có `orgId`/secret; cùng pipeline dedupe. |
+| **F-IN-04 API/Webhook inbound** | Hub kết nối: API key theo trường + hợp đồng JSON; CF public Phase 2. |
 
 ### 7.2. Workspace hồ sơ
 
@@ -412,6 +412,8 @@ Submit form → dedupe org → cấp mã → (optional) auto-assign lowest load 
 
 **Automation nội bộ (hướng hiện đại, ưu tiên sau ổn định tenant):** rule “nếu nhãn=HOT và chưa gọi 24h → nổi trong Ngày của tôi”; chưa thay toàn bộ n8n giấy tờ.
 
+**Hub kết nối (Phase 1):** catalog đầu nối Zalo/WA/email/SMS/Slack/Teams/API inbound/Zapier — cấu hình theo trường; fan-out sự kiện chuẩn. Chi tiết: `docs/INTEGRATION_HUB.md`.
+
 ---
 
 ## 10. Công nghệ & chất lượng
@@ -426,7 +428,7 @@ Submit form → dedupe org → cấp mã → (optional) auto-assign lowest load 
 | Backend | Cloud Functions v2 (asia-southeast1 callables; triggers theo thiết kế hiện có) |
 | Call | OMICall |
 | File | R2 Worker ưu tiên; Storage/Drive fallback có tài liệu |
-| Automation ngoài | n8n per-org URLs |
+| Automation ngoài | n8n per-org URLs + **Hub kết nối** (generic webhooks / Slack / API key) — xem `2026-07-29-crm-integration-hub-design.md` |
 | AI | OpenAI/DeepSeek/Gemini qua proxy; khóa/config theo org + quyền user |
 | Test | Vitest cho logic thuần (KPI map, hash, scoring…) |
 
