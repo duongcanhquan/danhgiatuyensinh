@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
-import { Building2, Loader2, Plus } from 'lucide-react'
+import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { Building2, Download, Loader2, Plus } from 'lucide-react'
 import { AppPageHeader } from '../components/AppPageHeader'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { useAuth } from '../hooks/useAuth'
@@ -8,10 +8,26 @@ import { useOrg } from '../hooks/useOrg'
 import { FS_COLLECTIONS, type Organization } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { provisionOrganization, setOrganizationStatus } from '../services/createOrganization'
+import { exportOrgSettingsBackup } from '../services/orgSettingsExport'
+import { fetchOrgLeadHealth7d, type OrgLeadHealth } from '../services/orgHealth'
 import { normalizeOrgSlug } from '../tenancy/orgConstants'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
+import {
+  platformAuditActionLabel,
+  type PlatformAuditAction,
+} from '../tenancy/platformOps'
 
 type OrgRow = Organization & { id: string }
+
+type AuditRow = {
+  id: string
+  action: PlatformAuditAction
+  orgId: string
+  orgName: string
+  performedByName: string
+  detail: string
+  atMs: number
+}
 
 export function OrganizationsView() {
   const { profile, firebaseUser } = useAuth()
@@ -23,6 +39,8 @@ export function OrganizationsView() {
   const [error, setError] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [healthByOrg, setHealthByOrg] = useState<Record<string, OrgLeadHealth>>({})
+  const [audits, setAudits] = useState<AuditRow[]>([])
 
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -64,12 +82,70 @@ export function OrganizationsView() {
       },
       (e) => {
         console.error(e)
-        setError('Không đọc được danh sách trường (cần index name hoặc quyền).')
+        setError('Không đọc được danh sách trường (cần quyền Siêu quản trị).')
         setLoading(false)
       },
     )
     return () => unsub()
   }, [isPlatform])
+
+  useEffect(() => {
+    if (!isPlatform || !isFirebaseConfigured()) return
+    const db = getFirestoreDb()
+    if (!db) return
+    const qy = query(
+      collection(db, FS_COLLECTIONS.platformAuditLogs),
+      orderBy('timestamp', 'desc'),
+      limit(20),
+    )
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        setAudits(
+          snap.docs.map((d) => {
+            const data = d.data() as {
+              action?: string
+              orgId?: string
+              orgName?: string
+              performedByName?: string
+              detail?: string
+              timestamp?: { toMillis?: () => number }
+            }
+            const action = (data.action ?? 'ORG_CREATED') as PlatformAuditAction
+            return {
+              id: d.id,
+              action,
+              orgId: String(data.orgId ?? ''),
+              orgName: String(data.orgName ?? data.orgId ?? ''),
+              performedByName: String(data.performedByName ?? ''),
+              detail: String(data.detail ?? ''),
+              atMs: data.timestamp?.toMillis?.() ?? 0,
+            }
+          }),
+        )
+      },
+      () => setAudits([]),
+    )
+    return () => unsub()
+  }, [isPlatform])
+
+  useEffect(() => {
+    if (!isPlatform || rows.length === 0) return
+    const db = getFirestoreDb()
+    if (!db) return
+    let cancelled = false
+    void (async () => {
+      const next: Record<string, OrgLeadHealth> = {}
+      for (const org of rows) {
+        next[org.id] = await fetchOrgLeadHealth7d(db, org.id)
+        if (cancelled) return
+      }
+      if (!cancelled) setHealthByOrg(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isPlatform, rows])
 
   const activeCount = useMemo(() => rows.filter((r) => r.status === 'active').length, [rows])
   const suspendedCount = useMemo(() => rows.filter((r) => r.status === 'suspended').length, [rows])
@@ -77,6 +153,15 @@ export function OrganizationsView() {
   const onSlugFromName = () => {
     if (!slug.trim() && name.trim()) setSlug(normalizeOrgSlug(name))
   }
+
+  const actor = useMemo(
+    () => ({
+      uid: firebaseUser?.uid ?? '',
+      displayName: profile?.displayName,
+      isPlatformSuperAdmin: true as const,
+    }),
+    [firebaseUser?.uid, profile?.displayName],
+  )
 
   const onCreate = useCallback(async () => {
     const db = getFirestoreDb()
@@ -87,7 +172,7 @@ export function OrganizationsView() {
     try {
       const result = await provisionOrganization(
         db,
-        { uid: firebaseUser.uid, isPlatformSuperAdmin: true },
+        actor,
         {
           name,
           slug,
@@ -110,7 +195,7 @@ export function OrganizationsView() {
     } finally {
       setBusy(false)
     }
-  }, [firebaseUser, name, slug, adminEmail, adminPassword, adminDisplayName, setActiveOrgId])
+  }, [firebaseUser, actor, name, slug, adminEmail, adminPassword, adminDisplayName, setActiveOrgId])
 
   const onToggleStatus = async (org: OrgRow) => {
     const db = getFirestoreDb()
@@ -119,10 +204,29 @@ export function OrganizationsView() {
     setBusy(true)
     setError(null)
     try {
-      await setOrganizationStatus(db, { isPlatformSuperAdmin: true }, org.id, next)
+      await setOrganizationStatus(db, actor, org.id, next, org.name)
       setBanner(next === 'suspended' ? `Đã tạm ngưng ${org.name}.` : `Đã mở lại ${org.name}.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không đổi được trạng thái.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onExport = async (org: OrgRow) => {
+    const db = getFirestoreDb()
+    if (!db) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await exportOrgSettingsBackup(db, {
+        orgId: org.id,
+        orgName: org.name,
+        actor,
+      })
+      setBanner(`Đã tải ${result.docCount} mục cấu hình của «${org.name}» (${result.filename}).`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không tải được cấu hình.')
     } finally {
       setBusy(false)
     }
@@ -140,7 +244,7 @@ export function OrganizationsView() {
     <div className="mx-auto max-w-5xl space-y-4">
       <AppPageHeader
         title="Quản lý trường"
-        meta="Tạo trường mới · tạm ngưng · chọn trường đang làm việc"
+        meta="Tạo trường · sức khỏe · nhật ký · tải cấu hình"
       />
 
       <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
@@ -228,6 +332,7 @@ export function OrganizationsView() {
       <BentoCell colSpan={4} className="!p-0 overflow-hidden">
         <div className="border-b border-slate-200 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900">Danh sách trường</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Sức khỏe = số hồ sơ cập nhật trong 7 ngày gần đây.</p>
         </div>
         {loading ? (
           <p className="px-4 py-6 text-sm text-slate-600">Đang tải…</p>
@@ -237,33 +342,78 @@ export function OrganizationsView() {
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {rows.map((org) => (
-              <li key={org.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900">{org.name}</p>
-                  <p className="truncate text-xs text-slate-500">
-                    {org.id} · /dang-ky/{org.slug} ·{' '}
-                    <span className={org.status === 'active' ? 'text-teal-700' : 'text-amber-700'}>
-                      {org.status === 'active' ? 'Đang hoạt động' : 'Tạm ngưng'}
-                    </span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="vm-btn vm-btn-secondary text-xs"
-                  disabled={busy || org.status !== 'active'}
-                  onClick={() => setActiveOrgId(org.id)}
-                >
-                  Làm việc tại đây
-                </button>
-                <button
-                  type="button"
-                  className="vm-btn vm-btn-secondary text-xs"
-                  disabled={busy}
-                  onClick={() => void onToggleStatus(org)}
-                >
-                  {org.status === 'active' ? 'Tạm ngưng' : 'Mở lại'}
-                </button>
+            {rows.map((org) => {
+              const health = healthByOrg[org.id]
+              return (
+                <li key={org.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">{org.name}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {org.id} · /dang-ky/{org.slug} ·{' '}
+                      <span className={org.status === 'active' ? 'text-teal-700' : 'text-amber-700'}>
+                        {org.status === 'active' ? 'Đang hoạt động' : 'Tạm ngưng'}
+                      </span>
+                      {health ? (
+                        <>
+                          {' '}
+                          · {health.bandLabel} ({health.leadCount7d} hồ sơ/7 ngày)
+                        </>
+                      ) : (
+                        ' · Đang đo…'
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="vm-btn vm-btn-secondary text-xs"
+                    disabled={busy || org.status !== 'active'}
+                    onClick={() => setActiveOrgId(org.id)}
+                  >
+                    Làm việc tại đây
+                  </button>
+                  <button
+                    type="button"
+                    className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                    disabled={busy}
+                    onClick={() => void onExport(org)}
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden />
+                    Tải cấu hình
+                  </button>
+                  <button
+                    type="button"
+                    className="vm-btn vm-btn-secondary text-xs"
+                    disabled={busy}
+                    onClick={() => void onToggleStatus(org)}
+                  >
+                    {org.status === 'active' ? 'Tạm ngưng' : 'Mở lại'}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </BentoCell>
+
+      <BentoCell colSpan={4} className="!p-0 overflow-hidden">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-900">Nhật ký nền tảng</h2>
+          <p className="mt-0.5 text-xs text-slate-500">20 thao tác gần nhất: tạo trường, tạm ngưng, tải cấu hình.</p>
+        </div>
+        {audits.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-slate-600">Chưa có nhật ký — thao tác tạo/tạm ngưng sẽ hiện ở đây.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {audits.map((a) => (
+              <li key={a.id} className="px-4 py-3 text-sm">
+                <p className="font-medium text-slate-900">
+                  {platformAuditActionLabel(a.action)} · {a.orgName || a.orgId}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {a.performedByName}
+                  {a.detail ? ` · ${a.detail}` : ''}
+                  {a.atMs ? ` · ${new Date(a.atMs).toLocaleString('vi-VN')}` : ''}
+                </p>
               </li>
             ))}
           </ul>

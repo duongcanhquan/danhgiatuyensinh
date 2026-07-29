@@ -21,6 +21,7 @@ import {
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { getDefaultKpiV2Config, KPI_V2_FIRESTORE_DOC_ID } from '../utils/kpiV2Config'
+import { commitPlatformAudit } from './platformAudit'
 
 export type ProvisionOrganizationResult = {
   orgId: string
@@ -93,7 +94,7 @@ async function copyOrgSettingsTemplate(
  */
 export async function provisionOrganization(
   db: Firestore,
-  actor: { uid: string; isPlatformSuperAdmin: boolean },
+  actor: { uid: string; displayName?: string; isPlatformSuperAdmin: boolean },
   input: CreateOrganizationInput & { templateOrgId?: string },
 ): Promise<ProvisionOrganizationResult> {
   if (!actor.isPlatformSuperAdmin) {
@@ -141,6 +142,19 @@ export async function provisionOrganization(
     updatedAt: now,
   })
 
+  try {
+    await commitPlatformAudit(db, {
+      action: 'ORG_CREATED',
+      orgId,
+      orgName: org.name,
+      performedBy: actor.uid,
+      performedByName: actor.displayName,
+      detail: `Admin: ${email} · ${copiedSettings} cấu hình mẫu`,
+    })
+  } catch (e) {
+    console.warn('[provisionOrganization] platform audit', e)
+  }
+
   return {
     orgId,
     slug,
@@ -152,9 +166,10 @@ export async function provisionOrganization(
 
 export async function setOrganizationStatus(
   db: Firestore,
-  actor: { isPlatformSuperAdmin: boolean },
+  actor: { uid?: string; displayName?: string; isPlatformSuperAdmin: boolean },
   orgId: string,
   status: 'active' | 'suspended',
+  orgName?: string,
 ): Promise<void> {
   if (!actor.isPlatformSuperAdmin) throw new Error('Chỉ Siêu quản trị mới đổi trạng thái trường.')
   const id = orgId.trim()
@@ -166,4 +181,17 @@ export async function setOrganizationStatus(
     status,
     updatedAt: Timestamp.now(),
   })
+  if (actor.uid) {
+    try {
+      await commitPlatformAudit(db, {
+        action: status === 'suspended' ? 'ORG_SUSPENDED' : 'ORG_REACTIVATED',
+        orgId: id,
+        orgName: (orgName ?? id).trim() || id,
+        performedBy: actor.uid,
+        performedByName: actor.displayName,
+      })
+    } catch (e) {
+      console.warn('[setOrganizationStatus] platform audit', e)
+    }
+  }
 }

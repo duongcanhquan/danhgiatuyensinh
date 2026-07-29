@@ -14,7 +14,8 @@ service cloud.firestore {
     // 2) Platform super_admin: request.auth.token.platform == true (bypass org match)
     // 3) organizations: read authenticated; create/update/suspend: platform super_admin only
     // 4) orgSettings/{orgId}/settings/{docId}: school admin of that orgId; or platform
-    // 5) Phase 2: creating a school seeds orgSettings from template and creates users/{admin} with orgId
+    // 5) Phase 2–3: creating a school seeds orgSettings; platformAuditLogs for create/suspend/export
+    // 6) Suspended org: school users blocked in app (ProtectedRoute); Rules should deny when claims land
     // Until custom claims land, DEV catch-all below still applies — replace before production multi-school.
     //
     // Production: add rules for `auditLogs` (read/write scoped by role).

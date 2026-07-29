@@ -1165,6 +1165,8 @@ export const FS_COLLECTIONS = {
   orgSettings: 'orgSettings',
   /** School tenants registry */
   organizations: 'organizations',
+  /** Superadmin platform ops trail (create/suspend/export org) */
+  platformAuditLogs: 'platformAuditLogs',
   masterData: 'masterData',
   consultingPlaybooks: 'consultingPlaybooks',
   /** Smart Script Hub — modular consulting snippets */
