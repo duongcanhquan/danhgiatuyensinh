@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  updatePassword,
   type User,
 } from 'firebase/auth'
-import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc, deleteField } from 'firebase/firestore'
 import type { AuthState, Permission, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
+import { type OrgRoleCapabilities } from '../utils/roleCapabilitiesConfig'
+import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
 import { normalizeUserRole } from '../auth/roleUtils'
 import { isUserInManagerTeamScope } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
@@ -19,6 +24,13 @@ import { ensureDefaultCounselingAiTask } from '../services/ensureDefaultCounseli
 import { defaultAccountantEmailFromEnv } from '../auth/accountantPortal'
 import { adminStaffAccountAction } from '../services/adminStaffAccount'
 import { AuthContext, type AuthContextValue } from './authContextDefinition'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { claimsMatchProfile } from '../tenancy/authClaims'
+import {
+  defaultSuperAdminEmailFromEnv,
+  shouldAttemptSuperAdminBootstrap,
+} from '../tenancy/superAdminBootstrap'
+import { refreshOwnAuthClaims } from '../services/refreshOwnAuthClaims'
 
 function devSyntheticProfile(): VietMyUserProfile | null {
   if (!import.meta.env.DEV) return null
@@ -32,6 +44,7 @@ function devSyntheticProfile(): VietMyUserProfile | null {
     email: 'dev@local',
     displayName: 'Dev User',
     role,
+    orgId: role === 'super_admin' ? null : DEFAULT_ORG_ID,
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -40,11 +53,23 @@ function devSyntheticProfile(): VietMyUserProfile | null {
 
 function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>): VietMyUserProfile {
   const now = Timestamp.now()
+  const role = normalizeUserRole(String(d.role ?? 'counselor'))
+  const rawOrg = d.orgId
+  // Superadmin nền tảng: luôn coi như không gắn trường (dù Firestore còn orgId cũ)
+  const orgId =
+    role === 'super_admin'
+      ? null
+      : rawOrg === null
+        ? null
+        : typeof rawOrg === 'string' && rawOrg.trim()
+          ? rawOrg.trim()
+          : undefined
   return {
     id: uid,
     email: String(d.email ?? user.email ?? ''),
     displayName: String(d.displayName ?? user.displayName ?? ''),
-    role: normalizeUserRole(String(d.role ?? 'counselor')),
+    role,
+    orgId: orgId === undefined ? undefined : orgId,
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
     managedMajorIds: d.managedMajorIds as string[] | undefined,
@@ -106,11 +131,16 @@ async function syncUserProfileWithRetry(
   throw last instanceof Error ? last : new Error(String(last))
 }
 
+function firebaseAuthErrorCode(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err && typeof (err as { code: unknown }).code === 'string') {
+    return (err as { code: string }).code
+  }
+  return ''
+}
+
 async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>>, user: User) {
   const ref = doc(db, FS_COLLECTIONS.users, user.uid)
-  const superEmail = String(import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? 'quan.duong@caodangvietmy.edu.vn')
-    .trim()
-    .toLowerCase()
+  const superEmail = defaultSuperAdminEmailFromEnv()
   const accountantEmail = defaultAccountantEmailFromEnv()
   const isSuper = Boolean(user.email && superEmail && user.email.toLowerCase() === superEmail)
   const isDefaultAccountant = Boolean(user.email && user.email.toLowerCase() === accountantEmail)
@@ -123,6 +153,7 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
       email: user.email ?? '',
       displayName: user.displayName || user.email?.split('@')[0] || 'Người dùng',
       role: isSuper ? 'super_admin' : isDefaultAccountant ? 'accountant' : 'counselor',
+      orgId: isSuper ? null : DEFAULT_ORG_ID,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -133,13 +164,75 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
 
   const data = snap.data() as Record<string, unknown>
   let role = normalizeUserRole(String(data.role ?? 'counselor'))
+
+  /** Clear orgId trên Firestore — cần claim platform; nếu Rules từ chối vẫn cho đăng nhập (UI đã coi super_admin = null). */
+  const clearSuperAdminOrgBinding = async (alsoSetRole: boolean) => {
+    try {
+      const patch: Record<string, unknown> = { orgId: deleteField(), updatedAt: now }
+      if (alsoSetRole) patch.role = 'super_admin'
+      await updateDoc(ref, patch)
+    } catch (e) {
+      console.warn('[syncUserProfile] không xóa được orgId super_admin (cần claim platform)', e)
+    }
+  }
+
   if (isSuper && role !== 'super_admin') {
     role = 'super_admin'
-    await updateDoc(ref, { role: 'super_admin', updatedAt: now })
+    await clearSuperAdminOrgBinding(true)
+    data.role = 'super_admin'
+    data.orgId = null
+  } else if (isSuper || role === 'super_admin') {
+    // Siêu quản trị nền tảng: không gắn orgId trường (backfill Phase 0 từng gắn nhầm → mất switcher)
+    role = 'super_admin'
+    if (data.orgId != null && String(data.orgId).trim() !== '') {
+      await clearSuperAdminOrgBinding(String(data.role) !== 'super_admin')
+      data.orgId = null
+    } else if (String(data.role) !== 'super_admin') {
+      try {
+        await updateDoc(ref, { role: 'super_admin', updatedAt: now })
+      } catch (e) {
+        console.warn('[syncUserProfile] không gán role super_admin', e)
+      }
+    }
+    data.role = 'super_admin'
   } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {
     await updateDoc(ref, { role: 'team_lead', updatedAt: now })
+    data.role = 'team_lead'
+  }
+  // Phase 1: school users without orgId get vietmy backfill on login
+  if (!isSuper && role !== 'super_admin' && (data.orgId == null || data.orgId === '')) {
+    await updateDoc(ref, { orgId: DEFAULT_ORG_ID, updatedAt: now })
+    data.orgId = DEFAULT_ORG_ID
   }
   return mapProfileFromDoc(user.uid, user, { ...data, role })
+}
+
+/** Force ID token refresh when custom claims lag behind Firestore profile. */
+async function ensureAuthClaimsFresh(
+  user: User,
+  profile: Pick<VietMyUserProfile, 'role' | 'orgId'>,
+): Promise<void> {
+  try {
+    const token = await user.getIdTokenResult()
+    const claims = {
+      role: typeof token.claims.role === 'string' ? token.claims.role : undefined,
+      orgId: typeof token.claims.orgId === 'string' ? token.claims.orgId : '',
+      platform: token.claims.platform === true,
+    }
+    const isSuper = profile.role === 'super_admin'
+    // Superadmin: luôn gọi refresh ít nhất một lần nếu thiếu platform — tránh mất quyền đọc leads
+    if (!isSuper && claimsMatchProfile(claims, { role: profile.role, orgId: profile.orgId })) return
+    if (isSuper && claims.platform === true && claims.role === 'super_admin') return
+    try {
+      await refreshOwnAuthClaims()
+    } catch (e) {
+      // Function may not be deployed yet — still try local token refresh
+      console.warn('[ensureAuthClaimsFresh] refreshOwnAuthClaims', e)
+    }
+    await user.getIdToken(true)
+  } catch (e) {
+    console.warn('[ensureAuthClaimsFresh]', e)
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -197,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('unauthenticated')
           return
         }
+        await ensureAuthClaimsFresh(user, p)
         setStatus('authenticated')
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
@@ -223,7 +317,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
   }, [firebaseUser, status])
 
-  const permissions = useMemo(() => resolveEffectivePermissions(profile), [profile])
+  const [orgCaps, setOrgCaps] = useState<OrgRoleCapabilities | null>(null)
+
+  useEffect(() => {
+    const orgId = profile?.orgId?.trim()
+    if (!orgId || profile?.role === 'super_admin') {
+      setOrgCaps(null)
+      return
+    }
+    const db = getFirestoreDb()
+    if (!db) return
+    return subscribeRoleCapabilities(db, orgId, setOrgCaps)
+  }, [profile?.orgId, profile?.role])
+
+  const permissions = useMemo(() => resolveEffectivePermissions(profile, orgCaps), [profile, orgCaps])
 
   const can = useCallback((p: Permission) => hasPermission(permissions, p), [permissions])
 
@@ -254,7 +361,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getFirebaseAuth()
     if (!auth) throw new Error('Firebase Auth chưa cấu hình.')
     const normalized = email.trim().toLowerCase()
-    await signInWithEmailAndPassword(auth, normalized, password)
+    try {
+      await signInWithEmailAndPassword(auth, normalized, password)
+    } catch (err) {
+      const code = firebaseAuthErrorCode(err)
+      const superEmail = defaultSuperAdminEmailFromEnv()
+      if (
+        !shouldAttemptSuperAdminBootstrap({
+          email: normalized,
+          password,
+          errorCode: code,
+          superAdminEmail: superEmail,
+        })
+      ) {
+        throw err
+      }
+      try {
+        // Lần đầu: tạo tài khoản Auth cho đúng email Siêu quản trị (mật khẩu do người dùng nhập).
+        await createUserWithEmailAndPassword(auth, normalized, password)
+      } catch (createErr) {
+        const createCode = firebaseAuthErrorCode(createErr)
+        if (createCode === 'auth/email-already-in-use') throw err
+        throw createErr
+      }
+    }
+  }, [])
+
+  const changeOwnPassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const auth = getFirebaseAuth()
+    const user = auth?.currentUser
+    if (!auth || !user?.email) throw new Error('Bạn cần đăng nhập lại để đổi mật khẩu.')
+    const next = newPassword.trim()
+    if (next.length < 6) throw new Error('Mật khẩu mới tối thiểu 6 ký tự.')
+    const cred = EmailAuthProvider.credential(user.email, currentPassword)
+    await reauthenticateWithCredential(user, cred)
+    await updatePassword(user, next)
   }, [])
 
   const createStaffAccount = useCallback(
@@ -263,6 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
       displayName: string
       role: UserRole
+      orgId?: string | null
       managedCounselorIds?: string[]
       omicallSipUser?: string
       omicallSipPassword?: string
@@ -295,10 +437,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const omicallSipPassword = input.omicallSipPassword?.trim()
       const omicallAgentId = input.omicallAgentId?.trim()
       const omicallOutboundNumber = input.omicallOutboundNumber?.trim()
+      const resolvedOrgId =
+        normalizedRole === 'super_admin'
+          ? null
+          : (input.orgId?.trim() || profile?.orgId?.trim() || DEFAULT_ORG_ID)
       await setDoc(doc(db, FS_COLLECTIONS.users, cred.user.uid), {
         email,
         displayName: input.displayName.trim() || email.split('@')[0],
         role: normalizedRole,
+        orgId: resolvedOrgId,
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -323,7 +470,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName?: string
       role?: UserRole
       isActive?: boolean
+      orgId?: string | null
       allowLlmAndAiTasks?: boolean
+      extraPermissions?: Permission[]
+      deniedPermissions?: Permission[]
       managedCounselorIds?: string[]
       omicallSipUser?: string
       omicallSipPassword?: string
@@ -391,7 +541,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (input.displayName !== undefined) patch.displayName = input.displayName.trim()
       if (input.role !== undefined) patch.role = normalizeUserRole(input.role)
       if (input.isActive !== undefined) patch.isActive = input.isActive
+      if (input.orgId !== undefined) {
+        if (profile?.role !== 'super_admin') {
+          throw new Error('Chỉ Siêu quản trị mới đổi trường gắn với nhân sự.')
+        }
+        const nextRole = input.role !== undefined ? normalizeUserRole(input.role) : normalizeUserRole(String(currentRole))
+        if (nextRole === 'super_admin') {
+          patch.orgId = deleteField()
+        } else {
+          const oid = input.orgId == null ? '' : String(input.orgId).trim()
+          if (!oid) throw new Error('Thiếu mã trường khi gán quản lý / nhân sự.')
+          patch.orgId = oid
+        }
+      }
       if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
+      if (input.extraPermissions !== undefined) {
+        if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới phân quyền chi tiết.')
+        patch.extraPermissions = input.extraPermissions
+      }
+      if (input.deniedPermissions !== undefined) {
+        if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới thu hồi quyền chi tiết.')
+        patch.deniedPermissions = input.deniedPermissions
+      }
       if (input.managedCounselorIds !== undefined) {
         patch.managedCounselorIds = input.managedCounselorIds.filter(Boolean).slice(0, 60)
       }
@@ -538,6 +709,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       reloadProfile,
       signInWithEmail,
+      changeOwnPassword,
       createStaffAccount,
       updateStaffProfile,
       setStaffPassword,
@@ -558,6 +730,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       reloadProfile,
       signInWithEmail,
+      changeOwnPassword,
       createStaffAccount,
       updateStaffProfile,
       setStaffPassword,

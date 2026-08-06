@@ -23,6 +23,6 @@ export async function triggerOmicallHistorySync(lookbackMinutes?: number): Promi
     const res = await fn({ lookbackMinutes })
     return res.data
   } catch (e) {
-    throw new Error(callableErrorMessage(e, 'Không đồng bộ được lịch sử OMICall.'))
+    throw new Error(callableErrorMessage(e, 'Không đồng bộ được lịch sử OMICall.'), { cause: e })
   }
 }

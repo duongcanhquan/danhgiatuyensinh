@@ -42,7 +42,8 @@ export const PERMISSION_TIERS: {
   { id: 'counselor', label: 'Nhân viên Sale', roles: ['counselor'] },
   { id: 'ctv', label: 'Cộng tác viên (CTV)', roles: ['ctv'] },
   { id: 'team_lead', label: 'Trưởng nhóm Sale', roles: ['team_lead'] },
-  { id: 'admin', label: 'Quản lý', roles: ['admin', 'super_admin'] },
+  { id: 'admin', label: 'Quản lý trường', roles: ['admin'] },
+  { id: 'super_admin', label: 'Siêu quản trị', roles: ['super_admin'] },
   { id: 'accountant', label: 'Kế toán', roles: ['accountant'] },
 ]
 

@@ -108,4 +108,14 @@ describe('resolveEffectivePermissions', () => {
     expect(hasPermission(perms, 'analytics:advanced')).toBe(true)
     expect(hasPermission(perms, 'leads:reassign:peer')).toBe(false)
   })
+
+  it('intersects school admin capabilities for admin role', () => {
+    const perms = resolveEffectivePermissions(
+      { role: 'admin' },
+      { adminEnabledModuleIds: ['staff', 'data'] },
+    )
+    expect(hasPermission(perms, 'config:users')).toBe(true)
+    expect(hasPermission(perms, 'config:master_data')).toBe(true)
+    expect(hasPermission(perms, 'config:omicall')).toBe(false)
+  })
 })

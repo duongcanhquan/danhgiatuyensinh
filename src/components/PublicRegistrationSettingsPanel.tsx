@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
 import { Copy, ExternalLink, Save } from 'lucide-react'
 import {
   defaultPublicRegistrationConfig,
   FS_COLLECTIONS,
-  SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID,
   type PublicRegistrationConfig,
 } from '../types'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../contexts/OrgProvider'
 import { getFirestoreDb } from '../services/firebase'
+import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+
+const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100'
@@ -34,6 +38,7 @@ function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrat
 
 export function PublicRegistrationSettingsPanel() {
   const { can, profile } = useAuth()
+  const { effectiveOrgId, currentOrgLabel, organizations } = useOrg()
   const canEdit = can('config:master_data')
   const db = getFirestoreDb()
   const [draft, setDraft] = useState<PublicRegistrationConfig>(defaultPublicRegistrationConfig())
@@ -41,45 +46,78 @@ export function PublicRegistrationSettingsPanel() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  const orgSlug = useMemo(() => {
+    const hit = organizations.find((o) => o.id === effectiveOrgId)
+    return (hit?.slug || effectiveOrgId || DEFAULT_ORG_ID).trim() || DEFAULT_ORG_ID
+  }, [organizations, effectiveOrgId])
+
   useEffect(() => {
     if (!db) return
-    const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID)
+    let cancelled = false
+    setRemoteLoaded(false)
+    const ref = doc(db, ...orgSettingsDocSegments(effectiveOrgId, PUBLIC_REGISTRATION_DOC_ID))
     const unsub = onSnapshot(
       ref,
       (snap) => {
+        if (cancelled) return
         setDraft(parseConfig(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined))
         setRemoteLoaded(true)
       },
       (err) => {
         console.error(err)
-        setMsg('Không đọc được cấu hình cổng đăng ký.')
-        setRemoteLoaded(true)
+        if (!cancelled) {
+          setMsg('Không đọc được cấu hình cổng đăng ký.')
+          setRemoteLoaded(true)
+        }
       },
     )
-    return unsub
-  }, [db])
+    return () => {
+      cancelled = true
+      unsub()
+    }
+  }, [db, effectiveOrgId])
 
   const patch = useCallback((partial: Partial<PublicRegistrationConfig>) => {
     setDraft((d) => ({ ...d, ...partial }))
   }, [])
 
-  const portalPath = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/dang-ky`
+  const portalPath = useMemo(() => {
+    const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}`
+    return `${base}/dang-ky/${orgSlug}`
+  }, [orgSlug])
 
   const onSave = async () => {
     if (!db || !canEdit) return
     setBusy(true)
     setMsg(null)
     try {
-      const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID)
+      const ref = doc(db, ...orgSettingsDocSegments(effectiveOrgId, PUBLIC_REGISTRATION_DOC_ID))
       const payload: PublicRegistrationConfig = {
         ...draft,
         portalPublicUrl: draft.portalPublicUrl?.trim() || portalPath,
         updatedAt: new Date().toISOString(),
         updatedBy: profile?.email ?? profile?.id ?? 'admin',
       }
-      await setDoc(ref, { ...payload, updatedAtServer: Timestamp.now() }, { merge: true })
+      await setDoc(
+        ref,
+        { ...payload, orgId: effectiveOrgId, updatedAtServer: Timestamp.now() },
+        { merge: true },
+      )
+      await setDoc(
+        doc(db, FS_COLLECTIONS.orgSettings, effectiveOrgId),
+        { orgId: effectiveOrgId, updatedAt: Timestamp.now() },
+        { merge: true },
+      )
+      // Mirror VietMy → scoringAux để tương thích Function/legacy
+      if (effectiveOrgId === DEFAULT_ORG_ID) {
+        await setDoc(
+          doc(db, FS_COLLECTIONS.scoringAux, PUBLIC_REGISTRATION_DOC_ID),
+          { ...payload, updatedAtServer: Timestamp.now() },
+          { merge: true },
+        )
+      }
       setDraft(payload)
-      setMsg('Đã lưu — áp dụng ngay cho cổng /dang-ky.')
+      setMsg(`Đã lưu — áp dụng ngay cho /dang-ky/${orgSlug}.`)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không lưu được cấu hình.')
     } finally {
@@ -105,8 +143,8 @@ export function PublicRegistrationSettingsPanel() {
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
         <p className="font-semibold">Cổng đăng ký sinh viên (công khai)</p>
         <p className="mt-1 text-emerald-900/90">
-          Sinh viên điền form → hồ sơ vào <strong>Hồ sơ</strong> chung → n8n gửi email (nếu bật). Không cần đăng nhập
-          sinh viên (phương án A).
+          Đang cấu hình cho <strong>{currentOrgLabel}</strong>. Sinh viên điền form → hồ sơ vào trường này → n8n gửi
+          email (nếu bật).
         </p>
       </div>
 
@@ -134,10 +172,6 @@ export function PublicRegistrationSettingsPanel() {
             Mở thử
           </a>
         </div>
-        <p className="mt-2 text-xs text-slate-500">
-          Gắn tên miền riêng (vd. dangky.vietmy.edu.vn) trỏ cùng bản build — thêm domain vào Firebase Authorized
-          domains nếu dùng Auth trên domain đó.
-        </p>
       </div>
 
       <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -193,13 +227,12 @@ export function PublicRegistrationSettingsPanel() {
             onChange={(e) => patch({ defaultSource1: e.target.value })}
             placeholder="Web đăng ký"
           />
-          <span className="mt-1 block text-xs text-slate-500">Dùng cho KPI OFF/MKT — thêm giá trị này vào danh mục Nguồn nếu cần.</span>
         </label>
         <label>
           <span className="text-sm font-semibold text-slate-800">URL cổng (gửi kèm n8n)</span>
           <input
             className={`mt-1 ${INPUT}`}
-            value={draft.portalPublicUrl ?? ''}
+            value={draft.portalPublicUrl}
             disabled={!canEdit}
             onChange={(e) => patch({ portalPublicUrl: e.target.value })}
             placeholder={portalPath}
@@ -207,14 +240,22 @@ export function PublicRegistrationSettingsPanel() {
         </label>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-sm font-semibold text-slate-900">Thông báo n8n (email sinh viên + tư vấn viên)</p>
-        <p className="mt-1 text-xs text-slate-600">
-          Workflow n8n nhận JSON <code className="rounded bg-slate-100 px-1">action: student_registration</code> — tự
-          gửi email tới <code className="rounded bg-slate-100 px-1">student.email</code> và{' '}
-          <code className="rounded bg-slate-100 px-1">counselor.email</code>.
-        </p>
-        <label className="mt-3 flex items-start gap-3">
+      <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+          checked={draft.autoAssignCounselor}
+          disabled={!canEdit}
+          onChange={(e) => patch({ autoAssignCounselor: e.target.checked })}
+        />
+        <span>
+          <span className="block text-sm font-semibold text-slate-900">Tự gán tư vấn viên</span>
+          <span className="mt-0.5 block text-xs text-slate-600">Chọn TVV ít hồ sơ nhất trong trường.</span>
+        </span>
+      </label>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+        <label className="flex items-start gap-3">
           <input
             type="checkbox"
             className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
@@ -222,49 +263,36 @@ export function PublicRegistrationSettingsPanel() {
             disabled={!canEdit}
             onChange={(e) => patch({ n8nEnabled: e.target.checked })}
           />
-          <span className="text-sm text-slate-800">Gọi webhook n8n sau khi tạo hồ sơ</span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">Gửi thông báo n8n (email)</span>
+            <span className="mt-0.5 block text-xs text-slate-600">Webhook riêng cho cổng đăng ký — không dùng 4 ô CTSV/giấy mời.</span>
+          </span>
         </label>
-        <label className="mt-3 block">
+        <label>
           <span className="text-sm font-semibold text-slate-800">URL webhook n8n</span>
           <input
-            className={`mt-1 ${INPUT}`}
+            className={`mt-1 ${INPUT} font-mono`}
             value={draft.n8nWebhookUrl}
             disabled={!canEdit}
             onChange={(e) => patch({ n8nWebhookUrl: e.target.value })}
-            placeholder="https://apchn-host.lapage.vn/webhook/dang-ky-sv"
+            placeholder="https://…/webhook/…"
+            autoComplete="off"
           />
-        </label>
-        <label className="mt-3 flex items-start gap-3">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
-            checked={draft.autoAssignCounselor}
-            disabled={!canEdit}
-            onChange={(e) => patch({ autoAssignCounselor: e.target.checked })}
-          />
-          <span>
-            <span className="block text-sm font-semibold text-slate-800">Tự gán tư vấn viên</span>
-            <span className="mt-0.5 block text-xs text-slate-600">Chọn TVV đang active có ít hồ sơ nhất.</span>
-          </span>
         </label>
       </div>
 
-      {canEdit ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void onSave()}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
-          >
-            <Save className="h-4 w-4" aria-hidden />
-            {busy ? 'Đang lưu…' : 'Lưu cấu hình'}
-          </button>
-          {msg ? <p className="text-sm text-slate-700">{msg}</p> : null}
-        </div>
-      ) : (
-        <p className="text-sm text-amber-800">Bạn chỉ xem — cần quyền cấu hình danh mục để chỉnh và lưu.</p>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={!canEdit || busy}
+          onClick={() => void onSave()}
+          className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50"
+        >
+          <Save className="h-4 w-4" aria-hidden />
+          {busy ? 'Đang lưu…' : 'Lưu'}
+        </button>
+        {msg ? <p className="text-sm text-slate-600">{msg}</p> : null}
+      </div>
     </div>
   )
 }

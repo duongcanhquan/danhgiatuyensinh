@@ -136,16 +136,76 @@ function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrat
   }
 }
 
-async function loadPublicRegistrationConfig(db: Firestore): Promise<PublicRegistrationConfig> {
-  const snap = await db.collection('scoringAux').doc(PUBLIC_REGISTRATION_DOC_ID).get()
-  return parseConfig(snap.exists ? (snap.data() as Record<string, unknown>) : undefined)
+async function resolveActiveOrgId(db: Firestore, slugOrId: string): Promise<string> {
+  const key = normalizeOrgSlugParam(slugOrId)
+  const byId = await db.collection('organizations').doc(key).get()
+  if (byId.exists) {
+    const status = str(byId.get('status')) || 'active'
+    if (status === 'suspended') {
+      throw new HttpsError('failed-precondition', 'Trường đang tạm ngưng — cổng đăng ký không nhận hồ sơ.')
+    }
+    return byId.id
+  }
+  try {
+    const bySlug = await db.collection('organizations').where('slug', '==', key).limit(1).get()
+    if (!bySlug.empty) {
+      const d = bySlug.docs[0]!
+      const status = str(d.get('status')) || 'active'
+      if (status === 'suspended') {
+        throw new HttpsError('failed-precondition', 'Trường đang tạm ngưng — cổng đăng ký không nhận hồ sơ.')
+      }
+      return d.id
+    }
+  } catch (e) {
+    if (e instanceof HttpsError) throw e
+    console.warn('[publicRegistration] slug query', key, e)
+  }
+  // Bootstrap VietMy trước khi có doc organizations
+  if (key === 'vietmy') return 'vietmy'
+  throw new HttpsError('not-found', 'Không tìm thấy trường tương ứng với đường dẫn đăng ký.')
 }
 
-async function loadCounselors(db: Firestore): Promise<CounselorLite[]> {
-  const snap = await db.collection('users').where('role', '==', 'counselor').get()
+async function loadPublicRegistrationConfig(
+  db: Firestore,
+  orgId?: string,
+): Promise<PublicRegistrationConfig & { orgId: string }> {
+  const resolvedOrg = (orgId ?? '').trim() || 'vietmy'
+  try {
+    const orgSnap = await db
+      .collection('orgSettings')
+      .doc(resolvedOrg)
+      .collection('settings')
+      .doc(PUBLIC_REGISTRATION_DOC_ID)
+      .get()
+    if (orgSnap.exists) {
+      return { ...parseConfig(orgSnap.data() as Record<string, unknown>), orgId: resolvedOrg }
+    }
+  } catch (e) {
+    console.warn('[publicRegistration] orgSettings read', resolvedOrg, e)
+  }
+  // Legacy fallback chỉ cho VietMy
+  if (resolvedOrg === 'vietmy') {
+    const snap = await db.collection('scoringAux').doc(PUBLIC_REGISTRATION_DOC_ID).get()
+    return {
+      ...parseConfig(snap.exists ? (snap.data() as Record<string, unknown>) : undefined),
+      orgId: resolvedOrg,
+    }
+  }
+  return { ...parseConfig(undefined), orgId: resolvedOrg, enabled: false }
+}
+
+async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLite[]> {
+  let snap
+  try {
+    snap = await db.collection('users').where('role', '==', 'counselor').where('orgId', '==', orgId).get()
+  } catch {
+    snap = await db.collection('users').where('role', '==', 'counselor').get()
+  }
   const out: CounselorLite[] = []
   snap.forEach((d) => {
     const data = d.data() as Record<string, unknown>
+    const userOrg = str(data.orgId) || 'vietmy'
+    if (userOrg !== orgId && str(data.orgId)) return
     out.push({
       id: d.id,
       email: str(data.email),
@@ -157,8 +217,8 @@ async function loadCounselors(db: Firestore): Promise<CounselorLite[]> {
   return out
 }
 
-async function pickCounselorByLoad(db: Firestore): Promise<CounselorLite | null> {
-  const counselors = (await loadCounselors(db)).filter((c) => c.isActive)
+async function pickCounselorByLoad(db: Firestore, orgId: string): Promise<CounselorLite | null> {
+  const counselors = (await loadCounselors(db, orgId)).filter((c) => c.isActive)
   if (!counselors.length) return null
   const picked = await pickCounselorByLoadInTransaction(db, counselors)
   if (!picked) return null
@@ -201,11 +261,13 @@ function buildLeadDoc(input: PublicLeadInput, opts: {
   source1: string
   uniqueHash: string
   assignedCounselorId: string | null
+  orgId: string
   now: Timestamp
 }) {
   const studyFormat = str(input.studyIntention) || str(input.educationLevel)
   const assignee = opts.assignedCounselorId
   return {
+    orgId: opts.orgId,
     customerId: '',
     systemCode: opts.systemCode,
     fullName: str(input.fullName),
@@ -243,9 +305,19 @@ function buildLeadDoc(input: PublicLeadInput, opts: {
   }
 }
 
+function normalizeOrgSlugParam(raw: unknown): string {
+  const s = str(raw)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return s || 'vietmy'
+}
+
 export function registerPublicRegistrationFunctions(db: Firestore) {
-  const getPublicRegistrationMeta = onCall(async () => {
-    const config = await loadPublicRegistrationConfig(db)
+  const getPublicRegistrationMeta = onCall(async (request) => {
+    const slug = normalizeOrgSlugParam((request.data as { orgSlug?: string } | undefined)?.orgSlug)
+    const orgId = await resolveActiveOrgId(db, slug)
+    const config = await loadPublicRegistrationConfig(db, orgId)
     let provinces: string[] = []
     try {
       const masterSnap = await db.collection('masterData').doc('provinces').get()
@@ -265,16 +337,20 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       introText: config.introText,
       successMessage: config.successMessage,
       provinces,
+      orgId: config.orgId,
     }
   })
 
   const submitPublicLead = onCall(async (request) => {
-    const config = await loadPublicRegistrationConfig(db)
+    const data = (request.data ?? {}) as PublicLeadInput & { orgSlug?: string }
+    const slug = normalizeOrgSlugParam(data.orgSlug)
+    const orgId = await resolveActiveOrgId(db, slug)
+    const config = await loadPublicRegistrationConfig(db, orgId)
     if (!config.enabled) {
       throw new HttpsError('failed-precondition', 'Cổng đăng ký đang tắt. Vui lòng liên hệ trường.')
     }
 
-    const input = (request.data ?? {}) as PublicLeadInput
+    const input = data as PublicLeadInput
     const validation = validatePublicLeadInput(input, config.defaultSource1)
     if (validation) {
       throw new HttpsError('invalid-argument', validation)
@@ -292,6 +368,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     const uniqueHash = computeLeadUniqueHash(row)
     const dupSnap = await db
       .collection('leads')
+      .where('orgId', '==', config.orgId)
       .where('uniqueHash', '==', uniqueHash)
       .limit(1)
       .get()
@@ -305,7 +382,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     const systemCode = await allocateSystemCode(db)
     let counselor: CounselorLite | null = null
     if (config.autoAssignCounselor) {
-      counselor = await pickCounselorByLoad(db)
+      counselor = await pickCounselorByLoad(db, config.orgId)
     }
 
     const now = Timestamp.now()
@@ -315,6 +392,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       source1: config.defaultSource1,
       uniqueHash,
       assignedCounselorId: counselor?.id ?? null,
+      orgId: config.orgId,
       now,
     })
     await ref.set(leadDoc)

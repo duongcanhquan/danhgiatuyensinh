@@ -27,6 +27,7 @@ import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useMasterData } from '../hooks/useMasterData'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
 import { USER_ROLE_LABELS } from '../types'
 import { evaluateLead, resolveTagBands } from '../utils/scoring'
 import {
@@ -53,6 +54,12 @@ import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
+import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
+import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSettingsPanel'
+import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
+import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
+import { CommsAutomationSettingsPanel } from '../components/CommsAutomationSettingsPanel'
+import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
 import {
   enabledMainTabs,
@@ -244,6 +251,49 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
           </p>
         </>
       )
+    case 'hub':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Hub kết nối</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>Chọn icon → điền URL/key → Lưu.</p>
+        </>
+      )
+    case 'comms':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Email &amp; tin nhắn tự động</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Cấu hình email, SMS, Zalo, WhatsApp: mẫu tin, khi nào gửi, đồng ý liên hệ và giờ im lặng. CRM đẩy sang webhook
+            (n8n) để gửi thật — xem thêm tab <strong>Hub kết nối</strong>.
+          </p>
+        </>
+      )
+    case 'webhooks':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Webhook n8n</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>Bốn URL: giấy mời, CTSV, báo cáo ngày/tháng.</p>
+        </>
+      )
+    case 'invite_docs':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Giấy mời &amp; mẫu</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Bật/tắt loại giấy, nhãn nút, mã mẫu Google Docs, thư mục Drive gốc và tự tạo thư mục lần đầu. Dùng cùng webhook
+            giấy mời ở tab <strong>Webhook n8n</strong>.
+          </p>
+        </>
+      )
+    case 'receipts':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Chứng từ &amp; lưu trữ</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Chọn nơi lưu bill (R2 / Drive / Firebase) và điền URL/token theo từng trường — không chỉ phụ thuộc file .env.
+          </p>
+        </>
+      )
     case 'public_registration':
       return (
         <>
@@ -272,11 +322,11 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'permissions':
       return (
         <>
-          <p className="font-semibold text-slate-900">Phân Quyền</p>
+          <p className="font-semibold text-slate-900">Phân quyền</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Ba tầng: Tư vấn viên → Trưởng nhóm → Quản trị. Trưởng nhóm được mẫu tư vấn (Thông tin TV), profile nhóm, đổi TVV
-            trong nhóm. Siêu quản trị có thể bổ sung <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">extraPermissions</code>{' '}
-            trên document user (Firestore Rules phải khớp).
+            Bảng tham chiếu quyền theo vai trò. <strong>Siêu quản trị</strong> giao module cho Admin từng trường tại{' '}
+            <strong>Quản lý trường → Chi tiết</strong>. <strong>Admin trường</strong> phân quyền nhân sự vận hành tại{' '}
+            <strong>Quản lý nhân sự → Sửa</strong> và setup cài đặt trong phạm vi đã được giao.
           </p>
         </>
       )
@@ -305,6 +355,7 @@ export function SettingsView() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
   const { can, permissions, status: authStatus, firebaseUser, profile } = useAuth()
+  const { currentOrgLabel, effectiveOrgId, isPlatformSuperAdmin } = useOrg()
   const [searchParams, setSearchParams] = useSearchParams()
   const { profiles } = useScoringProfiles()
   const { catalogs, byKind, loading: mdLoading, error: mdError } = useMasterData()
@@ -494,6 +545,7 @@ export function SettingsView() {
       canMaster,
       canScoringRules,
       canScoringProfilesTeam,
+      canScoringProfilesOwn,
       canPlaybooks,
       canAiEngine,
       canOmicall,
@@ -506,6 +558,7 @@ export function SettingsView() {
       canMaster,
       canScoringRules,
       canScoringProfilesTeam,
+      canScoringProfilesOwn,
       canPlaybooks,
       canAiEngine,
       canOmicall,
@@ -663,6 +716,22 @@ export function SettingsView() {
   return (
     <div className={`min-w-0 max-w-full space-y-2 ${settingsCopy}`}>
       <h1 className="sr-only">Cài đặt hệ thống</h1>
+      {isPlatformSuperAdmin ? (
+        <div className="rounded-xl border border-teal-200/80 bg-teal-50/90 px-3 py-2.5 text-sm text-teal-950">
+          <p className="font-semibold">
+            Đang cấu hình: <span className="text-teal-900">{currentOrgLabel}</span>
+            <span className="ml-1 font-mono text-xs font-normal text-teal-800/80">({effectiveOrgId})</span>
+          </p>
+          <p className="mt-0.5 text-xs text-teal-900/80">
+            Đổi trường trên thanh bên, hoặc vào{' '}
+            <Link to="/organizations" className="font-medium underline-offset-2 hover:underline">
+              Quản lý trường
+            </Link>
+            .
+          </p>
+        </div>
+      ) : null}
+      {activeMainTab === 'connect' ? <IntegrationsStatusStrip /> : null}
       {!configured || !db ? (
         <div className={`rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2.5 text-rose-900 ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
@@ -1217,12 +1286,57 @@ export function SettingsView() {
         </div>
       ) : null}
 
+      {db && activeSubTab === 'hub' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-hub" className="space-y-3">
+          <h2 id="tab-hub" className="sr-only">
+            Hub kết nối
+          </h2>
+          <IntegrationHubPanel />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'comms' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-comms" className="space-y-3">
+          <h2 id="tab-comms" className="sr-only">
+            Email và tin nhắn tự động
+          </h2>
+          <CommsAutomationSettingsPanel />
+        </div>
+      ) : null}
+
       {db && activeSubTab === 'omicall' && canOmicall ? (
         <div role="tabpanel" aria-labelledby="tab-omicall" className="space-y-3">
           <h2 id="tab-omicall" className="sr-only">
             Gọi điện OMICall
           </h2>
           <OmicallSettingsTab />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'webhooks' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-webhooks" className="space-y-3">
+          <h2 id="tab-webhooks" className="sr-only">
+            Webhook n8n
+          </h2>
+          <N8nWebhooksSettingsPanel />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'invite_docs' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-invite-docs" className="space-y-3">
+          <h2 id="tab-invite-docs" className="sr-only">
+            Giấy mời và mẫu
+          </h2>
+          <InviteDocumentsSettingsPanel />
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'receipts' && (canMaster || canOmicall) ? (
+        <div role="tabpanel" aria-labelledby="tab-receipts" className="space-y-3">
+          <h2 id="tab-receipts" className="sr-only">
+            Chứng từ và lưu trữ
+          </h2>
+          <ReceiptStorageSettingsPanel />
         </div>
       ) : null}
 

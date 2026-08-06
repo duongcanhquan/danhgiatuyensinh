@@ -18,6 +18,7 @@ import {
   type QueryFilterConstraint,
   type QuerySnapshot,
 } from 'firebase/firestore'
+import { asFirestoreTimestamp } from '../utils/firestoreTimestamp'
 import type {
   Lead,
   LeadCounselorStatus,
@@ -30,10 +31,16 @@ import type {
   VietMyUserProfile,
 } from '../types'
 import { FS_COLLECTIONS } from '../types'
-import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
+import { isAdminLikeRole, isFieldStaffRole, isSuperAdminRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
+import { useOrg } from './useOrg'
 import { useMasterData } from './useMasterData'
+import {
+  orgIdEqualityConstraint,
+  leadBelongsToOrg,
+  shouldUseLegacyMissingOrgIdRead,
+} from '../tenancy/orgQuery'
 import {
   coerceLeadCounselorStatus,
   counselorStatusToPipeline,
@@ -242,21 +249,20 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       data.mlExplanation !== undefined && data.mlExplanation !== null
         ? String(data.mlExplanation).slice(0, 2000)
         : undefined
-    const nextRaw = data.nextFollowUpDate
-    const nextFollowUpDate =
-      nextRaw && typeof nextRaw === 'object' && 'toMillis' in (nextRaw as object)
-        ? (nextRaw as Timestamp)
-        : null
+    const nextFollowUpDate = asFirestoreTimestamp(data.nextFollowUpDate) ?? null
 
     const uniqueHash = String(data.uniqueHash ?? '')
     const now = Timestamp.now()
-    const createdAt = (data.createdAt as Timestamp) ?? (data.importedAt as Timestamp) ?? now
-    const updatedAt = (data.updatedAt as Timestamp) ?? createdAt
-    const importedAt = data.importedAt as Timestamp | undefined
-    const uploadedAt = (data.uploadedAt as Timestamp) ?? importedAt ?? createdAt
+    // Legacy import / REST đôi khi ghi string hoặc {seconds} — không cast thô (sẽ crash Dashboard .toDate()).
+    const createdAt =
+      asFirestoreTimestamp(data.createdAt) ?? asFirestoreTimestamp(data.importedAt) ?? now
+    const updatedAt = asFirestoreTimestamp(data.updatedAt) ?? createdAt
+    const importedAt = asFirestoreTimestamp(data.importedAt)
+    const uploadedAt = asFirestoreTimestamp(data.uploadedAt) ?? importedAt ?? createdAt
 
     return {
       id,
+      orgId: data.orgId != null && String(data.orgId).trim() ? String(data.orgId).trim() : undefined,
       customerId,
       ...(systemCode ? { systemCode } : {}),
       fullName,
@@ -322,10 +328,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       uploaderName: data.uploaderName !== undefined ? String(data.uploaderName) : undefined,
       uploadBatchId: data.uploadBatchId !== undefined ? String(data.uploadBatchId) : undefined,
       importedAt,
-      lastTouchedAt:
-        data.lastTouchedAt && typeof data.lastTouchedAt === 'object' && 'toMillis' in (data.lastTouchedAt as object)
-          ? (data.lastTouchedAt as Timestamp)
-          : undefined,
+      lastTouchedAt: asFirestoreTimestamp(data.lastTouchedAt),
       routingMeta: data.routingMeta as Lead['routingMeta'],
       mlWinProbability,
       mlExplanation,
@@ -343,10 +346,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.recommendedAction !== undefined && data.recommendedAction !== null
           ? String(data.recommendedAction).slice(0, 4000)
           : undefined,
-      aiProcessedAt:
-        data.aiProcessedAt && typeof data.aiProcessedAt === 'object' && 'toMillis' in (data.aiProcessedAt as object)
-          ? (data.aiProcessedAt as Timestamp)
-          : undefined,
+      aiProcessedAt: asFirestoreTimestamp(data.aiProcessedAt),
       lastCallAiSummary:
         data.lastCallAiSummary !== undefined && data.lastCallAiSummary !== null
           ? String(data.lastCallAiSummary).slice(0, 500)
@@ -355,20 +355,24 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.lastCallAiReadiness !== undefined && data.lastCallAiReadiness !== null
           ? String(data.lastCallAiReadiness).slice(0, 64)
           : undefined,
-      lastCallAiAt:
-        data.lastCallAiAt && typeof data.lastCallAiAt === 'object' && 'toMillis' in (data.lastCallAiAt as object)
-          ? (data.lastCallAiAt as Timestamp)
+      lastCallAiAt: asFirestoreTimestamp(data.lastCallAiAt),
+      lastCallAt: asFirestoreTimestamp(data.lastCallAt),
+      lastCalledByLabel:
+        data.lastCalledByLabel !== undefined && data.lastCalledByLabel !== null
+          ? String(data.lastCalledByLabel).slice(0, 120)
           : undefined,
+      lastCallOutcome: (() => {
+        const o = data.lastCallOutcome
+        const ok = ['NO_ANSWER', 'CONNECTED', 'FOLLOW_UP', 'DISQUALIFIED', 'APPOINTMENT_SET', 'OTHER'] as const
+        return typeof o === 'string' && (ok as readonly string[]).includes(o)
+          ? (o as Lead['lastCallOutcome'])
+          : undefined
+      })(),
       callEvalPriorityBoost:
         data.callEvalPriorityBoost !== undefined && data.callEvalPriorityBoost !== null
           ? normPriorityTag(data.callEvalPriorityBoost)
           : undefined,
-      callEvalPriorityBoostAt:
-        data.callEvalPriorityBoostAt &&
-        typeof data.callEvalPriorityBoostAt === 'object' &&
-        'toMillis' in (data.callEvalPriorityBoostAt as object)
-          ? (data.callEvalPriorityBoostAt as Timestamp)
-          : undefined,
+      callEvalPriorityBoostAt: asFirestoreTimestamp(data.callEvalPriorityBoostAt),
       lastCallBehaviorScore:
         data.lastCallBehaviorScore !== undefined && data.lastCallBehaviorScore !== null
           ? Math.max(0, Math.min(100, Math.round(Number(data.lastCallBehaviorScore))))
@@ -485,8 +489,16 @@ export type UseLeadsOptions = {
   includeScopeSourceOptions?: boolean
 }
 
-function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryFilterConstraint | null {
-  if (isAdminLikeRole(profile.role)) return null
+function rbacConstraint(
+  profile: VietMyUserProfile,
+  hoDLabels: string[],
+  canReadGlobal: boolean,
+): QueryFilterConstraint | null {
+  if (isSuperAdminRole(profile.role)) return null
+  if (isAdminLikeRole(profile.role)) {
+    if (canReadGlobal) return null
+    return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
+  }
 
   if (isFieldStaffRole(profile.role)) {
     return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
@@ -506,7 +518,11 @@ function rbacConstraint(profile: VietMyUserProfile, hoDLabels: string[]): QueryF
   return null
 }
 
-function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMyUserProfile): QueryFilterConstraint[] {
+function filterConstraints(
+  f: LeadListServerFilters | undefined,
+  profile: VietMyUserProfile,
+  canReadGlobal: boolean,
+): QueryFilterConstraint[] {
   if (!f) return []
   const c: QueryFilterConstraint[] = []
   if (f.pipelineStatus) {
@@ -543,12 +559,15 @@ function filterConstraints(f: LeadListServerFilters | undefined, profile: VietMy
     if (p.length === 1) c.push(where('province', '==', p[0]))
     else if (p.length > 1) c.push(where('province', 'in', p))
   }
-  if (f.assignedCounselorIn?.length && isAdminLikeRole(profile.role)) {
-    const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
-    if (ids.length === 1) {
-      c.push(or(where('assignedTo', '==', ids[0]), where('assignedCounselorId', '==', ids[0])))
-    } else if (ids.length > 1) {
-      c.push(or(where('assignedTo', 'in', ids), where('assignedCounselorId', 'in', ids)))
+  if (f.assignedCounselorIn?.length) {
+    const canFilterByAssignee = isSuperAdminRole(profile.role) || canReadGlobal
+    if (canFilterByAssignee) {
+      const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
+      if (ids.length === 1) {
+        c.push(or(where('assignedTo', '==', ids[0]), where('assignedCounselorId', '==', ids[0])))
+      } else if (ids.length > 1) {
+        c.push(or(where('assignedTo', 'in', ids), where('assignedCounselorId', 'in', ids)))
+      }
     }
   }
   const fromMs = f.adminDateFromMs
@@ -575,16 +594,36 @@ function composeQuery(col: ReturnType<typeof collection>, parts: QueryFilterCons
   return query(col, composed as unknown as Parameters<typeof query>[1])
 }
 
+/**
+ * Superadmin xem VietMy: bỏ where(orgId) để lấy cả hồ sơ cũ thiếu orgId (Rules isPlatform).
+ * Mọi trường hợp khác: luôn where(orgId==) — nếu bỏ lọc, multi-tenant Rules từ chối cả query.
+ */
+function shouldOmitOrgServerFilter(
+  profile: VietMyUserProfile,
+  orgId: string | undefined,
+  orgFilter: 'auto' | 'strict',
+): boolean {
+  if (orgFilter === 'strict') return false
+  if (!orgId || !shouldUseLegacyMissingOrgIdRead(orgId)) return false
+  return isSuperAdminRole(profile.role)
+}
+
 function buildListDataQuery(
   firestore: Firestore,
   profile: VietMyUserProfile,
   hoDLabels: string[],
-  filters?: LeadListServerFilters,
+  filters: LeadListServerFilters | undefined,
+  orgId: string | undefined,
+  canReadGlobal: boolean,
+  orgFilter: 'auto' | 'strict' = 'auto',
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const rbac = rbacConstraint(profile, hoDLabels)
-  const extras = filterConstraints(filters, profile)
+  const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
+  const extras = filterConstraints(filters, profile, canReadGlobal)
   const parts: QueryFilterConstraint[] = []
+  if (orgId && !shouldOmitOrgServerFilter(profile, orgId, orgFilter)) {
+    parts.push(orgIdEqualityConstraint(orgId))
+  }
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
@@ -596,38 +635,109 @@ function buildPriorityTagCountQuery(
   hoDLabels: string[],
   filters: LeadListServerFilters | undefined,
   tag: PriorityTag,
+  orgId: string | undefined,
+  canReadGlobal: boolean,
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const rbac = rbacConstraint(profile, hoDLabels)
-  const extras = [...filterConstraints(filters, profile), where('priorityTag', '==', tag)]
+  const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
+  const extras = [...filterConstraints(filters, profile, canReadGlobal), where('priorityTag', '==', tag)]
   const parts: QueryFilterConstraint[] = []
+  // Count luôn strict — tránh đếm lẫn trường khác khi Superadmin bỏ lọc list
+  if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
   parts.push(...extras)
   return composeQuery(col, parts)
 }
 
-function applyRoleClientFilter(rows: Lead[], profile: VietMyUserProfile, hoDQueryLabels: string[]): Lead[] {
+function isFsPermissionDenied(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const code = 'code' in e ? String((e as { code: unknown }).code) : ''
+  return code === 'permission-denied' || code === 'permissions-denied'
+}
+
+/** List query: Superadmin+VietMy thử đọc không lọc org (legacy); luôn có đường orgId== dự phòng. */
+async function getDocsListWithOrgFallback(
+  firestore: Firestore,
+  profile: VietMyUserProfile,
+  hoDLabels: string[],
+  filters: LeadListServerFilters | undefined,
+  orgId: string | undefined,
+  canReadGlobal: boolean,
+  withConstraints: (base: Query) => Query,
+): Promise<QuerySnapshot<DocumentData>> {
+  const allowLegacy = shouldOmitOrgServerFilter(profile, orgId, 'auto')
+  const scopedQ = withConstraints(
+    buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'strict'),
+  )
+
+  let scopedSnap: QuerySnapshot<DocumentData> | null = null
+  let scopedErr: unknown
+  try {
+    scopedSnap = await getDocs(scopedQ)
+  } catch (e) {
+    scopedErr = e
+    if (!isFsPermissionDenied(e)) throw e
+  }
+
+  if (!allowLegacy) {
+    if (scopedSnap) return scopedSnap
+    throw scopedErr instanceof Error ? scopedErr : new Error('Không đọc được danh sách hồ sơ.')
+  }
+
+  try {
+    const legacyQ = withConstraints(
+      buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'auto'),
+    )
+    const legacySnap = await getDocs(legacyQ)
+    // Unscoped gồm cả thiếu orgId; ưu tiên khi có ít nhất bằng số bản ghi đã gắn org
+    if (legacySnap.docs.length >= (scopedSnap?.docs.length ?? 0)) {
+      return legacySnap
+    }
+    if (scopedSnap && scopedSnap.docs.length > 0) return scopedSnap
+    return legacySnap
+  } catch (e) {
+    console.warn('[useLeads] legacy VietMy unscoped failed — dùng orgId==', orgId, e)
+    if (scopedSnap) return scopedSnap
+    throw e
+  }
+}
+
+function applyRoleClientFilter(
+  rows: Lead[],
+  profile: VietMyUserProfile,
+  hoDQueryLabels: string[],
+  canReadGlobal: boolean,
+  orgId?: string,
+): Lead[] {
+  const scoped = orgId ? rows.filter((l) => leadBelongsToOrg(l, orgId)) : rows
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
   if (isTeamLeadRole(profile.role)) {
     const team = new Set(profile.managedCounselorIds ?? [])
     if (team.size) {
-      return rows.filter((l) => {
+      return scoped.filter((l) => {
         const u = l.assignedTo ?? l.assignedCounselorId
         return Boolean(u && team.has(u))
       })
     }
     if (labelSet.size) {
-      return rows.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
+      return scoped.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
     }
     return []
   }
   if (isFieldStaffRole(profile.role) && profile.id) {
-    return rows.filter((l) => {
+    return scoped.filter((l) => {
       const u = l.assignedTo ?? l.assignedCounselorId
       return u === profile.id
     })
   }
-  return rows
+  // Admin không còn module hồ sơ toàn trường → chỉ hồ sơ gán cho mình
+  if (isAdminLikeRole(profile.role) && !isSuperAdminRole(profile.role) && !canReadGlobal && profile.id) {
+    return scoped.filter((l) => {
+      const u = l.assignedTo ?? l.assignedCounselorId
+      return u === profile.id
+    })
+  }
+  return scoped
 }
 
 /** So khớp ô tìm (chuỗi đã lowercase) với các trường lead — dùng chung Pipeline & Quản lý hồ sơ. */
@@ -699,23 +809,28 @@ export async function fetchLeadsInScopeForRescore(
   profile: VietMyUserProfile,
   hoDQueryLabels: string[],
   filters: LeadListServerFilters | undefined,
-  opts?: { maxLeads?: number; chunkSize?: number },
+  opts?: { maxLeads?: number; chunkSize?: number; orgId?: string; canReadGlobal?: boolean },
 ): Promise<{ leads: Lead[]; truncated: boolean }> {
   const maxLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxLeads ?? LEADS_UI_FULL_SCOPE_MAX))
   const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
-  const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, filters)
+  const canReadGlobal = Boolean(opts?.canReadGlobal)
   let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
   const acc: Lead[] = []
   let hitCap = false
 
   while (acc.length < maxLeads) {
-    let qy: Query
-    if (lastSnap === null) {
-      qy = query(baseQy, orderBy('updatedAt', 'desc'), limit(chunkSize))
-    } else {
-      qy = query(baseQy, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize))
-    }
-    const snap: QuerySnapshot<DocumentData> = await getDocs(qy)
+    const snap: QuerySnapshot<DocumentData> = await getDocsListWithOrgFallback(
+      firestore,
+      profile,
+      hoDQueryLabels,
+      filters,
+      opts?.orgId,
+      canReadGlobal,
+      (base) =>
+        lastSnap === null
+          ? query(base, orderBy('updatedAt', 'desc'), limit(chunkSize))
+          : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize)),
+    )
     if (!snap.docs.length) break
     for (const d of snap.docs) {
       const row = mapDoc(d.id, d.data() as Record<string, unknown>)
@@ -729,13 +844,15 @@ export async function fetchLeadsInScopeForRescore(
     }
   }
 
-  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels)
+  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal, opts?.orgId)
   leads.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
   return { leads, truncated: hitCap }
 }
 
 export function useLeads(opts?: UseLeadsOptions) {
-  const { profile } = useAuth()
+  const { profile, can } = useAuth()
+  const canReadGlobal = Boolean(profile && (can('leads:read:global') || profile.role === 'super_admin'))
+  const { effectiveOrgId } = useOrg()
   const { byKind } = useMasterData()
   const serverFilters = opts?.serverFilters
   const searchText = (opts?.searchText ?? '').trim().toLowerCase()
@@ -765,7 +882,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       .join('|')
   }, [directoryLabels])
   const filterKey = useMemo(() => {
-    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}`
+    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}`
     if (dataMode === 'fullScope') return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}`
     return b
   }, [
@@ -777,6 +894,8 @@ export function useLeads(opts?: UseLeadsOptions) {
     directoryLabelsKey,
     fullScopeChunkSize,
     maxFullScopeLeads,
+    canReadGlobal,
+    effectiveOrgId,
   ])
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -809,24 +928,27 @@ export function useLeads(opts?: UseLeadsOptions) {
     if (!firestore || !profile) return
     try {
       const distFilters = serverFiltersOmitField(serverFilters, 'source')
-      const qy = query(
-        buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters),
-        orderBy('updatedAt', 'desc'),
-        limit(SOURCE_CATALOG_BATCH),
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        distFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
       )
-      const snap = await getDocs(qy)
       const rows: Lead[] = []
       snap.forEach((d) => {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) rows.push(row)
       })
-      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels)
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
       setScopeSourceOptions(collectDistinctSources(filtered))
     } catch (e) {
       console.error(e)
       setScopeSourceOptions([])
     }
-  }, [profile, hoDQueryLabels, serverFilters])
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
 
   const configured = useMemo(() => isFirebaseConfigured(), [])
   const pageEndSnaps = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([])
@@ -897,7 +1019,15 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const fetchTotalOnly = async (): Promise<number | null> => {
       try {
-        const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+        const base = buildListDataQuery(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          'strict',
+        )
         const total = (await getCountFromServer(base)).data().count
         if (cancelled) return null
         setTotalLeadCount(total)
@@ -920,7 +1050,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         const distFilters = serverFiltersForTagDistribution(serverFilters)
         const tagEntries = await Promise.all(
           TAG_KEYS.map(async (t) => {
-            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t)
+            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t, effectiveOrgId, canReadGlobal)
             const n = (await getCountFromServer(qTag)).data().count
             return [t, n] as const
           }),
@@ -941,19 +1071,22 @@ export function useLeads(opts?: UseLeadsOptions) {
     const fetchSourceCatalog = async () => {
       try {
         const distFilters = serverFiltersOmitField(serverFilters, 'source')
-        const qy = query(
-          buildListDataQuery(firestore, profile, hoDQueryLabels, distFilters),
-          orderBy('updatedAt', 'desc'),
-          limit(SOURCE_CATALOG_BATCH),
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          distFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
         )
-        const snap = await getDocs(qy)
         if (cancelled) return
         const rows: Lead[] = []
         snap.forEach((d) => {
           const row = mapDoc(d.id, d.data() as Record<string, unknown>)
           if (row) rows.push(row)
         })
-        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels)
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
         setScopeSourceOptions(collectDistinctSources(filtered))
       } catch (e) {
         console.error(e)
@@ -972,7 +1105,6 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadFirestorePage = async (page: number, total: number | null) => {
-      const base = () => buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
       const snaps = pageEndSnaps.current
       const pg = Math.max(1, Math.floor(page))
 
@@ -980,11 +1112,18 @@ export function useLeads(opts?: UseLeadsOptions) {
       const canSingleStep = pg === 1 || (prev !== undefined && prev !== null)
 
       const fetchOnePage = async (after: QueryDocumentSnapshot<DocumentData> | null) => {
-        const qy =
-          after === null
-            ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-            : query(base(), orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE))
-        const snap = await getDocs(qy)
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) =>
+            after === null
+              ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+              : query(base, orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE)),
+        )
         if (cancelled) return
         const mapped: Lead[] = []
         snap.forEach((d) => {
@@ -992,7 +1131,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) mapped.push(row)
         })
         mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels))
+        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
         snaps[pg - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
       }
 
@@ -1000,8 +1139,15 @@ export function useLeads(opts?: UseLeadsOptions) {
         await fetchOnePage(pg <= 1 ? null : (prev as QueryDocumentSnapshot<DocumentData>))
       } else if (pg * LEADS_PAGE_SIZE <= MAX_LIST_BULK_FETCH) {
         const bulkLimit = pg * LEADS_PAGE_SIZE
-        const qy = query(base(), orderBy('updatedAt', 'desc'), limit(bulkLimit))
-        const snap = await getDocs(qy)
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) => query(base, orderBy('updatedAt', 'desc'), limit(bulkLimit)),
+        )
         if (cancelled) return
         const docs = snap.docs
         for (let p = 1; p <= pg; p++) {
@@ -1018,16 +1164,23 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) pageRows.push(row)
         })
         pageRows.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels))
+        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
       } else {
         for (let p = 1; p < pg; p++) {
           if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
           const prevEnd = p === 1 ? null : snaps[p - 2] ?? null
-          const qy =
-            prevEnd === null
-              ? query(base(), orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-              : query(base(), orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE))
-          const snap = await getDocs(qy)
+          const snap = await getDocsListWithOrgFallback(
+            firestore,
+            profile,
+            hoDQueryLabels,
+            serverFilters,
+            effectiveOrgId,
+            canReadGlobal,
+            (base) =>
+              prevEnd === null
+                ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+                : query(base, orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE)),
+          )
           if (cancelled) return
           snaps[p - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
           if (!snap.docs.length) break
@@ -1041,16 +1194,22 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const rebuildSearchBucket = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
-      const qy = query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN))
-      const snap = await getDocs(qy)
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        serverFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN)),
+      )
       if (cancelled) return
       let mapped: Lead[] = []
       snap.forEach((d) => {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) mapped.push(row)
       })
-      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels)
+      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
       setSearchScanTruncated(snap.docs.length >= MAX_LEAD_SEARCH_SCAN)
       if (searchText) {
         mapped = mapped.filter((l) => leadMatchesClientSearch(l, searchText, directoryLabels))
@@ -1077,9 +1236,15 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const loadBatch = async () => {
-      const base = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
-      const qy = query(base, orderBy('updatedAt', 'desc'), limit(batchLimit))
-      const snap = await getDocs(qy)
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        serverFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(batchLimit)),
+      )
       if (cancelled) return
       const mapped: Lead[] = []
       snap.forEach((d) => {
@@ -1087,23 +1252,27 @@ export function useLeads(opts?: UseLeadsOptions) {
         if (row) mapped.push(row)
       })
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels))
+      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
       setTotalPages(1)
     }
 
     const loadFullScope = async () => {
-      const baseQy = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
       let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
       const acc: Lead[] = []
       let hitCap = false
       while (acc.length < maxFullScopeLeads) {
-        let qy: Query
-        if (lastSnap === null) {
-          qy = query(baseQy, orderBy('updatedAt', 'desc'), limit(fullScopeChunkSize))
-        } else {
-          qy = query(baseQy, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize))
-        }
-        const snap: QuerySnapshot<DocumentData> = await getDocs(qy)
+        const snap: QuerySnapshot<DocumentData> = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          serverFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) =>
+            lastSnap === null
+              ? query(base, orderBy('updatedAt', 'desc'), limit(fullScopeChunkSize))
+              : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize)),
+        )
         if (cancelled) return
         if (!snap.docs.length) break
         for (const d of snap.docs) {
@@ -1118,7 +1287,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         }
       }
       if (cancelled) return
-      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels)
+      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       setScopeFetchTruncated(hitCap)
       setSearchScanTruncated(false)
@@ -1241,13 +1410,23 @@ export function useLeads(opts?: UseLeadsOptions) {
     includeScopeTagCounts,
     includeScopeSourceOptions,
     manualRefreshKey,
+    effectiveOrgId,
+    canReadGlobal,
   ])
 
   const refreshTotalLeadCount = useCallback(async () => {
     const firestore = getFirestoreDb()
     if (!firestore || !profile) return
     try {
-      const cq = buildListDataQuery(firestore, profile, hoDQueryLabels, serverFilters)
+      const cq = buildListDataQuery(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        serverFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        'strict',
+      )
       const agg = await getCountFromServer(cq)
       setTotalLeadCount(agg.data().count)
       setTotalLeadCountError(null)
@@ -1257,7 +1436,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       setTotalLeadCount(null)
       setTotalLeadCountError(e instanceof Error ? e.message : 'Không đếm được tổng hồ sơ')
     }
-  }, [profile, hoDQueryLabels, serverFilters])
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
 
   const applyLocalLeadPatch = useCallback((id: string, patch: Partial<Lead>) => {
     setLeads((rows) => {

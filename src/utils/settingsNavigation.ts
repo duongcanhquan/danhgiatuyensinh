@@ -14,8 +14,13 @@ export type SettingsSubTabId =
   | 'kpi'
   | 'staff'
   | 'permissions'
+  | 'hub'
   | 'omicall'
+  | 'webhooks'
+  | 'invite_docs'
+  | 'receipts'
   | 'public_registration'
+  | 'comms'
 
 export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = ['data', 'rules', 'people', 'connect']
 
@@ -40,15 +45,20 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   kpi: 'Quy tắc KPI',
   staff: 'Quản lý nhân sự',
   permissions: 'Phân quyền',
+  hub: 'Hub kết nối',
   omicall: 'Gọi điện',
+  webhooks: 'Webhook n8n',
+  invite_docs: 'Giấy mời & mẫu',
+  receipts: 'Chứng từ & lưu trữ',
   public_registration: 'Cổng đăng ký SV',
+  comms: 'Email & tin nhắn',
 }
 
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
   data: ['intake', 'master', 'lead_profile'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
   people: ['kpi', 'staff', 'permissions'],
-  connect: ['consulting', 'knowledge', 'llm', 'omicall', 'public_registration'],
+  connect: ['hub', 'comms', 'consulting', 'knowledge', 'llm', 'omicall', 'webhooks', 'invite_docs', 'receipts', 'public_registration'],
 }
 
 const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: SettingsSubTabId }>> = {
@@ -71,9 +81,21 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   permissions: { main: 'people', sub: 'permissions' },
   kpi_permissions: { main: 'people', sub: 'kpi' },
   knowledge_advisory: { main: 'connect', sub: 'consulting' },
-  system: { main: 'connect', sub: 'omicall' },
+  system: { main: 'connect', sub: 'hub' },
+  hub: { main: 'connect', sub: 'hub' },
+  integrations: { main: 'connect', sub: 'hub' },
   omicall: { main: 'connect', sub: 'omicall' },
+  webhooks: { main: 'connect', sub: 'webhooks' },
+  n8n: { main: 'connect', sub: 'webhooks' },
+  invite_docs: { main: 'connect', sub: 'invite_docs' },
+  giay_moi: { main: 'connect', sub: 'invite_docs' },
+  receipts: { main: 'connect', sub: 'receipts' },
+  chung_tu: { main: 'connect', sub: 'receipts' },
   public_registration: { main: 'connect', sub: 'public_registration' },
+  comms: { main: 'connect', sub: 'comms' },
+  email: { main: 'connect', sub: 'comms' },
+  sms: { main: 'connect', sub: 'comms' },
+  messaging: { main: 'connect', sub: 'comms' },
 }
 
 export type SettingsAccessContext = {
@@ -81,6 +103,7 @@ export type SettingsAccessContext = {
   canMaster: boolean
   canScoringRules: boolean
   canScoringProfilesTeam: boolean
+  canScoringProfilesOwn: boolean
   canPlaybooks: boolean
   canAiEngine: boolean
   canOmicall: boolean
@@ -97,7 +120,7 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
     case 'lead_profile':
       return ctx.canMaster
     case 'scoring_profiles':
-      return ctx.canScoringRules || ctx.canScoringProfilesTeam
+      return ctx.canScoringRules || ctx.canScoringProfilesTeam || ctx.canScoringProfilesOwn
     case 'scoring':
     case 'classification':
     case 'rule_templates':
@@ -110,6 +133,12 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
       return ctx.canAiEngine
     case 'omicall':
       return ctx.canOmicall
+    case 'hub':
+    case 'webhooks':
+    case 'invite_docs':
+    case 'receipts':
+    case 'comms':
+      return ctx.canMaster || ctx.canOmicall
     case 'public_registration':
       return ctx.canMaster
     case 'staff':

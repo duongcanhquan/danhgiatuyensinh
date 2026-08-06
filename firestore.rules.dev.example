@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    // DEV ONLY — mọi user đã đăng nhập đọc/ghi toàn DB.
+    // KHÔNG deploy cho production multi-school.
+    // Production: firestore.rules (+ Auth custom claims).
+    // =====================================================================
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

@@ -7,29 +7,110 @@ import {
   type CounselorContact,
 } from './accountantN8nPayload'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
-const DEFAULT_WEBHOOK = 'https://apchn-host.lapage.vn/webhook/giaymoits'
+import { pickOrgWebhook } from './n8nWebhooksConfig'
+import {
+  findInviteTemplateFileId,
+  getInviteDocumentsConfigCache,
+  resolveInviteDocumentGroups,
+} from './inviteDocumentsConfig'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { dispatchOutboundEvent } from '../integrations/dispatchOutbound'
+import type { OutboundEventId } from '../integrations/outboundEvents'
+import { triggerCommsAutomation } from './commsAutomationDispatch'
+import type { CommsLeadContext } from './commsAutomationConfig'
+
 const DEFAULT_WEBHOOK_CTSV = 'https://apchn-host.lapage.vn/webhook/testctsv'
 const DEFAULT_WEBHOOK_DAILY = 'https://apchn-host.lapage.vn/webhook/baocao-ngay'
 const DEFAULT_WEBHOOK_MONTHLY = 'https://apchn-host.lapage.vn/webhook/baocao-thang'
 
-function webhookGiayMoi(): string {
-  const u = (import.meta.env.VITE_N8N_WEBHOOK as string | undefined)?.trim()
-  return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK
+function resolveLeadOrgId(lead?: { orgId?: string | null }): string {
+  return String(lead?.orgId ?? '').trim() || DEFAULT_ORG_ID
 }
 
-function webhookCtsv(): string {
-  const u = (import.meta.env.VITE_N8N_WEBHOOK_CTSV as string | undefined)?.trim()
-  return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK_CTSV
+function leadToCommsContext(lead: Lead, extras?: { assigneeName?: string; schoolName?: string }): CommsLeadContext {
+  const customerId = String(lead.customerId ?? '').trim()
+  const studentEmail = String(lead.studentEmail ?? '').trim()
+  const followUp = lead.nextFollowUpDate
+  let nextFollowUpDate: string | undefined
+  if (followUp && typeof followUp === 'object' && 'toDate' in followUp && typeof followUp.toDate === 'function') {
+    try {
+      nextFollowUpDate = followUp.toDate().toISOString().slice(0, 10)
+    } catch {
+      nextFollowUpDate = undefined
+    }
+  }
+  return {
+    id: lead.id,
+    fullName: lead.fullName,
+    phone: lead.phone,
+    email: studentEmail || (customerId.includes('@') ? customerId : undefined),
+    parentPhone: lead.parentPhone,
+    majorInterest: lead.majorInterest,
+    province: lead.province,
+    highSchool: lead.highSchool,
+    assigneeName: extras?.assigneeName,
+    schoolName: extras?.schoolName,
+    source: lead.source,
+    pipelineStatus: lead.pipelineStatus,
+    nextFollowUpDate,
+    doNotContact: Boolean((lead as { doNotContact?: boolean }).doNotContact),
+    commsOptIn: Boolean((lead as { commsOptIn?: boolean }).commsOptIn),
+  }
 }
 
-function webhookDaily(): string {
-  const u = (import.meta.env.VITE_N8N_WEBHOOK_DAILY as string | undefined)?.trim()
-  return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK_DAILY
+/** Fan-out Hub + luật email/tin nhắn — không làm fail luồng n8n chính. */
+function fanOutHubQuietly(
+  orgId: string,
+  event: OutboundEventId,
+  payload: Record<string, unknown>,
+  lead?: Lead,
+): void {
+  void dispatchOutboundEvent({ orgId, event, payload }).catch((e) => {
+    console.warn('[integrationHub dispatch]', event, e)
+  })
+  if (lead) {
+    triggerCommsAutomation(orgId, event, leadToCommsContext(lead))
+  } else if (payload && typeof payload === 'object') {
+    const data = payload as Record<string, unknown>
+    triggerCommsAutomation(orgId, event, {
+      id: data.leadId != null ? String(data.leadId) : undefined,
+      fullName: data.fullName != null ? String(data.fullName) : undefined,
+      phone: data.phone != null ? String(data.phone) : undefined,
+      email: data.email != null ? String(data.email) : undefined,
+    })
+  }
 }
 
-function webhookMonthly(): string {
-  const u = (import.meta.env.VITE_N8N_WEBHOOK_MONTHLY as string | undefined)?.trim()
-  return u && u.startsWith('http') ? u : DEFAULT_WEBHOOK_MONTHLY
+/** Chỉ VietMy được fallback URL cứng / env — trường khác phải cấu hình trên Cài đặt. */
+function legacyWebhookFallback(orgId: string, envKey: string, hardcoded: string): string {
+  if (orgId !== DEFAULT_ORG_ID) return ''
+  const u = (import.meta.env[envKey] as string | undefined)?.trim()
+  if (u && u.startsWith('http')) return u
+  return hardcoded.startsWith('http') ? hardcoded : ''
+}
+
+function webhookGiayMoi(orgId: string): string {
+  const fromOrg = pickOrgWebhook('giayMoi', orgId)
+  if (fromOrg) return fromOrg
+  return legacyWebhookFallback(orgId, 'VITE_N8N_WEBHOOK', '')
+}
+
+function webhookCtsv(orgId: string): string {
+  const fromOrg = pickOrgWebhook('ctsv', orgId)
+  if (fromOrg) return fromOrg
+  return legacyWebhookFallback(orgId, 'VITE_N8N_WEBHOOK_CTSV', DEFAULT_WEBHOOK_CTSV)
+}
+
+function webhookDaily(orgId: string): string {
+  const fromOrg = pickOrgWebhook('daily', orgId)
+  if (fromOrg) return fromOrg
+  return legacyWebhookFallback(orgId, 'VITE_N8N_WEBHOOK_DAILY', DEFAULT_WEBHOOK_DAILY)
+}
+
+function webhookMonthly(orgId: string): string {
+  const fromOrg = pickOrgWebhook('monthly', orgId)
+  if (fromOrg) return fromOrg
+  return legacyWebhookFallback(orgId, 'VITE_N8N_WEBHOOK_MONTHLY', DEFAULT_WEBHOOK_MONTHLY)
 }
 
 export function extractDriveFolderId(url: string): string {
@@ -156,12 +237,18 @@ export async function triggerProfileFinanceN8n(opts: {
     },
     fullData,
   )
-  const res = await postJson(webhookCtsv(), pl)
+  const orgId = resolveLeadOrgId(lead)
+  const webhook = webhookCtsv(orgId)
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook CTSV — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, pl)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     console.warn('n8n testctsv:', res.status, text)
     throw new Error(text || `n8n báo thu trả về ${res.status}`)
   }
+  fanOutHubQuietly(orgId, 'finance.submitted', pl as Record<string, unknown>, lead)
 }
 
 /** Kế toán duyệt / từ chối một đợt — `accountant_decision` (webhook n8n / Chat). */
@@ -173,11 +260,17 @@ export async function triggerAccountantDecisionN8n(opts: AccountantDecisionN8nCo
     scholarship2Label,
   })
   const pl = buildAccountantDecisionWebhookBody(opts, fullData)
-  const res = await postJson(webhookCtsv(), pl)
+  const orgId = resolveLeadOrgId(lead)
+  const webhook = webhookCtsv(orgId)
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook CTSV — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, pl)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n kế toán trả về ${res.status}`)
   }
+  fanOutHubQuietly(orgId, 'finance.decision', pl as Record<string, unknown>, lead)
 }
 
 export async function triggerAccountantFullNeN8n(opts: {
@@ -206,27 +299,45 @@ export async function triggerAccountantFullNeN8n(opts: {
     },
     fullData,
   )
-  const res = await postJson(webhookCtsv(), pl)
+  const orgId = resolveLeadOrgId(opts.lead)
+  const webhook = webhookCtsv(orgId)
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook CTSV — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, pl)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n Full NE trả về ${res.status}`)
   }
+  fanOutHubQuietly(orgId, 'finance.full_ne', pl as Record<string, unknown>, opts.lead)
 }
 
 export async function triggerDailyReportN8n(payload: Record<string, unknown>): Promise<void> {
-  const res = await postJson(webhookDaily(), payload)
+  const orgId = String(payload.orgId ?? '').trim() || DEFAULT_ORG_ID
+  const webhook = webhookDaily(orgId)
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook báo cáo ngày — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, payload)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `Báo cáo ngày — n8n trả về ${res.status}`)
   }
+  fanOutHubQuietly(orgId, 'report.daily', payload)
 }
 
 export async function triggerMonthlyReportN8n(payload: Record<string, unknown>): Promise<void> {
-  const res = await postJson(webhookMonthly(), payload)
+  const orgId = String(payload.orgId ?? '').trim() || DEFAULT_ORG_ID
+  const webhook = webhookMonthly(orgId)
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook báo cáo tháng — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, payload)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `Báo cáo tháng — n8n trả về ${res.status}`)
   }
+  fanOutHubQuietly(orgId, 'report.monthly', payload)
 }
 
 export async function triggerInvitationN8n(opts: {
@@ -238,6 +349,8 @@ export async function triggerInvitationN8n(opts: {
 }): Promise<{ folderUrl?: string }> {
   const { lead, docType, scholarship, scholarship2Label, inviteFolderUrl } = opts
   const folderId = inviteFolderUrl ? extractDriveFolderId(inviteFolderUrl) : ''
+  const inviteCfg = getInviteDocumentsConfigCache().config
+  const templateFileId = findInviteTemplateFileId(docType, inviteCfg)
   const scholarshipName = scholarship?.label ?? ''
   const scholarshipValue = scholarship?.amountVnd ? String(scholarship.amountVnd) : ''
 
@@ -245,6 +358,9 @@ export async function triggerInvitationN8n(opts: {
     action: 'create_document',
     docType,
     folderId,
+    driveRootFolderId: inviteCfg?.driveRootFolderId ?? '',
+    autoCreateFolder: inviteCfg?.autoCreateFolder !== false,
+    templateFileId,
     studentData: {
       id: lead.customerId || lead.id,
       name: lead.fullName,
@@ -266,11 +382,16 @@ export async function triggerInvitationN8n(opts: {
     },
   }
 
-  const res = await postJson(webhookGiayMoi(), payload)
+  const webhook = webhookGiayMoi(resolveLeadOrgId(lead))
+  if (!webhook) {
+    throw new Error('Chưa cấu hình webhook giấy mời — vào Cài đặt → Tích hợp → Webhook n8n.')
+  }
+  const res = await postJson(webhook, payload)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `n8n trả về ${res.status}`)
   }
+  fanOutHubQuietly(resolveLeadOrgId(lead), 'document.requested', payload as Record<string, unknown>, lead)
   try {
     const json = (await res.json()) as { folderUrl?: string }
     if (json?.folderUrl) return { folderUrl: json.folderUrl }
@@ -285,37 +406,9 @@ export const INVITE_DOCUMENT_GROUPS: {
   title: string
   tone: string
   options: { docType: InviteDocumentType; label: string }[]
-}[] = [
-  {
-    title: '1. Thông báo Lệ phí xét tuyển',
-    tone: 'text-blue-700',
-    options: [
-      { docType: 'LE_PHI_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'LE_PHI_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-  {
-    title: '2. Thông báo Trúng tuyển (9+)',
-    tone: 'text-emerald-700',
-    options: [
-      { docType: 'TRUNG_TUYEN_9_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'TRUNG_TUYEN_9_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-  {
-    title: '3. Thông báo Trúng tuyển (CĐ)',
-    tone: 'text-amber-800',
-    options: [
-      { docType: 'TRUNG_TUYEN_CD_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'TRUNG_TUYEN_CD_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-  {
-    title: '4. Thư mời nhập học (CĐCQ)',
-    tone: 'text-rose-700',
-    options: [
-      { docType: 'THU_MOI_CD_CO_DAU', label: 'Có dấu đỏ' },
-      { docType: 'THU_MOI_CD_KHONG_DAU', label: 'Không dấu' },
-    ],
-  },
-]
+}[] = resolveInviteDocumentGroups()
+
+/** Nhóm giấy mời theo cấu hình trường (fallback mặc định nếu chưa nạp). */
+export function getInviteDocumentGroups() {
+  return resolveInviteDocumentGroups()
+}

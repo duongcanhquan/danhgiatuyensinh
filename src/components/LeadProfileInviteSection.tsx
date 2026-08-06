@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Loader2 } from 'lucide-react'
 import type { InviteDocumentType, Lead, ScholarshipRecord } from '../types'
-import { INVITE_DOCUMENT_GROUPS } from '../utils/n8nIntegration'
+import { getInviteDocumentGroups } from '../utils/n8nIntegration'
+import { loadInviteDocumentsConfig, resolveInviteDocumentGroups } from '../utils/inviteDocumentsConfig'
 import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
+import { useOrg } from '../hooks/useOrg'
+import { getFirestoreDb } from '../services/firebase'
 
 export function LeadProfileInviteSection({
   lead,
@@ -19,9 +22,27 @@ export function LeadProfileInviteSection({
   busy: boolean
   onGenerate: (docType: InviteDocumentType, scholarshipId: string) => Promise<void>
 }) {
+  const { effectiveOrgId } = useOrg()
   const [scholarshipId, setScholarshipId] = useState(lead.scholarship1Id ?? '')
+  const [inviteGroups, setInviteGroups] = useState(() => getInviteDocumentGroups())
 
   const scholarshipOptions = useMemo(() => scholarships, [scholarships])
+
+  useEffect(() => {
+    const db = getFirestoreDb()
+    if (!db) {
+      setInviteGroups(getInviteDocumentGroups())
+      return
+    }
+    let cancelled = false
+    void loadInviteDocumentsConfig(db, lead.orgId?.trim() || effectiveOrgId).then((cfg) => {
+      if (cancelled) return
+      setInviteGroups(resolveInviteDocumentGroups(cfg))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [lead.orgId, effectiveOrgId])
 
   return (
     <div className="space-y-4 text-sm text-slate-800">
@@ -42,7 +63,8 @@ export function LeadProfileInviteSection({
         </div>
       ) : (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-          Chưa có link thư mục — khi tạo giấy tờ lần đầu, n8n / Drive có thể trả link (lưu vào hồ sơ).
+          Chưa có link thư mục — khi tạo giấy tờ lần đầu, n8n / Drive có thể trả link (lưu vào hồ sơ). Cấu hình thư mục
+          gốc tại <strong>Cài đặt → Giấy mời &amp; mẫu</strong>.
         </p>
       )}
 
@@ -68,7 +90,7 @@ export function LeadProfileInviteSection({
 
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Chọn loại giấy tờ cần tạo</h4>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {INVITE_DOCUMENT_GROUPS.map((group) => (
+        {inviteGroups.map((group) => (
           <div key={group.title} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <p className={`mb-2 text-sm font-bold ${group.tone}`}>{group.title}</p>
             <div className="grid gap-2">

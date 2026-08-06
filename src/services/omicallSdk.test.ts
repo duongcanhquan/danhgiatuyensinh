@@ -1,5 +1,75 @@
 import { describe, expect, it, vi } from 'vitest'
-import { hangUpOmicallCall, tryEndOmicallCallInstance, type OmicallSdkGlobal } from './omicallSdk'
+import {
+  hangUpOmicallCall,
+  suppressOmicallVendorToasts,
+  tryEndOmicallCallInstance,
+  type OmicallSdkGlobal,
+} from './omicallSdk'
+
+function makeToastSuppressHost() {
+  const nodes = new Map<string, { id: string; tagName: string; textContent: string }>()
+  const doc = {
+    getElementById: (id: string) => nodes.get(id) ?? null,
+    querySelectorAll: (sel: string) => {
+      if (sel !== '#vm-omicall-toast-suppress') return []
+      const el = nodes.get('vm-omicall-toast-suppress')
+      return el ? [el] : []
+    },
+    createElement: (tag: string) => ({ id: '', tagName: tag.toUpperCase(), textContent: '' }),
+    head: {
+      appendChild: (el: { id: string; tagName: string; textContent: string }) => {
+        nodes.set(el.id, el)
+      },
+    },
+  }
+  const win: {
+    OMIToastify?: unknown
+    OMICallSDK?: { showToast?: (...args: unknown[]) => void }
+  } = {
+    OMICallSDK: { showToast: vi.fn() },
+  }
+  return { document: doc as unknown as Document, window: win as unknown as Window, nodes, win }
+}
+
+describe('suppressOmicallVendorToasts', () => {
+  it('injects CSS that hides OMICall toastify nodes', () => {
+    const host = makeToastSuppressHost()
+    suppressOmicallVendorToasts(host)
+    const style = host.nodes.get('vm-omicall-toast-suppress')
+    expect(style?.tagName).toBe('STYLE')
+    expect(style?.textContent ?? '').toMatch(/\.omi-toastify/)
+    expect(style?.textContent ?? '').toMatch(/display:\s*none/i)
+  })
+
+  it('no-ops OMIToastify factory so SDK cannot mount error toasts', () => {
+    const host = makeToastSuppressHost()
+    const originalShow = vi.fn()
+    host.win.OMIToastify = () => ({ showToast: originalShow })
+
+    suppressOmicallVendorToasts(host)
+
+    const factory = host.win.OMIToastify as (opts?: unknown) => { showToast: () => unknown }
+    const toast = factory({ text: 'Có lỗi xảy ra', type: 'error' })
+    toast.showToast()
+    expect(originalShow).not.toHaveBeenCalled()
+  })
+
+  it('no-ops OMICallSDK.showToast used by vendor helpers', () => {
+    const host = makeToastSuppressHost()
+    const showToast = host.win.OMICallSDK!.showToast as ReturnType<typeof vi.fn>
+    suppressOmicallVendorToasts(host)
+    host.win.OMICallSDK!.showToast!('Có lỗi xảy ra')
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it('is idempotent for the style tag', () => {
+    const host = makeToastSuppressHost()
+    suppressOmicallVendorToasts(host)
+    suppressOmicallVendorToasts(host)
+    expect(host.document.querySelectorAll('#vm-omicall-toast-suppress')).toHaveLength(1)
+  })
+})
+
 
 describe('tryEndOmicallCallInstance', () => {
   it('calls call.end() on v3 instance', () => {

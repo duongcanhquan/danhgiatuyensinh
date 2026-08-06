@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { AuthSessionExitBar } from '../../components/AuthSessionControls'
 import { GraduationCap, Loader2, Send } from 'lucide-react'
@@ -15,11 +15,14 @@ import {
   PUBLIC_REG_INPUT_CLS,
   validatePublicRegistrationForm,
 } from '../../utils/publicRegistrationForm'
+import { normalizeOrgSlug } from '../../tenancy/orgConstants'
 
 const ACADEMIC_OPTIONS = ['Yếu', 'Trung Bình', 'Khá', 'Giỏi'] as const
 
 export function StudentRegistrationView() {
   const navigate = useNavigate()
+  const { orgSlug: orgSlugParam } = useParams<{ orgSlug?: string }>()
+  const orgSlug = useMemo(() => normalizeOrgSlug(orgSlugParam), [orgSlugParam])
   const [meta, setMeta] = useState<PublicRegistrationMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -33,7 +36,7 @@ export function StudentRegistrationView() {
       return
     }
     let cancelled = false
-    void fetchPublicRegistrationMeta()
+    void fetchPublicRegistrationMeta(orgSlug)
       .then((m) => {
         if (cancelled) return
         setMeta(m)
@@ -51,7 +54,7 @@ export function StudentRegistrationView() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [orgSlug])
 
   const patch = useCallback((partial: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...partial }))
@@ -69,6 +72,7 @@ export function StudentRegistrationView() {
     try {
       const result = await submitPublicRegistration({
         ...form,
+        orgSlug,
         fullName: form.fullName.trim(),
         phone: form.phone.trim(),
         studentEmail: form.studentEmail.trim(),
@@ -114,6 +118,7 @@ export function StudentRegistrationView() {
               <h1 className="truncate text-lg font-extrabold text-slate-900 sm:text-xl">
                 {meta?.portalTitle ?? 'Đăng ký tuyển sinh'}
               </h1>
+              <p className="mt-0.5 text-xs text-slate-500">Cổng trường · {orgSlug}</p>
             </div>
           </div>
         </div>

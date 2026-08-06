@@ -32,13 +32,15 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, type LeadListServerFilters, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
+import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, type LeadListServerFilters, LEADS_PAGE_SIZE, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { canCreateLead, canWriteLead } from '../auth/leadAccess'
@@ -46,6 +48,7 @@ import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleU
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { useAutoPersistLeadScores } from '../hooks/useAutoPersistLeadScores'
+import { leadNeedsAutoScorePersist } from '../hooks/leadNeedsAutoScorePersist'
 import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
@@ -79,6 +82,13 @@ import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
+import {
+  formatLeadLastCallLine,
+  leadMatchesCallQueueFilter,
+  type CallQueueFilter,
+} from '../utils/leadCallSignals'
+import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
+import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
@@ -98,7 +108,7 @@ import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft, mergeCo
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
-import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
+import { BulkLeadActionBar, BULK_PRIORITY_TAG_OPTIONS } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useScoringProfileSelection } from '../hooks/useScoringProfiles'
 import { commitAuditLog } from '../services/auditLog'
@@ -148,10 +158,6 @@ const EVALUATION_TAGS = [
 /** Tooltip cột Điểm thông tin — đặt chuột lên nút ? hoặc gauge để xem chi tiết. */
 const ML_WIN_COLUMN_HINT =
   'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
-
-function isElevatedForAdminFilters(role: string | undefined): boolean {
-  return role === 'admin' || role === 'super_admin' || role === 'head_of_department' || role === 'head_of_profession'
-}
 
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
   const uid = l.assignedTo ?? l.assignedCounselorId
@@ -212,6 +218,7 @@ export function LeadManagement() {
     catalogs: scoringCatalogDefs,
   } = useMasterData()
   const { profile, can, canRunLlmAnalysis } = useAuth()
+  const { currentOrgLabel, effectiveOrgId, isPlatformSuperAdmin, setActiveOrgId } = useOrg()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { users: directoryUsers, fieldStaff: fieldStaffUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
@@ -236,11 +243,12 @@ export function LeadManagement() {
   >('none')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  const showAdminGlobalFilters = isElevatedForAdminFilters(profile?.role)
+  const showAdminGlobalFilters = can('leads:read:global')
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
 
   const [tagFilter, setTagFilter] = useState<string>('ALL')
+  const [callQueueFilter, setCallQueueFilter] = useState<CallQueueFilter>('all')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -261,6 +269,8 @@ export function LeadManagement() {
    */
   const { profileScoringLive } = useScoringProfileSelection()
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
+  /** Lọc ca gọi cần quét phạm vi rộng (thiếu lastCallAt không query server được). */
+  const callQueueNeedsScope = callQueueFilter !== 'all'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -331,8 +341,8 @@ export function LeadManagement() {
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: tagClientEval ? 'fullScope' : 'paged',
-    maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    dataMode: tagClientEval || callQueueNeedsScope ? 'fullScope' : 'paged',
+    maxFullScopeLeads: tagClientEval || callQueueNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
   })
@@ -416,7 +426,7 @@ export function LeadManagement() {
 
   const reassignPickList = useMemo(() => {
     const base = fieldStaffUsers
-    const elevated = isAdminLikeRole(profile?.role)
+    const elevated = can('leads:read:global')
     const teamLead = isTeamLeadRole(profile?.role)
 
     if (teamLead && profile) {
@@ -444,7 +454,7 @@ export function LeadManagement() {
     }
 
     return base
-  }, [fieldStaffUsers, directoryUsers, profile])
+  }, [fieldStaffUsers, directoryUsers, profile, can])
 
   const schoolOptions = useMemo(() => {
     if (showAdminGlobalFilters && highSchoolLabels.length) {
@@ -462,9 +472,10 @@ export function LeadManagement() {
   /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
   const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
+  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm' | 'priorityTag'>(null)
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
+  const [bulkPriorityTag, setBulkPriorityTag] = useState<PriorityTag>('WARM')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [rescoreBusy, setRescoreBusy] = useState(false)
   const [rescoreMsg, setRescoreMsg] = useState<string | null>(null)
@@ -532,7 +543,7 @@ export function LeadManagement() {
     }
   }, [openLeadIdFromUrl, db, configured, setSearchParams])
 
-  const isElevatedLeadScope = isElevatedForAdminFilters(profile?.role)
+  const isElevatedLeadScope = can('leads:read:global') || can('leads:reassign:team')
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
   const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
@@ -641,6 +652,9 @@ export function LeadManagement() {
     if (tagClientEval && tagFilter !== 'ALL') {
       rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
     }
+    if (callQueueFilter !== 'all') {
+      rows = rows.filter((l) => leadMatchesCallQueueFilter(l, callQueueFilter))
+    }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
     } else if (assigneeFilter) {
@@ -651,11 +665,12 @@ export function LeadManagement() {
     leads,
     scoreMinInput,
     scoreMaxInput,
-    activeScoringProfile,
+    profileScoringActive,
     scoreByLeadId,
     tagClientEval,
     tagFilter,
     effectiveLeadTag,
+    callQueueFilter,
     assigneeFilter,
   ])
 
@@ -692,14 +707,28 @@ export function LeadManagement() {
     return rows
   }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId, infoScoreRuntime])
 
-  /** Phân trang theo Firestore / bucket tìm kiếm — hook đã trả đúng một trang (≤30 dòng). */
-  const displayTotalPages = Math.max(1, firestoreTotalPages)
+  /**
+   * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
+   * để «Chọn tất cả trên trang» không chọn hàng nghìn hồ sơ một lúc.
+   */
+  const clientPagingActive = tagClientEval || callQueueNeedsScope
+  const clientPageSlice = useMemo(
+    () =>
+      clientPagingActive
+        ? sliceClientPagedRows(sortedFiltered, currentPage, LEADS_PAGE_SIZE)
+        : {
+            pageRows: sortedFiltered,
+            totalPages: Math.max(1, firestoreTotalPages),
+            safePage: currentPage,
+          },
+    [clientPagingActive, sortedFiltered, currentPage, firestoreTotalPages],
+  )
+  const displayTotalPages = clientPageSlice.totalPages
+  const pagedRows = clientPageSlice.pageRows
 
   useEffect(() => {
     if (currentPage > displayTotalPages) setPage(displayTotalPages)
   }, [currentPage, displayTotalPages, setPage])
-
-  const pagedRows = useMemo(() => sortedFiltered, [sortedFiltered])
 
   const toggleSort = (k: typeof sortKey) => {
     if (k === 'none') return
@@ -743,6 +772,7 @@ export function LeadManagement() {
 
   const clearQuickFilters = useCallback(() => {
     setTagFilter('ALL')
+    setCallQueueFilter('all')
     setRegionFilter('ALL')
     setMajorFilter('ALL')
     setStatusFilter('ALL')
@@ -787,6 +817,21 @@ export function LeadManagement() {
           setTagFilter('ALL')
           setPage(1)
           mergeListFilterUrl({ [LWF.TAG]: null })
+        },
+      })
+    }
+    if (callQueueFilter !== 'all') {
+      const callLabels: Record<Exclude<CallQueueFilter, 'all'>, string> = {
+        never_called: 'Chưa gọi',
+        called_today: 'Đã gọi hôm nay',
+        needs_callback: 'Cần gọi lại',
+      }
+      out.push({
+        id: 'callQueue',
+        label: `Ca gọi: ${callLabels[callQueueFilter]}`,
+        onClear: () => {
+          setCallQueueFilter('all')
+          setPage(1)
         },
       })
     }
@@ -907,6 +952,7 @@ export function LeadManagement() {
   }, [
     searchParams,
     tagFilter,
+    callQueueFilter,
     regionFilter,
     majorFilter,
     statusFilter,
@@ -977,7 +1023,7 @@ export function LeadManagement() {
           profile,
           hoDQueryLabels,
           rescoreServerFilters,
-          { maxLeads: LEADS_UI_FULL_SCOPE_MAX },
+          { maxLeads: LEADS_UI_FULL_SCOPE_MAX, canReadGlobal: can('leads:read:global') },
         )
         setRescoreMsg(`Đang chấm ${scopeLeads.length.toLocaleString('vi-VN')} hồ sơ…`)
         const results = rescoreLeadList(
@@ -1035,6 +1081,7 @@ export function LeadManagement() {
     [
       db,
       profile,
+      can,
       activeScoringProfile,
       hoDQueryLabels,
       rescoreServerFilters,
@@ -1233,6 +1280,56 @@ export function LeadManagement() {
     }
   }, [db, profile, selectedIds, leads, bulkCrmStatus, activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs, applyLocalLeadPatch, refetchLeads])
 
+  const applyBulkPriorityTag = useCallback(async () => {
+    if (!db || !profile || !selectedIds.size) return
+    setBulkBusy(true)
+    setRescoreMsg(null)
+    const ids = [...selectedIds]
+    const touch = leadTouchPatch()
+    const applyCommitted = (committedIds: string[]) => {
+      for (const id of committedIds) {
+        const localPatch = { priorityTag: bulkPriorityTag, ...touch } as Partial<Lead>
+        applyLocalLeadPatch(id, localPatch)
+        setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
+      }
+    }
+    try {
+      const { committedIds } = await bulkSetLeadPriorityTags(db, ids, bulkPriorityTag)
+      applyCommitted(committedIds)
+      const performer = profile.displayName || profile.email || profile.id
+      for (const id of committedIds.slice(0, 40)) {
+        await commitAuditLog(db, {
+          leadId: id,
+          actionType: 'SYSTEM_UPDATE',
+          description: `Gán nhãn phân loại hàng loạt → ${bulkPriorityTag}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+      setBulkModal(null)
+      setSelectedIds(new Set())
+      const auditNote =
+        committedIds.length > 40
+          ? ` (đã ghi nhật ký mẫu ${Math.min(40, committedIds.length)} hồ sơ)`
+          : ''
+      setRescoreMsg(`Đã gán nhãn ${bulkPriorityTag} cho ${committedIds.length} hồ sơ.${auditNote}`)
+      refetchLeads()
+    } catch (e) {
+      console.error(e)
+      if (e instanceof BulkPriorityPartialError) {
+        applyCommitted(e.committedIds)
+        setBulkModal(null)
+        setSelectedIds(new Set(e.remainingIds))
+        setRescoreMsg(e.message)
+        refetchLeads()
+      } else {
+        setRescoreMsg(e instanceof Error ? e.message : 'Không gán được nhãn hàng loạt.')
+      }
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [db, profile, selectedIds, bulkPriorityTag, applyLocalLeadPatch, refetchLeads])
+
   const executeBulkAiMiner = useCallback(
     async (warmPassed: Lead[]) => {
       if (!db || !profile) return
@@ -1416,7 +1513,14 @@ export function LeadManagement() {
                 aria-hidden
               />
               <span className="shrink-0">Bộ chấm điểm</span>
-              <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden">
+              <span
+                className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden"
+                title={
+                  profilesLoading
+                    ? undefined
+                    : activeScoringProfile?.profileName?.trim() || undefined
+                }
+              >
                 {profilesLoading
                   ? 'Đang tải…'
                   : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'Chưa có profile' : '—')}
@@ -1539,7 +1643,7 @@ export function LeadManagement() {
                   )
                 })}
               </div>
-              {tagClientEval && scopeFetchTruncated ? (
+              {(tagClientEval || callQueueNeedsScope) && scopeFetchTruncated ? (
                 <p className="text-xs font-medium text-amber-900">
                   Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
                   phần ở đuôi danh sách.
@@ -1559,7 +1663,39 @@ export function LeadManagement() {
           </label>
         </div>
 
-        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin]">
+        {/* Ca gọi — hàng riêng trên điện thoại (tránh chìm trong dải lọc ngang) */}
+        <div className="border-t border-slate-200/70 pt-2 md:hidden">
+          <label
+            className="flex w-full flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
+            title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
+          >
+            Ca gọi
+            <select
+              value={callQueueFilter}
+              onChange={(e) => {
+                setCallQueueFilter(e.target.value as CallQueueFilter)
+                setPage(1)
+              }}
+              title={
+                callQueueFilter === 'all'
+                  ? 'Tất cả'
+                  : callQueueFilter === 'never_called'
+                    ? 'Chưa gọi'
+                    : callQueueFilter === 'called_today'
+                      ? 'Đã gọi hôm nay'
+                      : 'Cần gọi lại'
+              }
+              className="mt-0.5 min-h-11 w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+            >
+              <option value="all">Tất cả</option>
+              <option value="never_called">Chưa gọi</option>
+              <option value="called_today">Đã gọi hôm nay</option>
+              <option value="needs_callback">Cần gọi lại</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto scroll-smooth border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin] md:flex-wrap md:overflow-visible">
           <FilterSelect
             compact
             label="Nhãn"
@@ -1707,10 +1843,38 @@ export function LeadManagement() {
               className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
+          <label
+            className="hidden min-w-[10.5rem] shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500 md:flex"
+            title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
+          >
+            Ca gọi
+            <select
+              value={callQueueFilter}
+              onChange={(e) => {
+                setCallQueueFilter(e.target.value as CallQueueFilter)
+                setPage(1)
+              }}
+              title={
+                callQueueFilter === 'all'
+                  ? 'Tất cả'
+                  : callQueueFilter === 'never_called'
+                    ? 'Chưa gọi'
+                    : callQueueFilter === 'called_today'
+                      ? 'Đã gọi hôm nay'
+                      : 'Cần gọi lại'
+              }
+              className="mt-0.5 min-h-10 rounded-md border border-slate-200/95 bg-white px-2 py-1.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+            >
+              <option value="all">Tất cả</option>
+              <option value="never_called">Chưa gọi</option>
+              <option value="called_today">Đã gọi hôm nay</option>
+              <option value="needs_callback">Cần gọi lại</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={clearQuickFilters}
-            className="shrink-0 self-end rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
+            className="min-h-10 shrink-0 self-end rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
           >
             Xóa lọc nhanh
           </button>
@@ -1726,7 +1890,7 @@ export function LeadManagement() {
                   type="button"
                   onClick={() => c.onClear()}
                   className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50/95 px-2.5 py-1 text-xs font-medium text-amber-950 shadow-sm transition hover:border-amber-500 hover:bg-amber-100"
-                  title="Bỏ lọc này"
+                  title={`${c.label} — bấm để bỏ lọc`}
                 >
                   <span className="min-w-0 truncate">{c.label}</span>
                   <span className="shrink-0 font-bold text-amber-800" aria-hidden>
@@ -1808,15 +1972,21 @@ export function LeadManagement() {
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">
-              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span> hồ sơ (trang{' '}
-              {currentPage}/{displayTotalPages})
+              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span>
+              {clientPagingActive && sortedFiltered.length !== pagedRows.length ? (
+                <>
+                  {' '}
+                  / <span className="font-semibold text-slate-900">{sortedFiltered.length}</span> khớp lọc
+                </>
+              ) : null}{' '}
+              (trang {currentPage}/{displayTotalPages})
             </span>
-            <div className="flex flex-wrap items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 « Đầu
               </button>
@@ -1824,7 +1994,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(currentPage - 1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Trước
               </button>
@@ -1832,7 +2002,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(currentPage + 1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Sau
               </button>
@@ -1840,30 +2010,38 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(displayTotalPages)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Cuối »
               </button>
             </div>
           </div>
         ) : null}
-        <div className="scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain">
+        <div
+          className={`scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain ${
+            canBulkWrite && selectedIds.size > 0
+              ? 'pb-[calc(var(--nav-bottom-height,4rem)+9rem)] lg:pb-28'
+              : ''
+          }`}
+        >
           <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/85 backdrop-blur-xl">
+            <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/95 backdrop-blur-xl">
               <tr className="text-xs font-medium uppercase tracking-wide text-slate-600 sm:text-sm">
-                <th className="w-10 px-2 py-3">
+                <th className="sticky left-0 z-[3] w-11 bg-white/95 px-1 py-3 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]">
                   {canBulkWrite ? (
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleSelectAllVisible}
-                      disabled={!pagedRows.length}
-                      className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                      title="Chọn tất cả hồ sơ trên trang này"
-                    />
+                    <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        disabled={!pagedRows.length}
+                        className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                        title="Chọn tất cả hồ sơ trên trang này"
+                      />
+                    </label>
                   ) : null}
                 </th>
-                <th className="px-4 py-3 font-medium">
+                <th className="sticky left-11 z-[3] min-w-[9.5rem] bg-white/95 px-3 py-3 font-medium shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] sm:px-4">
                   <button
                     type="button"
                     onClick={() => toggleSort('fullName')}
@@ -1973,7 +2151,30 @@ export function LeadManagement() {
               {!loading && !sortedFiltered.length ? (
                 <tr>
                   <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
-                    Không có hồ sơ khớp bộ lọc.
+                    <p>Không có hồ sơ khớp bộ lọc.</p>
+                    {isPlatformSuperAdmin ? (
+                      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+                        Đang xem trường <span className="font-semibold text-slate-800">{currentOrgLabel}</span>
+                        {effectiveOrgId !== DEFAULT_ORG_ID ? (
+                          <>
+                            . Dữ liệu cũ nằm ở Việt Mỹ —{' '}
+                            <button
+                              type="button"
+                              className="font-semibold text-teal-700 underline underline-offset-2 hover:text-teal-900"
+                              onClick={() => setActiveOrgId(DEFAULT_ORG_ID)}
+                            >
+                              chuyển về Cao đẳng Việt Mỹ
+                            </button>
+                            .
+                          </>
+                        ) : (
+                          <>
+                            . Nếu vẫn trống: đăng xuất/đăng nhập lại, và deploy Firestore Rules (super_admin được đọc
+                            toàn hệ thống).
+                          </>
+                        )}
+                      </p>
+                    ) : null}
                   </td>
                 </tr>
               ) : null}
@@ -1982,11 +2183,12 @@ export function LeadManagement() {
                 const displayScore = profileScoringActive
                   ? (ev?.calculatedScore ?? l.calculatedScore)
                   : l.calculatedScore
-                const displayTag = profileScoringActive ? (ev?.priorityTag ?? l.priorityTag) : l.priorityTag
+                const displayTag = effectiveLeadTag(l)
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
                 const extraNotesFull = leadSupplementaryNotesText(l)
                 const callAiLine = formatLeadLastCallAiLine(l)
+                const callQueueLine = formatLeadLastCallLine(l)
                 return (
                 <motion.tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
@@ -1994,20 +2196,25 @@ export function LeadManagement() {
                   transition={{ type: 'spring', stiffness: 380, damping: 28 }}
                   onClick={() => setSelected(l)}
                   title="Bấm để xem chi tiết: hồ sơ sinh viên, ghi chú, đánh giá, lịch sử tương tác, AI…"
-                  className="cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
+                  className="group cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
                 >
-                  <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td
+                    className="sticky left-0 z-[2] bg-white px-1 py-2 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)] group-hover:bg-amber-50/90"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {canBulkWrite ? (
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(l.id)}
-                        onChange={() => toggleSelectId(l.id)}
-                        className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                        aria-label={`Chọn ${l.fullName}`}
-                      />
+                      <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(l.id)}
+                          onChange={() => toggleSelectId(l.id)}
+                          className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                          aria-label={`Chọn ${l.fullName}`}
+                        />
+                      </label>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="sticky left-11 z-[2] min-w-[9.5rem] bg-white px-3 py-3 font-medium text-slate-900 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] group-hover:bg-amber-50/90 sm:px-4">
                     <span className="inline-flex max-w-full items-center gap-1.5">
                       {l.isAiShortlisted ? (
                         <Zap
@@ -2017,11 +2224,21 @@ export function LeadManagement() {
                           aria-label="Đã được AI đánh dấu ưu tiên"
                         />
                       ) : null}
-                      <span className="min-w-0 truncate">{l.fullName || '—'}</span>
+                      <span className="min-w-0 truncate" title={l.fullName || undefined}>
+                        {l.fullName || '—'}
+                      </span>
                     </span>
+                    <p
+                      className={`mt-0.5 text-xs font-medium leading-snug md:line-clamp-1 md:text-[11px] ${
+                        callQueueFilter !== 'all' ? 'line-clamp-2' : 'line-clamp-1'
+                      } ${callQueueLine === 'Chưa gọi' ? 'text-amber-700' : 'text-slate-500'}`}
+                      title={callQueueLine}
+                    >
+                      {callQueueLine}
+                    </p>
                     {callAiLine ? (
                       <p
-                        className="mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-[var(--color-primary)]"
+                        className="mt-0.5 line-clamp-2 text-xs font-medium leading-snug text-[var(--color-primary)] md:text-[11px]"
                         title={callAiLine}
                       >
                         Đánh giá gọi: {callAiLine}
@@ -2081,6 +2298,10 @@ export function LeadManagement() {
             setBulkCrmStatus('NEW')
             setBulkModal('crm')
           }}
+          onBulkPriorityTag={() => {
+            setBulkPriorityTag('WARM')
+            setBulkModal('priorityTag')
+          }}
           onExport={() => exportBulkSelection()}
           showReassign={showBulkReassign}
           showAiMiner={tagFilter === 'WARM' && canRunLlmAnalysis}
@@ -2102,7 +2323,7 @@ export function LeadManagement() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-modal fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">
               Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.
@@ -2157,7 +2378,7 @@ export function LeadManagement() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-modal fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Đổi tình trạng tư vấn</h3>
             <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
             <label className="mt-4 block text-sm font-medium text-slate-700">
@@ -2190,6 +2411,56 @@ export function LeadManagement() {
                 className="rounded-xl border border-amber-500 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
                 {bulkBusy ? 'Đang xử lý…' : 'Áp dụng'}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {bulkModal === 'priorityTag' && db ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[55] bg-slate-900/25 backdrop-blur-md"
+            aria-label="Đóng"
+            onClick={() => !bulkBusy && setBulkModal(null)}
+          />
+          <div className="app-modal app-modal-sheet shadow-xl">
+            <h3 className="app-section-heading">Gán nhãn phân loại</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Gán cùng một nhãn HOT / WARM / COLD / LOSS cho {selectedIds.size} hồ sơ đã chọn (không đổi điểm). Muốn
+              máy chấm lại điểm + nhãn, dùng nút «Tính lại».
+            </p>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Nhãn
+              <select
+                value={bulkPriorityTag}
+                onChange={(e) => setBulkPriorityTag(e.target.value as PriorityTag)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-sky-200"
+              >
+                {BULK_PRIORITY_TAG_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} className="bg-white">
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => setBulkModal(null)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => void applyBulkPriorityTag()}
+                className="rounded-xl border border-sky-600 bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
+              >
+                {bulkBusy ? 'Đang xử lý…' : 'Gán nhãn'}
               </button>
             </div>
           </div>
@@ -2659,10 +2930,11 @@ function FilterSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocus}
+        title={options.find((o) => o.v === value)?.t ?? title}
         className={
           compact
-            ? 'mt-0.5 max-w-[7.25rem] min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
-            : 'mt-1 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            ? 'mt-0.5 max-w-[7.25rem] min-h-9 min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            : 'mt-1 min-h-11 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
         }
       >
         {options.map((o) => (
@@ -3083,7 +3355,8 @@ function LeadDetailPanel({
     if (coreDirty) return
     const live = detailScoringPreview
     if (!live) return
-    if (live.calculatedScore === lead.calculatedScore && live.priorityTag === lead.priorityTag) return
+    // Chỉ tự ghi khi điểm lệch — không ghi đè nhãn tay khi điểm đã khớp.
+    if (!leadNeedsAutoScorePersist(lead, live)) return
     const syncKey = `${lead.id}:${activeScoringProfile.id}:${live.calculatedScore}:${live.priorityTag}`
     if (scoreAutoSyncedRef.current === syncKey) return
     scoreAutoSyncedRef.current = syncKey
@@ -3804,13 +4077,14 @@ function LeadDetailPanel({
       role="dialog"
       aria-modal="true"
       aria-labelledby="lead-detail-title"
-      className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
+      className="safe-area-pt safe-area-pb fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
     >
-      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:px-5 lg:px-6">
+      <header className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:gap-3 sm:px-5 lg:px-6">
         <div className="min-w-0 flex-1">
           <h2
             id="lead-detail-title"
-            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+            className="truncate text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+            title={lead.fullName || undefined}
           >
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
@@ -3819,48 +4093,52 @@ function LeadDetailPanel({
           <button
             type="button"
             onClick={() => setPlaybookPopupOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+            title="Playbook"
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
           >
             <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-            Playbook
+            <span className="hidden sm:inline">Playbook</span>
           </button>
           {dynamicAssistantSlot ? (
             <button
               type="button"
               onClick={() => setAssistantPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-300/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              title="Trợ lý"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-sky-300/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
             >
               <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              Trợ lý
+              <span className="hidden sm:inline">Trợ lý</span>
             </button>
           ) : null}
           {canRunAi ? (
             <button
               type="button"
               onClick={() => setLlmPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-primary)]/50 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+              title="LLM"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-primary)]/50 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              LLM
+              <span className="hidden sm:inline">LLM</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setLlmAccessHelpOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-300/80 bg-violet-100 px-2.5 py-1.5 text-xs font-semibold text-violet-900 shadow-sm transition hover:bg-violet-200"
               title="Cần bật quyền AI trên tài khoản"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-violet-300/80 bg-violet-100 px-2.5 py-1.5 text-xs font-semibold text-violet-900 shadow-sm transition hover:bg-violet-200"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={1.75} />
-              LLM (khóa)
+              <span className="hidden sm:inline">LLM (khóa)</span>
             </button>
           )}
           <button
             type="button"
             onClick={requestClosePanel}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+            title="Đóng"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
-            Đóng
+            <span className="hidden sm:inline">Đóng</span>
           </button>
         </div>
       </header>
@@ -3877,7 +4155,7 @@ function LeadDetailPanel({
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-900">
                   Gợi ý từ AI (ưu tiên chốt sale)
                 </p>
-                {lead.aiProcessedAt?.toDate ? (
+                {typeof lead.aiProcessedAt?.toDate === 'function' ? (
                   <p className="mt-0.5 text-xs text-amber-800/80">
                     Cập nhật AI: {lead.aiProcessedAt.toDate().toLocaleString('vi-VN')}
                   </p>
@@ -4285,7 +4563,7 @@ function LeadDetailPanel({
                       {detailRightTab === 'assign' ? (
                         <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
                           <LeadCrmQuickBlock
-                            key={`${lead.id}-${lead.updatedAt.toMillis()}`}
+                            key={`${lead.id}-${lead.updatedAt?.toMillis?.() ?? 0}`}
                             lead={lead}
                             db={db}
                             counselorUsers={counselorUsers}

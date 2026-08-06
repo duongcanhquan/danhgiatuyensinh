@@ -81,7 +81,7 @@ export function mergeLeadClassificationConfig(
     },
     d.engagement.subWeights,
   )
-  let hot = clamp(Math.round(Number(remote.thresholds?.hotMinScore ?? d.thresholds.hotMinScore)), 1, 100)
+  const hot = clamp(Math.round(Number(remote.thresholds?.hotMinScore ?? d.thresholds.hotMinScore)), 1, 100)
   let warm = clamp(Math.round(Number(remote.thresholds?.warmMinScore ?? d.thresholds.warmMinScore)), 0, 99)
   if (warm >= hot) warm = Math.max(0, hot - 1)
 

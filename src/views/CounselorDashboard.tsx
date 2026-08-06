@@ -33,6 +33,7 @@ import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
 import { CallEvaluationAnalyticsPanel } from '../components/CallEvaluationAnalyticsPanel'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import { useCallEvaluationStats } from '../hooks/useCallEvaluationStats'
@@ -169,6 +170,17 @@ function CounselorLeadListRow({
     e.stopPropagation()
     if (!db || !profile || !canInteract) return
     try {
+      const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
+      const callPatch = {
+        ...leadTouchPatch(),
+        ...buildLastCallLeadPatch({
+          calledByLabel: callerLabel,
+          outcome: 'CONNECTED',
+        }),
+      }
+      // Ghi tín hiệu ca gọi trước — lọc «Chưa gọi» phụ thuộc lastCall*, không phải interaction.
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), callPatch)
+      onLeadLocallyPatched?.(lead.id, callPatch)
       await addDoc(collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions), {
         leadId: lead.id,
         channel: 'CALL',
@@ -178,9 +190,6 @@ function CounselorLeadListRow({
         counselorNote: 'Ghi nhanh: Cuộc gọi (danh sách TVV)',
         callOutcome: 'CONNECTED',
       })
-      const touch = leadTouchPatch()
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), touch)
-      onLeadLocallyPatched?.(lead.id, touch)
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'NOTE_ADDED',
@@ -264,14 +273,16 @@ function CounselorLeadListRow({
         followToday ? 'ring-1 ring-inset ring-amber-300/60' : '',
       ].join(' ')}
     >
-      <td className="px-2 py-2 align-middle">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => onToggleSelect(lead.id)}
-          className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-          aria-label={`Chọn ${lead.fullName}`}
-        />
+      <td className="px-1 py-2 align-middle">
+        <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(lead.id)}
+            className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+            aria-label={`Chọn ${lead.fullName}`}
+          />
+        </label>
       </td>
       <td className="max-w-[14rem] px-2 py-2 align-middle">
         <div className="relative min-w-0">
@@ -284,7 +295,9 @@ function CounselorLeadListRow({
               <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
             </span>
           ) : null}
-          <p className="truncate pl-1 text-sm font-semibold text-slate-900">{lead.fullName || '—'}</p>
+          <p className="truncate pl-1 text-sm font-semibold text-slate-900" title={lead.fullName || undefined}>
+            {lead.fullName || '—'}
+          </p>
           {callAiLine ? (
             <p
               className="mt-0.5 line-clamp-2 pl-1 text-[11px] font-medium leading-snug text-violet-800"
@@ -332,7 +345,7 @@ function CounselorLeadListRow({
             disabled={!canInteract}
             onClick={(e) => void logCall(e)}
             title="Ghi cuộc gọi"
-            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-30"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-30"
           >
             <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
@@ -341,7 +354,7 @@ function CounselorLeadListRow({
             disabled={!canInteract}
             onClick={(e) => void addNote(e)}
             title="Ghi chú nhanh"
-            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 disabled:opacity-30"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800 disabled:opacity-30"
           >
             <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
@@ -350,13 +363,13 @@ function CounselorLeadListRow({
             disabled={!canWrite}
             onClick={(e) => void setFollowUp(e)}
             title="Đặt follow-up"
-            className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-30"
           >
             <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
           <Link
             to={`/leads?open=${encodeURIComponent(lead.id)}`}
-            className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
+            className="inline-flex min-h-10 items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
             title="Mở đầy đủ thông tin trên màn Hồ sơ"
           >
             <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
@@ -406,19 +419,25 @@ function CounselorLeadWorklist({
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white/35 shadow-md backdrop-blur-xl">
-      <div className="scroll-touch overflow-x-auto">
+      <div
+        className={`scroll-touch overflow-x-auto ${
+          selectedIds.size > 0 ? 'pb-[calc(var(--nav-bottom-height,4rem)+9rem)] lg:pb-24' : ''
+        }`}
+      >
         <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200/90 bg-slate-50/90 text-xs font-semibold uppercase tracking-wide text-slate-600">
-              <th className="w-10 px-2 py-2.5">
-                <input
-                  type="checkbox"
-                  checked={allOnPageSelected}
-                  onChange={() => toggleSelectAllOnPage()}
-                  disabled={!rows.length}
-                  className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                  aria-label="Chọn tất cả trên trang"
-                />
+              <th className="w-11 px-1 py-2.5">
+                <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={() => toggleSelectAllOnPage()}
+                    disabled={!rows.length}
+                    className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                    aria-label="Chọn tất cả trên trang"
+                  />
+                </label>
               </th>
               <th className="px-2 py-2.5">Hồ sơ</th>
               <th className="px-2 py-2.5">Liên hệ</th>
@@ -466,7 +485,7 @@ function CounselorLeadWorklist({
               type="button"
               disabled={page <= 1}
               onClick={() => onPageChange(page - 1)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+              className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
             >
               ← Trước
             </button>
@@ -477,7 +496,7 @@ function CounselorLeadWorklist({
               type="button"
               disabled={page >= maxPage}
               onClick={() => onPageChange(page + 1)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+              className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
             >
               Sau →
             </button>
@@ -703,7 +722,9 @@ export function CounselorDashboard() {
   const listRows = useMemo(() => {
     let rows = filtered
     if (crmStageFilter !== 'ALL') rows = rows.filter((l) => l.status === crmStageFilter)
-    return [...rows].sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+    return [...rows].sort(
+      (a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0),
+    )
   }, [filtered, crmStageFilter])
 
   const maxListPage = Math.max(1, Math.ceil(listRows.length / LIST_PAGE_SIZE))
@@ -992,11 +1013,13 @@ export function CounselorDashboard() {
               <button
                 type="button"
                 onClick={() => setFiltersExpanded((x) => !x)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200/95 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80"
+                title="Lọc nâng cao (CRM · khu vực · trường · nguồn…)"
+                className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/95 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 sm:w-auto"
                 aria-expanded={filtersExpanded}
               >
                 <Filter className="h-3.5 w-3.5 text-amber-700" strokeWidth={2} />
-                Lọc nâng cao (CRM · khu vực · …)
+                <span className="sm:hidden">Lọc nâng cao</span>
+                <span className="hidden sm:inline">Lọc nâng cao (CRM · khu vực · …)</span>
                 <ChevronDown
                   className={[
                     'h-3.5 w-3.5 text-slate-500 transition-transform',
@@ -1380,7 +1403,7 @@ export function CounselorDashboard() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">
               {selectedIds.size} hồ sơ đã chọn.
@@ -1435,7 +1458,7 @@ export function CounselorDashboard() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-glass-panel fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Đổi giai đoạn CRM</h3>
             <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
             <select
@@ -1471,7 +1494,7 @@ export function CounselorDashboard() {
         </>
       ) : null}
 
-      <div className="pointer-events-none fixed bottom-[max(1.25rem,env(safe-area-inset-bottom,0px))] right-4 z-50 flex max-w-[min(100vw-2rem,320px)] flex-col gap-2 sm:right-6">
+      <div className="app-bulk-float pointer-events-none fixed right-4 z-50 flex max-w-[min(100vw-2rem,320px)] flex-col gap-2 sm:right-6">
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div

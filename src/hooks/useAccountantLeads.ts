@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import type { Lead } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb } from '../services/firebase'
 import { mapDoc } from './useLeads'
 import { leadHasFinanceActivity } from '../utils/accountantFinanceFilter'
+import { useAuth } from './useAuth'
+import { useOrg } from './useOrg'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
+import { isSuperAdminRole } from '../auth/roleUtils'
 
 /** Quét hồ sơ mới cập nhật — chỉ giữ bản ghi có phát sinh thu (lọc client). */
 const ACCOUNTANT_LEAD_LIMIT = 1500
 
 export function useAccountantLeads(enabled: boolean) {
+  const { profile } = useAuth()
+  const { effectiveOrgId } = useOrg()
+  const orgId =
+    (profile?.role === 'super_admin' ? effectiveOrgId : profile?.orgId?.trim()) || DEFAULT_ORG_ID
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,16 +29,31 @@ export function useAccountantLeads(enabled: boolean) {
     setLoading(true)
     setError(null)
     try {
-      const q = query(
-        collection(db, FS_COLLECTIONS.leads),
+      const col = collection(db, FS_COLLECTIONS.leads)
+      const scoped = query(
+        col,
+        where('orgId', '==', orgId),
         orderBy('updatedAt', 'desc'),
         limit(ACCOUNTANT_LEAD_LIMIT),
       )
-      const snap = await getDocs(q)
+      let snap = await getDocs(scoped)
+      // Superadmin + VietMy: nếu chưa có bản ghi gắn orgId, thử đọc legacy thiếu orgId
+      if (
+        snap.empty &&
+        profile &&
+        isSuperAdminRole(profile.role) &&
+        shouldUseLegacyMissingOrgIdRead(orgId)
+      ) {
+        try {
+          snap = await getDocs(query(col, orderBy('updatedAt', 'desc'), limit(ACCOUNTANT_LEAD_LIMIT)))
+        } catch (legacyErr) {
+          console.warn('[useAccountantLeads] legacy read skipped', legacyErr)
+        }
+      }
       const rows: Lead[] = []
       for (const d of snap.docs) {
         const lead = mapDoc(d.id, d.data() as Record<string, unknown>)
-        if (lead) rows.push(lead)
+        if (lead && leadBelongsToOrg(lead, orgId)) rows.push(lead)
       }
       setLeads(rows.filter(leadHasFinanceActivity))
     } catch (e) {
@@ -38,7 +62,7 @@ export function useAccountantLeads(enabled: boolean) {
     } finally {
       setLoading(false)
     }
-  }, [enabled])
+  }, [enabled, orgId, profile])
 
   useEffect(() => {
     void reload()

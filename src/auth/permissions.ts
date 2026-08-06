@@ -1,6 +1,11 @@
 import type { Permission, UserRole, VietMyUserProfile } from '../types'
 import { PERMISSIONS } from '../types'
 import { normalizeUserRole } from './roleUtils'
+import {
+  getRoleCapabilitiesCache,
+  SCHOOL_ADMIN_CAPABILITY_MODULES,
+  type OrgRoleCapabilities,
+} from '../utils/roleCapabilitiesConfig'
 
 const ALL = PERMISSIONS as unknown as readonly Permission[]
 
@@ -74,10 +79,42 @@ export function hasPermission(
 }
 
 /**
- * Quyền hiệu lực = ma trận vai trò + `extraPermissions` − `deniedPermissions`.
+ * Quyền hiệu lực = ma trận vai trò + `extraPermissions` − `deniedPermissions`
+ * (+ giao cắt capability trường cho role `admin`).
  */
+export function adminPermissionsAllowedByCapabilities(
+  caps: OrgRoleCapabilities | null | undefined,
+): Set<Permission> | null {
+  if (!caps || !caps.adminEnabledModuleIds?.length) return null
+  const enabled = new Set(caps.adminEnabledModuleIds)
+  const allowedFromModules = new Set<Permission>()
+  for (const m of SCHOOL_ADMIN_CAPABILITY_MODULES) {
+    if (!enabled.has(m.id)) continue
+    for (const p of m.permissions) allowedFromModules.add(p)
+  }
+  const modulePerms = new Set<Permission>()
+  for (const m of SCHOOL_ADMIN_CAPABILITY_MODULES) {
+    for (const p of m.permissions) modulePerms.add(p)
+  }
+  const adminDefaults = defaultPermissionsForRole('admin')
+  const result = new Set<Permission>()
+  for (const p of adminDefaults) {
+    if (!modulePerms.has(p)) {
+      result.add(p)
+      continue
+    }
+    if (allowedFromModules.has(p)) result.add(p)
+  }
+  for (const m of SCHOOL_ADMIN_CAPABILITY_MODULES) {
+    if (!m.required) continue
+    for (const p of m.permissions) result.add(p)
+  }
+  return result
+}
+
 export function resolveEffectivePermissions(
   profile: Pick<VietMyUserProfile, 'role' | 'extraPermissions' | 'deniedPermissions'> | null | undefined,
+  orgCaps?: OrgRoleCapabilities | null,
 ): readonly Permission[] {
   if (!profile) return []
   const base = new Set<Permission>(defaultPermissionsForRole(profile.role))
@@ -87,6 +124,18 @@ export function resolveEffectivePermissions(
   for (const p of profile.deniedPermissions ?? []) {
     base.delete(p)
   }
+
+  const role = normalizeUserRole(profile.role)
+  if (role === 'admin') {
+    const caps = orgCaps ?? getRoleCapabilitiesCache().caps
+    const allowed = adminPermissionsAllowedByCapabilities(caps)
+    if (allowed) {
+      for (const p of [...base]) {
+        if (!allowed.has(p)) base.delete(p)
+      }
+    }
+  }
+
   return [...base]
 }
 

@@ -9,12 +9,15 @@ export type AuthContextValue = AuthState & {
   canRunLlmAnalysis: boolean
   signOut: () => Promise<void>
   signInWithEmail: (email: string, password: string) => Promise<void>
+  /** Đổi mật khẩu tài khoản đang đăng nhập (cần mật khẩu hiện tại). */
+  changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<void>
   /** Admin: tạo tài khoản Auth + hồ sơ Firestore (dùng app Auth phụ). */
   createStaffAccount: (input: {
     email: string
     password: string
     displayName: string
     role: UserRole
+    orgId?: string | null
     managedCounselorIds?: string[]
     omicallSipUser?: string
     omicallSipPassword?: string
@@ -30,8 +33,12 @@ export type AuthContextValue = AuthState & {
     displayName?: string
     role?: UserRole
     isActive?: boolean
+    /** Siêu quản trị: gắn / đổi trường của nhân sự. */
+    orgId?: string | null
     /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
     allowLlmAndAiTasks?: boolean
+    extraPermissions?: Permission[]
+    deniedPermissions?: Permission[]
     managedCounselorIds?: string[]
     omicallSipUser?: string
     omicallSipPassword?: string

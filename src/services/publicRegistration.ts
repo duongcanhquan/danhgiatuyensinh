@@ -42,23 +42,23 @@ function functionsRegion() {
   return getFunctions(app, 'asia-southeast1')
 }
 
-export async function fetchPublicRegistrationMeta(): Promise<PublicRegistrationMeta> {
-  const fn = httpsCallable<Record<string, never>, PublicRegistrationMeta>(
+export async function fetchPublicRegistrationMeta(orgSlug?: string): Promise<PublicRegistrationMeta> {
+  const fn = httpsCallable<{ orgSlug?: string }, PublicRegistrationMeta>(
     functionsRegion(),
     'getPublicRegistrationMeta',
   )
   try {
-    const res = await fn({})
+    const res = await fn(orgSlug ? { orgSlug } : {})
     return res.data
   } catch (e) {
-    throw new Error(callableErrorMessage(e, 'Không tải được cấu hình cổng đăng ký.'))
+    throw new Error(callableErrorMessage(e, 'Không tải được cấu hình cổng đăng ký.'), { cause: e })
   }
 }
 
 export async function submitPublicRegistration(
-  input: PublicRegistrationFormInput,
+  input: PublicRegistrationFormInput & { orgSlug?: string },
 ): Promise<SubmitPublicLeadResult> {
-  const fn = httpsCallable<PublicRegistrationFormInput, SubmitPublicLeadResult>(
+  const fn = httpsCallable<PublicRegistrationFormInput & { orgSlug?: string }, SubmitPublicLeadResult>(
     functionsRegion(),
     'submitPublicLead',
   )
@@ -66,6 +66,6 @@ export async function submitPublicRegistration(
     const res = await fn(input)
     return res.data
   } catch (e) {
-    throw new Error(callableErrorMessage(e, 'Không gửi được đăng ký — thử lại sau.'))
+    throw new Error(callableErrorMessage(e, 'Không gửi được đăng ký — thử lại sau.'), { cause: e })
   }
 }

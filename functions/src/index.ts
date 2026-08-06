@@ -54,6 +54,10 @@ import {
   registerCounselorLoadOnLeadWrite,
 } from './counselorLoadSync.js'
 import {
+  registerRefreshOwnAuthClaimsCallable,
+  registerSyncAuthClaimsOnUserWrite,
+} from './syncAuthClaims.js'
+import {
   normalizePhoneLocal,
   normalizePhoneIntl,
   normalizeHotlineNumber,
@@ -314,7 +318,6 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
         teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
       }
     }
-    leadId = undefined
   }
 
   const phoneVariants = phoneLookupVariants(call.phoneNumber)
@@ -406,7 +409,8 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     endedAt: storedEndedAt ?? mergedCall.endedAt,
   }
   const validity = evaluateValidCall(mergedForStore, match, kpiCfg)
-  const { raw: _raw, ...callFields } = mergedForStore
+  const { raw, ...callFields } = mergedForStore
+  void raw
   const payload = {
     ...callFields,
     leadId: match.leadId ?? str(existingData?.leadId) ?? null,
@@ -432,34 +436,56 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   if (!isFinal) return
 
     const effectiveLeadId = match.leadId ?? (str(existingData?.leadId) || undefined)
-    if (effectiveLeadId && !existingData?.interactionId) {
-      const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
-      const dupSnap = await interactionsCol.where('providerCallId', '==', mergedForStore.transactionId).limit(1).get()
-      if (!dupSnap.empty) {
-        await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
-      } else {
-      const interactionRef = await interactionsCol.add({
-        leadId: effectiveLeadId,
-        channel: 'CALL',
-        authorUid: match.counselorUid || str(existingData?.counselorUid) || 'omicall',
-        authorRole: 'counselor',
-        counselorNote: interactionNote(mergedForStore),
-        callOutcome: mergedForStore.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER',
-        durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || undefined,
-        provider: 'OMICALL',
-        providerCallId: mergedForStore.transactionId,
-        providerUuid: mergedForStore.callUuid ?? null,
-        recordingUrl: mergedForStore.recordingFileUrl ?? null,
-        recordSeconds: mergedForStore.recordSeconds || null,
-        billSeconds: mergedForStore.billSeconds || null,
-        answerSeconds: mergedForStore.answerSeconds || null,
-        hotline: mergedForStore.hotline ?? null,
-        sipUser: mergedForStore.sipUser ?? null,
-        syncedFrom: source,
-        timestamp: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
-      })
-      await callRef.set({ interactionId: interactionRef.id }, { merge: true })
+    if (effectiveLeadId) {
+      const callOutcome = mergedForStore.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER'
+      if (!existingData?.interactionId) {
+        const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
+        const dupSnap = await interactionsCol.where('providerCallId', '==', mergedForStore.transactionId).limit(1).get()
+        if (!dupSnap.empty) {
+          await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
+        } else {
+          const interactionRef = await interactionsCol.add({
+            leadId: effectiveLeadId,
+            channel: 'CALL',
+            authorUid: match.counselorUid || str(existingData?.counselorUid) || 'omicall',
+            authorRole: 'counselor',
+            counselorNote: interactionNote(mergedForStore),
+            callOutcome,
+            durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || undefined,
+            provider: 'OMICALL',
+            providerCallId: mergedForStore.transactionId,
+            providerUuid: mergedForStore.callUuid ?? null,
+            recordingUrl: mergedForStore.recordingFileUrl ?? null,
+            recordSeconds: mergedForStore.recordSeconds || null,
+            billSeconds: mergedForStore.billSeconds || null,
+            answerSeconds: mergedForStore.answerSeconds || null,
+            hotline: mergedForStore.hotline ?? null,
+            sipUser: mergedForStore.sipUser ?? null,
+            syncedFrom: source,
+            timestamp: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
+          })
+          await callRef.set({ interactionId: interactionRef.id }, { merge: true })
+        }
       }
+      // Đồng bộ tín hiệu ca gọi trên lead (SDK/webhook đều có thể tạo interaction trước).
+      const callerLabel =
+        (mergedForStore.sipUser || match.counselorUid || str(existingData?.counselorUid) || 'OMICall')
+          .toString()
+          .trim()
+          .slice(0, 120) || 'OMICall'
+      await db
+        .collection(COLLECTIONS.leads)
+        .doc(effectiveLeadId)
+        .set(
+          {
+            lastCallAt: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
+            lastCalledByLabel: callerLabel,
+            lastCallOutcome: callOutcome,
+            lastTouchedAt: now,
+            updatedAt: now,
+          },
+          { merge: true },
+        )
     }
 
   const shouldApplyKpi =
@@ -1987,5 +2013,11 @@ export const backfillCounselorLoads = registerBackfillCounselorLoadsCallable(
   COLLECTIONS.users,
   COLLECTIONS.leads,
 )
+
+export const syncAuthClaimsOnUserWrite = registerSyncAuthClaimsOnUserWrite(
+  FIRESTORE_DATABASE_ID,
+  COLLECTIONS.users,
+)
+export const refreshOwnAuthClaims = registerRefreshOwnAuthClaimsCallable(db, COLLECTIONS.users)
 
 export { fetchOmicallCallsForClient } from './fetchOmicallCallsForClient.js'

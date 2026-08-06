@@ -3,13 +3,7 @@ import type { LeadPaymentSlotKey } from '../types'
 import { optimizeReceiptFile } from '../utils/receiptImageOptimize'
 import { buildFirebaseReceiptPath, buildReceiptObjectKey, receiptPublicUrl } from '../utils/receiptStoragePaths'
 import { getFirebaseStorage } from './firebase'
-
-const RECEIPT_R2_UPLOAD_URL = String(import.meta.env.VITE_RECEIPT_R2_UPLOAD_URL ?? '').trim()
-const RECEIPT_R2_UPLOAD_TOKEN = String(import.meta.env.VITE_RECEIPT_R2_UPLOAD_TOKEN ?? '').trim()
-const RECEIPT_R2_PUBLIC_BASE_URL = String(import.meta.env.VITE_RECEIPT_R2_PUBLIC_BASE_URL ?? '').trim()
-
-const RECEIPT_DRIVE_WEBHOOK_URL = String(import.meta.env.VITE_RECEIPT_DRIVE_WEBHOOK_URL ?? '').trim()
-const RECEIPT_DRIVE_WEBHOOK_TOKEN = String(import.meta.env.VITE_RECEIPT_DRIVE_WEBHOOK_TOKEN ?? '').trim()
+import { resolveReceiptStorageRuntime } from '../utils/receiptStorageConfig'
 
 /** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */
 export function receiptStorageFolderName(lead: {
@@ -39,6 +33,7 @@ async function uploadReceiptToR2(
   lead: { id: string; fullName: string; systemCode?: string; customerId?: string },
   slot: LeadPaymentSlotKey,
   file: File,
+  runtime: ReturnType<typeof resolveReceiptStorageRuntime>,
 ): Promise<string> {
   const folderName = receiptStorageFolderName(lead)
   const objectKey = buildReceiptObjectKey({
@@ -49,7 +44,7 @@ async function uploadReceiptToR2(
   })
 
   const payload = {
-    token: RECEIPT_R2_UPLOAD_TOKEN || undefined,
+    token: runtime.r2UploadToken || undefined,
     leadId: lead.id,
     folderName,
     slot,
@@ -58,7 +53,7 @@ async function uploadReceiptToR2(
     base64: await fileToBase64(file),
   }
 
-  const res = await fetch(RECEIPT_R2_UPLOAD_URL, {
+  const res = await fetch(runtime.r2UploadUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -71,7 +66,7 @@ async function uploadReceiptToR2(
     throw new Error(data.error?.trim() || 'Worker R2 không trả ok.')
   }
   if (data.fileUrl) return data.fileUrl
-  const base = RECEIPT_R2_PUBLIC_BASE_URL || RECEIPT_R2_UPLOAD_URL.replace(/\/upload\/?$/, '')
+  const base = runtime.r2PublicBaseUrl || runtime.r2UploadUrl.replace(/\/upload\/?$/, '')
   return receiptPublicUrl(base, data.objectKey ?? objectKey)
 }
 
@@ -79,9 +74,10 @@ async function uploadReceiptToDriveWebhook(
   lead: { id: string; fullName: string; systemCode?: string; customerId?: string },
   slot: LeadPaymentSlotKey,
   file: File,
+  runtime: ReturnType<typeof resolveReceiptStorageRuntime>,
 ): Promise<string> {
   const payload = {
-    token: RECEIPT_DRIVE_WEBHOOK_TOKEN || undefined,
+    token: runtime.driveWebhookToken || undefined,
     leadId: lead.id,
     fullName: lead.fullName,
     systemCode: lead.systemCode ?? '',
@@ -93,7 +89,7 @@ async function uploadReceiptToDriveWebhook(
     base64: await fileToBase64(file),
   }
 
-  const res = await fetch(RECEIPT_DRIVE_WEBHOOK_URL, {
+  const res = await fetch(runtime.driveWebhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -116,7 +112,7 @@ async function uploadReceiptToFirebase(
   const storage = getFirebaseStorage()
   if (!storage) {
     throw new Error(
-      'Chưa cấu hình nơi lưu chứng từ. Thiết lập VITE_RECEIPT_R2_UPLOAD_URL, VITE_RECEIPT_DRIVE_WEBHOOK_URL hoặc VITE_FIREBASE_STORAGE_BUCKET.',
+      'Chưa cấu hình nơi lưu chứng từ. Vào Cài đặt → Tích hợp → Chứng từ & lưu trữ (hoặc VITE_RECEIPT_* / Storage).',
     )
   }
   const folder = receiptStorageFolderName(lead)
@@ -129,10 +125,8 @@ async function uploadReceiptToFirebase(
 /**
  * Upload chứng từ tài chính; trả URL lưu vào Firestore `receiptUrl`.
  *
- * **Ưu tiên backend:** Cloudflare R2 → Google Drive (Apps Script) → Firebase Storage.
- * Ảnh được resize/nén trước khi gửi (JPEG ~1600px).
- *
- * R2 key: `receipts/leads/{leadId}/{HọTên_MãSV}/{slot}/{timestamp}_{file}`
+ * Ưu tiên: cấu hình trường (Cài đặt) → .env → Firebase Storage.
+ * Provider: auto | r2 | drive | firebase.
  */
 export async function uploadLeadReceiptFile(
   lead: { id: string; fullName: string; systemCode?: string; customerId?: string },
@@ -140,12 +134,23 @@ export async function uploadLeadReceiptFile(
   file: File,
 ): Promise<string> {
   const prepared = await optimizeReceiptFile(file)
+  const runtime = resolveReceiptStorageRuntime()
 
-  if (RECEIPT_R2_UPLOAD_URL) {
-    return uploadReceiptToR2(lead, slot, prepared)
+  const tryR2 = async () => {
+    if (!runtime.r2UploadUrl) throw new Error('Chưa có URL upload R2.')
+    return uploadReceiptToR2(lead, slot, prepared, runtime)
   }
-  if (RECEIPT_DRIVE_WEBHOOK_URL) {
-    return uploadReceiptToDriveWebhook(lead, slot, prepared)
+  const tryDrive = async () => {
+    if (!runtime.driveWebhookUrl) throw new Error('Chưa có URL Apps Script Drive.')
+    return uploadReceiptToDriveWebhook(lead, slot, prepared, runtime)
   }
+
+  if (runtime.provider === 'r2') return tryR2()
+  if (runtime.provider === 'drive') return tryDrive()
+  if (runtime.provider === 'firebase') return uploadReceiptToFirebase(lead, slot, prepared)
+
+  // auto
+  if (runtime.r2UploadUrl) return tryR2()
+  if (runtime.driveWebhookUrl) return tryDrive()
   return uploadReceiptToFirebase(lead, slot, prepared)
 }
