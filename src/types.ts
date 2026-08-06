@@ -428,6 +428,15 @@ export interface Lead {
   /** Mức sẵn sàng từ AI cuộc gọi (Cao / Trung bình / Thấp). */
   lastCallAiReadiness?: string
   lastCallAiAt?: Timestamp
+  /**
+   * Lần gọi gần nhất (denormalize) — hiện trên danh sách / lọc ca khi chung tài khoản.
+   * Ghi khi lưu đánh giá cuộc gọi hoặc log OMICall.
+   */
+  lastCallAt?: Timestamp
+  /** Nhãn người/máy nhánh (SIP, tên hiển thị) — không chỉ uid. */
+  lastCalledByLabel?: string
+  /** Kết quả cuộc gọi gần nhất. */
+  lastCallOutcome?: 'NO_ANSWER' | 'CONNECTED' | 'FOLLOW_UP' | 'DISQUALIFIED' | 'APPOINTMENT_SET' | 'OTHER'
   /** Nhãn ưu tiên tối thiểu sau bảng đánh giá gọi (chỉ nâng HOT/WARM, không tự hạ). */
   callEvalPriorityBoost?: PriorityTag
   callEvalPriorityBoostAt?: Timestamp

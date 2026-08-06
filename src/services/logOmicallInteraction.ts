@@ -1,9 +1,11 @@
-import { addDoc, collection, getDocs, limit, query, Timestamp, where, type Firestore } from 'firebase/firestore'
+import { addDoc, collection, doc, getDocs, limit, query, Timestamp, updateDoc, where, type Firestore } from 'firebase/firestore'
 import type { Interaction, OmicallCallTarget, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { commitAuditLog } from './auditLog'
 import type { OmicallCallData } from './omicallSdk'
 import { OMICALL_TARGET_LABELS, parseOmicallUserData } from '../utils/omicallConfig'
+import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
+import { leadTouchPatch } from '../utils/leadTouch'
 
 function durationSecondsFromCall(call: OmicallCallData): number | undefined {
   const talk = call.callingDuration?.value ?? 0
@@ -73,6 +75,22 @@ export async function logOmicallInteraction(
     syncedFrom: 'sdk',
     timestamp: Timestamp.now(),
   })
+
+  const callerLabel =
+    profile.omicallSipUser?.trim() ||
+    profile.displayName?.trim() ||
+    profile.id
+  try {
+    await updateDoc(doc(db, FS_COLLECTIONS.leads, meta.leadId), {
+      ...leadTouchPatch(),
+      ...buildLastCallLeadPatch({
+        calledByLabel: callerLabel,
+        outcome,
+      }),
+    })
+  } catch (e) {
+    console.warn('[logOmicallInteraction] lastCall patch', e)
+  }
 
   await commitAuditLog(db, {
     leadId: meta.leadId,

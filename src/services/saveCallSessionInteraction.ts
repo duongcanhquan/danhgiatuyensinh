@@ -35,6 +35,7 @@ import type { AIIntegrationConfig } from '../types'
 import { behaviorScoreFromPicks } from '../utils/callSessionBehaviorScore'
 import { mergeCallEvalPriorityBoost } from '../utils/callSessionPriorityFromEvaluation'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
 import { mapDoc } from '../hooks/useLeads'
 import { persistedLeadScoringFields, type MasterDataBuckets } from '../utils/scoring'
 import type { InfoScoreRuntime } from '../utils/infoScoreRules'
@@ -168,7 +169,15 @@ export async function saveCallSessionInteraction(
   }
 
   const touch = leadTouchPatch()
-  const leadPatch: Record<string, unknown> = { ...touch }
+  const callerLabel =
+    profile.displayName?.trim() || profile.email?.trim() || profile.id
+  const leadPatch: Record<string, unknown> = {
+    ...touch,
+    ...buildLastCallLeadPatch({
+      calledByLabel: callerLabel,
+      outcome: input.callOutcome,
+    }),
+  }
   const evalLine = formatEvaluationSummaryLine(picks)
   const readinessFromEval = picks.find((p) => p.dimensionId === 'readiness')?.optionLabel
   if (callAiAssessment) {

@@ -366,6 +366,21 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.lastCallAiAt && typeof data.lastCallAiAt === 'object' && 'toMillis' in (data.lastCallAiAt as object)
           ? (data.lastCallAiAt as Timestamp)
           : undefined,
+      lastCallAt:
+        data.lastCallAt && typeof data.lastCallAt === 'object' && 'toMillis' in (data.lastCallAt as object)
+          ? (data.lastCallAt as Timestamp)
+          : undefined,
+      lastCalledByLabel:
+        data.lastCalledByLabel !== undefined && data.lastCalledByLabel !== null
+          ? String(data.lastCalledByLabel).slice(0, 120)
+          : undefined,
+      lastCallOutcome: (() => {
+        const o = data.lastCallOutcome
+        const ok = ['NO_ANSWER', 'CONNECTED', 'FOLLOW_UP', 'DISQUALIFIED', 'APPOINTMENT_SET', 'OTHER'] as const
+        return typeof o === 'string' && (ok as readonly string[]).includes(o)
+          ? (o as Lead['lastCallOutcome'])
+          : undefined
+      })(),
       callEvalPriorityBoost:
         data.callEvalPriorityBoost !== undefined && data.callEvalPriorityBoost !== null
           ? normPriorityTag(data.callEvalPriorityBoost)

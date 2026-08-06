@@ -81,6 +81,12 @@ import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
+import {
+  formatLeadLastCallLine,
+  leadMatchesCallQueueFilter,
+  type CallQueueFilter,
+} from '../utils/leadCallSignals'
+import { bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
@@ -100,7 +106,7 @@ import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft, mergeCo
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
-import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
+import { BulkLeadActionBar, BULK_PRIORITY_TAG_OPTIONS } from '../components/bulk/BulkLeadActionBar'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useScoringProfileSelection } from '../hooks/useScoringProfiles'
 import { commitAuditLog } from '../services/auditLog'
@@ -240,6 +246,7 @@ export function LeadManagement() {
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
 
   const [tagFilter, setTagFilter] = useState<string>('ALL')
+  const [callQueueFilter, setCallQueueFilter] = useState<CallQueueFilter>('all')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -260,6 +267,8 @@ export function LeadManagement() {
    */
   const { profileScoringLive } = useScoringProfileSelection()
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
+  /** Lọc ca gọi cần quét phạm vi rộng (thiếu lastCallAt không query server được). */
+  const callQueueNeedsScope = callQueueFilter !== 'all'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -330,7 +339,7 @@ export function LeadManagement() {
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: tagClientEval ? 'fullScope' : 'paged',
+    dataMode: tagClientEval || callQueueNeedsScope ? 'fullScope' : 'paged',
     maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
@@ -461,9 +470,10 @@ export function LeadManagement() {
   /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
   const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
+  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm' | 'priorityTag'>(null)
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
+  const [bulkPriorityTag, setBulkPriorityTag] = useState<PriorityTag>('WARM')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [rescoreBusy, setRescoreBusy] = useState(false)
   const [rescoreMsg, setRescoreMsg] = useState<string | null>(null)
@@ -640,6 +650,9 @@ export function LeadManagement() {
     if (tagClientEval && tagFilter !== 'ALL') {
       rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
     }
+    if (callQueueFilter !== 'all') {
+      rows = rows.filter((l) => leadMatchesCallQueueFilter(l, callQueueFilter))
+    }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
     } else if (assigneeFilter) {
@@ -655,6 +668,7 @@ export function LeadManagement() {
     tagClientEval,
     tagFilter,
     effectiveLeadTag,
+    callQueueFilter,
     assigneeFilter,
   ])
 
@@ -742,6 +756,7 @@ export function LeadManagement() {
 
   const clearQuickFilters = useCallback(() => {
     setTagFilter('ALL')
+    setCallQueueFilter('all')
     setRegionFilter('ALL')
     setMajorFilter('ALL')
     setStatusFilter('ALL')
@@ -786,6 +801,21 @@ export function LeadManagement() {
           setTagFilter('ALL')
           setPage(1)
           mergeListFilterUrl({ [LWF.TAG]: null })
+        },
+      })
+    }
+    if (callQueueFilter !== 'all') {
+      const callLabels: Record<Exclude<CallQueueFilter, 'all'>, string> = {
+        never_called: 'Chưa gọi',
+        called_today: 'Đã gọi hôm nay',
+        needs_callback: 'Cần gọi lại',
+      }
+      out.push({
+        id: 'callQueue',
+        label: `Ca gọi: ${callLabels[callQueueFilter]}`,
+        onClear: () => {
+          setCallQueueFilter('all')
+          setPage(1)
         },
       })
     }
@@ -906,6 +936,7 @@ export function LeadManagement() {
   }, [
     searchParams,
     tagFilter,
+    callQueueFilter,
     regionFilter,
     majorFilter,
     statusFilter,
@@ -1232,6 +1263,38 @@ export function LeadManagement() {
       setBulkBusy(false)
     }
   }, [db, profile, selectedIds, leads, bulkCrmStatus, activeScoringProfile, scoringMasterBuckets, schoolTvvSignalDefs, applyLocalLeadPatch, refetchLeads])
+
+  const applyBulkPriorityTag = useCallback(async () => {
+    if (!db || !profile || !selectedIds.size) return
+    setBulkBusy(true)
+    try {
+      const ids = [...selectedIds]
+      await bulkSetLeadPriorityTags(db, ids, bulkPriorityTag)
+      const touch = leadTouchPatch()
+      for (const id of ids) {
+        const localPatch = { priorityTag: bulkPriorityTag, ...touch } as Partial<Lead>
+        applyLocalLeadPatch(id, localPatch)
+        setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
+      }
+      const performer = profile.displayName || profile.email || profile.id
+      for (const id of ids.slice(0, 40)) {
+        await commitAuditLog(db, {
+          leadId: id,
+          actionType: 'SYSTEM_UPDATE',
+          description: `Gán nhãn phân loại hàng loạt → ${bulkPriorityTag}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+      setBulkModal(null)
+      setSelectedIds(new Set())
+      refetchLeads()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [db, profile, selectedIds, bulkPriorityTag, applyLocalLeadPatch, refetchLeads])
 
   const executeBulkAiMiner = useCallback(
     async (warmPassed: Lead[]) => {
@@ -1707,6 +1770,25 @@ export function LeadManagement() {
               className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
           </label>
+          <label
+            className="flex min-w-[9.5rem] shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
+            title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
+          >
+            Ca gọi
+            <select
+              value={callQueueFilter}
+              onChange={(e) => {
+                setCallQueueFilter(e.target.value as CallQueueFilter)
+                setPage(1)
+              }}
+              className="mt-0.5 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+            >
+              <option value="all">Tất cả</option>
+              <option value="never_called">Chưa gọi</option>
+              <option value="called_today">Đã gọi hôm nay</option>
+              <option value="needs_callback">Cần gọi lại</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={clearQuickFilters}
@@ -2010,6 +2092,7 @@ export function LeadManagement() {
                 const descForTable = leadDescriptionForDisplay(l.description)
                 const extraNotesFull = leadSupplementaryNotesText(l)
                 const callAiLine = formatLeadLastCallAiLine(l)
+                const callQueueLine = formatLeadLastCallLine(l)
                 return (
                 <motion.tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
@@ -2042,6 +2125,14 @@ export function LeadManagement() {
                       ) : null}
                       <span className="min-w-0 truncate">{l.fullName || '—'}</span>
                     </span>
+                    <p
+                      className={`mt-0.5 line-clamp-1 text-[11px] font-medium leading-snug ${
+                        callQueueLine === 'Chưa gọi' ? 'text-amber-700' : 'text-slate-500'
+                      }`}
+                      title={callQueueLine}
+                    >
+                      {callQueueLine}
+                    </p>
                     {callAiLine ? (
                       <p
                         className="mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-[var(--color-primary)]"
@@ -2103,6 +2194,10 @@ export function LeadManagement() {
           onBulkStatus={() => {
             setBulkCrmStatus('NEW')
             setBulkModal('crm')
+          }}
+          onBulkPriorityTag={() => {
+            setBulkPriorityTag('WARM')
+            setBulkModal('priorityTag')
           }}
           onExport={() => exportBulkSelection()}
           showReassign={showBulkReassign}
@@ -2213,6 +2308,56 @@ export function LeadManagement() {
                 className="rounded-xl border border-amber-500 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
                 {bulkBusy ? 'Đang xử lý…' : 'Áp dụng'}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {bulkModal === 'priorityTag' && db ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[55] bg-slate-900/25 backdrop-blur-md"
+            aria-label="Đóng"
+            onClick={() => !bulkBusy && setBulkModal(null)}
+          />
+          <div className="app-modal fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+            <h3 className="app-section-heading">Gán nhãn phân loại</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Gán cùng một nhãn HOT / WARM / COLD / LOSS cho {selectedIds.size} hồ sơ đã chọn (không đổi điểm). Muốn
+              máy chấm lại điểm + nhãn, dùng nút «Tính lại».
+            </p>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Nhãn
+              <select
+                value={bulkPriorityTag}
+                onChange={(e) => setBulkPriorityTag(e.target.value as PriorityTag)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-sky-200"
+              >
+                {BULK_PRIORITY_TAG_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} className="bg-white">
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => setBulkModal(null)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => void applyBulkPriorityTag()}
+                className="rounded-xl border border-sky-600 bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
+              >
+                {bulkBusy ? 'Đang xử lý…' : 'Gán nhãn'}
               </button>
             </div>
           </div>

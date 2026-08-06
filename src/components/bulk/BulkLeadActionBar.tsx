@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { UserPlus, Download, GitBranch, Sparkles, X } from 'lucide-react'
+import { UserPlus, Download, GitBranch, Sparkles, X, Tags } from 'lucide-react'
+import type { PriorityTag } from '../../types'
 
 type Props = {
   count: number
@@ -7,6 +8,8 @@ type Props = {
   onReassign: () => void
   onBulkStatus: () => void
   onExport: () => void
+  /** Gán nhãn HOT/WARM/COLD/LOSS hàng loạt */
+  onBulkPriorityTag?: () => void
   showReassign: boolean
   /** Chỉ hiện khi lọc WARM + có quyền AI — stage-2 shortlist miner */
   showAiMiner?: boolean
@@ -20,6 +23,7 @@ export function BulkLeadActionBar({
   onReassign,
   onBulkStatus,
   onExport,
+  onBulkPriorityTag,
   showReassign,
   showAiMiner,
   onAiMiner,
@@ -33,7 +37,7 @@ export function BulkLeadActionBar({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 120, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-          className="pointer-events-auto fixed left-1/2 z-[45] w-[min(96vw,860px)] -translate-x-1/2 pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-[480px]:bottom-2 bottom-6"
+          className="pointer-events-auto fixed left-1/2 z-[45] w-[min(96vw,960px)] -translate-x-1/2 pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-[480px]:bottom-2 bottom-6"
         >
           <div className="app-modal flex flex-wrap items-center justify-between gap-3 rounded-2xl px-3 py-3 sm:px-4">
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
@@ -64,6 +68,16 @@ export function BulkLeadActionBar({
                 >
                   <Sparkles className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                   ✨ Chạy AI Phân tích (Shortlist)
+                </button>
+              ) : null}
+              {onBulkPriorityTag ? (
+                <button
+                  type="button"
+                  onClick={onBulkPriorityTag}
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-3 py-2.5 text-sm font-semibold text-sky-950 transition hover:border-sky-400 hover:bg-sky-100 sm:flex-initial sm:min-h-0 sm:py-2"
+                >
+                  <Tags className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  Gán nhãn phân loại
                 </button>
               ) : null}
               {showReassign ? (
@@ -99,3 +113,10 @@ export function BulkLeadActionBar({
     </AnimatePresence>
   )
 }
+
+export const BULK_PRIORITY_TAG_OPTIONS: { value: PriorityTag; label: string }[] = [
+  { value: 'HOT', label: 'HOT' },
+  { value: 'WARM', label: 'WARM' },
+  { value: 'COLD', label: 'COLD' },
+  { value: 'LOSS', label: 'LOSS' },
+]
