@@ -88,10 +88,15 @@ import {
 import {
   CALL_DISPOSITIONS,
   compareUncalledQueueOrder,
+  buildCallWorkLeadPatch,
+  dispositionPriorityOverridesAfterScoring,
+  getCallDisposition,
   isCallDispositionId,
   leadMatchesCallWorkBucket,
   leadMatchesDisposition,
+  resolveCallWorkBucket,
   type CallDispositionFilter,
+  type CallDispositionId,
   type CallWorkBucketFilter,
 } from '../utils/callWorkQueue'
 import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
@@ -3474,6 +3479,11 @@ function LeadDetailPanel({
 
   const [note, setNote] = useState('')
   const [evalTag, setEvalTag] = useState<string>(EVALUATION_TAGS[0])
+  const [dispositionDraft, setDispositionDraft] = useState<CallDispositionId | ''>(() =>
+    lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
+      ? lead.lastCallDispositionId
+      : '',
+  )
   const [crmDirty, setCrmDirty] = useState<LeadCounselorStatus | null>(null)
   const crmForForm = crmDirty ?? lead.status
   const [statusDirty, setStatusDirty] = useState<LeadPipelineStatus | null>(null)
@@ -3493,6 +3503,11 @@ function LeadDetailPanel({
   useEffect(() => {
     setNote('')
     setEvalTag(EVALUATION_TAGS[0])
+    setDispositionDraft(
+      lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
+        ? lead.lastCallDispositionId
+        : '',
+    )
     setCrmDirty(null)
     setStatusDirty(null)
     setMsg(null)
@@ -3500,6 +3515,8 @@ function LeadDetailPanel({
     setDetailLeftTab('counselor')
     setDetailRightTab('history')
     signalsHelpRef.current?.close()
+    // Chỉ reset khi đổi hồ sơ — không phụ thuộc field lead (tránh xóa draft khi patch local).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: lead.id only
   }, [lead.id])
 
   useEffect(() => {
@@ -3580,13 +3597,19 @@ function LeadDetailPanel({
   const crmEditOnRight = crmQuickBlockVisible
   const crmEditOnLeft = showCounselorProgressForm && !crmEditOnRight
 
+  const dispositionChanged =
+    (dispositionDraft || null) !== (lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
+      ? lead.lastCallDispositionId
+      : null)
+
   const hasUnsavedProgress = useMemo(
     () =>
       coreDirty ||
       financeDirty ||
       (crmDirty !== null && crmForForm !== lead.status) ||
       (statusDirty !== null && statusForForm !== lead.pipelineStatus) ||
-      note.trim().length > 0,
+      note.trim().length > 0 ||
+      dispositionChanged,
     [
       coreDirty,
       financeDirty,
@@ -3597,6 +3620,7 @@ function LeadDetailPanel({
       statusForForm,
       lead.pipelineStatus,
       note,
+      dispositionChanged,
     ],
   )
 
@@ -3852,9 +3876,20 @@ function LeadDetailPanel({
     const pipeChanged = statusDirty !== null && statusForForm !== lead.pipelineStatus
     const corePatch = buildLeadCoreFirestorePatch(lead, coreDraft)
     const coreChanged = Object.keys(corePatch).length > 0
+    const nextDispositionId =
+      dispositionDraft && isCallDispositionId(dispositionDraft) ? dispositionDraft : null
+    const dispChanged =
+      nextDispositionId !==
+      (lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
+        ? lead.lastCallDispositionId
+        : null)
 
-    if (!crmChanged && !pipeChanged && !noteTrim && !coreChanged) {
+    if (!crmChanged && !pipeChanged && !noteTrim && !coreChanged && !dispChanged) {
       setMsg('Không có thay đổi.')
+      return
+    }
+    if (dispChanged && !canSaveInteraction && !canMutateLead) {
+      setMsg('Bạn không có quyền cập nhật note sau gọi trên hồ sơ này.')
       return
     }
     if (coreChanged && !canMutateLead) {
@@ -3890,6 +3925,22 @@ function LeadDetailPanel({
       else if (crmChanged) dataPatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
 
       const coreAsPartial = corePatch as unknown as Partial<Lead>
+      const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
+      let callWorkFields: Partial<Lead> = {}
+      if (dispChanged && nextDispositionId) {
+        const work = buildCallWorkLeadPatch({
+          dispositionId: nextDispositionId,
+          calledByLabel: callerLabel,
+          previousAttemptCount: lead.callAttemptCount,
+          bumpAttempt: true,
+          existingScoringSignals: lead.scoringSignals,
+        })
+        const overrides = dispositionPriorityOverridesAfterScoring(nextDispositionId, lead.priorityTag)
+        callWorkFields = { ...work }
+        if (overrides.priorityTag) callWorkFields.priorityTag = overrides.priorityTag
+        Object.assign(dataPatch, callWorkFields)
+      }
+
       const mergedForScore: Partial<Lead> = { ...dataPatch, ...coreAsPartial }
       const scoreFields = persistedLeadScoringFields(
         lead,
@@ -3901,9 +3952,33 @@ function LeadDetailPanel({
       )
 
       const touch = leadTouchPatch()
-      const performer = profile.displayName?.trim() || profile.email || profile.id
+      const performer = callerLabel
 
-      const leadFirestorePatch: Record<string, unknown> = { ...touch, ...scoreFields, ...corePatch }
+      const leadFirestorePatch: Record<string, unknown> = {
+        ...touch,
+        ...scoreFields,
+        ...corePatch,
+        ...callWorkFields,
+      }
+      if (dispChanged && nextDispositionId === 'enrolled_elsewhere') {
+        const overrides = dispositionPriorityOverridesAfterScoring('enrolled_elsewhere', lead.priorityTag)
+        leadFirestorePatch.priorityTag = 'LOSS'
+        if (overrides.clearCallEvalPriorityBoost) {
+          leadFirestorePatch.callEvalPriorityBoost = deleteField()
+          leadFirestorePatch.callEvalPriorityBoostAt = deleteField()
+        }
+      } else if (dispChanged && nextDispositionId === 'college_hot') {
+        const scored =
+          typeof scoreFields.priorityTag === 'string'
+            ? (scoreFields.priorityTag as PriorityTag)
+            : lead.priorityTag
+        const ov = dispositionPriorityOverridesAfterScoring('college_hot', scored)
+        if (ov.priorityTag) leadFirestorePatch.priorityTag = ov.priorityTag
+        if (ov.callEvalPriorityBoost) {
+          leadFirestorePatch.callEvalPriorityBoost = ov.callEvalPriorityBoost
+          leadFirestorePatch.callEvalPriorityBoostAt = Timestamp.now()
+        }
+      }
       if (crmChanged || pipeChanged) {
         if (crmChanged) leadFirestorePatch.status = nextCrm
         if (pipeChanged) leadFirestorePatch.pipelineStatus = statusForForm
@@ -3944,6 +4019,7 @@ function LeadDetailPanel({
       }
 
       const nextPriority: PriorityTag =
+        (leadFirestorePatch.priorityTag as PriorityTag | undefined) ??
         (scoreFields.priorityTag as PriorityTag | undefined) ??
         scoringPreview?.priorityTag ??
         detailScoringPreview?.priorityTag ??
@@ -3983,15 +4059,26 @@ function LeadDetailPanel({
         }
       }
 
-      if (noteTrim) {
+      const dispDef = nextDispositionId ? getCallDisposition(nextDispositionId) : undefined
+      if (noteTrim || dispChanged) {
         const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
+        const counselorNote =
+          noteTrim ||
+          (dispDef ? `Note sau gọi: ${dispDef.label}` : '')
         await addDoc(sub, {
           leadId: lead.id,
-          channel: 'NOTE',
+          channel: dispChanged ? 'CALL' : 'NOTE',
           authorUid: profile.id,
           authorRole: profile.role,
-          counselorNote: noteTrim,
+          counselorNote,
           evaluationTag: evalTag,
+          ...(dispDef
+            ? {
+                callDispositionId: dispDef.id,
+                callDispositionLabel: dispDef.label,
+                callOutcome: (callWorkFields.lastCallOutcome as Lead['lastCallOutcome']) ?? undefined,
+              }
+            : {}),
           snapshotCrmStatus: nextCrm,
           snapshotPipelineStatus: nextPipeFinal,
           snapshotPriorityTag: nextPriority,
@@ -4000,7 +4087,9 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'NOTE_ADDED',
-          description: `Ghi chú tương tác (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
+          description: dispDef
+            ? `Note sau gọi: ${dispDef.label}${noteTrim ? ` — ${noteTrim.slice(0, 200)}` : ''}`
+            : `Ghi chú tương tác (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -4011,6 +4100,9 @@ function LeadDetailPanel({
         ...dataPatch,
         ...coreAsPartial,
         ...scoreFields,
+        ...(typeof leadFirestorePatch.priorityTag === 'string'
+          ? { priorityTag: leadFirestorePatch.priorityTag as PriorityTag }
+          : {}),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       }
@@ -4020,6 +4112,9 @@ function LeadDetailPanel({
         ...dataPatch,
         ...coreAsPartial,
         ...scoreFields,
+        ...(typeof leadFirestorePatch.priorityTag === 'string'
+          ? { priorityTag: leadFirestorePatch.priorityTag as PriorityTag }
+          : {}),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
@@ -4027,7 +4122,8 @@ function LeadDetailPanel({
       setNote('')
       setStatusDirty(null)
       setCrmDirty(null)
-      setMsg('Đã lưu cập nhật.')
+      if (dispDef) setDispositionDraft(dispDef.id)
+      setMsg(dispDef ? `Đã lưu · Note sau gọi: ${dispDef.label}` : 'Đã lưu cập nhật.')
     } catch (e) {
       console.error(e)
       setMsg('Không lưu được. Kiểm tra Firestore Rules.')
@@ -4417,6 +4513,25 @@ function LeadDetailPanel({
                                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
                                   Tiến độ tư vấn &amp; ghi chú
                                 </p>
+                                <p className="mt-1 text-[11px] leading-snug text-slate-600">
+                                  Hàng chờ:{' '}
+                                  <span className="font-semibold text-slate-800">
+                                    {resolveCallWorkBucket(lead) === 'uncalled'
+                                      ? 'Chưa gọi'
+                                      : resolveCallWorkBucket(lead) === 'callback'
+                                        ? 'Gọi lại'
+                                        : 'Đã gọi'}
+                                  </span>
+                                  {lead.lastCallDispositionLabel ? (
+                                    <>
+                                      {' '}
+                                      · Note hiện tại:{' '}
+                                      <span className="font-semibold text-slate-800">
+                                        {lead.lastCallDispositionLabel}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                </p>
                                 <div
                                   className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
                                 >
@@ -4466,6 +4581,25 @@ function LeadDetailPanel({
                                   </label>
                                 </div>
                                 <label className="mt-2 block text-xs font-medium text-slate-800">
+                                  Note sau gọi{' '}
+                                  <span className="font-normal text-slate-500">(đưa hồ sơ vào Chưa gọi / Gọi lại / Đã gọi)</span>
+                                  <select
+                                    value={dispositionDraft}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      setDispositionDraft(v && isCallDispositionId(v) ? v : '')
+                                    }}
+                                    className="mt-0.5 w-full rounded-md border border-amber-300/90 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                  >
+                                    <option value="">— Chưa chọn note —</option>
+                                    {CALL_DISPOSITIONS.map((d) => (
+                                      <option key={d.id} value={d.id}>
+                                        {d.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="mt-2 block text-xs font-medium text-slate-800">
                                   Ghi chú tương tác
                                   <textarea
                                     value={note}
@@ -4473,8 +4607,8 @@ function LeadDetailPanel({
                                     rows={3}
                                     placeholder={
                                       crmEditOnRight
-                                        ? 'Ghi nhận buổi làm việc — lưu kèm funnel / nhãn phía trên…'
-                                        : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / funnel phía trên…'
+                                        ? 'Ghi nhận buổi làm việc — lưu kèm funnel / note sau gọi phía trên…'
+                                        : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / note sau gọi phía trên…'
                                     }
                                     className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
                                   />

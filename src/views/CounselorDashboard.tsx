@@ -33,7 +33,12 @@ import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
-import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
+import {
+  CALL_DISPOSITIONS,
+  isCallDispositionId,
+  type CallDispositionId,
+} from '../utils/callWorkQueue'
+import { persistLeadCallDisposition } from '../utils/persistLeadCallDisposition'
 import { CallEvaluationAnalyticsPanel } from '../components/CallEvaluationAnalyticsPanel'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import { useCallEvaluationStats } from '../hooks/useCallEvaluationStats'
@@ -169,35 +174,25 @@ function CounselorLeadListRow({
   const logCall = async (e: MouseEvent) => {
     e.stopPropagation()
     if (!db || !profile || !canInteract) return
+    const lines = CALL_DISPOSITIONS.map((d, i) => `${i + 1}. ${d.label}`).join('\n')
+    const raw = window.prompt(
+      `Chọn note sau gọi (nhập số 1–${CALL_DISPOSITIONS.length}):\n${lines}`,
+      '1',
+    )
+    if (raw == null) return
+    const n = Number.parseInt(raw.trim(), 10)
+    const picked = Number.isFinite(n) ? CALL_DISPOSITIONS[n - 1] : undefined
+    if (!picked || !isCallDispositionId(picked.id)) {
+      onToast('Note sau gọi không hợp lệ.')
+      return
+    }
     try {
-      const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
-      const callPatch = {
-        ...leadTouchPatch(),
-        ...buildLastCallLeadPatch({
-          calledByLabel: callerLabel,
-          outcome: 'CONNECTED',
-        }),
-      }
-      // Ghi tín hiệu ca gọi trước — lọc «Chưa gọi» phụ thuộc lastCall*, không phải interaction.
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), callPatch)
-      onLeadLocallyPatched?.(lead.id, callPatch)
-      await addDoc(collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions), {
-        leadId: lead.id,
-        channel: 'CALL',
-        authorUid: profile.id,
-        authorRole: profile.role,
-        timestamp: Timestamp.now(),
-        counselorNote: 'Ghi nhanh: Cuộc gọi (danh sách TVV)',
-        callOutcome: 'CONNECTED',
+      const { leadPatch } = await persistLeadCallDisposition(db, profile, lead, {
+        dispositionId: picked.id as CallDispositionId,
+        counselorNote: `Ghi nhanh TVV · ${picked.label}`,
       })
-      await commitAuditLog(db, {
-        leadId: lead.id,
-        actionType: 'NOTE_ADDED',
-        description: 'Ghi nhận cuộc gọi nhanh (kênh CALL).',
-        performedBy: profile.id,
-        performedByName: performerName,
-      })
-      onToast('Đã ghi nhận cuộc gọi.')
+      onLeadLocallyPatched?.(lead.id, leadPatch as Partial<Lead>)
+      onToast(`Đã ghi nhận cuộc gọi · ${picked.label}`)
     } catch (err) {
       console.error(err)
       onToast('Không thể ghi cuộc gọi.')
