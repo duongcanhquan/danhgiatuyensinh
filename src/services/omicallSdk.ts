@@ -239,8 +239,59 @@ export type OmicallUiGlobal = {
 
 declare global {
   interface Window {
-    OMICallSDK?: OmicallSdkGlobal
+    OMICallSDK?: OmicallSdkGlobal & { showToast?: (...args: unknown[]) => void }
     OMICallUI?: OmicallUiGlobal
+    OMIToastify?: unknown
+    Toastify?: unknown
+  }
+}
+
+export const OMICALL_TOAST_SUPPRESS_STYLE_ID = 'vm-omicall-toast-suppress'
+
+/** CSS ẩn toast đỏ «Có lỗi xảy ra» của OMICall SDK (nền đăng ký SIP / mạng yếu). */
+export const OMICALL_TOAST_SUPPRESS_CSS =
+  '.omi-toastify{display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important}'
+
+export type OmicallToastSuppressHost = {
+  document?: Document
+  window?: Window & typeof globalThis
+}
+
+function createSilentOmiToastify() {
+  const api = {
+    showToast() {
+      return api
+    },
+    hideToast() {},
+    removeElement() {},
+  }
+  const factory = () => api
+  ;(factory as { lib?: { init: typeof factory } }).lib = { init: factory }
+  return factory
+}
+
+/**
+ * Chặn toast vendor OMICall — app đã có dải trạng thái tổng đài riêng.
+ * Gọi sau khi tải SDK (và khi SDK đã có sẵn trên window).
+ */
+export function suppressOmicallVendorToasts(host?: OmicallToastSuppressHost): void {
+  const doc = host?.document ?? (typeof document !== 'undefined' ? document : undefined)
+  const win = host?.window ?? (typeof window !== 'undefined' ? window : undefined)
+  if (!doc?.head || !win) return
+
+  if (!doc.getElementById(OMICALL_TOAST_SUPPRESS_STYLE_ID)) {
+    const style = doc.createElement('style')
+    style.id = OMICALL_TOAST_SUPPRESS_STYLE_ID
+    style.textContent = OMICALL_TOAST_SUPPRESS_CSS
+    doc.head.appendChild(style)
+  }
+
+  const silent = createSilentOmiToastify()
+  win.OMIToastify = silent
+  win.Toastify = silent
+
+  if (win.OMICallSDK) {
+    win.OMICallSDK.showToast = () => {}
   }
 }
 
@@ -257,7 +308,10 @@ export function getOmicallSdk(): OmicallSdkGlobal | null {
 export function loadOmicallSdk(version: string): Promise<OmicallSdkGlobal> {
   const v = version.trim() || '3.0.41'
   const existing = getOmicallSdk()
-  if (existing) return Promise.resolve(existing)
+  if (existing) {
+    suppressOmicallVendorToasts()
+    return Promise.resolve(existing)
+  }
   if (loadPromise) return loadPromise
 
   loadPromise = new Promise((resolve, reject) => {
@@ -266,8 +320,10 @@ export function loadOmicallSdk(version: string): Promise<OmicallSdkGlobal> {
     if (prev) {
       prev.addEventListener('load', () => {
         const sdk = getOmicallSdk()
-        if (sdk) resolve(sdk)
-        else reject(new Error('OMICall SDK không khởi tạo sau khi tải script.'))
+        if (sdk) {
+          suppressOmicallVendorToasts()
+          resolve(sdk)
+        } else reject(new Error('OMICall SDK không khởi tạo sau khi tải script.'))
       })
       prev.addEventListener('error', () => reject(new Error('Không tải được script OMICall.')))
       return
@@ -279,8 +335,10 @@ export function loadOmicallSdk(version: string): Promise<OmicallSdkGlobal> {
     el.dataset.omicallSdk = '1'
     el.onload = () => {
       const sdk = getOmicallSdk()
-      if (sdk) resolve(sdk)
-      else reject(new Error('OMICall SDK không có trên window sau khi tải.'))
+      if (sdk) {
+        suppressOmicallVendorToasts()
+        resolve(sdk)
+      } else reject(new Error('OMICall SDK không có trên window sau khi tải.'))
     }
     el.onerror = () => {
       loadPromise = null

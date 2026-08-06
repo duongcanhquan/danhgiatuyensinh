@@ -31,6 +31,7 @@ import {
   hangUpOmicallCall,
   loadOmicallSdk,
   normalizeOmicallSdkPayload,
+  suppressOmicallVendorToasts,
   type OmicallCallData,
   type OmicallRegisterData,
   type OmicallSdkGlobal,
@@ -628,6 +629,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           searchRecentCall: false,
           searchRemoteContact: async () => null,
         })
+        // SDK có thể gắn lại OMIToastify khi init — chặn toast đỏ nền trên Hồ sơ / mobile.
+        suppressOmicallVendorToasts()
         if (cancelled) return
         if (!ok) {
           setConnectionStatus('error')

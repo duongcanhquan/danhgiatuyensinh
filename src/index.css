@@ -857,3 +857,11 @@ a {
 .app-focus-ring:focus-visible {
   box-shadow: 0 0 0 3px rgb(13 148 136 / 0.28);
 }
+
+/* OMICall SDK toastify — ẩn toast đỏ «Có lỗi xảy ra» khi SIP/mạng lỗi nền; trạng thái nằm ở dải tổng đài. */
+.omi-toastify {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
