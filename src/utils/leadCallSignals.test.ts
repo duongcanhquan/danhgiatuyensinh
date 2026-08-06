@@ -77,4 +77,25 @@ describe('leadCallSignals', () => {
     expect(line).toContain('SIP 101')
     expect(line.toLowerCase()).toMatch(/đã bắt|connected|gọi/i)
   })
+
+  it('falls back to lastCallAiAt when lastCallAt missing (legacy calls)', () => {
+    const aiAt = Timestamp.fromDate(noon)
+    expect(callQueueFilterMatches({ lastCallAiAt: aiAt }, 'never_called', noon)).toBe(false)
+    expect(callQueueFilterMatches({ lastCallAiAt: aiAt }, 'called_today', noon)).toBe(true)
+    const line = formatLeadLastCallLine({ lastCallAiAt: aiAt })
+    expect(line).not.toBe('Chưa gọi')
+    expect(line).toMatch(/Gọi/)
+  })
+
+  it('prefers lastCallAt over lastCallAiAt', () => {
+    const today = Timestamp.fromDate(noon)
+    const yesterday = Timestamp.fromDate(new Date(2026, 7, 5, 18, 0, 0))
+    expect(
+      callQueueFilterMatches(
+        { lastCallAt: yesterday, lastCallAiAt: today },
+        'called_today',
+        noon,
+      ),
+    ).toBe(false)
+  })
 })

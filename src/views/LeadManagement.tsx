@@ -340,7 +340,7 @@ export function LeadManagement() {
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
     dataMode: tagClientEval || callQueueNeedsScope ? 'fullScope' : 'paged',
-    maxFullScopeLeads: tagClientEval ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    maxFullScopeLeads: tagClientEval || callQueueNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
   })
@@ -663,7 +663,7 @@ export function LeadManagement() {
     leads,
     scoreMinInput,
     scoreMaxInput,
-    activeScoringProfile,
+    profileScoringActive,
     scoreByLeadId,
     tagClientEval,
     tagFilter,
@@ -1267,6 +1267,7 @@ export function LeadManagement() {
   const applyBulkPriorityTag = useCallback(async () => {
     if (!db || !profile || !selectedIds.size) return
     setBulkBusy(true)
+    setRescoreMsg(null)
     try {
       const ids = [...selectedIds]
       await bulkSetLeadPriorityTags(db, ids, bulkPriorityTag)
@@ -1288,9 +1289,11 @@ export function LeadManagement() {
       }
       setBulkModal(null)
       setSelectedIds(new Set())
+      setRescoreMsg(`Đã gán nhãn ${bulkPriorityTag} cho ${ids.length} hồ sơ.`)
       refetchLeads()
     } catch (e) {
       console.error(e)
+      setRescoreMsg(e instanceof Error ? e.message : 'Không gán được nhãn hàng loạt.')
     } finally {
       setBulkBusy(false)
     }
@@ -1602,7 +1605,7 @@ export function LeadManagement() {
                   )
                 })}
               </div>
-              {tagClientEval && scopeFetchTruncated ? (
+              {(tagClientEval || callQueueNeedsScope) && scopeFetchTruncated ? (
                 <p className="text-xs font-medium text-amber-900">
                   Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
                   phần ở đuôi danh sách.

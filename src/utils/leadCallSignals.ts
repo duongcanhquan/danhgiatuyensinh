@@ -5,6 +5,8 @@ export type CallQueueFilter = 'all' | 'never_called' | 'called_today' | 'needs_c
 
 export type LeadCallSignalFields = {
   lastCallAt?: Timestamp | null
+  /** Fallback khi hồ sơ cũ chỉ có đánh giá AI sau gọi, chưa có lastCallAt. */
+  lastCallAiAt?: Timestamp | null
   lastCalledByLabel?: string | null
   lastCallOutcome?: Interaction['callOutcome'] | null
   nextFollowUpDate?: Timestamp | null
@@ -17,6 +19,19 @@ const OUTCOME_VI: Record<NonNullable<Interaction['callOutcome']>, string> = {
   DISQUALIFIED: 'Loại',
   APPOINTMENT_SET: 'Hẹn',
   OTHER: 'Khác',
+}
+
+function isTs(v: unknown): v is Timestamp {
+  return Boolean(v && typeof v === 'object' && typeof (v as Timestamp).toMillis === 'function')
+}
+
+/** Ưu tiên lastCallAt; hồ sơ cũ dùng lastCallAiAt. */
+export function effectiveLastCallAt(
+  lead: Pick<LeadCallSignalFields, 'lastCallAt' | 'lastCallAiAt'>,
+): Timestamp | null {
+  if (isTs(lead.lastCallAt)) return lead.lastCallAt
+  if (isTs(lead.lastCallAiAt)) return lead.lastCallAiAt
+  return null
 }
 
 /** Midnight local of the calendar day containing `now`. */
@@ -56,7 +71,8 @@ export function callQueueFilterMatches(
   now: Date = new Date(),
 ): boolean {
   if (filter === 'all') return true
-  const atMs = lead.lastCallAt && typeof lead.lastCallAt.toMillis === 'function' ? lead.lastCallAt.toMillis() : null
+  const at = effectiveLastCallAt(lead)
+  const atMs = at ? at.toMillis() : null
 
   if (filter === 'never_called') return atMs == null
 
@@ -68,8 +84,8 @@ export function callQueueFilterMatches(
   if (filter === 'needs_callback') {
     if (lead.lastCallOutcome === 'FOLLOW_UP') return true
     const follow = lead.nextFollowUpDate
-    if (!follow || typeof follow.toMillis !== 'function') return false
-    // Due today or overdue (follow-up timestamp on/before end of today)
+    if (!isTs(follow)) return false
+    // Due today or overdue (follow-up timestamp before end of today)
     return follow.toMillis() < endOfLocalDayMs(now)
   }
 
@@ -78,24 +94,28 @@ export function callQueueFilterMatches(
 
 /** Dòng ngắn trên danh sách hồ sơ — ưu tiên tín hiệu gọi, không phải AI summary. */
 export function formatLeadLastCallLine(
-  lead: Pick<LeadCallSignalFields, 'lastCallAt' | 'lastCalledByLabel' | 'lastCallOutcome'>,
+  lead: Pick<LeadCallSignalFields, 'lastCallAt' | 'lastCallAiAt' | 'lastCalledByLabel' | 'lastCallOutcome'>,
 ): string {
-  const at = lead.lastCallAt
-  if (!at || typeof at.toMillis !== 'function') return 'Chưa gọi'
+  const at = effectiveLastCallAt(lead)
+  if (!at) return 'Chưa gọi'
   const when = new Date(at.toMillis()).toLocaleString('vi-VN', {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   })
-  const who = lead.lastCalledByLabel?.trim() || '—'
+  const who = lead.lastCalledByLabel?.trim()
   const outcome = lead.lastCallOutcome ? OUTCOME_VI[lead.lastCallOutcome] ?? lead.lastCallOutcome : null
-  return outcome ? `Gọi ${when} · ${who} · ${outcome}` : `Gọi ${when} · ${who}`
+  const parts = [`Gọi ${when}`]
+  if (who) parts.push(who)
+  else if (!lead.lastCallAt && lead.lastCallAiAt) parts.push('đã đánh giá gọi')
+  if (outcome) parts.push(outcome)
+  return parts.join(' · ')
 }
 
 /** Type guard helper for Lead list filtering. */
 export function leadMatchesCallQueueFilter(
-  lead: Pick<Lead, 'lastCallAt' | 'lastCalledByLabel' | 'lastCallOutcome' | 'nextFollowUpDate'>,
+  lead: Pick<Lead, 'lastCallAt' | 'lastCallAiAt' | 'lastCalledByLabel' | 'lastCallOutcome' | 'nextFollowUpDate'>,
   filter: CallQueueFilter,
   now?: Date,
 ): boolean {

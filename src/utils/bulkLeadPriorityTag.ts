@@ -1,4 +1,4 @@
-import { doc, Timestamp, writeBatch, type Firestore } from 'firebase/firestore'
+import { doc, writeBatch, type Firestore } from 'firebase/firestore'
 import type { PriorityTag } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { leadTouchPatch } from './leadTouch'
@@ -20,7 +20,6 @@ export async function bulkSetLeadPriorityTags(
   if (!isPriorityTag(priorityTag)) throw new Error('Nhãn không hợp lệ.')
 
   const touch = leadTouchPatch()
-  const now = Timestamp.now()
   const chunk = 400
   let updated = 0
   for (let i = 0; i < ids.length; i += chunk) {
@@ -30,7 +29,6 @@ export async function bulkSetLeadPriorityTags(
       batch.update(doc(db, FS_COLLECTIONS.leads, id), {
         priorityTag,
         ...touch,
-        updatedAt: now,
       })
     }
     await batch.commit()
