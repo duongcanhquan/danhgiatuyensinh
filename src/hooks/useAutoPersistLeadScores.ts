@@ -7,6 +7,7 @@ import type { LeadClassificationRuntime } from '../utils/leadClassificationConfi
 import { persistLeadRescoresToFirestore, rescoreLeadList } from '../utils/bulkLeadRescore'
 import type { MasterDataBuckets } from '../utils/scoring'
 import { profileHasActiveRules } from '../utils/scoringProfileUtils'
+import { leadNeedsAutoScorePersist } from './leadNeedsAutoScorePersist'
 
 const AUTO_SYNC_DEBOUNCE_MS = 1200
 const AUTO_SYNC_MAX_LEADS = 80
@@ -65,7 +66,8 @@ export function useAutoPersistLeadScores(opts: UseAutoPersistLeadScoresOptions):
       for (const l of leads) {
         const ev = scoreByLeadId.get(l.id)
         if (!ev) continue
-        if (ev.calculatedScore !== l.calculatedScore || ev.priorityTag !== l.priorityTag) {
+        // Chỉ khi điểm lệch — tránh ghi đè nhãn tay (gán hàng loạt) khi điểm đã khớp.
+        if (leadNeedsAutoScorePersist(l, ev)) {
           mismatched.push(l)
         }
       }

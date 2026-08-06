@@ -32,7 +32,7 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, type LeadListServerFilters, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
+import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, type LeadListServerFilters, LEADS_PAGE_SIZE, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
@@ -86,7 +86,8 @@ import {
   leadMatchesCallQueueFilter,
   type CallQueueFilter,
 } from '../utils/leadCallSignals'
-import { bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
+import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
+import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
@@ -705,14 +706,28 @@ export function LeadManagement() {
     return rows
   }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId, infoScoreRuntime])
 
-  /** Phân trang theo Firestore / bucket tìm kiếm — hook đã trả đúng một trang (≤30 dòng). */
-  const displayTotalPages = Math.max(1, firestoreTotalPages)
+  /**
+   * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
+   * để «Chọn tất cả trên trang» không chọn hàng nghìn hồ sơ một lúc.
+   */
+  const clientPagingActive = tagClientEval || callQueueNeedsScope
+  const clientPageSlice = useMemo(
+    () =>
+      clientPagingActive
+        ? sliceClientPagedRows(sortedFiltered, currentPage, LEADS_PAGE_SIZE)
+        : {
+            pageRows: sortedFiltered,
+            totalPages: Math.max(1, firestoreTotalPages),
+            safePage: currentPage,
+          },
+    [clientPagingActive, sortedFiltered, currentPage, firestoreTotalPages],
+  )
+  const displayTotalPages = clientPageSlice.totalPages
+  const pagedRows = clientPageSlice.pageRows
 
   useEffect(() => {
     if (currentPage > displayTotalPages) setPage(displayTotalPages)
   }, [currentPage, displayTotalPages, setPage])
-
-  const pagedRows = useMemo(() => sortedFiltered, [sortedFiltered])
 
   const toggleSort = (k: typeof sortKey) => {
     if (k === 'none') return
@@ -1268,17 +1283,20 @@ export function LeadManagement() {
     if (!db || !profile || !selectedIds.size) return
     setBulkBusy(true)
     setRescoreMsg(null)
-    try {
-      const ids = [...selectedIds]
-      await bulkSetLeadPriorityTags(db, ids, bulkPriorityTag)
-      const touch = leadTouchPatch()
-      for (const id of ids) {
+    const ids = [...selectedIds]
+    const touch = leadTouchPatch()
+    const applyCommitted = (committedIds: string[]) => {
+      for (const id of committedIds) {
         const localPatch = { priorityTag: bulkPriorityTag, ...touch } as Partial<Lead>
         applyLocalLeadPatch(id, localPatch)
         setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
       }
+    }
+    try {
+      const { committedIds } = await bulkSetLeadPriorityTags(db, ids, bulkPriorityTag)
+      applyCommitted(committedIds)
       const performer = profile.displayName || profile.email || profile.id
-      for (const id of ids.slice(0, 40)) {
+      for (const id of committedIds.slice(0, 40)) {
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'SYSTEM_UPDATE',
@@ -1289,11 +1307,23 @@ export function LeadManagement() {
       }
       setBulkModal(null)
       setSelectedIds(new Set())
-      setRescoreMsg(`Đã gán nhãn ${bulkPriorityTag} cho ${ids.length} hồ sơ.`)
+      const auditNote =
+        committedIds.length > 40
+          ? ` (đã ghi nhật ký mẫu ${Math.min(40, committedIds.length)} hồ sơ)`
+          : ''
+      setRescoreMsg(`Đã gán nhãn ${bulkPriorityTag} cho ${committedIds.length} hồ sơ.${auditNote}`)
       refetchLeads()
     } catch (e) {
       console.error(e)
-      setRescoreMsg(e instanceof Error ? e.message : 'Không gán được nhãn hàng loạt.')
+      if (e instanceof BulkPriorityPartialError) {
+        applyCommitted(e.committedIds)
+        setBulkModal(null)
+        setSelectedIds(new Set(e.remainingIds))
+        setRescoreMsg(e.message)
+        refetchLeads()
+      } else {
+        setRescoreMsg(e instanceof Error ? e.message : 'Không gán được nhãn hàng loạt.')
+      }
     } finally {
       setBulkBusy(false)
     }
@@ -1893,8 +1923,14 @@ export function LeadManagement() {
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">
-              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span> hồ sơ (trang{' '}
-              {currentPage}/{displayTotalPages})
+              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span>
+              {clientPagingActive && sortedFiltered.length !== pagedRows.length ? (
+                <>
+                  {' '}
+                  / <span className="font-semibold text-slate-900">{sortedFiltered.length}</span> khớp lọc
+                </>
+              ) : null}{' '}
+              (trang {currentPage}/{displayTotalPages})
             </span>
             <div className="flex flex-wrap items-center gap-1">
               <button

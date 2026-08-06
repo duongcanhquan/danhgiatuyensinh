@@ -436,34 +436,56 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
   if (!isFinal) return
 
     const effectiveLeadId = match.leadId ?? (str(existingData?.leadId) || undefined)
-    if (effectiveLeadId && !existingData?.interactionId) {
-      const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
-      const dupSnap = await interactionsCol.where('providerCallId', '==', mergedForStore.transactionId).limit(1).get()
-      if (!dupSnap.empty) {
-        await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
-      } else {
-      const interactionRef = await interactionsCol.add({
-        leadId: effectiveLeadId,
-        channel: 'CALL',
-        authorUid: match.counselorUid || str(existingData?.counselorUid) || 'omicall',
-        authorRole: 'counselor',
-        counselorNote: interactionNote(mergedForStore),
-        callOutcome: mergedForStore.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER',
-        durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || undefined,
-        provider: 'OMICALL',
-        providerCallId: mergedForStore.transactionId,
-        providerUuid: mergedForStore.callUuid ?? null,
-        recordingUrl: mergedForStore.recordingFileUrl ?? null,
-        recordSeconds: mergedForStore.recordSeconds || null,
-        billSeconds: mergedForStore.billSeconds || null,
-        answerSeconds: mergedForStore.answerSeconds || null,
-        hotline: mergedForStore.hotline ?? null,
-        sipUser: mergedForStore.sipUser ?? null,
-        syncedFrom: source,
-        timestamp: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
-      })
-      await callRef.set({ interactionId: interactionRef.id }, { merge: true })
+    if (effectiveLeadId) {
+      const callOutcome = mergedForStore.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER'
+      if (!existingData?.interactionId) {
+        const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
+        const dupSnap = await interactionsCol.where('providerCallId', '==', mergedForStore.transactionId).limit(1).get()
+        if (!dupSnap.empty) {
+          await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
+        } else {
+          const interactionRef = await interactionsCol.add({
+            leadId: effectiveLeadId,
+            channel: 'CALL',
+            authorUid: match.counselorUid || str(existingData?.counselorUid) || 'omicall',
+            authorRole: 'counselor',
+            counselorNote: interactionNote(mergedForStore),
+            callOutcome,
+            durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || undefined,
+            provider: 'OMICALL',
+            providerCallId: mergedForStore.transactionId,
+            providerUuid: mergedForStore.callUuid ?? null,
+            recordingUrl: mergedForStore.recordingFileUrl ?? null,
+            recordSeconds: mergedForStore.recordSeconds || null,
+            billSeconds: mergedForStore.billSeconds || null,
+            answerSeconds: mergedForStore.answerSeconds || null,
+            hotline: mergedForStore.hotline ?? null,
+            sipUser: mergedForStore.sipUser ?? null,
+            syncedFrom: source,
+            timestamp: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
+          })
+          await callRef.set({ interactionId: interactionRef.id }, { merge: true })
+        }
       }
+      // Đồng bộ tín hiệu ca gọi trên lead (SDK/webhook đều có thể tạo interaction trước).
+      const callerLabel =
+        (mergedForStore.sipUser || match.counselorUid || str(existingData?.counselorUid) || 'OMICall')
+          .toString()
+          .trim()
+          .slice(0, 120) || 'OMICall'
+      await db
+        .collection(COLLECTIONS.leads)
+        .doc(effectiveLeadId)
+        .set(
+          {
+            lastCallAt: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
+            lastCalledByLabel: callerLabel,
+            lastCallOutcome: callOutcome,
+            lastTouchedAt: now,
+            updatedAt: now,
+          },
+          { merge: true },
+        )
     }
 
   const shouldApplyKpi =

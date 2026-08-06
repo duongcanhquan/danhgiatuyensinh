@@ -27,6 +27,21 @@ function callOutcomeFromCall(call: OmicallCallData): Interaction['callOutcome'] 
   return 'NO_ANSWER'
 }
 
+async function patchLeadLastCall(
+  db: Firestore,
+  leadId: string,
+  calledByLabel: string,
+  outcome: Interaction['callOutcome'],
+): Promise<void> {
+  await updateDoc(doc(db, FS_COLLECTIONS.leads, leadId), {
+    ...leadTouchPatch(),
+    ...buildLastCallLeadPatch({
+      calledByLabel,
+      outcome,
+    }),
+  })
+}
+
 export async function logOmicallInteraction(
   db: Firestore,
   call: OmicallCallData,
@@ -35,15 +50,24 @@ export async function logOmicallInteraction(
   const meta = parseOmicallUserData(call.userData)
   if (!meta?.leadId) return null
 
+  const outcome = callOutcomeFromCall(call)
+  const callerLabel =
+    profile.omicallSipUser?.trim() ||
+    profile.displayName?.trim() ||
+    profile.id
+
   const sub = collection(db, FS_COLLECTIONS.leads, meta.leadId, FS_COLLECTIONS.interactions)
   if (call.uid) {
     const dup = await getDocs(query(sub, where('providerCallId', '==', call.uid), limit(1)))
-    if (!dup.empty) return { leadId: meta.leadId }
+    if (!dup.empty) {
+      // Webhook/SDK có thể đã tạo interaction trước — vẫn phải cập nhật tín hiệu ca gọi trên lead.
+      await patchLeadLastCall(db, meta.leadId, callerLabel, outcome)
+      return { leadId: meta.leadId }
+    }
   }
 
   const targetLabel = OMICALL_TARGET_LABELS[meta.target as OmicallCallTarget] ?? meta.target
   const dir = call.direction === 'inbound' ? 'gọi vào' : 'gọi ra'
-  const outcome = callOutcomeFromCall(call)
   const durationSeconds = durationSecondsFromCall(call)
   const ringingSeconds = call.ringingDuration?.value ?? 0
   const hotline = call.sipNumber?.number
@@ -76,21 +100,8 @@ export async function logOmicallInteraction(
     timestamp: Timestamp.now(),
   })
 
-  const callerLabel =
-    profile.omicallSipUser?.trim() ||
-    profile.displayName?.trim() ||
-    profile.id
-  try {
-    await updateDoc(doc(db, FS_COLLECTIONS.leads, meta.leadId), {
-      ...leadTouchPatch(),
-      ...buildLastCallLeadPatch({
-        calledByLabel: callerLabel,
-        outcome,
-      }),
-    })
-  } catch (e) {
-    console.warn('[logOmicallInteraction] lastCall patch', e)
-  }
+  // Không nuốt lỗi — caller (OmicallProvider) cần xóa uid khỏi cache để retry.
+  await patchLeadLastCall(db, meta.leadId, callerLabel, outcome)
 
   await commitAuditLog(db, {
     leadId: meta.leadId,

@@ -33,6 +33,7 @@ import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
 import { CallEvaluationAnalyticsPanel } from '../components/CallEvaluationAnalyticsPanel'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import { useCallEvaluationStats } from '../hooks/useCallEvaluationStats'
@@ -178,9 +179,16 @@ function CounselorLeadListRow({
         counselorNote: 'Ghi nhanh: Cuộc gọi (danh sách TVV)',
         callOutcome: 'CONNECTED',
       })
-      const touch = leadTouchPatch()
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), touch)
-      onLeadLocallyPatched?.(lead.id, touch)
+      const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
+      const callPatch = {
+        ...leadTouchPatch(),
+        ...buildLastCallLeadPatch({
+          calledByLabel: callerLabel,
+          outcome: 'CONNECTED',
+        }),
+      }
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), callPatch)
+      onLeadLocallyPatched?.(lead.id, callPatch)
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'NOTE_ADDED',

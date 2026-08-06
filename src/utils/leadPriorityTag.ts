@@ -16,7 +16,8 @@ export function resolveLeadDisplayPriorityTag(
   lead: Pick<Lead, 'priorityTag' | 'callEvalPriorityBoost'>,
   scoredTag?: PriorityTag,
 ): PriorityTag {
-  const base = scoredTag ?? lead.priorityTag
+  let base = lead.priorityTag
+  if (scoredTag) base = maxPriorityTag(base, scoredTag)
   if (lead.callEvalPriorityBoost) return maxPriorityTag(base, lead.callEvalPriorityBoost)
   return base
 }
