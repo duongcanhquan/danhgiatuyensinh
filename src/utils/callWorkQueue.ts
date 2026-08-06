@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore'
 import type { Interaction, Lead, LeadScoringSignals, PriorityTag } from '../types'
 import { buildLastCallLeadPatch, effectiveLastCallAt } from './leadCallSignals'
+import { maxPriorityTag } from './leadPriorityTag'
 
 export type CallWorkBucket = 'uncalled' | 'callback' | 'called'
 
@@ -55,6 +56,15 @@ export function bucketForDisposition(id: CallDispositionId): Exclude<CallWorkBuc
   return BY_ID.get(id)!.bucket
 }
 
+/**
+ * Soft hangup chỉ gán KNM tạm. Note đã lưu từ panel (khác knm) không bị soft đè.
+ * KNM từ panel cũng là note hợp lệ — soft có thể làm mới timestamp nhưng không +attempt.
+ */
+export function isSoftOverwritableDisposition(id: string | null | undefined): boolean {
+  if (!id) return true
+  return id === 'knm'
+}
+
 export type CallWorkLeadFields = {
   callWorkBucket?: CallWorkBucket | null
   lastCallAt?: Timestamp | null
@@ -92,7 +102,8 @@ export type CallWorkLeadPatch = {
   callWorkBucket: Exclude<CallWorkBucket, 'uncalled'>
   lastCallDispositionId: CallDispositionId
   lastCallDispositionLabel: string
-  callAttemptCount: number
+  /** Chỉ có khi bumpAttempt — soft hangup không tăng. */
+  callAttemptCount?: number
   callEvalPriorityBoost?: PriorityTag
   priorityTag?: PriorityTag
   scoringSignals?: LeadScoringSignals
@@ -105,6 +116,8 @@ export function buildCallWorkLeadPatch(input: {
   calledByLabel: string
   outcome?: Interaction['callOutcome'] | null
   previousAttemptCount?: number
+  /** Soft hangup = false (tránh đếm đôi soft + panel). Panel save = true. */
+  bumpAttempt?: boolean
   at?: Timestamp
   existingScoringSignals?: LeadScoringSignals | null
 }): CallWorkLeadPatch {
@@ -125,7 +138,10 @@ export function buildCallWorkLeadPatch(input: {
     callWorkBucket: def.bucket,
     lastCallDispositionId: def.id,
     lastCallDispositionLabel: def.label,
-    callAttemptCount: Math.max(0, Math.floor(input.previousAttemptCount ?? 0)) + 1,
+  }
+
+  if (input.bumpAttempt !== false) {
+    patch.callAttemptCount = Math.max(0, Math.floor(input.previousAttemptCount ?? 0)) + 1
   }
 
   if (def.id === 'college_hot') {
@@ -142,19 +158,70 @@ export function buildCallWorkLeadPatch(input: {
   return patch
 }
 
-/** Hangup không lưu panel + KNM: gán soft vào Gọi lại. */
+/** Hangup không bắt máy + chưa lưu panel: soft KNM / Gọi lại — không tăng callAttemptCount. */
 export function buildNoAnswerSoftCallWorkPatch(input: {
   calledByLabel: string
-  previousAttemptCount?: number
   at?: Timestamp
 }): CallWorkLeadPatch {
   return buildCallWorkLeadPatch({
     dispositionId: 'knm',
     calledByLabel: input.calledByLabel,
     outcome: 'NO_ANSWER',
-    previousAttemptCount: input.previousAttemptCount,
+    bumpAttempt: false,
     at: input.at,
   })
+}
+
+/**
+ * CONNECTED hangup chưa có note panel: bỏ soft KNM, chuyển Đã gọi (chờ note).
+ * Không đụng note đã lưu từ panel (disposition khác knm).
+ */
+export function buildConnectedClearSoftLeadPatch(input: {
+  calledByLabel: string
+  at?: Timestamp
+}): {
+  lastCallAt: Timestamp
+  lastCalledByLabel: string
+  lastCallOutcome: 'CONNECTED'
+  callWorkBucket: 'called'
+  lastCallDispositionId: null
+  lastCallDispositionLabel: null
+} {
+  const base = buildLastCallLeadPatch({
+    calledByLabel: input.calledByLabel,
+    outcome: 'CONNECTED',
+    at: input.at,
+  })
+  return {
+    lastCallAt: base.lastCallAt,
+    lastCalledByLabel: base.lastCalledByLabel,
+    lastCallOutcome: 'CONNECTED',
+    callWorkBucket: 'called',
+    lastCallDispositionId: null,
+    lastCallDispositionLabel: null,
+  }
+}
+
+/**
+ * Sau khi chấm điểm / boost eval — ép lại nhãn theo disposition (tránh score đè LOSS/HOT).
+ * Trả về field cần ghi; `clearCallEvalPriorityBoost` → caller dùng deleteField().
+ */
+export function dispositionPriorityOverridesAfterScoring(
+  dispositionId: CallDispositionId,
+  currentPriorityTag: PriorityTag | undefined,
+): {
+  priorityTag?: PriorityTag
+  callEvalPriorityBoost?: PriorityTag
+  clearCallEvalPriorityBoost?: boolean
+} {
+  if (dispositionId === 'enrolled_elsewhere') {
+    return { priorityTag: 'LOSS', clearCallEvalPriorityBoost: true }
+  }
+  if (dispositionId === 'college_hot') {
+    const tag = currentPriorityTag ? maxPriorityTag(currentPriorityTag, 'HOT') : 'HOT'
+    return { priorityTag: tag, callEvalPriorityBoost: 'HOT' }
+  }
+  return {}
 }
 
 export type CallWorkBucketFilter = 'all' | CallWorkBucket

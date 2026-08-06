@@ -4,8 +4,11 @@ import {
   CALL_DISPOSITIONS,
   bucketForDisposition,
   buildCallWorkLeadPatch,
+  buildConnectedClearSoftLeadPatch,
   buildNoAnswerSoftCallWorkPatch,
+  dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
+  isSoftOverwritableDisposition,
   leadMatchesCallWorkBucket,
   leadMatchesDisposition,
   resolveCallWorkBucket,
@@ -122,15 +125,63 @@ describe('buildCallWorkLeadPatch', () => {
 })
 
 describe('buildNoAnswerSoftCallWorkPatch', () => {
-  it('soft-assigns knm / callback without wiping other fields', () => {
+  it('soft-assigns knm / callback without bumping attempt count', () => {
     const patch = buildNoAnswerSoftCallWorkPatch({
       calledByLabel: 'OMI',
-      previousAttemptCount: 0,
     })
     expect(patch.lastCallDispositionId).toBe('knm')
     expect(patch.callWorkBucket).toBe('callback')
     expect(patch.lastCallOutcome).toBe('NO_ANSWER')
-    expect(patch.callAttemptCount).toBe(1)
+    expect(patch.callAttemptCount).toBeUndefined()
+  })
+
+  it('panel save after soft still bumps from previous count once', () => {
+    const soft = buildNoAnswerSoftCallWorkPatch({ calledByLabel: 'OMI' })
+    expect(soft.callAttemptCount).toBeUndefined()
+    const panel = buildCallWorkLeadPatch({
+      dispositionId: 'callback_later',
+      calledByLabel: 'TVV',
+      previousAttemptCount: 0,
+      bumpAttempt: true,
+    })
+    expect(panel.callAttemptCount).toBe(1)
+  })
+})
+
+describe('buildConnectedClearSoftLeadPatch', () => {
+  it('clears soft knm and moves to called', () => {
+    const patch = buildConnectedClearSoftLeadPatch({ calledByLabel: 'sip' })
+    expect(patch.callWorkBucket).toBe('called')
+    expect(patch.lastCallDispositionId).toBeNull()
+    expect(patch.lastCallOutcome).toBe('CONNECTED')
+  })
+})
+
+describe('dispositionPriorityOverridesAfterScoring', () => {
+  it('forces LOSS and clears boost for enrolled_elsewhere', () => {
+    expect(dispositionPriorityOverridesAfterScoring('enrolled_elsewhere', 'HOT')).toEqual({
+      priorityTag: 'LOSS',
+      clearCallEvalPriorityBoost: true,
+    })
+  })
+
+  it('keeps at least HOT for college_hot', () => {
+    expect(dispositionPriorityOverridesAfterScoring('college_hot', 'WARM')).toEqual({
+      priorityTag: 'HOT',
+      callEvalPriorityBoost: 'HOT',
+    })
+    expect(dispositionPriorityOverridesAfterScoring('college_hot', 'HOT')).toEqual({
+      priorityTag: 'HOT',
+      callEvalPriorityBoost: 'HOT',
+    })
+  })
+})
+
+describe('isSoftOverwritableDisposition', () => {
+  it('only allows overwrite when empty or knm', () => {
+    expect(isSoftOverwritableDisposition(null)).toBe(true)
+    expect(isSoftOverwritableDisposition('knm')).toBe(true)
+    expect(isSoftOverwritableDisposition('college_hot')).toBe(false)
   })
 })
 

@@ -28,6 +28,14 @@ function mapInteraction(
       timestamp: ts,
       counselorNote: data.counselorNote !== undefined ? String(data.counselorNote) : undefined,
       callOutcome: data.callOutcome as Interaction['callOutcome'],
+      callDispositionId:
+        data.callDispositionId !== undefined && data.callDispositionId !== null
+          ? String(data.callDispositionId).slice(0, 64)
+          : undefined,
+      callDispositionLabel:
+        data.callDispositionLabel !== undefined && data.callDispositionLabel !== null
+          ? String(data.callDispositionLabel).slice(0, 120)
+          : undefined,
       durationSeconds:
         data.durationSeconds !== undefined ? Number(data.durationSeconds) : undefined,
       aiSentiment: data.aiSentiment as Interaction['aiSentiment'],

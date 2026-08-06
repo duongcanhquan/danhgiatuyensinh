@@ -1038,6 +1038,9 @@ export interface Interaction {
   counselorNote?: string
   /** Structured outcome for funnel metrics */
   callOutcome?: 'NO_ANSWER' | 'CONNECTED' | 'FOLLOW_UP' | 'DISQUALIFIED' | 'APPOINTMENT_SET' | 'OTHER'
+  /** Note kết quả sau gọi (catalog TVV) — khi lưu từ panel. */
+  callDispositionId?: string
+  callDispositionLabel?: string
   durationSeconds?: number
   /** Đồng bộ từ nhà cung cấp tổng đài (vd. OMICall) */
   provider?: 'OMICALL'

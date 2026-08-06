@@ -16,7 +16,7 @@ import {
   validateEvaluationSelections,
 } from '../utils/callSessionEvaluation'
 import { behaviorScoreFromSelections, formatBehaviorDelta } from '../utils/callSessionBehaviorScore'
-import { CALL_DISPOSITIONS, type CallDispositionId } from '../utils/callWorkQueue'
+import { CALL_DISPOSITIONS, isCallDispositionId } from '../utils/callWorkQueue'
 import type { CallAiAssessment } from '../types'
 import { CallSessionEvaluationBoard } from './CallSessionEvaluationBoard'
 
@@ -158,7 +158,7 @@ export function CallSessionQuickPanel({
           disabled={busy}
           onChange={(e) => {
             const v = e.target.value
-            setDispositionId(v ? (v as CallDispositionId) : null)
+            setDispositionId(v && isCallDispositionId(v) ? v : null)
           }}
           className="mt-1 w-full rounded-lg border border-white/20 bg-slate-900/60 px-2 py-1.5 text-xs text-white outline-none focus:ring-2 focus:ring-amber-400/40"
         >

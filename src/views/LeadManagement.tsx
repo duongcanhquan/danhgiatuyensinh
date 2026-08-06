@@ -795,11 +795,10 @@ export function LeadManagement() {
     if (sp.has(LWF.CRM)) setCrmStatusFilter(parseCrmFromUrl(sp.get(LWF.CRM)))
     if (sp.has(LWF.SOURCE)) setSourceFilter(sp.get(LWF.SOURCE)!.trim() || 'ALL')
     if (sp.has(LWF.ASSIGN)) setAssigneeFilter(sp.get(LWF.ASSIGN)!.trim())
-    if (sp.has(LWF.CQ)) setCallWorkBucketFilter(parseCallWorkBucketFromUrl(sp.get(LWF.CQ)))
-    if (sp.has(LWF.DISP)) {
-      const d = parseDispositionFromUrl(sp.get(LWF.DISP))
-      setDispositionFilter(d && isCallDispositionId(d) ? d : 'all')
-    }
+    // Luôn đồng bộ từ URL — thiếu param = Tất cả (tránh sticky khi Back).
+    setCallWorkBucketFilter(parseCallWorkBucketFromUrl(sp.get(LWF.CQ)))
+    const d = parseDispositionFromUrl(sp.get(LWF.DISP))
+    setDispositionFilter(d && isCallDispositionId(d) ? d : 'all')
   }, [filterHydrateSig, searchParams])
 
   const clearQuickFilters = useCallback(() => {
@@ -861,7 +860,7 @@ export function LeadManagement() {
       }
       out.push({
         id: 'callQueue',
-        label: `Ca gọi: ${callLabels[callWorkBucketFilter]}`,
+        label: `Hàng chờ: ${callLabels[callWorkBucketFilter]}`,
         onClear: () => {
           setCallWorkBucketFilter('all')
           setPage(1)

@@ -249,9 +249,11 @@ export function LeadActivityTimeline({
                       ) : null}
                     </div>
                   ) : null}
-                  {it.callOutcome ? (
+                  {it.callDispositionLabel || it.callOutcome ? (
                     <p className="mt-1 text-[11px] font-medium text-slate-600">
-                      Kết quả: {it.callOutcome}
+                      {it.callDispositionLabel
+                        ? `Note: ${it.callDispositionLabel}`
+                        : `Kết quả: ${it.callOutcome}`}
                       {it.durationSeconds !== undefined ? ` · ${formatSec(it.durationSeconds)}` : ''}
                     </p>
                   ) : null}

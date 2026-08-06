@@ -1,11 +1,27 @@
-import { addDoc, collection, doc, getDoc, getDocs, limit, query, Timestamp, updateDoc, where, type Firestore } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  Timestamp,
+  updateDoc,
+  where,
+  type Firestore,
+} from 'firebase/firestore'
 import type { Interaction, OmicallCallTarget, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { commitAuditLog } from './auditLog'
 import type { OmicallCallData } from './omicallSdk'
 import { OMICALL_TARGET_LABELS, parseOmicallUserData } from '../utils/omicallConfig'
 import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
-import { buildNoAnswerSoftCallWorkPatch } from '../utils/callWorkQueue'
+import {
+  buildConnectedClearSoftLeadPatch,
+  buildNoAnswerSoftCallWorkPatch,
+  isSoftOverwritableDisposition,
+} from '../utils/callWorkQueue'
 import { leadTouchPatch } from '../utils/leadTouch'
 
 function durationSecondsFromCall(call: OmicallCallData): number | undefined {
@@ -21,7 +37,7 @@ function durationText(seconds: number | undefined): string {
   return `${m} phút ${s.toString().padStart(2, '0')} giây`
 }
 
-function callOutcomeFromCall(call: OmicallCallData): Interaction['callOutcome'] {
+export function callOutcomeFromCall(call: OmicallCallData): Interaction['callOutcome'] {
   if (call.state === 'accepted' || (call.callingDuration?.value ?? 0) > 0) return 'CONNECTED'
   if (call.isHangup) return 'OTHER'
   if (call.rejectCode) return 'NO_ANSWER'
@@ -37,23 +53,40 @@ async function patchLeadLastCall(
   const leadRef = doc(db, FS_COLLECTIONS.leads, leadId)
   const snap = await getDoc(leadRef)
   const data = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
-  const prevAttempts =
-    typeof data.callAttemptCount === 'number' && Number.isFinite(data.callAttemptCount)
-      ? Math.max(0, Math.floor(data.callAttemptCount as number))
-      : 0
+  const existingDisp =
+    typeof data.lastCallDispositionId === 'string' ? data.lastCallDispositionId : null
+  const preserveUserNote = !isSoftOverwritableDisposition(existingDisp)
 
-  // Soft: không bắt máy / gác máy chưa nói → KNM + Gọi lại (TVV sửa note khi lưu panel).
-  if (outcome === 'NO_ANSWER' || outcome === 'OTHER') {
+  // Note panel đã lưu (khác soft KNM) — chỉ cập nhật lần gọi gần nhất, không đè note/bucket.
+  if (preserveUserNote) {
     await updateDoc(leadRef, {
       ...leadTouchPatch(),
-      ...buildNoAnswerSoftCallWorkPatch({
+      ...buildLastCallLeadPatch({
         calledByLabel,
-        previousAttemptCount: prevAttempts,
+        outcome: outcome ?? undefined,
       }),
     })
     return
   }
 
+  // Soft KNM chỉ khi không bắt máy (đúng design — không gom OTHER).
+  if (outcome === 'NO_ANSWER') {
+    await updateDoc(leadRef, {
+      ...leadTouchPatch(),
+      ...buildNoAnswerSoftCallWorkPatch({ calledByLabel }),
+    })
+    return
+  }
+
+  if (outcome === 'CONNECTED') {
+    await updateDoc(leadRef, {
+      ...leadTouchPatch(),
+      ...buildConnectedClearSoftLeadPatch({ calledByLabel }),
+    })
+    return
+  }
+
+  // OTHER / còn lại: tín hiệu gọi, không gán soft KNM.
   await updateDoc(leadRef, {
     ...leadTouchPatch(),
     ...buildLastCallLeadPatch({

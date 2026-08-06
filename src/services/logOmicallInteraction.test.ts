@@ -74,7 +74,7 @@ describe('logOmicallInteraction', () => {
     addDoc.mockResolvedValue({ id: 'ix1' })
     updateDoc.mockResolvedValue(undefined)
     commitAuditLog.mockResolvedValue(undefined)
-    getDoc.mockResolvedValue({ exists: () => true, data: () => ({ callAttemptCount: 0 }) })
+    getDoc.mockResolvedValue({ exists: () => true, data: () => ({}) })
   })
 
   it('writes interaction + lastCall patch on first log', async () => {
@@ -87,9 +87,11 @@ describe('logOmicallInteraction', () => {
     expect(patch.lastCalledByLabel).toBe('sip101')
     expect(patch.lastCallOutcome).toBe('CONNECTED')
     expect(patch.lastCallAt).toBeTruthy()
+    expect(patch.callWorkBucket).toBe('called')
+    expect(patch.lastCallDispositionId).toBeNull()
   })
 
-  it('soft-assigns knm / callback when NO_ANSWER', async () => {
+  it('soft-assigns knm / callback when NO_ANSWER without bumping attempts', async () => {
     getDocs.mockResolvedValue({ empty: true, docs: [] })
     await logOmicallInteraction(
       {} as never,
@@ -105,6 +107,28 @@ describe('logOmicallInteraction', () => {
     expect(patch.lastCallDispositionId).toBe('knm')
     expect(patch.callWorkBucket).toBe('callback')
     expect(patch.lastCallOutcome).toBe('NO_ANSWER')
+    expect(patch.callAttemptCount).toBeUndefined()
+  })
+
+  it('does not soft-overwrite panel disposition on retry', async () => {
+    getDocs.mockResolvedValue({ empty: false, docs: [{ id: 'existing' }] })
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ lastCallDispositionId: 'college_hot', callWorkBucket: 'called' }),
+    })
+    await logOmicallInteraction(
+      {} as never,
+      callPayload({
+        state: 'ended',
+        callingDuration: { value: 0, text: '0s' },
+        rejectCode: 486,
+      }),
+      profile,
+    )
+    const patch = updateDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(patch.lastCallDispositionId).toBeUndefined()
+    expect(patch.callWorkBucket).toBeUndefined()
+    expect(patch.lastCallAt).toBeTruthy()
   })
 
   it('still patches lastCall when providerCallId already exists', async () => {

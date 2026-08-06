@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -38,6 +39,8 @@ import { leadTouchPatch } from '../utils/leadTouch'
 import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
 import {
   buildCallWorkLeadPatch,
+  dispositionPriorityOverridesAfterScoring,
+  getCallDisposition,
   isCallDispositionId,
   type CallDispositionId,
 } from '../utils/callWorkQueue'
@@ -150,6 +153,10 @@ export async function saveCallSessionInteraction(
     })
   }
 
+  const dispositionId =
+    input.dispositionId && isCallDispositionId(input.dispositionId) ? input.dispositionId : null
+  const dispositionDef = dispositionId ? getCallDisposition(dispositionId) : undefined
+
   const payload: Record<string, unknown> = {
     leadId: input.leadId,
     channel: 'CALL',
@@ -163,6 +170,12 @@ export async function saveCallSessionInteraction(
     snapshotCrmStatus: snapCrm,
     snapshotPipelineStatus: snapPipe,
     snapshotPriorityTag: snapTag,
+    ...(dispositionDef
+      ? {
+          callDispositionId: dispositionDef.id,
+          callDispositionLabel: dispositionDef.label,
+        }
+      : {}),
     ...(input.durationSeconds !== undefined ? { durationSeconds: input.durationSeconds } : {}),
     ...(input.callUid ? { provider: 'OMICALL', providerCallId: input.callUid, syncedFrom: 'sdk' } : {}),
     ...(callAiAssessment ? { callAiAssessment } : {}),
@@ -183,8 +196,12 @@ export async function saveCallSessionInteraction(
       ? Math.max(0, Math.floor(leadData.callAttemptCount as number))
       : 0
 
-  const dispositionId =
-    input.dispositionId && isCallDispositionId(input.dispositionId) ? input.dispositionId : null
+  // Prefer raw Firestore signals so mapDoc fallback không làm mất cờ checklist.
+  const rawSignals =
+    lead.scoringSignals ??
+    (leadData.scoringSignals && typeof leadData.scoringSignals === 'object'
+      ? (leadData.scoringSignals as Lead['scoringSignals'])
+      : undefined)
 
   const leadPatch: Record<string, unknown> = {
     ...touch,
@@ -194,7 +211,8 @@ export async function saveCallSessionInteraction(
           calledByLabel: callerLabel,
           outcome: input.callOutcome,
           previousAttemptCount: prevAttempts,
-          existingScoringSignals: lead.scoringSignals,
+          bumpAttempt: true,
+          existingScoringSignals: rawSignals,
         })
       : buildLastCallLeadPatch({
           calledByLabel: callerLabel,
@@ -256,6 +274,23 @@ export async function saveCallSessionInteraction(
       },
     )
     Object.assign(leadPatch, scoreFields)
+  }
+
+  // Disposition thắng score/boost: LOSS / HOT không bị chấm điểm đè.
+  if (dispositionId) {
+    const scoredTag =
+      typeof leadPatch.priorityTag === 'string'
+        ? (leadPatch.priorityTag as Lead['priorityTag'])
+        : lead.priorityTag
+    const overrides = dispositionPriorityOverridesAfterScoring(dispositionId, scoredTag)
+    if (overrides.priorityTag) leadPatch.priorityTag = overrides.priorityTag
+    if (overrides.clearCallEvalPriorityBoost) {
+      leadPatch.callEvalPriorityBoost = deleteField()
+      leadPatch.callEvalPriorityBoostAt = deleteField()
+    } else if (overrides.callEvalPriorityBoost) {
+      leadPatch.callEvalPriorityBoost = overrides.callEvalPriorityBoost
+      leadPatch.callEvalPriorityBoostAt = Timestamp.now()
+    }
   }
 
   await updateDoc(leadRef, leadPatch)
