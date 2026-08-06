@@ -170,6 +170,17 @@ function CounselorLeadListRow({
     e.stopPropagation()
     if (!db || !profile || !canInteract) return
     try {
+      const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
+      const callPatch = {
+        ...leadTouchPatch(),
+        ...buildLastCallLeadPatch({
+          calledByLabel: callerLabel,
+          outcome: 'CONNECTED',
+        }),
+      }
+      // Ghi tín hiệu ca gọi trước — lọc «Chưa gọi» phụ thuộc lastCall*, không phải interaction.
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), callPatch)
+      onLeadLocallyPatched?.(lead.id, callPatch)
       await addDoc(collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions), {
         leadId: lead.id,
         channel: 'CALL',
@@ -179,16 +190,6 @@ function CounselorLeadListRow({
         counselorNote: 'Ghi nhanh: Cuộc gọi (danh sách TVV)',
         callOutcome: 'CONNECTED',
       })
-      const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
-      const callPatch = {
-        ...leadTouchPatch(),
-        ...buildLastCallLeadPatch({
-          calledByLabel: callerLabel,
-          outcome: 'CONNECTED',
-        }),
-      }
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), callPatch)
-      onLeadLocallyPatched?.(lead.id, callPatch)
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'NOTE_ADDED',

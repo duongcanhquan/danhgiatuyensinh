@@ -48,6 +48,7 @@ import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleU
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { useAutoPersistLeadScores } from '../hooks/useAutoPersistLeadScores'
+import { leadNeedsAutoScorePersist } from '../hooks/leadNeedsAutoScorePersist'
 import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
@@ -2126,7 +2127,7 @@ export function LeadManagement() {
                 const displayScore = profileScoringActive
                   ? (ev?.calculatedScore ?? l.calculatedScore)
                   : l.calculatedScore
-                const displayTag = profileScoringActive ? (ev?.priorityTag ?? l.priorityTag) : l.priorityTag
+                const displayTag = effectiveLeadTag(l)
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const descForTable = leadDescriptionForDisplay(l.description)
                 const extraNotesFull = leadSupplementaryNotesText(l)
@@ -3290,7 +3291,8 @@ function LeadDetailPanel({
     if (coreDirty) return
     const live = detailScoringPreview
     if (!live) return
-    if (live.calculatedScore === lead.calculatedScore && live.priorityTag === lead.priorityTag) return
+    // Chỉ tự ghi khi điểm lệch — không ghi đè nhãn tay khi điểm đã khớp.
+    if (!leadNeedsAutoScorePersist(lead, live)) return
     const syncKey = `${lead.id}:${activeScoringProfile.id}:${live.calculatedScore}:${live.priorityTag}`
     if (scoreAutoSyncedRef.current === syncKey) return
     scoreAutoSyncedRef.current = syncKey
