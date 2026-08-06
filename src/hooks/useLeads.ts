@@ -332,10 +332,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       uploaderName: data.uploaderName !== undefined ? String(data.uploaderName) : undefined,
       uploadBatchId: data.uploadBatchId !== undefined ? String(data.uploadBatchId) : undefined,
       importedAt,
-      lastTouchedAt:
-        data.lastTouchedAt && typeof data.lastTouchedAt === 'object' && 'toMillis' in (data.lastTouchedAt as object)
-          ? (data.lastTouchedAt as Timestamp)
-          : undefined,
+      lastTouchedAt: asFirestoreTimestamp(data.lastTouchedAt),
       routingMeta: data.routingMeta as Lead['routingMeta'],
       mlWinProbability,
       mlExplanation,
