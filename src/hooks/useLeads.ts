@@ -368,6 +368,22 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
           ? (o as Lead['lastCallOutcome'])
           : undefined
       })(),
+      callWorkBucket: (() => {
+        const b = data.callWorkBucket
+        return b === 'uncalled' || b === 'callback' || b === 'called' ? b : undefined
+      })(),
+      callAttemptCount:
+        data.callAttemptCount !== undefined && data.callAttemptCount !== null
+          ? Math.max(0, Math.floor(Number(data.callAttemptCount)))
+          : undefined,
+      lastCallDispositionId:
+        data.lastCallDispositionId !== undefined && data.lastCallDispositionId !== null
+          ? String(data.lastCallDispositionId).slice(0, 64)
+          : undefined,
+      lastCallDispositionLabel:
+        data.lastCallDispositionLabel !== undefined && data.lastCallDispositionLabel !== null
+          ? String(data.lastCallDispositionLabel).slice(0, 120)
+          : undefined,
       callEvalPriorityBoost:
         data.callEvalPriorityBoost !== undefined && data.callEvalPriorityBoost !== null
           ? normPriorityTag(data.callEvalPriorityBoost)

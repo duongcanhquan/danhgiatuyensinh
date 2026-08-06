@@ -84,9 +84,16 @@ import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import {
   formatLeadLastCallLine,
-  leadMatchesCallQueueFilter,
-  type CallQueueFilter,
 } from '../utils/leadCallSignals'
+import {
+  CALL_DISPOSITIONS,
+  compareUncalledQueueOrder,
+  isCallDispositionId,
+  leadMatchesCallWorkBucket,
+  leadMatchesDisposition,
+  type CallDispositionFilter,
+  type CallWorkBucketFilter,
+} from '../utils/callWorkQueue'
 import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
 import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
@@ -124,7 +131,9 @@ import {
   LWF,
   leadFilterSignatureForHydrate,
   mergeLeadFiltersIntoSearchParams,
+  parseCallWorkBucketFromUrl,
   parseCrmFromUrl,
+  parseDispositionFromUrl,
   parsePipelineFromUrl,
   parseTagFromUrl,
   stripListFiltersKeepOpenView,
@@ -248,7 +257,8 @@ export function LeadManagement() {
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
 
   const [tagFilter, setTagFilter] = useState<string>('ALL')
-  const [callQueueFilter, setCallQueueFilter] = useState<CallQueueFilter>('all')
+  const [callWorkBucketFilter, setCallWorkBucketFilter] = useState<CallWorkBucketFilter>('all')
+  const [dispositionFilter, setDispositionFilter] = useState<CallDispositionFilter>('all')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -269,8 +279,8 @@ export function LeadManagement() {
    */
   const { profileScoringLive } = useScoringProfileSelection()
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
-  /** Lọc ca gọi cần quét phạm vi rộng (thiếu lastCallAt không query server được). */
-  const callQueueNeedsScope = callQueueFilter !== 'all'
+  /** Lọc hàng chờ / note sau gọi — thiếu field trên hồ sơ cũ → quét phạm vi rộng. */
+  const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -652,8 +662,11 @@ export function LeadManagement() {
     if (tagClientEval && tagFilter !== 'ALL') {
       rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
     }
-    if (callQueueFilter !== 'all') {
-      rows = rows.filter((l) => leadMatchesCallQueueFilter(l, callQueueFilter))
+    if (callWorkBucketFilter !== 'all') {
+      rows = rows.filter((l) => leadMatchesCallWorkBucket(l, callWorkBucketFilter))
+    }
+    if (dispositionFilter !== 'all') {
+      rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
     }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
@@ -670,12 +683,17 @@ export function LeadManagement() {
     tagClientEval,
     tagFilter,
     effectiveLeadTag,
-    callQueueFilter,
+    callWorkBucketFilter,
+    dispositionFilter,
     assigneeFilter,
   ])
 
   const sortedFiltered = useMemo(() => {
     const rows = [...filtered]
+    if (callWorkBucketFilter === 'uncalled' && sortKey === 'none') {
+      rows.sort(compareUncalledQueueOrder)
+      return rows
+    }
     if (sortKey === 'none') return rows
     const dir = sortDir === 'asc' ? 1 : -1
     const scoreOf = (l: Lead) =>
@@ -705,7 +723,16 @@ export function LeadManagement() {
       }
     })
     return rows
-  }, [filtered, sortKey, sortDir, effectiveLeadTag, activeScoringProfile, scoreByLeadId, infoScoreRuntime])
+  }, [
+    filtered,
+    sortKey,
+    sortDir,
+    effectiveLeadTag,
+    profileScoringActive,
+    scoreByLeadId,
+    infoScoreRuntime,
+    callWorkBucketFilter,
+  ])
 
   /**
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
@@ -768,11 +795,17 @@ export function LeadManagement() {
     if (sp.has(LWF.CRM)) setCrmStatusFilter(parseCrmFromUrl(sp.get(LWF.CRM)))
     if (sp.has(LWF.SOURCE)) setSourceFilter(sp.get(LWF.SOURCE)!.trim() || 'ALL')
     if (sp.has(LWF.ASSIGN)) setAssigneeFilter(sp.get(LWF.ASSIGN)!.trim())
+    if (sp.has(LWF.CQ)) setCallWorkBucketFilter(parseCallWorkBucketFromUrl(sp.get(LWF.CQ)))
+    if (sp.has(LWF.DISP)) {
+      const d = parseDispositionFromUrl(sp.get(LWF.DISP))
+      setDispositionFilter(d && isCallDispositionId(d) ? d : 'all')
+    }
   }, [filterHydrateSig, searchParams])
 
   const clearQuickFilters = useCallback(() => {
     setTagFilter('ALL')
-    setCallQueueFilter('all')
+    setCallWorkBucketFilter('all')
+    setDispositionFilter('all')
     setRegionFilter('ALL')
     setMajorFilter('ALL')
     setStatusFilter('ALL')
@@ -820,18 +853,31 @@ export function LeadManagement() {
         },
       })
     }
-    if (callQueueFilter !== 'all') {
-      const callLabels: Record<Exclude<CallQueueFilter, 'all'>, string> = {
-        never_called: 'Chưa gọi',
-        called_today: 'Đã gọi hôm nay',
-        needs_callback: 'Cần gọi lại',
+    if (callWorkBucketFilter !== 'all') {
+      const callLabels: Record<Exclude<CallWorkBucketFilter, 'all'>, string> = {
+        uncalled: 'Chưa gọi',
+        callback: 'Gọi lại',
+        called: 'Đã gọi',
       }
       out.push({
         id: 'callQueue',
-        label: `Ca gọi: ${callLabels[callQueueFilter]}`,
+        label: `Ca gọi: ${callLabels[callWorkBucketFilter]}`,
         onClear: () => {
-          setCallQueueFilter('all')
+          setCallWorkBucketFilter('all')
           setPage(1)
+          mergeListFilterUrl({ [LWF.CQ]: null })
+        },
+      })
+    }
+    if (dispositionFilter !== 'all') {
+      const disp = CALL_DISPOSITIONS.find((d) => d.id === dispositionFilter)
+      out.push({
+        id: 'disp',
+        label: `Note: ${disp?.label ?? dispositionFilter}`,
+        onClear: () => {
+          setDispositionFilter('all')
+          setPage(1)
+          mergeListFilterUrl({ [LWF.DISP]: null })
         },
       })
     }
@@ -952,7 +998,8 @@ export function LeadManagement() {
   }, [
     searchParams,
     tagFilter,
-    callQueueFilter,
+    callWorkBucketFilter,
+    dispositionFilter,
     regionFilter,
     majorFilter,
     statusFilter,
@@ -1663,34 +1710,67 @@ export function LeadManagement() {
           </label>
         </div>
 
-        {/* Ca gọi — hàng riêng trên điện thoại (tránh chìm trong dải lọc ngang) */}
-        <div className="border-t border-slate-200/70 pt-2 md:hidden">
-          <label
-            className="flex w-full flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
-            title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
+        {/* Hàng chờ gọi — tab Chưa gọi → Gọi lại → Đã gọi */}
+        <div className="space-y-2 border-t border-slate-200/70 pt-2">
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="tablist"
+            aria-label="Hàng chờ gọi"
           >
-            Ca gọi
+            {(
+              [
+                { id: 'all' as const, label: 'Tất cả' },
+                { id: 'uncalled' as const, label: 'Chưa gọi' },
+                { id: 'callback' as const, label: 'Gọi lại' },
+                { id: 'called' as const, label: 'Đã gọi' },
+              ] as const
+            ).map((tab) => {
+              const active = callWorkBucketFilter === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    setCallWorkBucketFilter(tab.id)
+                    setPage(1)
+                    mergeListFilterUrl({ [LWF.CQ]: tab.id === 'all' ? null : tab.id })
+                  }}
+                  className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    active
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'border border-slate-200/95 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/60'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+          <label
+            className="flex max-w-md flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
+            title="Lọc theo note kết quả sau gọi — dùng khi quản lý rà soát"
+          >
+            Note sau gọi
             <select
-              value={callQueueFilter}
+              value={dispositionFilter === 'all' ? 'all' : dispositionFilter}
               onChange={(e) => {
-                setCallQueueFilter(e.target.value as CallQueueFilter)
+                const v = e.target.value
+                const next: CallDispositionFilter =
+                  v === 'all' || !isCallDispositionId(v) ? 'all' : v
+                setDispositionFilter(next)
                 setPage(1)
+                mergeListFilterUrl({ [LWF.DISP]: next === 'all' ? null : next })
               }}
-              title={
-                callQueueFilter === 'all'
-                  ? 'Tất cả'
-                  : callQueueFilter === 'never_called'
-                    ? 'Chưa gọi'
-                    : callQueueFilter === 'called_today'
-                      ? 'Đã gọi hôm nay'
-                      : 'Cần gọi lại'
-              }
-              className="mt-0.5 min-h-11 w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+              className="mt-0.5 min-h-10 w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
             >
-              <option value="all">Tất cả</option>
-              <option value="never_called">Chưa gọi</option>
-              <option value="called_today">Đã gọi hôm nay</option>
-              <option value="needs_callback">Cần gọi lại</option>
+              <option value="all">Tất cả note</option>
+              {CALL_DISPOSITIONS.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -1842,34 +1922,6 @@ export function LeadManagement() {
               onChange={(e) => setScoreMaxInput(e.target.value)}
               className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             />
-          </label>
-          <label
-            className="hidden min-w-[10.5rem] shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500 md:flex"
-            title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
-          >
-            Ca gọi
-            <select
-              value={callQueueFilter}
-              onChange={(e) => {
-                setCallQueueFilter(e.target.value as CallQueueFilter)
-                setPage(1)
-              }}
-              title={
-                callQueueFilter === 'all'
-                  ? 'Tất cả'
-                  : callQueueFilter === 'never_called'
-                    ? 'Chưa gọi'
-                    : callQueueFilter === 'called_today'
-                      ? 'Đã gọi hôm nay'
-                      : 'Cần gọi lại'
-              }
-              className="mt-0.5 min-h-10 rounded-md border border-slate-200/95 bg-white px-2 py-1.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
-            >
-              <option value="all">Tất cả</option>
-              <option value="never_called">Chưa gọi</option>
-              <option value="called_today">Đã gọi hôm nay</option>
-              <option value="needs_callback">Cần gọi lại</option>
-            </select>
           </label>
           <button
             type="button"
@@ -2230,7 +2282,9 @@ export function LeadManagement() {
                     </span>
                     <p
                       className={`mt-0.5 text-xs font-medium leading-snug md:line-clamp-1 md:text-[11px] ${
-                        callQueueFilter !== 'all' ? 'line-clamp-2' : 'line-clamp-1'
+                        callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
+                          ? 'line-clamp-2'
+                          : 'line-clamp-1'
                       } ${callQueueLine === 'Chưa gọi' ? 'text-amber-700' : 'text-slate-500'}`}
                       title={callQueueLine}
                     >

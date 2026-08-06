@@ -1,10 +1,11 @@
-import { addDoc, collection, doc, getDocs, limit, query, Timestamp, updateDoc, where, type Firestore } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, limit, query, Timestamp, updateDoc, where, type Firestore } from 'firebase/firestore'
 import type { Interaction, OmicallCallTarget, UserRole, VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { commitAuditLog } from './auditLog'
 import type { OmicallCallData } from './omicallSdk'
 import { OMICALL_TARGET_LABELS, parseOmicallUserData } from '../utils/omicallConfig'
 import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
+import { buildNoAnswerSoftCallWorkPatch } from '../utils/callWorkQueue'
 import { leadTouchPatch } from '../utils/leadTouch'
 
 function durationSecondsFromCall(call: OmicallCallData): number | undefined {
@@ -33,7 +34,27 @@ async function patchLeadLastCall(
   calledByLabel: string,
   outcome: Interaction['callOutcome'],
 ): Promise<void> {
-  await updateDoc(doc(db, FS_COLLECTIONS.leads, leadId), {
+  const leadRef = doc(db, FS_COLLECTIONS.leads, leadId)
+  const snap = await getDoc(leadRef)
+  const data = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
+  const prevAttempts =
+    typeof data.callAttemptCount === 'number' && Number.isFinite(data.callAttemptCount)
+      ? Math.max(0, Math.floor(data.callAttemptCount as number))
+      : 0
+
+  // Soft: không bắt máy / gác máy chưa nói → KNM + Gọi lại (TVV sửa note khi lưu panel).
+  if (outcome === 'NO_ANSWER' || outcome === 'OTHER') {
+    await updateDoc(leadRef, {
+      ...leadTouchPatch(),
+      ...buildNoAnswerSoftCallWorkPatch({
+        calledByLabel,
+        previousAttemptCount: prevAttempts,
+      }),
+    })
+    return
+  }
+
+  await updateDoc(leadRef, {
     ...leadTouchPatch(),
     ...buildLastCallLeadPatch({
       calledByLabel,

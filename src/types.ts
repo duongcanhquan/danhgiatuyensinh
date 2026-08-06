@@ -437,6 +437,17 @@ export interface Lead {
   lastCalledByLabel?: string
   /** Kết quả cuộc gọi gần nhất. */
   lastCallOutcome?: 'NO_ANSWER' | 'CONNECTED' | 'FOLLOW_UP' | 'DISQUALIFIED' | 'APPOINTMENT_SET' | 'OTHER'
+  /**
+   * Hàng chờ gọi TVV (denormalize) — thiếu = chưa gọi.
+   * `uncalled` | `callback` (KNM / gọi lại) | `called` (đã xử lý xong vòng gọi).
+   */
+  callWorkBucket?: 'uncalled' | 'callback' | 'called'
+  /** Số lần đã ghi nhận cuộc gọi (tăng khi lưu đánh giá / soft KNM). */
+  callAttemptCount?: number
+  /** Mã note kết quả sau gọi (catalog TVV). */
+  lastCallDispositionId?: string
+  /** Nhãn note kết quả sau gọi (denormalize để lọc / hiện list). */
+  lastCallDispositionLabel?: string
   /** Nhãn ưu tiên tối thiểu sau bảng đánh giá gọi (chỉ nâng HOT/WARM, không tự hạ). */
   callEvalPriorityBoost?: PriorityTag
   callEvalPriorityBoostAt?: Timestamp

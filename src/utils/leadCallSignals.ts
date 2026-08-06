@@ -92,9 +92,14 @@ export function callQueueFilterMatches(
   return true
 }
 
-/** Dòng ngắn trên danh sách hồ sơ — ưu tiên tín hiệu gọi, không phải AI summary. */
+/** Dòng ngắn trên danh sách hồ sơ — ưu tiên note sau gọi, rồi tín hiệu gọi. */
 export function formatLeadLastCallLine(
-  lead: Pick<LeadCallSignalFields, 'lastCallAt' | 'lastCallAiAt' | 'lastCalledByLabel' | 'lastCallOutcome'>,
+  lead: Pick<
+    LeadCallSignalFields,
+    'lastCallAt' | 'lastCallAiAt' | 'lastCalledByLabel' | 'lastCallOutcome'
+  > & {
+    lastCallDispositionLabel?: string | null
+  },
 ): string {
   const at = effectiveLastCallAt(lead)
   if (!at) return 'Chưa gọi'
@@ -105,11 +110,13 @@ export function formatLeadLastCallLine(
     minute: '2-digit',
   })
   const who = lead.lastCalledByLabel?.trim()
+  const disp = lead.lastCallDispositionLabel?.trim()
   const outcome = lead.lastCallOutcome ? OUTCOME_VI[lead.lastCallOutcome] ?? lead.lastCallOutcome : null
   const parts = [`Gọi ${when}`]
   if (who) parts.push(who)
   else if (!lead.lastCallAt && lead.lastCallAiAt) parts.push('đã đánh giá gọi')
-  if (outcome) parts.push(outcome)
+  if (disp) parts.push(disp)
+  else if (outcome) parts.push(outcome)
   return parts.join(' · ')
 }
 

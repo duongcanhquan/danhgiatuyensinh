@@ -9,17 +9,21 @@ import {
 } from 'react'
 import type { CallEvalDimension, Interaction } from '../types'
 import type { EvaluationSelections } from '../utils/callSessionEvaluation'
+import type { CallDispositionId } from '../utils/callWorkQueue'
 
 export type CallSessionDraft = {
   selections: EvaluationSelections
   freeNote: string
   callOutcome: NonNullable<Interaction['callOutcome']>
+  /** Note kết quả sau gọi (catalog TVV). */
+  dispositionId: CallDispositionId | null
 }
 
 const EMPTY: CallSessionDraft = {
   selections: {},
   freeNote: '',
   callOutcome: 'CONNECTED',
+  dispositionId: null,
 }
 
 type Ctx = {
@@ -30,6 +34,7 @@ type Ctx = {
   isOptionSelected: (dimensionId: string, optionId: string) => boolean
   setFreeNote: (note: string) => void
   setCallOutcome: (outcome: NonNullable<Interaction['callOutcome']>) => void
+  setDispositionId: (id: CallDispositionId | null) => void
   resetDraft: () => void
 }
 
@@ -75,6 +80,10 @@ export function CallSessionDraftProvider({ children }: { children: ReactNode }) 
     setDraft((prev) => ({ ...prev, callOutcome }))
   }, [])
 
+  const setDispositionId = useCallback((dispositionId: CallDispositionId | null) => {
+    setDraft((prev) => ({ ...prev, dispositionId }))
+  }, [])
+
   const value = useMemo(
     () => ({
       callUid,
@@ -84,9 +93,20 @@ export function CallSessionDraftProvider({ children }: { children: ReactNode }) 
       isOptionSelected,
       setFreeNote,
       setCallOutcome,
+      setDispositionId,
       resetDraft,
     }),
-    [callUid, draft, setCallUid, toggleOption, isOptionSelected, setFreeNote, setCallOutcome, resetDraft],
+    [
+      callUid,
+      draft,
+      setCallUid,
+      toggleOption,
+      isOptionSelected,
+      setFreeNote,
+      setCallOutcome,
+      setDispositionId,
+      resetDraft,
+    ],
   )
 
   return <CallSessionDraftContext.Provider value={value}>{children}</CallSessionDraftContext.Provider>

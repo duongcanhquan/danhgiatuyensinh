@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getDocs = vi.fn()
+const getDoc = vi.fn()
 const addDoc = vi.fn()
 const updateDoc = vi.fn()
 const commitAuditLog = vi.fn()
@@ -26,6 +27,7 @@ vi.mock('firebase/firestore', () => {
     where: vi.fn((...args: unknown[]) => args),
     limit: vi.fn((n: number) => n),
     getDocs: (...a: unknown[]) => getDocs(...a),
+    getDoc: (...a: unknown[]) => getDoc(...a),
     addDoc: (...a: unknown[]) => addDoc(...a),
     updateDoc: (...a: unknown[]) => updateDoc(...a),
   }
@@ -65,12 +67,14 @@ function callPayload(overrides: Record<string, unknown> = {}) {
 describe('logOmicallInteraction', () => {
   beforeEach(() => {
     getDocs.mockReset()
+    getDoc.mockReset()
     addDoc.mockReset()
     updateDoc.mockReset()
     commitAuditLog.mockReset()
     addDoc.mockResolvedValue({ id: 'ix1' })
     updateDoc.mockResolvedValue(undefined)
     commitAuditLog.mockResolvedValue(undefined)
+    getDoc.mockResolvedValue({ exists: () => true, data: () => ({ callAttemptCount: 0 }) })
   })
 
   it('writes interaction + lastCall patch on first log', async () => {
@@ -83,6 +87,24 @@ describe('logOmicallInteraction', () => {
     expect(patch.lastCalledByLabel).toBe('sip101')
     expect(patch.lastCallOutcome).toBe('CONNECTED')
     expect(patch.lastCallAt).toBeTruthy()
+  })
+
+  it('soft-assigns knm / callback when NO_ANSWER', async () => {
+    getDocs.mockResolvedValue({ empty: true, docs: [] })
+    await logOmicallInteraction(
+      {} as never,
+      callPayload({
+        state: 'ended',
+        callingDuration: { value: 0, text: '0s' },
+        rejectCode: 486,
+        isHangup: false,
+      }),
+      profile,
+    )
+    const patch = updateDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(patch.lastCallDispositionId).toBe('knm')
+    expect(patch.callWorkBucket).toBe('callback')
+    expect(patch.lastCallOutcome).toBe('NO_ANSWER')
   })
 
   it('still patches lastCall when providerCallId already exists', async () => {

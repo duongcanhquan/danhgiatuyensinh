@@ -36,6 +36,11 @@ import { behaviorScoreFromPicks } from '../utils/callSessionBehaviorScore'
 import { mergeCallEvalPriorityBoost } from '../utils/callSessionPriorityFromEvaluation'
 import { leadTouchPatch } from '../utils/leadTouch'
 import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
+import {
+  buildCallWorkLeadPatch,
+  isCallDispositionId,
+  type CallDispositionId,
+} from '../utils/callWorkQueue'
 import { mapDoc } from '../hooks/useLeads'
 import { persistedLeadScoringFields, type MasterDataBuckets } from '../utils/scoring'
 import type { InfoScoreRuntime } from '../utils/infoScoreRules'
@@ -78,6 +83,8 @@ export type SaveCallSessionInput = {
   evaluationPicks: CallEvalPick[]
   freeNote: string
   callOutcome: NonNullable<Interaction['callOutcome']>
+  /** Note kết quả sau gọi (bắt buộc khi lưu từ panel TVV). */
+  dispositionId?: CallDispositionId | null
   durationSeconds?: number
   direction?: 'inbound' | 'outbound'
   phone?: string
@@ -171,12 +178,28 @@ export async function saveCallSessionInteraction(
   const touch = leadTouchPatch()
   const callerLabel =
     profile.displayName?.trim() || profile.email?.trim() || profile.id
+  const prevAttempts =
+    typeof leadData.callAttemptCount === 'number' && Number.isFinite(leadData.callAttemptCount)
+      ? Math.max(0, Math.floor(leadData.callAttemptCount as number))
+      : 0
+
+  const dispositionId =
+    input.dispositionId && isCallDispositionId(input.dispositionId) ? input.dispositionId : null
+
   const leadPatch: Record<string, unknown> = {
     ...touch,
-    ...buildLastCallLeadPatch({
-      calledByLabel: callerLabel,
-      outcome: input.callOutcome,
-    }),
+    ...(dispositionId
+      ? buildCallWorkLeadPatch({
+          dispositionId,
+          calledByLabel: callerLabel,
+          outcome: input.callOutcome,
+          previousAttemptCount: prevAttempts,
+          existingScoringSignals: lead.scoringSignals,
+        })
+      : buildLastCallLeadPatch({
+          calledByLabel: callerLabel,
+          outcome: input.callOutcome,
+        })),
   }
   const evalLine = formatEvaluationSummaryLine(picks)
   const readinessFromEval = picks.find((p) => p.dimensionId === 'readiness')?.optionLabel

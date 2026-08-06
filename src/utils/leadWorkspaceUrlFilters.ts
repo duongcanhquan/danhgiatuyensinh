@@ -17,6 +17,10 @@ export const LWF = {
   DATE_TO: 'dto',
   DUE: 'due',
   MYDAY: 'myday',
+  /** Hàng chờ gọi: uncalled | callback | called */
+  CQ: 'cq',
+  /** Note kết quả sau gọi (disposition id) */
+  DISP: 'disp',
 } as const
 
 const TAG_SET = new Set<string>(['HOT', 'WARM', 'COLD', 'LOSS'])
@@ -67,6 +71,18 @@ export function parseMyDayFromUrl(raw: string | null): null | 'followup' | 'hot_
   return null
 }
 
+export function parseCallWorkBucketFromUrl(
+  raw: string | null,
+): 'all' | 'uncalled' | 'callback' | 'called' {
+  const x = (raw ?? '').trim().toLowerCase()
+  if (x === 'uncalled' || x === 'callback' || x === 'called') return x
+  return 'all'
+}
+
+export function parseDispositionFromUrl(raw: string | null): string {
+  return (raw ?? '').trim().slice(0, 64)
+}
+
 /** Chuỗi ổn định để hydrate từ URL (không gồm `q` — ô tìm đọc trực tiếp từ `searchParams`). */
 export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
   const keys = [
@@ -83,6 +99,8 @@ export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
     LWF.DATE_TO,
     LWF.DUE,
     LWF.MYDAY,
+    LWF.CQ,
+    LWF.DISP,
   ] as const
   return keys.map((k) => `${k}=${sp.get(k) ?? ''}`).join('|')
 }

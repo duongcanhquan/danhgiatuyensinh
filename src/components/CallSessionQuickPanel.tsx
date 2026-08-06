@@ -16,6 +16,7 @@ import {
   validateEvaluationSelections,
 } from '../utils/callSessionEvaluation'
 import { behaviorScoreFromSelections, formatBehaviorDelta } from '../utils/callSessionBehaviorScore'
+import { CALL_DISPOSITIONS, type CallDispositionId } from '../utils/callWorkQueue'
 import type { CallAiAssessment } from '../types'
 import { CallSessionEvaluationBoard } from './CallSessionEvaluationBoard'
 
@@ -33,7 +34,7 @@ export function CallSessionQuickPanel({
   onClose,
 }: Props) {
   const { profile, canRunLlmAnalysis } = useAuth()
-  const { draft, setFreeNote, setCallOutcome, resetDraft } = useCallSessionDraft()
+  const { draft, setFreeNote, setCallOutcome, setDispositionId, resetDraft } = useCallSessionDraft()
   const { dimensions } = useCallSessionConfigOptional()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
@@ -66,6 +67,10 @@ export function CallSessionQuickPanel({
       setErr(valid.message)
       return
     }
+    if (!draft.dispositionId) {
+      setErr('Chọn một kết quả sau gọi (note) trước khi lưu.')
+      return
+    }
     const db = getFirestoreDb()
     if (!db) {
       setErr('Chưa kết nối Firestore.')
@@ -86,6 +91,7 @@ export function CallSessionQuickPanel({
         evaluationPicks: picks,
         freeNote: draft.freeNote,
         callOutcome: draft.callOutcome,
+        dispositionId: draft.dispositionId,
         durationSeconds: call.durationSec > 0 ? call.durationSec : undefined,
         direction: call.direction,
         phone: call.phone,
@@ -140,6 +146,28 @@ export function CallSessionQuickPanel({
           {CALL_OUTCOME_QUICK_OPTIONS.map((o) => (
             <option key={o.value} value={o.value} className="bg-slate-900 text-white">
               {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+        Note sau gọi <span className="text-rose-300">*</span>
+        <select
+          value={draft.dispositionId ?? ''}
+          disabled={busy}
+          onChange={(e) => {
+            const v = e.target.value
+            setDispositionId(v ? (v as CallDispositionId) : null)
+          }}
+          className="mt-1 w-full rounded-lg border border-white/20 bg-slate-900/60 px-2 py-1.5 text-xs text-white outline-none focus:ring-2 focus:ring-amber-400/40"
+        >
+          <option value="" className="bg-slate-900 text-white">
+            — Chọn một kết quả —
+          </option>
+          {CALL_DISPOSITIONS.map((d) => (
+            <option key={d.id} value={d.id} className="bg-slate-900 text-white">
+              {d.label}
             </option>
           ))}
         </select>
