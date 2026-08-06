@@ -67,9 +67,17 @@ const PIPELINE_NEON: Record<LeadPipelineStatus, string> = {
 const chartTooltipClass =
   'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-lg ring-1 ring-slate-900/5'
 
-function monthStart(ts: { toDate: () => Date }): Date {
-  const d = ts.toDate()
-  return new Date(d.getFullYear(), d.getMonth(), 1)
+function monthStart(ts: unknown): Date | null {
+  if (!ts || typeof ts !== 'object' || typeof (ts as { toDate?: unknown }).toDate !== 'function') {
+    return null
+  }
+  try {
+    const d = (ts as { toDate: () => Date }).toDate()
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  } catch {
+    return null
+  }
 }
 
 function formatMonth(d: Date): string {
@@ -120,7 +128,10 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
     if (adminChartsReady) return adminAgg.data!.summerMeltSeries
     if (isAdmin && !adminChartsReady) return []
     const years = new Set<number>()
-    for (const l of leads) years.add(l.updatedAt.toDate().getFullYear())
+    for (const l of leads) {
+      if (typeof l.updatedAt?.toDate !== 'function') continue
+      years.add(l.updatedAt.toDate().getFullYear())
+    }
     if (!years.size) years.add(new Date().getFullYear())
     const list: { month: string; melt: number }[] = []
     for (const y of [...years].sort()) {
@@ -129,6 +140,7 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
         let melt = 0
         for (const l of leads) {
           if (l.status !== 'SUMMER_MELT') continue
+          if (typeof l.updatedAt?.toDate !== 'function') continue
           const d = l.updatedAt.toDate()
           if (d.getFullYear() === y && d.getMonth() === m) melt++
         }
@@ -148,6 +160,7 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
     const map = new Map<string, Partial<Record<LeadPipelineStatus, number>>>()
     for (const l of leads) {
       const d = monthStart(l.importedAt ?? l.createdAt)
+      if (!d) continue
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
       const row = map.get(key) ?? {}
       const p = l.pipelineStatus

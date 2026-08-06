@@ -722,7 +722,9 @@ export function CounselorDashboard() {
   const listRows = useMemo(() => {
     let rows = filtered
     if (crmStageFilter !== 'ALL') rows = rows.filter((l) => l.status === crmStageFilter)
-    return [...rows].sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+    return [...rows].sort(
+      (a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0),
+    )
   }, [filtered, crmStageFilter])
 
   const maxListPage = Math.max(1, Math.ceil(listRows.length / LIST_PAGE_SIZE))

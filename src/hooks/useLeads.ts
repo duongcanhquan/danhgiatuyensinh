@@ -18,6 +18,7 @@ import {
   type QueryFilterConstraint,
   type QuerySnapshot,
 } from 'firebase/firestore'
+import { asFirestoreTimestamp } from '../utils/firestoreTimestamp'
 import type {
   Lead,
   LeadCounselorStatus,
@@ -256,10 +257,12 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
 
     const uniqueHash = String(data.uniqueHash ?? '')
     const now = Timestamp.now()
-    const createdAt = (data.createdAt as Timestamp) ?? (data.importedAt as Timestamp) ?? now
-    const updatedAt = (data.updatedAt as Timestamp) ?? createdAt
-    const importedAt = data.importedAt as Timestamp | undefined
-    const uploadedAt = (data.uploadedAt as Timestamp) ?? importedAt ?? createdAt
+    // Legacy import / REST đôi khi ghi string hoặc {seconds} — không cast thô (sẽ crash Dashboard .toDate()).
+    const createdAt =
+      asFirestoreTimestamp(data.createdAt) ?? asFirestoreTimestamp(data.importedAt) ?? now
+    const updatedAt = asFirestoreTimestamp(data.updatedAt) ?? createdAt
+    const importedAt = asFirestoreTimestamp(data.importedAt)
+    const uploadedAt = asFirestoreTimestamp(data.uploadedAt) ?? importedAt ?? createdAt
 
     return {
       id,

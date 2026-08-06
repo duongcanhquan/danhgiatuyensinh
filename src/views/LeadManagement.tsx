@@ -4563,7 +4563,7 @@ function LeadDetailPanel({
                       {detailRightTab === 'assign' ? (
                         <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
                           <LeadCrmQuickBlock
-                            key={`${lead.id}-${lead.updatedAt.toMillis()}`}
+                            key={`${lead.id}-${lead.updatedAt?.toMillis?.() ?? 0}`}
                             lead={lead}
                             db={db}
                             counselorUsers={counselorUsers}
