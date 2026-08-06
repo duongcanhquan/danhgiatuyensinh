@@ -1513,7 +1513,14 @@ export function LeadManagement() {
                 aria-hidden
               />
               <span className="shrink-0">Bộ chấm điểm</span>
-              <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden">
+              <span
+                className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden"
+                title={
+                  profilesLoading
+                    ? undefined
+                    : activeScoringProfile?.profileName?.trim() || undefined
+                }
+              >
                 {profilesLoading
                   ? 'Đang tải…'
                   : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'Chưa có profile' : '—')}
@@ -1656,7 +1663,39 @@ export function LeadManagement() {
           </label>
         </div>
 
-        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin]">
+        {/* Ca gọi — hàng riêng trên điện thoại (tránh chìm trong dải lọc ngang) */}
+        <div className="border-t border-slate-200/70 pt-2 md:hidden">
+          <label
+            className="flex w-full flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
+            title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
+          >
+            Ca gọi
+            <select
+              value={callQueueFilter}
+              onChange={(e) => {
+                setCallQueueFilter(e.target.value as CallQueueFilter)
+                setPage(1)
+              }}
+              title={
+                callQueueFilter === 'all'
+                  ? 'Tất cả'
+                  : callQueueFilter === 'never_called'
+                    ? 'Chưa gọi'
+                    : callQueueFilter === 'called_today'
+                      ? 'Đã gọi hôm nay'
+                      : 'Cần gọi lại'
+              }
+              className="mt-0.5 min-h-11 w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+            >
+              <option value="all">Tất cả</option>
+              <option value="never_called">Chưa gọi</option>
+              <option value="called_today">Đã gọi hôm nay</option>
+              <option value="needs_callback">Cần gọi lại</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto scroll-smooth border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin] md:flex-wrap md:overflow-visible">
           <FilterSelect
             compact
             label="Nhãn"
@@ -1805,7 +1844,7 @@ export function LeadManagement() {
             />
           </label>
           <label
-            className="flex min-w-[9.5rem] shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
+            className="hidden min-w-[10.5rem] shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500 md:flex"
             title="Lọc ca gọi khi nhiều người dùng chung tài khoản"
           >
             Ca gọi
@@ -1815,7 +1854,16 @@ export function LeadManagement() {
                 setCallQueueFilter(e.target.value as CallQueueFilter)
                 setPage(1)
               }}
-              className="mt-0.5 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+              title={
+                callQueueFilter === 'all'
+                  ? 'Tất cả'
+                  : callQueueFilter === 'never_called'
+                    ? 'Chưa gọi'
+                    : callQueueFilter === 'called_today'
+                      ? 'Đã gọi hôm nay'
+                      : 'Cần gọi lại'
+              }
+              className="mt-0.5 min-h-10 rounded-md border border-slate-200/95 bg-white px-2 py-1.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
             >
               <option value="all">Tất cả</option>
               <option value="never_called">Chưa gọi</option>
@@ -1826,7 +1874,7 @@ export function LeadManagement() {
           <button
             type="button"
             onClick={clearQuickFilters}
-            className="shrink-0 self-end rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
+            className="min-h-10 shrink-0 self-end rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
           >
             Xóa lọc nhanh
           </button>
@@ -1842,7 +1890,7 @@ export function LeadManagement() {
                   type="button"
                   onClick={() => c.onClear()}
                   className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50/95 px-2.5 py-1 text-xs font-medium text-amber-950 shadow-sm transition hover:border-amber-500 hover:bg-amber-100"
-                  title="Bỏ lọc này"
+                  title={`${c.label} — bấm để bỏ lọc`}
                 >
                   <span className="min-w-0 truncate">{c.label}</span>
                   <span className="shrink-0 font-bold text-amber-800" aria-hidden>
@@ -1933,12 +1981,12 @@ export function LeadManagement() {
               ) : null}{' '}
               (trang {currentPage}/{displayTotalPages})
             </span>
-            <div className="flex flex-wrap items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 « Đầu
               </button>
@@ -1946,7 +1994,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(currentPage - 1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Trước
               </button>
@@ -1954,7 +2002,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(currentPage + 1)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Sau
               </button>
@@ -1962,30 +2010,38 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(displayTotalPages)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
               >
                 Cuối »
               </button>
             </div>
           </div>
         ) : null}
-        <div className="scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain">
+        <div
+          className={`scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain ${
+            canBulkWrite && selectedIds.size > 0
+              ? 'pb-[calc(var(--nav-bottom-height,4rem)+9rem)] lg:pb-28'
+              : ''
+          }`}
+        >
           <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/85 backdrop-blur-xl">
+            <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/95 backdrop-blur-xl">
               <tr className="text-xs font-medium uppercase tracking-wide text-slate-600 sm:text-sm">
-                <th className="w-10 px-2 py-3">
+                <th className="sticky left-0 z-[3] w-11 bg-white/95 px-1 py-3 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]">
                   {canBulkWrite ? (
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleSelectAllVisible}
-                      disabled={!pagedRows.length}
-                      className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                      title="Chọn tất cả hồ sơ trên trang này"
-                    />
+                    <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        disabled={!pagedRows.length}
+                        className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                        title="Chọn tất cả hồ sơ trên trang này"
+                      />
+                    </label>
                   ) : null}
                 </th>
-                <th className="px-4 py-3 font-medium">
+                <th className="sticky left-11 z-[3] min-w-[9.5rem] bg-white/95 px-3 py-3 font-medium shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] sm:px-4">
                   <button
                     type="button"
                     onClick={() => toggleSort('fullName')}
@@ -2140,20 +2196,25 @@ export function LeadManagement() {
                   transition={{ type: 'spring', stiffness: 380, damping: 28 }}
                   onClick={() => setSelected(l)}
                   title="Bấm để xem chi tiết: hồ sơ sinh viên, ghi chú, đánh giá, lịch sử tương tác, AI…"
-                  className="cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
+                  className="group cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
                 >
-                  <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td
+                    className="sticky left-0 z-[2] bg-white px-1 py-2 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)] group-hover:bg-amber-50/90"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {canBulkWrite ? (
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(l.id)}
-                        onChange={() => toggleSelectId(l.id)}
-                        className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
-                        aria-label={`Chọn ${l.fullName}`}
-                      />
+                      <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(l.id)}
+                          onChange={() => toggleSelectId(l.id)}
+                          className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                          aria-label={`Chọn ${l.fullName}`}
+                        />
+                      </label>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="sticky left-11 z-[2] min-w-[9.5rem] bg-white px-3 py-3 font-medium text-slate-900 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] group-hover:bg-amber-50/90 sm:px-4">
                     <span className="inline-flex max-w-full items-center gap-1.5">
                       {l.isAiShortlisted ? (
                         <Zap
@@ -2163,19 +2224,21 @@ export function LeadManagement() {
                           aria-label="Đã được AI đánh dấu ưu tiên"
                         />
                       ) : null}
-                      <span className="min-w-0 truncate">{l.fullName || '—'}</span>
+                      <span className="min-w-0 truncate" title={l.fullName || undefined}>
+                        {l.fullName || '—'}
+                      </span>
                     </span>
                     <p
-                      className={`mt-0.5 line-clamp-1 text-[11px] font-medium leading-snug ${
-                        callQueueLine === 'Chưa gọi' ? 'text-amber-700' : 'text-slate-500'
-                      }`}
+                      className={`mt-0.5 text-xs font-medium leading-snug md:line-clamp-1 md:text-[11px] ${
+                        callQueueFilter !== 'all' ? 'line-clamp-2' : 'line-clamp-1'
+                      } ${callQueueLine === 'Chưa gọi' ? 'text-amber-700' : 'text-slate-500'}`}
                       title={callQueueLine}
                     >
                       {callQueueLine}
                     </p>
                     {callAiLine ? (
                       <p
-                        className="mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-[var(--color-primary)]"
+                        className="mt-0.5 line-clamp-2 text-xs font-medium leading-snug text-[var(--color-primary)] md:text-[11px]"
                         title={callAiLine}
                       >
                         Đánh giá gọi: {callAiLine}
@@ -2260,7 +2323,7 @@ export function LeadManagement() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-modal fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">
               Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.
@@ -2315,7 +2378,7 @@ export function LeadManagement() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-modal fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Đổi tình trạng tư vấn</h3>
             <p className="mt-1 text-sm text-slate-600">Áp dụng cho {selectedIds.size} hồ sơ đã chọn.</p>
             <label className="mt-4 block text-sm font-medium text-slate-700">
@@ -2362,7 +2425,7 @@ export function LeadManagement() {
             aria-label="Đóng"
             onClick={() => !bulkBusy && setBulkModal(null)}
           />
-          <div className="app-modal fixed left-1/2 top-1/2 z-[60] w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-5 shadow-xl">
+          <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Gán nhãn phân loại</h3>
             <p className="mt-1 text-sm text-slate-600">
               Gán cùng một nhãn HOT / WARM / COLD / LOSS cho {selectedIds.size} hồ sơ đã chọn (không đổi điểm). Muốn
@@ -2867,10 +2930,11 @@ function FilterSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocus}
+        title={options.find((o) => o.v === value)?.t ?? title}
         className={
           compact
-            ? 'mt-0.5 max-w-[7.25rem] min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
-            : 'mt-1 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            ? 'mt-0.5 max-w-[7.25rem] min-h-9 min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            : 'mt-1 min-h-11 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
         }
       >
         {options.map((o) => (
@@ -4013,13 +4077,14 @@ function LeadDetailPanel({
       role="dialog"
       aria-modal="true"
       aria-labelledby="lead-detail-title"
-      className="fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
+      className="safe-area-pt safe-area-pb fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
     >
-      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:px-5 lg:px-6">
+      <header className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-3 shadow-sm sm:gap-3 sm:px-5 lg:px-6">
         <div className="min-w-0 flex-1">
           <h2
             id="lead-detail-title"
-            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+            className="truncate text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+            title={lead.fullName || undefined}
           >
             {lead.fullName || 'Chưa rõ tên'}
           </h2>
@@ -4028,48 +4093,52 @@ function LeadDetailPanel({
           <button
             type="button"
             onClick={() => setPlaybookPopupOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+            title="Playbook"
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-amber-400/70 bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
           >
             <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-            Playbook
+            <span className="hidden sm:inline">Playbook</span>
           </button>
           {dynamicAssistantSlot ? (
             <button
               type="button"
               onClick={() => setAssistantPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-300/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              title="Trợ lý"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-sky-300/80 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
             >
               <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              Trợ lý
+              <span className="hidden sm:inline">Trợ lý</span>
             </button>
           ) : null}
           {canRunAi ? (
             <button
               type="button"
               onClick={() => setLlmPopupOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-primary)]/50 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+              title="LLM"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-primary)]/50 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              LLM
+              <span className="hidden sm:inline">LLM</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setLlmAccessHelpOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-300/80 bg-violet-100 px-2.5 py-1.5 text-xs font-semibold text-violet-900 shadow-sm transition hover:bg-violet-200"
               title="Cần bật quyền AI trên tài khoản"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-violet-300/80 bg-violet-100 px-2.5 py-1.5 text-xs font-semibold text-violet-900 shadow-sm transition hover:bg-violet-200"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={1.75} />
-              LLM (khóa)
+              <span className="hidden sm:inline">LLM (khóa)</span>
             </button>
           )}
           <button
             type="button"
             onClick={requestClosePanel}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+            title="Đóng"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
-            Đóng
+            <span className="hidden sm:inline">Đóng</span>
           </button>
         </div>
       </header>
