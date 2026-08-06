@@ -249,11 +249,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       data.mlExplanation !== undefined && data.mlExplanation !== null
         ? String(data.mlExplanation).slice(0, 2000)
         : undefined
-    const nextRaw = data.nextFollowUpDate
-    const nextFollowUpDate =
-      nextRaw && typeof nextRaw === 'object' && 'toMillis' in (nextRaw as object)
-        ? (nextRaw as Timestamp)
-        : null
+    const nextFollowUpDate = asFirestoreTimestamp(data.nextFollowUpDate) ?? null
 
     const uniqueHash = String(data.uniqueHash ?? '')
     const now = Timestamp.now()
@@ -350,10 +346,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.recommendedAction !== undefined && data.recommendedAction !== null
           ? String(data.recommendedAction).slice(0, 4000)
           : undefined,
-      aiProcessedAt:
-        data.aiProcessedAt && typeof data.aiProcessedAt === 'object' && 'toMillis' in (data.aiProcessedAt as object)
-          ? (data.aiProcessedAt as Timestamp)
-          : undefined,
+      aiProcessedAt: asFirestoreTimestamp(data.aiProcessedAt),
       lastCallAiSummary:
         data.lastCallAiSummary !== undefined && data.lastCallAiSummary !== null
           ? String(data.lastCallAiSummary).slice(0, 500)
@@ -362,14 +355,8 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.lastCallAiReadiness !== undefined && data.lastCallAiReadiness !== null
           ? String(data.lastCallAiReadiness).slice(0, 64)
           : undefined,
-      lastCallAiAt:
-        data.lastCallAiAt && typeof data.lastCallAiAt === 'object' && 'toMillis' in (data.lastCallAiAt as object)
-          ? (data.lastCallAiAt as Timestamp)
-          : undefined,
-      lastCallAt:
-        data.lastCallAt && typeof data.lastCallAt === 'object' && 'toMillis' in (data.lastCallAt as object)
-          ? (data.lastCallAt as Timestamp)
-          : undefined,
+      lastCallAiAt: asFirestoreTimestamp(data.lastCallAiAt),
+      lastCallAt: asFirestoreTimestamp(data.lastCallAt),
       lastCalledByLabel:
         data.lastCalledByLabel !== undefined && data.lastCalledByLabel !== null
           ? String(data.lastCalledByLabel).slice(0, 120)
@@ -385,12 +372,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         data.callEvalPriorityBoost !== undefined && data.callEvalPriorityBoost !== null
           ? normPriorityTag(data.callEvalPriorityBoost)
           : undefined,
-      callEvalPriorityBoostAt:
-        data.callEvalPriorityBoostAt &&
-        typeof data.callEvalPriorityBoostAt === 'object' &&
-        'toMillis' in (data.callEvalPriorityBoostAt as object)
-          ? (data.callEvalPriorityBoostAt as Timestamp)
-          : undefined,
+      callEvalPriorityBoostAt: asFirestoreTimestamp(data.callEvalPriorityBoostAt),
       lastCallBehaviorScore:
         data.lastCallBehaviorScore !== undefined && data.lastCallBehaviorScore !== null
           ? Math.max(0, Math.min(100, Math.round(Number(data.lastCallBehaviorScore))))

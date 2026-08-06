@@ -32,6 +32,23 @@ describe('mapDoc timestamp hardening', () => {
     expect(lead!.importedAt).toBeUndefined()
     expect(lead!.createdAt.toMillis()).toBe(1_700_000_100_000)
   })
+
+  it('normalizes call/AI/follow-up timestamps the same way', () => {
+    const lead = mapDoc('L3', {
+      fullName: 'C',
+      phone: '092',
+      uniqueHash: 'h3',
+      createdAt: TimestampLike(1_700_000_200),
+      lastCallAt: '2026-08-06T01:00:00.000Z',
+      lastCallAiAt: { seconds: 1_700_000_300, nanoseconds: 0 },
+      nextFollowUpDate: { foo: true },
+      aiProcessedAt: '2026-08-05T12:00:00.000Z',
+    })
+    expect(typeof lead!.lastCallAt?.toDate).toBe('function')
+    expect(typeof lead!.lastCallAiAt?.toDate).toBe('function')
+    expect(typeof lead!.aiProcessedAt?.toDate).toBe('function')
+    expect(lead!.nextFollowUpDate).toBeNull()
+  })
 })
 
 function TimestampLike(seconds: number) {

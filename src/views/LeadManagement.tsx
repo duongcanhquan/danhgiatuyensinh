@@ -4155,7 +4155,7 @@ function LeadDetailPanel({
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-900">
                   Gợi ý từ AI (ưu tiên chốt sale)
                 </p>
-                {lead.aiProcessedAt?.toDate ? (
+                {typeof lead.aiProcessedAt?.toDate === 'function' ? (
                   <p className="mt-0.5 text-xs text-amber-800/80">
                     Cập nhật AI: {lead.aiProcessedAt.toDate().toLocaleString('vi-VN')}
                   </p>
