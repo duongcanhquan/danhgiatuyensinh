@@ -59,6 +59,8 @@ import {
 } from '../utils/leadWorkspaceUrlFilters'
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { prefersNativePhoneDial } from '../utils/preferNativePhoneDial'
+import { normalizePhoneForDial } from '../utils/omicallConfig'
 
 const TAG_BADGE: Record<PriorityTag, string> = {
   HOT: 'bg-rose-100 text-rose-900 ring-1 ring-rose-300/80',
@@ -171,6 +173,11 @@ function CounselorLeadListRow({
   const followToday = isFollowUpTodayLocal(lead.nextFollowUpDate)
   const callAiLine = formatLeadLastCallAiLine(lead)
   const performerName = profile?.displayName?.trim() || profile?.email || profile?.id || ''
+  const nativeDialHref = (() => {
+    const local = normalizePhoneForDial(lead.phone ?? '', 'local')
+    return local ? `tel:${local}` : null
+  })()
+  const showNativeDial = Boolean(nativeDialHref && prefersNativePhoneDial())
   const logCall = async (e: MouseEvent) => {
     e.stopPropagation()
     if (!db || !profile || !canInteract) return
@@ -335,11 +342,22 @@ function CounselorLeadListRow({
       </td>
       <td className="px-2 py-2 align-middle">
         <div className="flex flex-wrap items-center gap-1">
+          {showNativeDial ? (
+            <a
+              href={nativeDialHref!}
+              onClick={(e) => e.stopPropagation()}
+              title="Gọi bằng máy điện thoại"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 p-2 text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
+              aria-label="Gọi máy"
+            >
+              <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </a>
+          ) : null}
           <button
             type="button"
             disabled={!canInteract}
             onClick={(e) => void logCall(e)}
-            title="Ghi cuộc gọi"
+            title="Ghi cuộc gọi (note sau gọi)"
             className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-30"
           >
             <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
