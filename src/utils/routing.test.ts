@@ -44,4 +44,9 @@ describe('countAssignments', () => {
     expect(m.get('c2')).toBe(1)
     expect(m.has('legacy')).toBe(false)
   })
+
+  it('falls back to legacy when assignedTo is empty string', () => {
+    const m = countAssignments([{ assignedTo: '', assignedCounselorId: 'c3' }])
+    expect(m.get('c3')).toBe(1)
+  })
 })

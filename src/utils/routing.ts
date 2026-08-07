@@ -29,13 +29,15 @@ export function pickCounselorByLowestLoad(
   return best.id
 }
 
-/** Đếm lead đang gán cho từng counselor (ưu tiên `assignedTo`, fallback legacy). */
+/** Đếm lead đang gán cho từng counselor (ưu tiên `assignedTo`, fallback legacy; bỏ qua chuỗi rỗng). */
 export function countAssignments(
   leads: readonly Pick<{ assignedTo?: string | null; assignedCounselorId?: string | null }, 'assignedTo' | 'assignedCounselorId'>[],
 ): Map<UserId, number> {
   const m = new Map<UserId, number>()
   for (const l of leads) {
-    const id = (l.assignedTo ?? l.assignedCounselorId ?? '').trim()
+    const primary = String(l.assignedTo ?? '').trim()
+    const legacy = String(l.assignedCounselorId ?? '').trim()
+    const id = primary || legacy
     if (!id) continue
     m.set(id, (m.get(id) ?? 0) + 1)
   }

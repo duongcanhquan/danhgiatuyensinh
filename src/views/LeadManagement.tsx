@@ -32,7 +32,7 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, type LeadListServerFilters, LEADS_PAGE_SIZE, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
+import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, leadMatchesClientSearch, type LeadListServerFilters, LEADS_PAGE_SIZE, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
@@ -490,6 +490,20 @@ export function LeadManagement() {
 
     return base
   }, [fieldStaffUsers, directoryUsers, profile, can])
+
+  /**
+   * Mục tiêu khi giao việc hàng loạt.
+   * Peer mode: dùng danh sách TVV đầy đủ (giống LeadCrmQuickBlock) — không chỉ chính mình.
+   */
+  const bulkReassignTargets = useMemo(() => {
+    const peerMode = !can('leads:read:global') && !can('leads:reassign:team') && can('leads:reassign:peer')
+    if (!peerMode || !profile?.id) return reassignPickList
+    const me = counselorUsers.find((c) => c.id === profile.id)
+    const others = counselorUsers
+      .filter((c) => c.id !== profile.id && c.isActive)
+      .sort((a, b) => formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'))
+    return me ? [me, ...others] : others
+  }, [reassignPickList, counselorUsers, profile?.id, can])
 
   const schoolOptions = useMemo(() => {
     if (showAdminGlobalFilters && highSchoolLabels.length) {
@@ -1315,6 +1329,11 @@ export function LeadManagement() {
         if (dispositionFilter !== 'all') {
           rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
         }
+        if (urlQuery.trim()) {
+          rows = rows.filter((l) =>
+            leadMatchesClientSearch(l, urlQuery.trim().toLowerCase(), counselorDirectoryLabelById),
+          )
+        }
       }
       const map = new Map<string, Lead>()
       for (const l of rows) map.set(l.id, l)
@@ -1352,6 +1371,8 @@ export function LeadManagement() {
     assigneeFilter,
     callWorkBucketFilter,
     dispositionFilter,
+    urlQuery,
+    counselorDirectoryLabelById,
   ])
 
   const applyBulkReassign = useCallback(async () => {
@@ -1380,8 +1401,14 @@ export function LeadManagement() {
       const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
       for (const id of ids) {
         const row = resolveLeadForBulk(id)
-        if (!row || !canWriteLead(profile, row, can, directoryUsers)) {
-          window.alert('Có hồ sơ nằm ngoài phạm vi nhóm hoặc chưa tải đủ — bỏ chọn hoặc liên hệ Quản trị.')
+        if (!row) {
+          window.alert('Có hồ sơ chưa tải đủ — bỏ chọn hoặc bấm lại «Chọn tất cả theo lọc».')
+          return
+        }
+        const owner = (row.assignedTo ?? row.assignedCounselorId ?? '').trim()
+        // Chưa gán hoặc đang trong nhóm → được phân; ngoài nhóm → chặn.
+        if (owner && !team.has(owner)) {
+          window.alert('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.')
           return
         }
       }
@@ -1419,30 +1446,14 @@ export function LeadManagement() {
     setBulkBusy(true)
     setBulkReassignProgress({ done: 0, total: ids.length })
     setRescoreMsg(null)
-    const touch = leadTouchPatch()
-    const items = ids.map((leadId) => {
-      const counselorUid = plan.assignments.get(leadId)!
-      const prev = resolveLeadForBulk(leadId)
-      const prevOwner = prev?.assignedTo ?? prev?.assignedCounselorId ?? null
-      const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
-      const scoreFields = prev
-        ? persistedLeadScoringFields(
-            prev,
-            assignPatch,
-            activeScoringProfile,
-            scoringMasterBuckets,
-            schoolTvvSignalDefs,
-            scoringPersistOpts,
-          )
-        : {}
-      return {
-        leadId,
-        counselorUid,
-        prevOwner,
-        extraPatch: { ...scoreFields } as Record<string, unknown>,
-        localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
-      }
-    })
+
+    let items: Array<{
+      leadId: string
+      counselorUid: string
+      prevOwner: string | null
+      extraPatch: Record<string, unknown>
+      localPatch: Partial<Lead>
+    }> = []
 
     const applyCommitted = (committedIds: string[]) => {
       for (const id of committedIds) {
@@ -1456,6 +1467,34 @@ export function LeadManagement() {
     }
 
     try {
+      const touch = leadTouchPatch()
+      items = ids.map((leadId) => {
+        const counselorUid = (plan.assignments.get(leadId) ?? '').trim()
+        if (!counselorUid) {
+          throw new Error(`Không xác định được người nhận cho hồ sơ ${leadId.slice(0, 8)}…`)
+        }
+        const prev = resolveLeadForBulk(leadId)
+        const prevOwner = prev?.assignedTo ?? prev?.assignedCounselorId ?? null
+        const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
+        const scoreFields = prev
+          ? persistedLeadScoringFields(
+              prev,
+              assignPatch,
+              activeScoringProfile,
+              scoringMasterBuckets,
+              schoolTvvSignalDefs,
+              scoringPersistOpts,
+            )
+          : {}
+        return {
+          leadId,
+          counselorUid,
+          prevOwner,
+          extraPatch: { ...scoreFields } as Record<string, unknown>,
+          localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
+        }
+      })
+
       const { committedIds } = await bulkReassignLeads(
         db,
         items.map(({ leadId, counselorUid, extraPatch }) => ({ leadId, counselorUid, extraPatch })),
@@ -1476,6 +1515,8 @@ export function LeadManagement() {
         const item = itemById.get(id)
         const uid = item?.counselorUid ?? plan.assignments.get(id) ?? ''
         const targetLabel =
+          bulkReassignTargets.find((c) => c.id === uid)?.displayName?.trim() ||
+          bulkReassignTargets.find((c) => c.id === uid)?.email ||
           reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
           reassignPickList.find((c) => c.id === uid)?.email ||
           uid
@@ -1522,7 +1563,6 @@ export function LeadManagement() {
     isElevatedLeadScope,
     canPeerReassignLeads,
     directoryUsers,
-    can,
     bulkAssignMode,
     bulkReassignUid,
     bulkAssignPoolIds,
@@ -1531,6 +1571,7 @@ export function LeadManagement() {
     scoringMasterBuckets,
     schoolTvvSignalDefs,
     scoringPersistOpts,
+    bulkReassignTargets,
     reassignPickList,
     applyLocalLeadPatch,
     refetchLeads,
@@ -2614,14 +2655,15 @@ export function LeadManagement() {
           count={selectedIds.size}
           onClear={() => setSelectedIds(new Set())}
           onReassign={() => {
-            const others = reassignPickList.filter((c) => c.id !== profile?.id)
-            const defaultUid = others[0]?.id ?? reassignPickList[0]?.id ?? ''
+            const others = bulkReassignTargets.filter((c) => c.id !== profile?.id)
+            const defaultUid = others[0]?.id ?? bulkReassignTargets[0]?.id ?? ''
             setBulkReassignUid(defaultUid)
             setBulkAssignMode('single')
-            const pool = reassignPickList
+            const pool = bulkReassignTargets
               .filter((c) => c.role === 'counselor' || isFieldStaffRole(c.role))
+              .filter((c) => c.id !== profile?.id || isElevatedLeadScope)
               .map((c) => c.id)
-            setBulkAssignPoolIds(pool.length ? pool.slice(0, 12) : defaultUid ? [defaultUid] : [])
+            setBulkAssignPoolIds(pool.length ? pool : defaultUid ? [defaultUid] : [])
             setBulkModal('reassign')
             void hydrateAssignmentLoads()
           }}
@@ -2701,7 +2743,7 @@ export function LeadManagement() {
                   disabled={counselorsLoading || bulkBusy}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
                 >
-                  {reassignPickList.map((c) => (
+                  {bulkReassignTargets.map((c) => (
                     <option key={c.id} value={c.id} className="bg-white">
                       {formatStaffDirectoryLabel(c)}
                       {assignmentLoadByUid.has(c.id) ? ` · đang ~${assignmentLoadByUid.get(c.id)} hồ sơ` : ''}
@@ -2720,7 +2762,7 @@ export function LeadManagement() {
                       : 'Số «đang ~N» ước lượng theo danh sách đang tải.'}
                 </p>
                 <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-2">
-                  {reassignPickList
+                  {bulkReassignTargets
                     .filter((c) => c.role === 'counselor' || isFieldStaffRole(c.role))
                     .map((c) => {
                       const checked = bulkAssignPoolIds.includes(c.id)
