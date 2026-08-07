@@ -21,6 +21,12 @@ Mỗi lần upload Excel gắn **chương trình** (đợt / chiến dịch tư 
 2. Hồ sơ: lọc «Chương trình» (+ «Chưa gắn»).
 3. Chọn nhiều → gán chương trình hàng loạt.
 
+## Ghi chú kỹ thuật (sau rà soát)
+
+- «Chưa gắn» / TVV / kết hợp lọc khác: fullScope + lọc client (Firestore không query field thiếu; tránh thiếu composite index).
+- Dropdown chương trình: quét phạm vi (giống Nguồn), không chỉ localStorage + trang hiện tại.
+- Index RBAC: `assignedTo` / `assignedCounselorId` + `intakeProgram` + `updatedAt`.
+
 ## Sau này (không chặn)
 
-Catalog master `intake_programs` nếu cần danh mục cố định.
+Catalog master `intake_programs` nếu cần danh mục cố định / chuẩn hóa chữ hoa thường trên server.
