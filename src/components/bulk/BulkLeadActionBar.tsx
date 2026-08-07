@@ -90,7 +90,7 @@ export function BulkLeadActionBar({
                 >
                   <UserPlus className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="sm:hidden">Giao việc</span>
-                  <span className="hidden sm:inline">Giao việc hàng loạt</span>
+                  <span className="hidden sm:inline">Phân lead hàng loạt</span>
                 </button>
               ) : null}
               <button

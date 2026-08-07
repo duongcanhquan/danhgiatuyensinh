@@ -100,6 +100,13 @@ import {
   type CallWorkBucketFilter,
 } from '../utils/callWorkQueue'
 import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
+import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
+import {
+  planLeadAssignments,
+  summarizeAssignPlan,
+  type SmartAssignMode,
+} from '../utils/smartLeadAssign'
+import { countAssignments } from '../utils/routing'
 import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
@@ -286,6 +293,8 @@ export function LeadManagement() {
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
   /** Lọc hàng chờ / note sau gọi — thiếu field trên hồ sơ cũ → quét phạm vi rộng. */
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
+  /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
+  const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -320,6 +329,13 @@ export function LeadManagement() {
     if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
+    if (
+      assigneeFilter &&
+      assigneeFilter !== '__UNASSIGNED__' &&
+      can('leads:read:global')
+    ) {
+      o.assignedCounselorIn = [assigneeFilter]
+    }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
     return Object.keys(o).length ? o : undefined
   }, [
@@ -330,13 +346,17 @@ export function LeadManagement() {
     majorFilter,
     sourceFilter,
     schoolFilter,
+    assigneeFilter,
     scoreMinInput,
     scoreMaxInput,
     aiShortlistOnly,
     tagClientEval,
+    can,
   ])
 
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
+
+  const listNeedsFullScope = tagClientEval || callQueueNeedsScope || assigneeUnsetNeedsScope
 
   const {
     leads,
@@ -356,8 +376,8 @@ export function LeadManagement() {
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: tagClientEval || callQueueNeedsScope ? 'fullScope' : 'paged',
-    maxFullScopeLeads: tagClientEval || callQueueNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    dataMode: listNeedsFullScope ? 'fullScope' : 'paged',
+    maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
   })
@@ -489,6 +509,14 @@ export function LeadManagement() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm' | 'priorityTag'>(null)
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
+  const [bulkAssignMode, setBulkAssignMode] = useState<SmartAssignMode>('single')
+  const [bulkAssignPoolIds, setBulkAssignPoolIds] = useState<string[]>([])
+  const [bulkReassignProgress, setBulkReassignProgress] = useState<null | { done: number; total: number }>(
+    null,
+  )
+  const [selectScopeBusy, setSelectScopeBusy] = useState(false)
+  /** Hồ sơ đã tải khi «Chọn tất cả theo lọc» — dùng khi id không còn trong trang hiện tại. */
+  const selectScopeLeadsRef = useRef<Map<string, Lead>>(new Map())
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkPriorityTag, setBulkPriorityTag] = useState<PriorityTag>('WARM')
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -1200,12 +1228,91 @@ export function LeadManagement() {
     })
   }, [pagedRows])
 
+  const assignmentLoadByUid = useMemo(() => countAssignments(leads), [leads])
+
+  const resolveLeadForBulk = useCallback(
+    (id: string): Lead | undefined => selectScopeLeadsRef.current.get(id) ?? leads.find((x) => x.id === id),
+    [leads],
+  )
+
+  const selectAllMatchingFilters = useCallback(async () => {
+    if (!db || !profile) return
+    setSelectScopeBusy(true)
+    setRescoreMsg(null)
+    try {
+      let rows = filtered
+      let truncated = Boolean(listNeedsFullScope && scopeFetchTruncated)
+      if (!listNeedsFullScope) {
+        const { leads: scopeLeads, truncated: t } = await fetchLeadsInScopeForRescore(
+          db,
+          profile,
+          hoDQueryLabels,
+          leadServerFilters,
+          {
+            maxLeads: LEADS_UI_FULL_SCOPE_MAX,
+            canReadGlobal: can('leads:read:global'),
+            orgId: effectiveOrgId,
+          },
+        )
+        truncated = t
+        rows = scopeLeads
+        if (assigneeFilter === '__UNASSIGNED__') {
+          rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
+        } else if (assigneeFilter) {
+          rows = rows.filter((l) => effectiveLeadAssigneeUid(l) === assigneeFilter)
+        }
+        if (callWorkBucketFilter !== 'all') {
+          rows = rows.filter((l) => leadMatchesCallWorkBucket(l, callWorkBucketFilter))
+        }
+        if (dispositionFilter !== 'all') {
+          rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
+        }
+      }
+      const map = new Map<string, Lead>()
+      for (const l of rows) map.set(l.id, l)
+      selectScopeLeadsRef.current = map
+      setSelectedIds(new Set(rows.map((l) => l.id)))
+      const truncNote = truncated
+        ? ` (đạt giới hạn ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} — có thể còn hồ sơ chưa tải)`
+        : ''
+      setRescoreMsg(
+        `Đã chọn ${rows.length.toLocaleString('vi-VN')} hồ sơ theo bộ lọc hiện tại${truncNote}.`,
+      )
+    } catch (e) {
+      console.error(e)
+      setRescoreMsg(e instanceof Error ? e.message : 'Không chọn được theo bộ lọc.')
+    } finally {
+      setSelectScopeBusy(false)
+    }
+  }, [
+    db,
+    profile,
+    filtered,
+    listNeedsFullScope,
+    scopeFetchTruncated,
+    hoDQueryLabels,
+    leadServerFilters,
+    can,
+    effectiveOrgId,
+    assigneeFilter,
+    callWorkBucketFilter,
+    dispositionFilter,
+  ])
+
   const applyBulkReassign = useCallback(async () => {
-    if (!db || !profile || !bulkReassignUid || !selectedIds.size) return
+    if (!db || !profile || !selectedIds.size) return
+    const ids = [...selectedIds]
+
     if (!isElevatedLeadScope && canPeerReassignLeads) {
-      for (const id of selectedIds) {
-        const row = leads.find((x) => x.id === id)
-        const owner = row?.assignedTo ?? row?.assignedCounselorId
+      for (const id of ids) {
+        const row = resolveLeadForBulk(id)
+        if (!row) {
+          window.alert(
+            'Có hồ sơ chưa tải đủ để kiểm tra quyền — bỏ chọn hoặc bấm lại «Chọn tất cả theo lọc».',
+          )
+          return
+        }
+        const owner = row.assignedTo ?? row.assignedCounselorId
         if (owner !== profile.id) {
           window.alert(
             'Chỉ có thể «Giao việc hàng loạt» cho các hồ sơ đang gán cho bạn. Bỏ chọn hồ sơ của đồng nghiệp hoặc liên hệ Admin/Trưởng.',
@@ -1216,72 +1323,156 @@ export function LeadManagement() {
     }
     if (isElevatedLeadScope && profile && isTeamLeadRole(profile.role)) {
       const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
-      if (!team.has(bulkReassignUid)) {
-        window.alert('Chỉ được gán cho TVV trong nhóm bạn quản lý.')
-        return
-      }
-      for (const id of selectedIds) {
-        const row = leads.find((x) => x.id === id)
-        if (row && !canWriteLead(profile, row, can, directoryUsers)) {
-          window.alert('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.')
+      for (const id of ids) {
+        const row = resolveLeadForBulk(id)
+        if (!row || !canWriteLead(profile, row, can, directoryUsers)) {
+          window.alert('Có hồ sơ nằm ngoài phạm vi nhóm hoặc chưa tải đủ — bỏ chọn hoặc liên hệ Quản trị.')
           return
         }
       }
+      if (bulkAssignMode === 'single') {
+        if (!team.has(bulkReassignUid)) {
+          window.alert('Chỉ được gán cho TVV trong nhóm bạn quản lý.')
+          return
+        }
+      } else {
+        for (const uid of bulkAssignPoolIds) {
+          if (!team.has(uid)) {
+            window.alert('Chỉ được chia cho TVV trong nhóm bạn quản lý.')
+            return
+          }
+        }
+      }
     }
-    setBulkBusy(true)
+
+    let plan
     try {
+      plan = planLeadAssignments(
+        ids,
+        bulkAssignMode === 'single' ? [bulkReassignUid] : bulkAssignPoolIds,
+        bulkAssignMode,
+        {
+          singleUid: bulkReassignUid,
+          currentLoads: assignmentLoadByUid,
+        },
+      )
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Không lập được kế hoạch phân lead.')
+      return
+    }
+
+    setBulkBusy(true)
+    setBulkReassignProgress({ done: 0, total: ids.length })
+    setRescoreMsg(null)
+    const touch = leadTouchPatch()
+    const items = ids.map((leadId) => {
+      const counselorUid = plan.assignments.get(leadId)!
+      const prev = resolveLeadForBulk(leadId)
+      const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
+      const scoreFields = prev
+        ? persistedLeadScoringFields(
+            prev,
+            assignPatch,
+            activeScoringProfile,
+            scoringMasterBuckets,
+            schoolTvvSignalDefs,
+            scoringPersistOpts,
+          )
+        : {}
+      return {
+        leadId,
+        counselorUid,
+        extraPatch: { ...scoreFields } as Record<string, unknown>,
+        localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
+      }
+    })
+
+    const applyCommitted = (committedIds: string[]) => {
+      for (const id of committedIds) {
+        const item = items.find((x) => x.leadId === id)
+        if (!item) continue
+        applyLocalLeadPatch(id, item.localPatch)
+        setSelected((p) => (p?.id === id ? { ...p, ...item.localPatch } : p))
+        const cached = selectScopeLeadsRef.current.get(id)
+        if (cached) selectScopeLeadsRef.current.set(id, { ...cached, ...item.localPatch })
+      }
+    }
+
+    try {
+      const { committedIds } = await bulkReassignLeads(
+        db,
+        items.map(({ leadId, counselorUid, extraPatch }) => ({ leadId, counselorUid, extraPatch })),
+        {
+          onProgress: (done, total) => setBulkReassignProgress({ done, total }),
+        },
+      )
+      applyCommitted(committedIds)
       const performer = profile.displayName?.trim() || profile.email || profile.id
-      const targetLabel =
-        reassignPickList.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
-        reassignPickList.find((c) => c.id === bulkReassignUid)?.email ||
-        bulkReassignUid
-      for (const id of selectedIds) {
-        const ref = doc(db, FS_COLLECTIONS.leads, id)
-        const prev = leads.find((x) => x.id === id)
-        const assignPatch = assigneeFirestoreMirror(bulkReassignUid) as Partial<Lead>
-        const scoreFields = prev
-          ? persistedLeadScoringFields(
-              prev,
-              assignPatch,
-              activeScoringProfile,
-              scoringMasterBuckets,
-              schoolTvvSignalDefs,
-              scoringPersistOpts,
-            )
-          : {}
-        const touch = leadTouchPatch()
-        const localPatch = { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>
-        await updateDoc(ref, localPatch)
-        applyLocalLeadPatch(id, localPatch)
-        setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
+      const modeLabel =
+        bulkAssignMode === 'single'
+          ? 'một người'
+          : bulkAssignMode === 'round_robin'
+            ? 'chia đều'
+            : 'theo tải thấp nhất'
+      for (const id of committedIds.slice(0, 40)) {
+        const uid = plan.assignments.get(id) ?? ''
+        const targetLabel =
+          reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
+          reassignPickList.find((c) => c.id === uid)?.email ||
+          uid
+        const prev = resolveLeadForBulk(id)
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
+          description: `Phân công hàng loạt (${modeLabel}) → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
       }
       setBulkModal(null)
       setSelectedIds(new Set())
+      selectScopeLeadsRef.current = new Map()
+      const auditNote =
+        committedIds.length > 40
+          ? ` (đã ghi nhật ký mẫu ${Math.min(40, committedIds.length)} hồ sơ)`
+          : ''
+      setRescoreMsg(
+        `Đã giao việc ${committedIds.length.toLocaleString('vi-VN')} hồ sơ · ${summarizeAssignPlan(plan)}${auditNote}.`,
+      )
       refetchLeads()
     } catch (e) {
       console.error(e)
+      if (e instanceof BulkReassignPartialError) {
+        applyCommitted(e.committedIds)
+        setBulkModal(null)
+        setSelectedIds(new Set(e.remainingIds))
+        setRescoreMsg(e.message)
+        refetchLeads()
+      } else {
+        setRescoreMsg(e instanceof Error ? e.message : 'Không giao việc hàng loạt được.')
+      }
     } finally {
       setBulkBusy(false)
+      setBulkReassignProgress(null)
     }
   }, [
     db,
     profile,
-    bulkReassignUid,
     selectedIds,
-    leads,
-    reassignPickList,
+    resolveLeadForBulk,
     isElevatedLeadScope,
     canPeerReassignLeads,
+    directoryUsers,
+    can,
+    bulkAssignMode,
+    bulkReassignUid,
+    bulkAssignPoolIds,
+    assignmentLoadByUid,
     activeScoringProfile,
     scoringMasterBuckets,
     schoolTvvSignalDefs,
+    scoringPersistOpts,
+    reassignPickList,
     applyLocalLeadPatch,
     refetchLeads,
   ])
@@ -1889,7 +2080,7 @@ export function LeadManagement() {
           <FilterSelect
             compact
             label="Nhân viên"
-            title="Nhân viên sale / CTV được phân công (lọc trên danh sách đang hiển thị)."
+            title="Lọc theo người phụ trách. «Chưa gán» quét cả phạm vi để phân lead số lượng lớn."
             value={assigneeFilter}
             onChange={(v) => {
               setAssigneeFilter(v)
@@ -1901,7 +2092,7 @@ export function LeadManagement() {
               { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
               ...reassignPickList.map((c) => ({
                 v: c.id,
-                t: formatStaffDirectoryLabel(c),
+                t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
               })),
             ]}
           />
@@ -1997,6 +2188,22 @@ export function LeadManagement() {
               <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
               Hướng dẫn
             </button>
+            {canBulkWrite && showBulkReassign ? (
+              <button
+                type="button"
+                disabled={selectScopeBusy || loading || !filtered.length}
+                onClick={() => void selectAllMatchingFilters()}
+                className="inline-flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-violet-950 shadow-sm transition hover:border-violet-400 hover:bg-violet-100 disabled:opacity-40 sm:px-3 sm:py-1.5 sm:text-xs"
+                title={`Chọn mọi hồ sơ đang khớp bộ lọc (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}) rồi dùng «Giao việc hàng loạt».`}
+              >
+                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {selectScopeBusy
+                  ? 'Đang chọn…'
+                  : listNeedsFullScope
+                    ? `Chọn tất cả theo lọc (${filtered.length.toLocaleString('vi-VN')})`
+                    : 'Chọn tất cả theo lọc (quét phạm vi)'}
+              </button>
+            ) : null}
           </div>
           {aiShortlistOnly ? (
             <span className="max-w-xl text-xs leading-snug text-slate-600">
@@ -2349,7 +2556,13 @@ export function LeadManagement() {
           onClear={() => setSelectedIds(new Set())}
           onReassign={() => {
             const others = reassignPickList.filter((c) => c.id !== profile?.id)
-            setBulkReassignUid(others[0]?.id ?? reassignPickList[0]?.id ?? '')
+            const defaultUid = others[0]?.id ?? reassignPickList[0]?.id ?? ''
+            setBulkReassignUid(defaultUid)
+            setBulkAssignMode('single')
+            const pool = reassignPickList
+              .filter((c) => c.role === 'counselor' || isFieldStaffRole(c.role))
+              .map((c) => c.id)
+            setBulkAssignPoolIds(pool.length ? pool.slice(0, 12) : defaultUid ? [defaultUid] : [])
             setBulkModal('reassign')
           }}
           onBulkStatus={() => {
@@ -2384,28 +2597,121 @@ export function LeadManagement() {
           <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Gán tư vấn viên mới cho {selectedIds.size} hồ sơ đã chọn.
+              Phân {selectedIds.size.toLocaleString('vi-VN')} hồ sơ đã chọn — một người, chia đều, hoặc theo tải
+              thấp nhất.
               {!isElevatedLeadScope && canPeerReassignLeads ? (
                 <span className="mt-1 block font-medium text-amber-800">
                   Bạn chỉ có thể chuyển các hồ sơ đang gán cho chính bạn sang đồng nghiệp (theo quyền TVV).
                 </span>
               ) : null}
             </p>
-            <label className="mt-4 block text-sm font-medium text-slate-700">
-              Phụ trách (TVV / Admin)
-              <select
-                value={bulkReassignUid}
-                onChange={(e) => setBulkReassignUid(e.target.value)}
-                disabled={counselorsLoading}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-              >
-                {reassignPickList.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-white">
-                    {formatStaffDirectoryLabel(c)}
-                  </option>
-                ))}
-              </select>
-            </label>
+
+            <fieldset className="mt-4 space-y-2">
+              <legend className="text-sm font-medium text-slate-700">Cách phân</legend>
+              {(
+                [
+                  { v: 'single' as const, t: 'Một người phụ trách' },
+                  { v: 'round_robin' as const, t: 'Chia đều (lần lượt)' },
+                  { v: 'lowest_load' as const, t: 'Theo tải thấp nhất' },
+                ] as const
+              ).map((o) => (
+                <label key={o.v} className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                  <input
+                    type="radio"
+                    name="bulk-assign-mode"
+                    checked={bulkAssignMode === o.v}
+                    disabled={bulkBusy || (!isElevatedLeadScope && o.v !== 'single')}
+                    onChange={() => setBulkAssignMode(o.v)}
+                    className="h-4 w-4 accent-[var(--color-primary)]"
+                  />
+                  {o.t}
+                </label>
+              ))}
+              {!isElevatedLeadScope ? (
+                <p className="text-xs text-slate-500">TVV chỉ chuyển sang một đồng nghiệp (không chia đều).</p>
+              ) : null}
+            </fieldset>
+
+            {bulkAssignMode === 'single' ? (
+              <label className="mt-4 block text-sm font-medium text-slate-700">
+                Phụ trách (TVV / Admin)
+                <select
+                  value={bulkReassignUid}
+                  onChange={(e) => setBulkReassignUid(e.target.value)}
+                  disabled={counselorsLoading || bulkBusy}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                >
+                  {reassignPickList.map((c) => (
+                    <option key={c.id} value={c.id} className="bg-white">
+                      {formatStaffDirectoryLabel(c)}
+                      {assignmentLoadByUid.has(c.id) ? ` · đang ~${assignmentLoadByUid.get(c.id)} hồ sơ` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-slate-700">Chọn nhóm nhận lead</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Số «đang ~N» ước lượng theo danh sách đang tải — dùng để cân tải.
+                </p>
+                <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-2">
+                  {reassignPickList
+                    .filter((c) => c.role === 'counselor' || isFieldStaffRole(c.role))
+                    .map((c) => {
+                      const checked = bulkAssignPoolIds.includes(c.id)
+                      const load = assignmentLoadByUid.get(c.id) ?? 0
+                      return (
+                        <label
+                          key={c.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-800 hover:bg-white"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={bulkBusy}
+                            onChange={() => {
+                              setBulkAssignPoolIds((prev) =>
+                                checked ? prev.filter((id) => id !== c.id) : [...prev, c.id],
+                              )
+                            }}
+                            className="h-4 w-4 accent-violet-600"
+                          />
+                          <span className="min-w-0 flex-1 truncate">{formatStaffDirectoryLabel(c)}</span>
+                          <span className="shrink-0 tabular-nums text-xs text-slate-500">~{load}</span>
+                        </label>
+                      )
+                    })}
+                </div>
+                {(() => {
+                  try {
+                    const preview = planLeadAssignments(
+                      [...selectedIds].slice(0, Math.min(selectedIds.size, 5000)),
+                      bulkAssignPoolIds,
+                      bulkAssignMode,
+                      { currentLoads: assignmentLoadByUid },
+                    )
+                    return (
+                      <p className="mt-2 text-xs font-medium text-violet-900">
+                        Xem trước: {summarizeAssignPlan(preview)}
+                      </p>
+                    )
+                  } catch {
+                    return (
+                      <p className="mt-2 text-xs text-amber-800">Chọn ít nhất một người trong nhóm nhận.</p>
+                    )
+                  }
+                })()}
+              </div>
+            )}
+
+            {bulkReassignProgress ? (
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                Đang ghi {bulkReassignProgress.done.toLocaleString('vi-VN')} /{' '}
+                {bulkReassignProgress.total.toLocaleString('vi-VN')}…
+              </p>
+            ) : null}
+
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
@@ -2417,7 +2723,10 @@ export function LeadManagement() {
               </button>
               <button
                 type="button"
-                disabled={bulkBusy || !bulkReassignUid}
+                disabled={
+                  bulkBusy ||
+                  (bulkAssignMode === 'single' ? !bulkReassignUid : bulkAssignPoolIds.length === 0)
+                }
                 onClick={() => void applyBulkReassign()}
                 className="rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >

@@ -1,4 +1,4 @@
-import type { Lead, UserId, VietMyUserProfile } from '../types'
+import type { UserId, VietMyUserProfile } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 
 /** Chọn một UID quản trị (ổn định theo email) để gán lead chờ điều phối khi import không khớp TVV. */
@@ -29,11 +29,13 @@ export function pickCounselorByLowestLoad(
   return best.id
 }
 
-/** Đếm lead đang gán cho từng counselor (chỉ cần trường gán TVV). */
-export function countAssignments(leads: readonly Pick<Lead, 'assignedCounselorId'>[]): Map<UserId, number> {
+/** Đếm lead đang gán cho từng counselor (ưu tiên `assignedTo`, fallback legacy). */
+export function countAssignments(
+  leads: readonly Pick<{ assignedTo?: string | null; assignedCounselorId?: string | null }, 'assignedTo' | 'assignedCounselorId'>[],
+): Map<UserId, number> {
   const m = new Map<UserId, number>()
   for (const l of leads) {
-    const id = l.assignedCounselorId
+    const id = (l.assignedTo ?? l.assignedCounselorId ?? '').trim()
     if (!id) continue
     m.set(id, (m.get(id) ?? 0) + 1)
   }
