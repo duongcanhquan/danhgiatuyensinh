@@ -21,7 +21,8 @@ import {
 import { Link, useSearchParams } from 'react-router-dom'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
-import { isAdminLikeRole } from '../auth/roleUtils'
+import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
+import { leadAssignedUid } from '../auth/leadAccess'
 import {
   leadMatchesClientSearch,
   LEADS_UI_FULL_SCOPE_MAX,
@@ -35,6 +36,7 @@ import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
 import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
 import { planLeadAssignments } from '../utils/smartLeadAssign'
+import { counselorIdsInManagerScope } from '../utils/teamScope'
 import {
   CALL_DISPOSITIONS,
   isCallDispositionId,
@@ -135,8 +137,7 @@ function leadMatchesDateRange(l: Lead, axis: DateAxisFilter, dateFrom: string, d
 }
 
 function effectiveAssigneeUid(l: Lead): string {
-  const u = l.assignedTo ?? l.assignedCounselorId
-  return u ? String(u).trim() : ''
+  return leadAssignedUid(l) ?? ''
 }
 
 function isElevatedForBulk(role: string | undefined): boolean {
@@ -610,6 +611,13 @@ export function CounselorDashboard() {
 
   const reassignPickList = useMemo(() => {
     const base = counselorUsers
+    if (isTeamLeadRole(profile?.role) && profile) {
+      const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
+      team.add(profile.id)
+      return base
+        .filter((u) => team.has(u.id))
+        .sort((a, b) => formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'))
+    }
     if (!isElevatedLeadScope) return base
     const extras = directoryUsers.filter(
       (u) => u.isActive && isAdminLikeRole(u.role) && !base.some((c) => c.id === u.id),
@@ -617,7 +625,7 @@ export function CounselorDashboard() {
     return [...base, ...extras].sort((a, b) =>
       formatStaffDirectoryLabel(a).localeCompare(formatStaffDirectoryLabel(b), 'vi'),
     )
-  }, [counselorUsers, directoryUsers, isElevatedLeadScope])
+  }, [counselorUsers, directoryUsers, isElevatedLeadScope, profile])
 
   const followUpCount = useMemo(
     () => leads.filter((l) => isDueTodayOrOverdue(l.nextFollowUpDate)).length,
@@ -786,11 +794,30 @@ export function CounselorDashboard() {
           pushToast('Có hồ sơ chưa tải đủ — bỏ chọn hoặc tải lại danh sách.')
           return
         }
-        const owner = row.assignedTo ?? row.assignedCounselorId
-        if (owner !== profile.id) {
+        if (leadAssignedUid(row) !== profile.id) {
           pushToast('Chỉ chuyển được hồ sơ đang gán cho bạn.')
           return
         }
+      }
+    }
+    if (isElevatedLeadScope && isTeamLeadRole(profile.role)) {
+      const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
+      team.add(profile.id)
+      for (const id of ids) {
+        const row = leads.find((x) => x.id === id)
+        if (!row) {
+          pushToast('Có hồ sơ chưa tải đủ — bỏ chọn hoặc tải lại danh sách.')
+          return
+        }
+        const owner = leadAssignedUid(row)
+        if (owner && !team.has(owner)) {
+          pushToast('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.')
+          return
+        }
+      }
+      if (!team.has(bulkReassignUid)) {
+        pushToast('Chỉ được gán cho TVV trong nhóm bạn quản lý.')
+        return
       }
     }
 
@@ -803,30 +830,13 @@ export function CounselorDashboard() {
     }
 
     setBulkBusy(true)
-    const touch = leadTouchPatch()
-    const items = ids.map((leadId) => {
-      const prev = leads.find((x) => x.id === leadId)
-      const prevOwner = prev?.assignedTo ?? prev?.assignedCounselorId ?? null
-      const counselorUid = plan.assignments.get(leadId)!
-      const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
-      const scoreFields = prev
-        ? persistedLeadScoringFields(
-            prev,
-            assignPatch,
-            activeScoringProfile,
-            scoringMasterBuckets,
-            schoolTvvSignalDefs,
-            dashboardScoringOpts,
-          )
-        : {}
-      return {
-        leadId,
-        counselorUid,
-        prevOwner,
-        extraPatch: { ...scoreFields } as Record<string, unknown>,
-        localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
-      }
-    })
+    let items: Array<{
+      leadId: string
+      counselorUid: string
+      prevOwner: string | null
+      extraPatch: Record<string, unknown>
+      localPatch: Partial<Lead>
+    }> = []
 
     const applyCommitted = (committedIds: string[]) => {
       for (const id of committedIds) {
@@ -836,12 +846,7 @@ export function CounselorDashboard() {
       }
     }
 
-    try {
-      const { committedIds } = await bulkReassignLeads(
-        db,
-        items.map(({ leadId, counselorUid, extraPatch }) => ({ leadId, counselorUid, extraPatch })),
-      )
-      applyCommitted(committedIds)
+    const writeAuditSample = async (committedIds: string[]) => {
       const performer = profile.displayName?.trim() || profile.email || profile.id
       const targetLabel =
         reassignPickList.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
@@ -858,6 +863,43 @@ export function CounselorDashboard() {
           performedByName: performer,
         })
       }
+    }
+
+    try {
+      const touch = leadTouchPatch()
+      items = ids.map((leadId) => {
+        const prev = leads.find((x) => x.id === leadId)
+        const prevOwner = prev ? leadAssignedUid(prev) ?? null : null
+        const counselorUid = (plan.assignments.get(leadId) ?? '').trim()
+        if (!counselorUid) {
+          throw new Error(`Không xác định được người nhận cho hồ sơ ${leadId.slice(0, 8)}…`)
+        }
+        const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
+        const scoreFields = prev
+          ? persistedLeadScoringFields(
+              prev,
+              assignPatch,
+              activeScoringProfile,
+              scoringMasterBuckets,
+              schoolTvvSignalDefs,
+              dashboardScoringOpts,
+            )
+          : {}
+        return {
+          leadId,
+          counselorUid,
+          prevOwner,
+          extraPatch: { ...scoreFields } as Record<string, unknown>,
+          localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
+        }
+      })
+
+      const { committedIds } = await bulkReassignLeads(
+        db,
+        items.map(({ leadId, counselorUid, extraPatch }) => ({ leadId, counselorUid, extraPatch })),
+      )
+      applyCommitted(committedIds)
+      await writeAuditSample(committedIds)
       setBulkModal(null)
       setSelectedIds(new Set())
       refetchLeads()
@@ -866,12 +908,19 @@ export function CounselorDashboard() {
       console.error(e)
       if (e instanceof BulkReassignPartialError) {
         applyCommitted(e.committedIds)
+        if (e.committedIds.length && items.length) {
+          try {
+            await writeAuditSample(e.committedIds)
+          } catch (auditErr) {
+            console.error(auditErr)
+          }
+        }
         setBulkModal(null)
         setSelectedIds(new Set(e.remainingIds))
         refetchLeads()
         pushToast(e.message)
       } else {
-        pushToast('Lỗi khi phân công.')
+        pushToast(e instanceof Error ? e.message : 'Lỗi khi phân công.')
       }
     } finally {
       setBulkBusy(false)
@@ -882,6 +931,7 @@ export function CounselorDashboard() {
     bulkReassignUid,
     selectedIds,
     leads,
+    directoryUsers,
     reassignPickList,
     pushToast,
     isElevatedLeadScope,

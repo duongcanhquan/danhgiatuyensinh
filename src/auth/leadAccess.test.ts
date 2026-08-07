@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCreateLead, canWriteLead } from './leadAccess'
+import { canCreateLead, canWriteLead, leadAssignedUid } from './leadAccess'
 import type { VietMyUserProfile } from '../types'
 
 function profile(partial: Partial<VietMyUserProfile> & Pick<VietMyUserProfile, 'id' | 'role'>): VietMyUserProfile {
@@ -42,5 +42,17 @@ describe('leadAccess capability-aware admin', () => {
     expect(canCreateLead(p, can)).toBe(true)
     expect(canWriteLead(p, { assignedTo: 'ad' }, can, [])).toBe(true)
     expect(canWriteLead(p, { assignedTo: 'other' }, can, [])).toBe(false)
+  })
+
+  it('leadAssignedUid falls back when assignedTo is empty string', () => {
+    expect(leadAssignedUid({ assignedTo: '', assignedCounselorId: 'c3' })).toBe('c3')
+    expect(leadAssignedUid({ assignedTo: 'c1', assignedCounselorId: 'c3' })).toBe('c1')
+    expect(leadAssignedUid({ assignedTo: '  ', assignedCounselorId: null })).toBeUndefined()
+  })
+
+  it('self-write uses legacy assignee when assignedTo is empty', () => {
+    const p = profile({ id: 'c3', role: 'counselor' })
+    const can = (perm: string) => perm === 'leads:write:self_assigned'
+    expect(canWriteLead(p, { assignedTo: '', assignedCounselorId: 'c3' }, can, [])).toBe(true)
   })
 })

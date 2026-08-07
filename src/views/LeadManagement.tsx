@@ -43,7 +43,7 @@ import { useOrg } from '../hooks/useOrg'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
-import { canCreateLead, canWriteLead } from '../auth/leadAccess'
+import { canCreateLead, canWriteLead, leadAssignedUid } from '../auth/leadAccess'
 import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
@@ -181,14 +181,13 @@ const ML_WIN_COLUMN_HINT =
   'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
 
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
-  const uid = l.assignedTo ?? l.assignedCounselorId
+  const uid = leadAssignedUid(l)
   if (!uid) return '—'
   return names.get(uid) ?? `${uid.slice(0, 8)}…`
 }
 
 function effectiveLeadAssigneeUid(l: Lead): string {
-  const u = l.assignedTo ?? l.assignedCounselorId
-  return u ? String(u).trim() : ''
+  return leadAssignedUid(l) ?? ''
 }
 
 /** Bỏ dòng nhật ký nhập `[Import]…` khỏi mô tả — chỉ dùng khi hiển thị, không sửa dữ liệu gốc. */
@@ -1388,7 +1387,7 @@ export function LeadManagement() {
           )
           return
         }
-        const owner = row.assignedTo ?? row.assignedCounselorId
+        const owner = leadAssignedUid(row)
         if (owner !== profile.id) {
           window.alert(
             'Chỉ có thể «Giao việc hàng loạt» cho các hồ sơ đang gán cho bạn. Bỏ chọn hồ sơ của đồng nghiệp hoặc liên hệ Admin/Trưởng.',
@@ -1399,13 +1398,14 @@ export function LeadManagement() {
     }
     if (isElevatedLeadScope && profile && isTeamLeadRole(profile.role)) {
       const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
+      team.add(profile.id)
       for (const id of ids) {
         const row = resolveLeadForBulk(id)
         if (!row) {
           window.alert('Có hồ sơ chưa tải đủ — bỏ chọn hoặc bấm lại «Chọn tất cả theo lọc».')
           return
         }
-        const owner = (row.assignedTo ?? row.assignedCounselorId ?? '').trim()
+        const owner = leadAssignedUid(row)
         // Chưa gán hoặc đang trong nhóm → được phân; ngoài nhóm → chặn.
         if (owner && !team.has(owner)) {
           window.alert('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.')
@@ -1474,7 +1474,7 @@ export function LeadManagement() {
           throw new Error(`Không xác định được người nhận cho hồ sơ ${leadId.slice(0, 8)}…`)
         }
         const prev = resolveLeadForBulk(leadId)
-        const prevOwner = prev?.assignedTo ?? prev?.assignedCounselorId ?? null
+        const prevOwner = prev ? leadAssignedUid(prev) ?? null : null
         const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
         const scoreFields = prev
           ? persistedLeadScoringFields(
@@ -1511,24 +1511,27 @@ export function LeadManagement() {
             ? 'chia đều'
             : 'theo tải thấp nhất'
       const itemById = new Map(items.map((it) => [it.leadId, it]))
-      for (const id of committedIds.slice(0, 40)) {
-        const item = itemById.get(id)
-        const uid = item?.counselorUid ?? plan.assignments.get(id) ?? ''
-        const targetLabel =
-          bulkReassignTargets.find((c) => c.id === uid)?.displayName?.trim() ||
-          bulkReassignTargets.find((c) => c.id === uid)?.email ||
-          reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
-          reassignPickList.find((c) => c.id === uid)?.email ||
-          uid
-        const before = item?.prevOwner ?? '—'
-        await commitAuditLog(db, {
-          leadId: id,
-          actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt (${modeLabel}) → ${targetLabel} (trước: ${before})`,
-          performedBy: profile.id,
-          performedByName: performer,
-        })
+      const writeAuditSample = async (committed: string[]) => {
+        for (const id of committed.slice(0, 40)) {
+          const item = itemById.get(id)
+          const uid = item?.counselorUid ?? plan.assignments.get(id) ?? ''
+          const targetLabel =
+            bulkReassignTargets.find((c) => c.id === uid)?.displayName?.trim() ||
+            bulkReassignTargets.find((c) => c.id === uid)?.email ||
+            reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
+            reassignPickList.find((c) => c.id === uid)?.email ||
+            uid
+          const before = item?.prevOwner ?? '—'
+          await commitAuditLog(db, {
+            leadId: id,
+            actionType: 'REASSIGNMENT',
+            description: `Phân công hàng loạt (${modeLabel}) → ${targetLabel} (trước: ${before})`,
+            performedBy: profile.id,
+            performedByName: performer,
+          })
+        }
       }
+      await writeAuditSample(committedIds)
       setBulkModal(null)
       setSelectedIds(new Set())
       selectScopeLeadsRef.current = new Map()
@@ -1544,6 +1547,37 @@ export function LeadManagement() {
       console.error(e)
       if (e instanceof BulkReassignPartialError) {
         applyCommitted(e.committedIds)
+        if (e.committedIds.length && items.length) {
+          try {
+            const performer = profile.displayName?.trim() || profile.email || profile.id
+            const modeLabel =
+              bulkAssignMode === 'single'
+                ? 'một người'
+                : bulkAssignMode === 'round_robin'
+                  ? 'chia đều'
+                  : 'theo tải thấp nhất'
+            const itemById = new Map(items.map((it) => [it.leadId, it]))
+            for (const id of e.committedIds.slice(0, 40)) {
+              const item = itemById.get(id)
+              const uid = item?.counselorUid ?? ''
+              const targetLabel =
+                bulkReassignTargets.find((c) => c.id === uid)?.displayName?.trim() ||
+                bulkReassignTargets.find((c) => c.id === uid)?.email ||
+                reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
+                reassignPickList.find((c) => c.id === uid)?.email ||
+                uid
+              await commitAuditLog(db, {
+                leadId: id,
+                actionType: 'REASSIGNMENT',
+                description: `Phân công hàng loạt (${modeLabel}) → ${targetLabel} (trước: ${item?.prevOwner ?? '—'})`,
+                performedBy: profile.id,
+                performedByName: performer,
+              })
+            }
+          } catch (auditErr) {
+            console.error(auditErr)
+          }
+        }
         setBulkModal(null)
         setSelectedIds(new Set(e.remainingIds))
         setRescoreMsg(e.message)
@@ -2659,11 +2693,8 @@ export function LeadManagement() {
             const defaultUid = others[0]?.id ?? bulkReassignTargets[0]?.id ?? ''
             setBulkReassignUid(defaultUid)
             setBulkAssignMode('single')
-            const pool = bulkReassignTargets
-              .filter((c) => c.role === 'counselor' || isFieldStaffRole(c.role))
-              .filter((c) => c.id !== profile?.id || isElevatedLeadScope)
-              .map((c) => c.id)
-            setBulkAssignPoolIds(pool.length ? pool : defaultUid ? [defaultUid] : [])
+            // Không tick sẵn cả danh sách — tránh chia nhầm toàn bộ TVV khi Admin mở modal.
+            setBulkAssignPoolIds([])
             setBulkModal('reassign')
             void hydrateAssignmentLoads()
           }}
@@ -2759,7 +2790,8 @@ export function LeadManagement() {
                     ? 'Đang ước lượng tải trong phạm vi…'
                     : assignmentLoadSnapshot
                       ? 'Số «đang ~N» ước lượng theo phạm vi (tối đa 4000 hồ sơ gần nhất).'
-                      : 'Số «đang ~N» ước lượng theo danh sách đang tải.'}
+                      : 'Số «đang ~N» ước lượng theo danh sách đang tải.'}{' '}
+                  Đã chọn {bulkAssignPoolIds.length.toLocaleString('vi-VN')} người — tick thủ công để tránh chia nhầm cả danh sách.
                 </p>
                 <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-2">
                   {bulkReassignTargets

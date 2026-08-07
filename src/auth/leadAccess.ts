@@ -14,7 +14,9 @@ export function canReassignTeamLeads(perms: readonly Permission[] | undefined): 
 }
 
 export function leadAssignedUid(lead: Pick<Lead, 'assignedTo' | 'assignedCounselorId'>): string | undefined {
-  const uid = (lead.assignedTo ?? lead.assignedCounselorId)?.trim()
+  const primary = String(lead.assignedTo ?? '').trim()
+  const legacy = String(lead.assignedCounselorId ?? '').trim()
+  const uid = primary || legacy
   return uid || undefined
 }
 
