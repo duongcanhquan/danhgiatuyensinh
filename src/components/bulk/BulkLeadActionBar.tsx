@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { UserPlus, Download, GitBranch, Sparkles, X, Tags } from 'lucide-react'
+import { UserPlus, Download, GitBranch, Sparkles, X, Tags, Layers } from 'lucide-react'
 import type { PriorityTag } from '../../types'
 
 type Props = {
@@ -10,6 +10,8 @@ type Props = {
   onExport: () => void
   /** Gán nhãn HOT/WARM/COLD/LOSS hàng loạt */
   onBulkPriorityTag?: () => void
+  /** Gán chương trình / đợt nhập hàng loạt */
+  onBulkIntakeProgram?: () => void
   showReassign: boolean
   /** Chỉ hiện khi lọc WARM + có quyền AI — stage-2 shortlist miner */
   showAiMiner?: boolean
@@ -24,6 +26,7 @@ export function BulkLeadActionBar({
   onBulkStatus,
   onExport,
   onBulkPriorityTag,
+  onBulkIntakeProgram,
   showReassign,
   showAiMiner,
   onAiMiner,
@@ -80,6 +83,17 @@ export function BulkLeadActionBar({
                   <Tags className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="sm:hidden">Gán nhãn</span>
                   <span className="hidden sm:inline">Gán nhãn phân loại</span>
+                </button>
+              ) : null}
+              {onBulkIntakeProgram ? (
+                <button
+                  type="button"
+                  onClick={onBulkIntakeProgram}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-3 py-2.5 text-sm font-semibold text-teal-950 transition hover:border-teal-400 hover:bg-teal-100 sm:flex-initial sm:min-h-10"
+                >
+                  <Layers className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  <span className="sm:hidden">Chương trình</span>
+                  <span className="hidden sm:inline">Gán chương trình</span>
                 </button>
               ) : null}
               {showReassign ? (

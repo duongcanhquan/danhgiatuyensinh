@@ -409,6 +409,11 @@ export interface Lead {
   uploadedBy?: UserId
   uploaderName?: string
   uploadBatchId?: string
+  /**
+   * Chương trình / đợt nhập (nhãn TVV) — gắn khi upload Excel hoặc gán hàng loạt.
+   * Thiếu / rỗng = chưa phân loại theo chương trình.
+   */
+  intakeProgram?: string
   importedAt?: Timestamp
   lastTouchedAt?: Timestamp
   routingMeta?: LeadRoutingMeta

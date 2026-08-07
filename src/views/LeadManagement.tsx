@@ -100,6 +100,15 @@ import {
   type CallWorkBucketFilter,
 } from '../utils/callWorkQueue'
 import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
+import {
+  BulkIntakeProgramPartialError,
+  bulkSetLeadIntakeProgram,
+} from '../utils/bulkLeadIntakeProgram'
+import {
+  loadRecentIntakePrograms,
+  normalizeIntakeProgramLabel,
+  rememberIntakeProgram,
+} from '../utils/intakeProgramRecent'
 import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
@@ -270,6 +279,8 @@ export function LeadManagement() {
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
   const [sourceCatalogRequested, setSourceCatalogRequested] = useState(false)
+  /** ALL | __UNSET__ | nhãn chương trình */
+  const [programFilter, setProgramFilter] = useState<string>('ALL')
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
   /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
   const [assigneeFilter, setAssigneeFilter] = useState<string>('')
@@ -286,6 +297,7 @@ export function LeadManagement() {
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
   /** Lọc hàng chờ / note sau gọi — thiếu field trên hồ sơ cũ → quét phạm vi rộng. */
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
+  const programUnsetNeedsScope = programFilter === '__UNSET__'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -317,6 +329,7 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
+    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') o.intakeProgram = programFilter
     if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
@@ -329,6 +342,7 @@ export function LeadManagement() {
     regionFilter,
     majorFilter,
     sourceFilter,
+    programFilter,
     schoolFilter,
     scoreMinInput,
     scoreMaxInput,
@@ -356,8 +370,9 @@ export function LeadManagement() {
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: tagClientEval || callQueueNeedsScope ? 'fullScope' : 'paged',
-    maxFullScopeLeads: tagClientEval || callQueueNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    dataMode: tagClientEval || callQueueNeedsScope || programUnsetNeedsScope ? 'fullScope' : 'paged',
+    maxFullScopeLeads:
+      tagClientEval || callQueueNeedsScope || programUnsetNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
   })
@@ -487,10 +502,16 @@ export function LeadManagement() {
   /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
   const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm' | 'priorityTag'>(null)
+  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm' | 'priorityTag' | 'intakeProgram'>(
+    null,
+  )
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkPriorityTag, setBulkPriorityTag] = useState<PriorityTag>('WARM')
+  const [bulkIntakeProgram, setBulkIntakeProgram] = useState('')
+  const [bulkIntakeProgramRecent, setBulkIntakeProgramRecent] = useState<string[]>(() =>
+    loadRecentIntakePrograms(),
+  )
   const [bulkBusy, setBulkBusy] = useState(false)
   const [rescoreBusy, setRescoreBusy] = useState(false)
   const [rescoreMsg, setRescoreMsg] = useState<string | null>(null)
@@ -648,6 +669,16 @@ export function LeadManagement() {
     return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [leads, scopeSourceOptions, sourceFilter])
 
+  const programOptions = useMemo(() => {
+    const s = new Set<string>(loadRecentIntakePrograms())
+    for (const l of leads) {
+      const p = (l.intakeProgram ?? '').trim()
+      if (p) s.add(p)
+    }
+    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') s.add(programFilter)
+    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leads, programFilter])
+
   const filtered = useMemo(() => {
     const minScore =
       scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
@@ -673,6 +704,9 @@ export function LeadManagement() {
     if (dispositionFilter !== 'all') {
       rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
     }
+    if (programFilter === '__UNSET__') {
+      rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
+    }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
     } else if (assigneeFilter) {
@@ -690,6 +724,7 @@ export function LeadManagement() {
     effectiveLeadTag,
     callWorkBucketFilter,
     dispositionFilter,
+    programFilter,
     assigneeFilter,
   ])
 
@@ -799,6 +834,7 @@ export function LeadManagement() {
     if (sp.has(LWF.PIPE)) setStatusFilter(parsePipelineFromUrl(sp.get(LWF.PIPE)))
     if (sp.has(LWF.CRM)) setCrmStatusFilter(parseCrmFromUrl(sp.get(LWF.CRM)))
     if (sp.has(LWF.SOURCE)) setSourceFilter(sp.get(LWF.SOURCE)!.trim() || 'ALL')
+    setProgramFilter((sp.get(LWF.PROG) ?? '').trim() || 'ALL')
     if (sp.has(LWF.ASSIGN)) setAssigneeFilter(sp.get(LWF.ASSIGN)!.trim())
     // Luôn đồng bộ từ URL — thiếu param = Tất cả (tránh sticky khi Back).
     setCallWorkBucketFilter(parseCallWorkBucketFromUrl(sp.get(LWF.CQ)))
@@ -815,6 +851,7 @@ export function LeadManagement() {
     setStatusFilter('ALL')
     setCrmStatusFilter('ALL')
     setSourceFilter('ALL')
+    setProgramFilter('ALL')
     setSchoolFilter('ALL')
     setAssigneeFilter('')
     setScoreMinInput('')
@@ -940,6 +977,20 @@ export function LeadManagement() {
         },
       })
     }
+    if (programFilter !== 'ALL') {
+      out.push({
+        id: 'prog',
+        label:
+          programFilter === '__UNSET__'
+            ? 'Chương trình: Chưa gắn'
+            : `Chương trình: ${programFilter.length > 18 ? `${programFilter.slice(0, 18)}…` : programFilter}`,
+        onClear: () => {
+          setProgramFilter('ALL')
+          setPage(1)
+          mergeListFilterUrl({ [LWF.PROG]: null })
+        },
+      })
+    }
     if (schoolFilter !== 'ALL') {
       out.push({
         id: 'school',
@@ -1009,6 +1060,7 @@ export function LeadManagement() {
     statusFilter,
     crmStatusFilter,
     sourceFilter,
+    programFilter,
     schoolFilter,
     assigneeFilter,
     scoreMinInput,
@@ -1380,6 +1432,77 @@ export function LeadManagement() {
       setBulkBusy(false)
     }
   }, [db, profile, selectedIds, bulkPriorityTag, applyLocalLeadPatch, refetchLeads])
+
+  const applyBulkIntakeProgram = useCallback(
+    async (mode: 'set' | 'clear' = 'set') => {
+      if (!db || !profile || !selectedIds.size) return
+      const label = normalizeIntakeProgramLabel(bulkIntakeProgram)
+      const clear = mode === 'clear' || !label
+      if (mode === 'set' && !label) {
+        setRescoreMsg('Nhập tên chương trình trước khi gán, hoặc dùng «Gỡ gắn».')
+        return
+      }
+      setBulkBusy(true)
+      setRescoreMsg(null)
+      const ids = [...selectedIds]
+      const touch = leadTouchPatch()
+      const applyCommitted = (committedIds: string[]) => {
+        for (const id of committedIds) {
+          const localPatch = {
+            ...(clear ? { intakeProgram: undefined } : { intakeProgram: label }),
+            ...touch,
+          } as Partial<Lead>
+          applyLocalLeadPatch(id, localPatch)
+          setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
+        }
+      }
+      try {
+        const { committedIds } = await bulkSetLeadIntakeProgram(db, ids, clear ? null : label)
+        applyCommitted(committedIds)
+        if (!clear) setBulkIntakeProgramRecent(rememberIntakeProgram(label))
+        const performer = profile.displayName || profile.email || profile.id
+        const desc = clear
+          ? 'Gỡ chương trình / đợt nhập (đặt chưa gắn) hàng loạt'
+          : `Gán chương trình hàng loạt → ${label}`
+        for (const id of committedIds.slice(0, 40)) {
+          await commitAuditLog(db, {
+            leadId: id,
+            actionType: 'SYSTEM_UPDATE',
+            description: desc,
+            performedBy: profile.id,
+            performedByName: performer,
+          })
+        }
+        setBulkModal(null)
+        setSelectedIds(new Set())
+        const auditNote =
+          committedIds.length > 40
+            ? ` (đã ghi nhật ký mẫu ${Math.min(40, committedIds.length)} hồ sơ)`
+            : ''
+        setRescoreMsg(
+          clear
+            ? `Đã gỡ chương trình cho ${committedIds.length} hồ sơ (chưa gắn).${auditNote}`
+            : `Đã gán chương trình «${label}» cho ${committedIds.length} hồ sơ.${auditNote}`,
+        )
+        refetchLeads()
+      } catch (e) {
+        console.error(e)
+        if (e instanceof BulkIntakeProgramPartialError) {
+          applyCommitted(e.committedIds)
+          if (!clear && e.committedIds.length) setBulkIntakeProgramRecent(rememberIntakeProgram(label))
+          setBulkModal(null)
+          setSelectedIds(new Set(e.remainingIds))
+          setRescoreMsg(e.message)
+          refetchLeads()
+        } else {
+          setRescoreMsg(e instanceof Error ? e.message : 'Không gán được chương trình hàng loạt.')
+        }
+      } finally {
+        setBulkBusy(false)
+      }
+    },
+    [db, profile, selectedIds, bulkIntakeProgram, applyLocalLeadPatch, refetchLeads],
+  )
 
   const executeBulkAiMiner = useCallback(
     async (warmPassed: Lead[]) => {
@@ -1871,6 +1994,22 @@ export function LeadManagement() {
             }}
             options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
           />
+          <FilterSelect
+            compact
+            label="Chương trình"
+            title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
+            value={programFilter}
+            onChange={(v) => {
+              setProgramFilter(v)
+              setPage(1)
+              mergeListFilterUrl({ [LWF.PROG]: v === 'ALL' ? null : v })
+            }}
+            options={[
+              { v: 'ALL', t: 'Tất cả' },
+              { v: '__UNSET__', t: 'Chưa gắn chương trình' },
+              ...programOptions.map((p) => ({ v: p, t: p })),
+            ]}
+          />
           <SearchableFilterSelect
             compact
             label="Trường THPT"
@@ -2360,6 +2499,13 @@ export function LeadManagement() {
             setBulkPriorityTag('WARM')
             setBulkModal('priorityTag')
           }}
+          onBulkIntakeProgram={() => {
+            setBulkIntakeProgramRecent(loadRecentIntakePrograms())
+            setBulkIntakeProgram(
+              programFilter !== 'ALL' && programFilter !== '__UNSET__' ? programFilter : '',
+            )
+            setBulkModal('intakeProgram')
+          }}
           onExport={() => exportBulkSelection()}
           showReassign={showBulkReassign}
           showAiMiner={tagFilter === 'WARM' && canRunLlmAnalysis}
@@ -2519,6 +2665,66 @@ export function LeadManagement() {
                 className="rounded-xl border border-sky-600 bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
                 {bulkBusy ? 'Đang xử lý…' : 'Gán nhãn'}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {bulkModal === 'intakeProgram' && db ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[55] bg-slate-900/25 backdrop-blur-md"
+            aria-label="Đóng"
+            onClick={() => !bulkBusy && setBulkModal(null)}
+          />
+          <div className="app-modal app-modal-sheet shadow-xl">
+            <h3 className="app-section-heading">Gán chương trình</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Gắn đợt / chương trình cho {selectedIds.size} hồ sơ đã chọn — dùng để lọc và xử lý theo từng lần nhập.
+              Hồ sơ cũ chưa gắn có thể gán ở đây; «Gỡ gắn» đưa về chưa phân loại.
+            </p>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Chương trình / đợt
+              <input
+                list="bulk-intake-program-suggestions"
+                value={bulkIntakeProgram}
+                onChange={(e) => setBulkIntakeProgram(e.target.value)}
+                disabled={bulkBusy}
+                placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-teal-200"
+              />
+            </label>
+            <datalist id="bulk-intake-program-suggestions">
+              {[...new Set([...bulkIntakeProgramRecent, ...programOptions])].map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => setBulkModal(null)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => void applyBulkIntakeProgram('clear')}
+                className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm disabled:opacity-40"
+              >
+                {bulkBusy ? 'Đang xử lý…' : 'Gỡ gắn (chưa gắn)'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy || !normalizeIntakeProgramLabel(bulkIntakeProgram)}
+                onClick={() => void applyBulkIntakeProgram('set')}
+                className="rounded-xl border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
+              >
+                {bulkBusy ? 'Đang xử lý…' : 'Gán chương trình'}
               </button>
             </div>
           </div>

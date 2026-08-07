@@ -330,6 +330,9 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       uploadedBy: data.uploadedBy !== undefined && data.uploadedBy !== null ? String(data.uploadedBy) : undefined,
       uploaderName: data.uploaderName !== undefined ? String(data.uploaderName) : undefined,
       uploadBatchId: data.uploadBatchId !== undefined ? String(data.uploadBatchId) : undefined,
+      ...(String(data.intakeProgram ?? '').trim()
+        ? { intakeProgram: String(data.intakeProgram).trim().slice(0, 120) }
+        : {}),
       importedAt,
       lastTouchedAt: asFirestoreTimestamp(data.lastTouchedAt),
       routingMeta: data.routingMeta as Lead['routingMeta'],
@@ -433,6 +436,8 @@ export type LeadListServerFilters = {
   province?: string
   educationLevel?: string
   source?: string
+  /** Chương trình / đợt nhập — khớp exact `intakeProgram`. */
+  intakeProgram?: string
   scoreMin?: number
   scoreMax?: number
   uploadedByIn?: string[]
@@ -560,6 +565,7 @@ function filterConstraints(
   if (f.province?.trim()) c.push(where('province', '==', f.province.trim()))
   if (f.educationLevel?.trim()) c.push(where('educationLevel', '==', f.educationLevel.trim()))
   if (f.source?.trim()) c.push(where('source', '==', f.source.trim()))
+  if (f.intakeProgram?.trim()) c.push(where('intakeProgram', '==', f.intakeProgram.trim()))
   if (f.highSchoolIn?.length) {
     const h = f.highSchoolIn.map((x) => x.trim()).filter(Boolean).slice(0, 10)
     if (h.length === 1) c.push(where('highSchool', '==', h[0]))

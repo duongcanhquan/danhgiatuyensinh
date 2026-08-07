@@ -63,6 +63,7 @@ export function exportEvaluatedLeadsToXlsx(
       'Người tải lên (UID)': l.uploadedBy ?? '',
       'Tên người tải lên': l.uploaderName ?? '',
       'Mã lô tải lên': l.uploadBatchId ?? '',
+      'Chương trình / đợt nhập': l.intakeProgram ?? '',
       [`Điểm tính toán (${profileName})`]: ev?.calculatedScore ?? l.calculatedScore,
       [`Nhãn ưu tiên (${profileName})`]: ev?.priorityTag ?? l.priorityTag,
     })
