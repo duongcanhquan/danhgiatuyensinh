@@ -549,6 +549,9 @@ export function DataIntake() {
       <div className="mx-auto w-full space-y-5 text-center">
         <header>
           <h1 className="text-xl font-semibold tracking-tight text-slate-900">Nhập liệu</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Mỗi lần tải file gắn một tên chương trình / đợt để sau lọc riêng khỏi dữ liệu cũ.
+          </p>
         </header>
 
         {!canIntake ? (
@@ -603,6 +606,27 @@ export function DataIntake() {
             </div>
           </fieldset>
 
+          <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Chương trình / đợt nhập <span className="text-rose-600">*</span>
+            <input
+              list="intake-program-suggestions"
+              value={intakeProgram}
+              onChange={(e) => setIntakeProgram(e.target.value)}
+              disabled={busy || !canIntake}
+              placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
+              className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
+            />
+            <datalist id="intake-program-suggestions">
+              {recentPrograms.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+            <span className="mt-1.5 block text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-500">
+              Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này — trên màn Hồ sơ sẽ lọc theo đợt này.
+              Hồ sơ cũ chưa có tên đợt: chọn nhiều → «Gán chương trình».
+            </span>
+          </label>
+
           <input
             ref={fileInputRef}
             type="file"
@@ -654,7 +678,7 @@ export function DataIntake() {
             <p className="text-sm font-medium text-slate-800">Hoặc kéo thả file vào đây</p>
             <p className="mt-1 max-w-sm text-xs text-slate-500">
               Đang dùng: <strong>{selectedTemplate.label}</strong>. Sheet «{selectedTemplate.sheetName}» — hàng 1
-              tiêu đề, dữ liệu từ hàng 2. Trùng → không nhập.
+              tiêu đề, dữ liệu từ hàng 2. Trùng → không nhập. Hồ sơ mới sẽ mang tên đợt ở ô phía trên.
             </p>
             {busy && !preview ? (
               <p className="mt-2 text-xs font-medium text-emerald-700">Đang xử lý…</p>
@@ -691,25 +715,11 @@ export function DataIntake() {
                     {previewStats.assignEmptyRouted} để trống → chia tải TVV.
                   </p>
                 ) : null}
-                <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Chương trình / đợt nhập <span className="text-rose-600">*</span>
-                  <input
-                    list="intake-program-suggestions"
-                    value={intakeProgram}
-                    onChange={(e) => setIntakeProgram(e.target.value)}
-                    disabled={busy}
-                    placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
-                    className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                  />
-                </label>
-                <datalist id="intake-program-suggestions">
-                  {recentPrograms.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
-                <p className="mt-1 text-[11px] leading-snug text-slate-500">
-                  Gắn vào mọi hồ sơ nhập lần này để sau lọc / xử lý theo đợt. Hồ sơ cũ chưa gắn có thể gán hàng loạt
-                  trên màn Hồ sơ.
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm text-amber-950">
+                  <span className="font-semibold">Đợt sẽ gắn:</span>{' '}
+                  {normalizeIntakeProgramLabel(intakeProgram) || (
+                    <span className="text-rose-700">chưa nhập — điền ô «Chương trình / đợt» phía trên</span>
+                  )}
                 </p>
               </div>
               <button
@@ -737,8 +747,8 @@ export function DataIntake() {
             </div>
 
             <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
-              Chỉ ghi dòng mới, không ghi đè. «Người phụ trách»: khớp → gán đúng; không khớp → Admin / ghi chú — điều
-              chuyển sau tại «Hồ sơ».
+              Chỉ ghi dòng mới, không ghi đè. Mỗi hồ sơ mới mang tên đợt ở trên — sau này lọc trên màn Hồ sơ.
+              «Người phụ trách»: khớp → gán đúng; không khớp → Admin — điều chuyển sau tại «Hồ sơ».
             </div>
 
             <div className="flex justify-center pt-1">
