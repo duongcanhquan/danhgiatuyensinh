@@ -515,6 +515,9 @@ export function LeadManagement() {
     null,
   )
   const [selectScopeBusy, setSelectScopeBusy] = useState(false)
+  /** Tải TVV ước lượng theo phạm vi (hydrate khi mở modal phân lead). */
+  const [assignmentLoadSnapshot, setAssignmentLoadSnapshot] = useState<Map<string, number> | null>(null)
+  const [assignmentLoadBusy, setAssignmentLoadBusy] = useState(false)
   /** Hồ sơ đã tải khi «Chọn tất cả theo lọc» — dùng khi id không còn trong trang hiện tại. */
   const selectScopeLeadsRef = useRef<Map<string, Lead>>(new Map())
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
@@ -1228,7 +1231,34 @@ export function LeadManagement() {
     })
   }, [pagedRows])
 
-  const assignmentLoadByUid = useMemo(() => countAssignments(leads), [leads])
+  const assignmentLoadByUid = useMemo(() => {
+    if (assignmentLoadSnapshot) return assignmentLoadSnapshot
+    return countAssignments(leads)
+  }, [assignmentLoadSnapshot, leads])
+
+  const hydrateAssignmentLoads = useCallback(async () => {
+    if (!db || !profile || !isElevatedLeadScope) return
+    setAssignmentLoadBusy(true)
+    try {
+      const { leads: scopeLeads } = await fetchLeadsInScopeForRescore(
+        db,
+        profile,
+        hoDQueryLabels,
+        undefined,
+        {
+          maxLeads: LEADS_UI_FULL_SCOPE_MAX,
+          canReadGlobal: can('leads:read:global'),
+          orgId: effectiveOrgId,
+        },
+      )
+      setAssignmentLoadSnapshot(countAssignments(scopeLeads))
+    } catch (e) {
+      console.error(e)
+      setAssignmentLoadSnapshot(countAssignments(leads))
+    } finally {
+      setAssignmentLoadBusy(false)
+    }
+  }, [db, profile, isElevatedLeadScope, hoDQueryLabels, can, effectiveOrgId, leads])
 
   const resolveLeadForBulk = useCallback(
     (id: string): Lead | undefined => selectScopeLeadsRef.current.get(id) ?? leads.find((x) => x.id === id),
@@ -2564,6 +2594,7 @@ export function LeadManagement() {
               .map((c) => c.id)
             setBulkAssignPoolIds(pool.length ? pool.slice(0, 12) : defaultUid ? [defaultUid] : [])
             setBulkModal('reassign')
+            void hydrateAssignmentLoads()
           }}
           onBulkStatus={() => {
             setBulkCrmStatus('NEW')
@@ -2653,7 +2684,11 @@ export function LeadManagement() {
               <div className="mt-4">
                 <p className="text-sm font-medium text-slate-700">Chọn nhóm nhận lead</p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Số «đang ~N» ước lượng theo danh sách đang tải — dùng để cân tải.
+                  {assignmentLoadBusy
+                    ? 'Đang ước lượng tải trong phạm vi…'
+                    : assignmentLoadSnapshot
+                      ? 'Số «đang ~N» ước lượng theo phạm vi (tối đa 4000 hồ sơ gần nhất).'
+                      : 'Số «đang ~N» ước lượng theo danh sách đang tải.'}
                 </p>
                 <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-2">
                   {reassignPickList
