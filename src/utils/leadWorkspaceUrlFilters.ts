@@ -21,6 +21,8 @@ export const LWF = {
   CQ: 'cq',
   /** Note kết quả sau gọi (disposition id) */
   DISP: 'disp',
+  /** Chương trình / đợt nhập */
+  PROG: 'prog',
 } as const
 
 const TAG_SET = new Set<string>(['HOT', 'WARM', 'COLD', 'LOSS'])
@@ -101,6 +103,7 @@ export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
     LWF.MYDAY,
     LWF.CQ,
     LWF.DISP,
+    LWF.PROG,
   ] as const
   return keys.map((k) => `${k}=${sp.get(k) ?? ''}`).join('|')
 }

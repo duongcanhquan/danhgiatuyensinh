@@ -23,6 +23,11 @@ import {
   LEAD_INTAKE_TEMPLATES,
   type LeadIntakeTemplateId,
 } from '../utils/leadIntakeTemplates'
+import {
+  loadRecentIntakePrograms,
+  normalizeIntakeProgramLabel,
+  rememberIntakeProgram,
+} from '../utils/intakeProgramRecent'
 import { evaluateLead, evaluationRecordFromLeadLike } from '../utils/scoring'
 import { evaluateLeadWithClassification, classificationFirestorePatch } from '../utils/leadClassificationScore'
 import { partialLeadFromExcelRow } from '../utils/scoringLeadInput'
@@ -189,6 +194,10 @@ export function DataIntake() {
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [templateId, setTemplateId] = useState<LeadIntakeTemplateId>('standard_v1')
+  const [intakeProgram, setIntakeProgram] = useState('')
+  const [recentPrograms, setRecentPrograms] = useState<string[]>(() =>
+    typeof localStorage !== 'undefined' ? loadRecentIntakePrograms() : [],
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
   const selectedTemplate = useMemo(() => getLeadIntakeTemplate(templateId), [templateId])
 
@@ -350,6 +359,11 @@ export function DataIntake() {
 
   const commitImport = useCallback(async () => {
     if (!preview || !db || !profile) return
+    const programLabel = normalizeIntakeProgramLabel(intakeProgram)
+    if (!programLabel) {
+      setBanner('Nhập tên chương trình / đợt trước khi xác nhận nhập (vd. «Đợt 9/2026 — OFF»).')
+      return
+    }
     const importProfile = pickProfileForImport(profiles)
     if (!importProfile) {
       setBanner('Chưa có Scoring Profile.')
@@ -360,7 +374,12 @@ export function DataIntake() {
     try {
       const counts = await fetchAssignmentCountsForImport(db)
       const { prepared, uploadBatchId, uploadedBy, uploaderName } = preview
-      const ownership = { uploadedBy, uploaderName, uploadBatchId }
+      const ownership = {
+        uploadedBy,
+        uploaderName,
+        uploadBatchId,
+        intakeProgram: programLabel,
+      }
       const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (isAdminLikeRole(profile.role) ? profile.id : null)
 
       const toCreate: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
@@ -463,13 +482,14 @@ export function DataIntake() {
 
       const msg =
         toCreate.length > 0
-          ? `Đã nhập ${toCreate.length} hồ sơ mới (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.${
+          ? `Đã nhập ${toCreate.length} hồ sơ mới · chương trình «${programLabel}» (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.${
               importAssignUnresolved > 0
                 ? ` Trong đó ${importAssignUnresolved} dòng có «Người phụ trách» không khớp danh bạ — đã gán Admin chờ điều phối (hoặc TVV theo tải nếu chưa có Admin).`
                 : ''
             }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
+      setRecentPrograms(rememberIntakeProgram(programLabel))
       setPreview(null)
     } catch (e) {
       console.error(e)
@@ -490,6 +510,7 @@ export function DataIntake() {
     infoScoreRuntime,
     classificationRuntime,
     effectiveOrgId,
+    intakeProgram,
   ])
 
   const onDrop = (e: DragEvent) => {
@@ -670,6 +691,26 @@ export function DataIntake() {
                     {previewStats.assignEmptyRouted} để trống → chia tải TVV.
                   </p>
                 ) : null}
+                <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Chương trình / đợt nhập <span className="text-rose-600">*</span>
+                  <input
+                    list="intake-program-suggestions"
+                    value={intakeProgram}
+                    onChange={(e) => setIntakeProgram(e.target.value)}
+                    disabled={busy}
+                    placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
+                    className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  />
+                </label>
+                <datalist id="intake-program-suggestions">
+                  {recentPrograms.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                  Gắn vào mọi hồ sơ nhập lần này để sau lọc / xử lý theo đợt. Hồ sơ cũ chưa gắn có thể gán hàng loạt
+                  trên màn Hồ sơ.
+                </p>
               </div>
               <button
                 type="button"
@@ -703,9 +744,17 @@ export function DataIntake() {
             <div className="flex justify-center pt-1">
               <button
                 type="button"
-                disabled={busy || previewStats.acceptedNew === 0}
+                disabled={
+                  busy || previewStats.acceptedNew === 0 || !normalizeIntakeProgramLabel(intakeProgram)
+                }
                 onClick={() => void commitImport()}
-                title={previewStats.acceptedNew === 0 ? 'Không có dòng mới để nhập' : undefined}
+                title={
+                  previewStats.acceptedNew === 0
+                    ? 'Không có dòng mới để nhập'
+                    : !normalizeIntakeProgramLabel(intakeProgram)
+                      ? 'Nhập tên chương trình / đợt trước'
+                      : undefined
+                }
                 className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
               >
                 <Upload className="h-4 w-4 shrink-0" aria-hidden />

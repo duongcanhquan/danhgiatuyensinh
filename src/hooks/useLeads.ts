@@ -330,6 +330,9 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       uploadedBy: data.uploadedBy !== undefined && data.uploadedBy !== null ? String(data.uploadedBy) : undefined,
       uploaderName: data.uploaderName !== undefined ? String(data.uploaderName) : undefined,
       uploadBatchId: data.uploadBatchId !== undefined ? String(data.uploadBatchId) : undefined,
+      ...(String(data.intakeProgram ?? '').trim()
+        ? { intakeProgram: String(data.intakeProgram).trim().slice(0, 120) }
+        : {}),
       importedAt,
       lastTouchedAt: asFirestoreTimestamp(data.lastTouchedAt),
       routingMeta: data.routingMeta as Lead['routingMeta'],
@@ -433,6 +436,8 @@ export type LeadListServerFilters = {
   province?: string
   educationLevel?: string
   source?: string
+  /** Chương trình / đợt nhập — khớp exact `intakeProgram`. */
+  intakeProgram?: string
   scoreMin?: number
   scoreMax?: number
   uploadedByIn?: string[]
@@ -486,6 +491,17 @@ function collectDistinctSources(rows: Lead[]): string[] {
   return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
 }
 
+function collectDistinctIntakePrograms(rows: Lead[]): string[] {
+  const byLower = new Map<string, string>()
+  for (const l of rows) {
+    const p = (l.intakeProgram ?? '').trim()
+    if (!p) continue
+    const k = p.toLowerCase()
+    if (!byLower.has(k)) byLower.set(k, p)
+  }
+  return [...byLower.values()].sort((a, b) => a.localeCompare(b, 'vi'))
+}
+
 export type UseLeadsOptions = {
   serverFilters?: LeadListServerFilters
   searchText?: string
@@ -506,6 +522,10 @@ export type UseLeadsOptions = {
    * Quét tối đa {@link SOURCE_CATALOG_BATCH} hồ sơ (cùng RBAC, bỏ lọc `source`) để gợi ý giá trị Nguồn.
    */
   includeScopeSourceOptions?: boolean
+  /**
+   * Quét tối đa {@link SOURCE_CATALOG_BATCH} hồ sơ (cùng RBAC, bỏ lọc `intakeProgram`) để gợi ý chương trình / đợt.
+   */
+  includeScopeProgramOptions?: boolean
 }
 
 function rbacConstraint(
@@ -560,6 +580,7 @@ function filterConstraints(
   if (f.province?.trim()) c.push(where('province', '==', f.province.trim()))
   if (f.educationLevel?.trim()) c.push(where('educationLevel', '==', f.educationLevel.trim()))
   if (f.source?.trim()) c.push(where('source', '==', f.source.trim()))
+  if (f.intakeProgram?.trim()) c.push(where('intakeProgram', '==', f.intakeProgram.trim()))
   if (f.highSchoolIn?.length) {
     const h = f.highSchoolIn.map((x) => x.trim()).filter(Boolean).slice(0, 10)
     if (h.length === 1) c.push(where('highSchool', '==', h[0]))
@@ -882,6 +903,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const maxFullScopeLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxFullScopeLeads ?? MAX_FULL_SCOPE_LEADS))
   const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
   const includeScopeSourceOptions = Boolean(opts?.includeScopeSourceOptions)
+  const includeScopeProgramOptions = Boolean(opts?.includeScopeProgramOptions)
 
   const hoDQueryLabels = useMemo(() => {
     const ids = profile?.managedMajorIds ?? []
@@ -930,6 +952,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     null,
   )
   const [scopeSourceOptions, setScopeSourceOptions] = useState<string[]>([])
+  const [scopeProgramOptions, setScopeProgramOptions] = useState<string[]>([])
   const [searchScanTruncated, setSearchScanTruncated] = useState(false)
   const [searchHitTotal, setSearchHitTotal] = useState<number | null>(null)
   const [scopeFetchTruncated, setScopeFetchTruncated] = useState(false)
@@ -966,6 +989,33 @@ export function useLeads(opts?: UseLeadsOptions) {
     } catch (e) {
       console.error(e)
       setScopeSourceOptions([])
+    }
+  }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
+
+  const fetchScopeProgramOptions = useCallback(async () => {
+    const firestore = getFirestoreDb()
+    if (!firestore || !profile) return
+    try {
+      const distFilters = serverFiltersOmitField(serverFilters, 'intakeProgram')
+      const snap = await getDocsListWithOrgFallback(
+        firestore,
+        profile,
+        hoDQueryLabels,
+        distFilters,
+        effectiveOrgId,
+        canReadGlobal,
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
+      )
+      const rows: Lead[] = []
+      snap.forEach((d) => {
+        const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+        if (row) rows.push(row)
+      })
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+      setScopeProgramOptions(collectDistinctIntakePrograms(filtered))
+    } catch (e) {
+      console.error(e)
+      setScopeProgramOptions([])
     }
   }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
 
@@ -1113,12 +1163,39 @@ export function useLeads(opts?: UseLeadsOptions) {
       }
     }
 
+    const fetchProgramCatalog = async () => {
+      try {
+        const distFilters = serverFiltersOmitField(serverFilters, 'intakeProgram')
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          distFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
+        )
+        if (cancelled) return
+        const rows: Lead[] = []
+        snap.forEach((d) => {
+          const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+          if (row) rows.push(row)
+        })
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+        setScopeProgramOptions(collectDistinctIntakePrograms(filtered))
+      } catch (e) {
+        console.error(e)
+        if (!cancelled) setScopeProgramOptions([])
+      }
+    }
+
     const runAggregations = async (): Promise<number | null> => {
       const total = await fetchTotalOnly()
       if (cancelled || total == null) return null
       const side: Promise<void>[] = []
       if (includeScopeTagCounts) side.push(fetchTagCountsOnly())
       if (includeScopeSourceOptions) side.push(fetchSourceCatalog())
+      if (includeScopeProgramOptions) side.push(fetchProgramCatalog())
       if (side.length) await Promise.all(side)
       return total
     }
@@ -1327,6 +1404,9 @@ export function useLeads(opts?: UseLeadsOptions) {
       if (includeScopeSourceOptions && !cancelled) {
         setScopeSourceOptions(collectDistinctSources(mapped))
       }
+      if (includeScopeProgramOptions && !cancelled) {
+        setScopeProgramOptions(collectDistinctIntakePrograms(mapped))
+      }
     }
 
     void (async () => {
@@ -1363,10 +1443,12 @@ export function useLeads(opts?: UseLeadsOptions) {
             if (cancelled) return
             if (includeScopeTagCounts) void fetchTagCountsOnly()
             if (includeScopeSourceOptions) void fetchSourceCatalog()
+            if (includeScopeProgramOptions) void fetchProgramCatalog()
           } else {
             await loadSearchBucketAndSlice(pageToLoad, manualRefetch)
             if (manualRefetch && includeScopeTagCounts) void fetchTagCountsOnly()
             if (manualRefetch && includeScopeSourceOptions) void fetchSourceCatalog()
+            if (manualRefetch && includeScopeProgramOptions) void fetchProgramCatalog()
           }
           setLoading(false)
           setLoadingPage(false)
@@ -1388,12 +1470,14 @@ export function useLeads(opts?: UseLeadsOptions) {
           }
           if (includeScopeTagCounts) void fetchTagCountsOnly()
           if (includeScopeSourceOptions) void fetchSourceCatalog()
+          if (includeScopeProgramOptions) void fetchProgramCatalog()
         } else {
           const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
           setTotalPages(tp)
           const safePage = Math.min(Math.max(1, pageToLoad), tp)
           if (safePage !== pageToLoad) setCurrentPageState(safePage)
           await loadFirestorePage(safePage, total)
+          if (manualRefetch && includeScopeProgramOptions) void fetchProgramCatalog()
         }
         setLoading(false)
         setLoadingPage(false)
@@ -1428,6 +1512,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     pagedFirestoreDep,
     includeScopeTagCounts,
     includeScopeSourceOptions,
+    includeScopeProgramOptions,
     manualRefreshKey,
     effectiveOrgId,
     canReadGlobal,
@@ -1458,18 +1543,25 @@ export function useLeads(opts?: UseLeadsOptions) {
   }, [profile, hoDQueryLabels, serverFilters, effectiveOrgId, canReadGlobal])
 
   const applyLocalLeadPatch = useCallback((id: string, patch: Partial<Lead>) => {
+    const mergeRow = (row: Lead): Lead => {
+      const next = { ...row, ...patch } as Lead
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === undefined) delete (next as unknown as Record<string, unknown>)[k]
+      }
+      return next
+    }
     setLeads((rows) => {
       const idx = rows.findIndex((r) => r.id === id)
       if (idx === -1) return rows
       const next = [...rows]
-      next[idx] = { ...next[idx]!, ...patch }
+      next[idx] = mergeRow(next[idx]!)
       return next
     })
     const bucket = searchBucketRef.current
     if (bucket?.length) {
       const idx = bucket.findIndex((r) => r.id === id)
       if (idx !== -1) {
-        searchBucketRef.current = bucket.map((r, i) => (i === idx ? { ...r, ...patch } : r))
+        searchBucketRef.current = bucket.map((r, i) => (i === idx ? mergeRow(r) : r))
       }
     }
   }, [])
@@ -1484,6 +1576,8 @@ export function useLeads(opts?: UseLeadsOptions) {
     scopeTagCounts,
     scopeSourceOptions,
     fetchScopeSourceOptions,
+    scopeProgramOptions,
+    fetchScopeProgramOptions,
     searchScanTruncated,
     searchHitTotal,
     scopeFetchTruncated,

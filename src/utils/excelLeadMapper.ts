@@ -170,6 +170,8 @@ export type LeadIntakeOwnershipMeta = {
   uploadedBy: string
   uploaderName: string
   uploadBatchId: string
+  /** Chương trình / đợt nhập — bắt buộc khi commit từ màn Nhập liệu. */
+  intakeProgram?: string
 }
 
 export type LeadIntakeIdentityMeta = {
@@ -262,6 +264,9 @@ export function buildLeadFirestorePayload(
           uploadedBy: ownership.uploadedBy,
           uploaderName: ownership.uploaderName,
           uploadBatchId: ownership.uploadBatchId,
+          ...(ownership.intakeProgram?.trim()
+            ? { intakeProgram: ownership.intakeProgram.trim().slice(0, 120) }
+            : {}),
         }
       : {}),
   }
