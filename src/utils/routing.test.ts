@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pickCounselorByLowestLoad, pickPrimaryAdminUid } from './routing'
+import { countAssignments, pickCounselorByLowestLoad, pickPrimaryAdminUid } from './routing'
 
 const u = (id: string, role: 'admin' | 'counselor', email: string) => ({
   id,
@@ -30,5 +30,18 @@ describe('pickPrimaryAdminUid', () => {
 describe('pickCounselorByLowestLoad', () => {
   it('returns null when no active counselors', () => {
     expect(pickCounselorByLowestLoad([], new Map())).toBeNull()
+  })
+})
+
+describe('countAssignments', () => {
+  it('prefers assignedTo over legacy assignedCounselorId', () => {
+    const m = countAssignments([
+      { assignedTo: 'c1', assignedCounselorId: 'legacy' },
+      { assignedTo: null, assignedCounselorId: 'c2' },
+      { assignedTo: 'c1', assignedCounselorId: 'c1' },
+    ])
+    expect(m.get('c1')).toBe(2)
+    expect(m.get('c2')).toBe(1)
+    expect(m.has('legacy')).toBe(false)
   })
 })
