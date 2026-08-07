@@ -33,6 +33,8 @@ import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
+import { planLeadAssignments } from '../utils/smartLeadAssign'
 import {
   CALL_DISPOSITIONS,
   isCallDispositionId,
@@ -776,45 +778,82 @@ export function CounselorDashboard() {
 
   const applyBulkReassign = useCallback(async () => {
     if (!db || !profile || !bulkReassignUid || !selectedIds.size) return
+    const ids = [...selectedIds]
     if (!isElevatedLeadScope && canPeerReassignLeads) {
-      for (const id of selectedIds) {
+      for (const id of ids) {
         const row = leads.find((x) => x.id === id)
-        const owner = row?.assignedTo ?? row?.assignedCounselorId
+        if (!row) {
+          pushToast('Có hồ sơ chưa tải đủ — bỏ chọn hoặc tải lại danh sách.')
+          return
+        }
+        const owner = row.assignedTo ?? row.assignedCounselorId
         if (owner !== profile.id) {
           pushToast('Chỉ chuyển được hồ sơ đang gán cho bạn.')
           return
         }
       }
     }
-    setBulkBusy(true)
+
+    let plan
     try {
+      plan = planLeadAssignments(ids, [bulkReassignUid], 'single', { singleUid: bulkReassignUid })
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : 'Không lập được kế hoạch phân lead.')
+      return
+    }
+
+    setBulkBusy(true)
+    const touch = leadTouchPatch()
+    const items = ids.map((leadId) => {
+      const prev = leads.find((x) => x.id === leadId)
+      const prevOwner = prev?.assignedTo ?? prev?.assignedCounselorId ?? null
+      const counselorUid = plan.assignments.get(leadId)!
+      const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
+      const scoreFields = prev
+        ? persistedLeadScoringFields(
+            prev,
+            assignPatch,
+            activeScoringProfile,
+            scoringMasterBuckets,
+            schoolTvvSignalDefs,
+            dashboardScoringOpts,
+          )
+        : {}
+      return {
+        leadId,
+        counselorUid,
+        prevOwner,
+        extraPatch: { ...scoreFields } as Record<string, unknown>,
+        localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
+      }
+    })
+
+    const applyCommitted = (committedIds: string[]) => {
+      for (const id of committedIds) {
+        const item = items.find((x) => x.leadId === id)
+        if (!item) continue
+        applyLocalLeadPatch(id, item.localPatch)
+      }
+    }
+
+    try {
+      const { committedIds } = await bulkReassignLeads(
+        db,
+        items.map(({ leadId, counselorUid, extraPatch }) => ({ leadId, counselorUid, extraPatch })),
+      )
+      applyCommitted(committedIds)
       const performer = profile.displayName?.trim() || profile.email || profile.id
       const targetLabel =
         reassignPickList.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
         reassignPickList.find((c) => c.id === bulkReassignUid)?.email ||
         bulkReassignUid
-      for (const id of selectedIds) {
-        const ref = doc(db, FS_COLLECTIONS.leads, id)
-        const prev = leads.find((x) => x.id === id)
-        const assignPatch = assigneeFirestoreMirror(bulkReassignUid) as Partial<Lead>
-        const scoreFields = prev
-          ? persistedLeadScoringFields(
-              prev,
-              assignPatch,
-              activeScoringProfile,
-              scoringMasterBuckets,
-              schoolTvvSignalDefs,
-              dashboardScoringOpts,
-            )
-          : {}
-        const touch = leadTouchPatch()
-        const localPatch = { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>
-        await updateDoc(ref, localPatch)
-        applyLocalLeadPatch(id, localPatch)
+      const itemById = new Map(items.map((it) => [it.leadId, it]))
+      for (const id of committedIds.slice(0, 40)) {
+        const item = itemById.get(id)
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
+          description: `Phân công hàng loạt → ${targetLabel} (trước: ${item?.prevOwner ?? '—'})`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -822,10 +861,18 @@ export function CounselorDashboard() {
       setBulkModal(null)
       setSelectedIds(new Set())
       refetchLeads()
-      pushToast('Đã phân công hàng loạt.')
+      pushToast(`Đã phân công ${committedIds.length} hồ sơ.`)
     } catch (e) {
       console.error(e)
-      pushToast('Lỗi khi phân công.')
+      if (e instanceof BulkReassignPartialError) {
+        applyCommitted(e.committedIds)
+        setBulkModal(null)
+        setSelectedIds(new Set(e.remainingIds))
+        refetchLeads()
+        pushToast(e.message)
+      } else {
+        pushToast('Lỗi khi phân công.')
+      }
     } finally {
       setBulkBusy(false)
     }

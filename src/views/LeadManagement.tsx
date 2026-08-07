@@ -1286,6 +1286,24 @@ export function LeadManagement() {
         )
         truncated = t
         rows = scopeLeads
+        // Khớp cùng predicate với `filtered` (điểm live / nhãn client / hàng chờ / TVV).
+        const minScore =
+          scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
+        const maxScore =
+          scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput)) ? null : Number(scoreMaxInput)
+        if (minScore != null || maxScore != null) {
+          rows = rows.filter((l) => {
+            const displayScore = profileScoringActive
+              ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
+              : l.calculatedScore
+            if (minScore != null && displayScore < minScore) return false
+            if (maxScore != null && displayScore > maxScore) return false
+            return true
+          })
+        }
+        if (tagClientEval && tagFilter !== 'ALL') {
+          rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
+        }
         if (assigneeFilter === '__UNASSIGNED__') {
           rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
         } else if (assigneeFilter) {
@@ -1324,6 +1342,13 @@ export function LeadManagement() {
     leadServerFilters,
     can,
     effectiveOrgId,
+    scoreMinInput,
+    scoreMaxInput,
+    profileScoringActive,
+    scoreByLeadId,
+    tagClientEval,
+    tagFilter,
+    effectiveLeadTag,
     assigneeFilter,
     callWorkBucketFilter,
     dispositionFilter,
@@ -1398,6 +1423,7 @@ export function LeadManagement() {
     const items = ids.map((leadId) => {
       const counselorUid = plan.assignments.get(leadId)!
       const prev = resolveLeadForBulk(leadId)
+      const prevOwner = prev?.assignedTo ?? prev?.assignedCounselorId ?? null
       const assignPatch = assigneeFirestoreMirror(counselorUid) as Partial<Lead>
       const scoreFields = prev
         ? persistedLeadScoringFields(
@@ -1412,6 +1438,7 @@ export function LeadManagement() {
       return {
         leadId,
         counselorUid,
+        prevOwner,
         extraPatch: { ...scoreFields } as Record<string, unknown>,
         localPatch: { ...assignPatch, ...scoreFields, ...touch } as Partial<Lead>,
       }
@@ -1444,17 +1471,19 @@ export function LeadManagement() {
           : bulkAssignMode === 'round_robin'
             ? 'chia đều'
             : 'theo tải thấp nhất'
+      const itemById = new Map(items.map((it) => [it.leadId, it]))
       for (const id of committedIds.slice(0, 40)) {
-        const uid = plan.assignments.get(id) ?? ''
+        const item = itemById.get(id)
+        const uid = item?.counselorUid ?? plan.assignments.get(id) ?? ''
         const targetLabel =
           reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
           reassignPickList.find((c) => c.id === uid)?.email ||
           uid
-        const prev = resolveLeadForBulk(id)
+        const before = item?.prevOwner ?? '—'
         await commitAuditLog(db, {
           leadId: id,
           actionType: 'REASSIGNMENT',
-          description: `Phân công hàng loạt (${modeLabel}) → ${targetLabel}${prev ? ` (trước: ${prev.assignedTo ?? prev.assignedCounselorId ?? '—'})` : ''}`,
+          description: `Phân công hàng loạt (${modeLabel}) → ${targetLabel} (trước: ${before})`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -2760,6 +2789,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={
                   bulkBusy ||
+                  (bulkAssignMode === 'lowest_load' && assignmentLoadBusy) ||
                   (bulkAssignMode === 'single' ? !bulkReassignUid : bulkAssignPoolIds.length === 0)
                 }
                 onClick={() => void applyBulkReassign()}
