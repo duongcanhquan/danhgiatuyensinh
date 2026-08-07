@@ -35,3 +35,12 @@ export function rememberIntakeProgram(label: string): string[] {
   }
   return next
 }
+
+/** So khớp nhãn chương trình (không phân biệt hoa/thường) — lọc client. */
+export function intakeProgramsMatch(a: string | undefined | null, b: string | undefined | null): boolean {
+  const left = normalizeIntakeProgramLabel(a ?? '')
+  const right = normalizeIntakeProgramLabel(b ?? '')
+  if (!left && !right) return true
+  if (!left || !right) return false
+  return left.toLowerCase() === right.toLowerCase()
+}

@@ -40,7 +40,12 @@ vi.mock('firebase/firestore', () => {
 })
 
 import { bulkSetLeadIntakeProgram } from './bulkLeadIntakeProgram'
-import { loadRecentIntakePrograms, normalizeIntakeProgramLabel, rememberIntakeProgram } from './intakeProgramRecent'
+import {
+  intakeProgramsMatch,
+  loadRecentIntakePrograms,
+  normalizeIntakeProgramLabel,
+  rememberIntakeProgram,
+} from './intakeProgramRecent'
 
 describe('intakeProgramRecent', () => {
   beforeEach(() => {
@@ -56,6 +61,12 @@ describe('intakeProgramRecent', () => {
     rememberIntakeProgram('B')
     rememberIntakeProgram('a')
     expect(loadRecentIntakePrograms()).toEqual(['a', 'B'])
+  })
+
+  it('matches program labels case-insensitively', () => {
+    expect(intakeProgramsMatch('Đợt 9', 'đợt 9')).toBe(true)
+    expect(intakeProgramsMatch('A', 'B')).toBe(false)
+    expect(intakeProgramsMatch('', null)).toBe(true)
   })
 })
 

@@ -108,6 +108,7 @@ import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
   rememberIntakeProgram,
+  intakeProgramsMatch,
 } from '../utils/intakeProgramRecent'
 import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
@@ -281,6 +282,7 @@ export function LeadManagement() {
   const [sourceCatalogRequested, setSourceCatalogRequested] = useState(false)
   /** ALL | __UNSET__ | nhãn chương trình */
   const [programFilter, setProgramFilter] = useState<string>('ALL')
+  const [programCatalogRequested, setProgramCatalogRequested] = useState(false)
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
   /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
   const [assigneeFilter, setAssigneeFilter] = useState<string>('')
@@ -297,7 +299,30 @@ export function LeadManagement() {
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
   /** Lọc hàng chờ / note sau gọi — thiếu field trên hồ sơ cũ → quét phạm vi rộng. */
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
+  /**
+   * Chương trình:
+   * - `__UNSET__`: Firestore không query field thiếu → fullScope + lọc client.
+   * - TVV (không read:global): tránh thiếu composite index RBAC+intakeProgram → fullScope + lọc client.
+   * - Kết hợp với lọc equality khác: tránh thiếu index chéo → fullScope + lọc chương trình client.
+   */
+  const programFilterActive = programFilter !== 'ALL'
   const programUnsetNeedsScope = programFilter === '__UNSET__'
+  const programRbacNeedsScope =
+    programFilterActive && programFilter !== '__UNSET__' && !can('leads:read:global')
+  const programComboNeedsScope =
+    programFilterActive &&
+    programFilter !== '__UNSET__' &&
+    (sourceFilter !== 'ALL' ||
+      regionFilter !== 'ALL' ||
+      majorFilter !== 'ALL' ||
+      statusFilter !== 'ALL' ||
+      crmStatusFilter !== 'ALL' ||
+      schoolFilter !== 'ALL' ||
+      (!tagClientEval && tagFilter !== 'ALL') ||
+      aiShortlistOnly ||
+      scoreMinInput.trim() !== '' ||
+      scoreMaxInput.trim() !== '')
+  const programNeedsScope = programUnsetNeedsScope || programRbacNeedsScope || programComboNeedsScope
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -329,7 +354,10 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
-    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') o.intakeProgram = programFilter
+    // Chỉ đẩy intakeProgram lên server khi không cần quét fullScope (admin, một mình lọc chương trình).
+    if (programFilter !== 'ALL' && programFilter !== '__UNSET__' && !programNeedsScope) {
+      o.intakeProgram = programFilter
+    }
     if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
@@ -343,6 +371,7 @@ export function LeadManagement() {
     majorFilter,
     sourceFilter,
     programFilter,
+    programNeedsScope,
     schoolFilter,
     scoreMinInput,
     scoreMaxInput,
@@ -364,17 +393,20 @@ export function LeadManagement() {
     scopeTagCounts,
     scopeSourceOptions,
     fetchScopeSourceOptions,
+    scopeProgramOptions,
+    fetchScopeProgramOptions,
     applyLocalLeadPatch,
     refetchLeads,
   } = useLeads({
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: tagClientEval || callQueueNeedsScope || programUnsetNeedsScope ? 'fullScope' : 'paged',
+    dataMode: tagClientEval || callQueueNeedsScope || programNeedsScope ? 'fullScope' : 'paged',
     maxFullScopeLeads:
-      tagClientEval || callQueueNeedsScope || programUnsetNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+      tagClientEval || callQueueNeedsScope || programNeedsScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
+    includeScopeProgramOptions: programCatalogRequested,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -670,14 +702,19 @@ export function LeadManagement() {
   }, [leads, scopeSourceOptions, sourceFilter])
 
   const programOptions = useMemo(() => {
-    const s = new Set<string>(loadRecentIntakePrograms())
-    for (const l of leads) {
-      const p = (l.intakeProgram ?? '').trim()
-      if (p) s.add(p)
+    const byLower = new Map<string, string>()
+    const add = (raw: string) => {
+      const p = raw.trim()
+      if (!p) return
+      const k = p.toLowerCase()
+      if (!byLower.has(k)) byLower.set(k, p)
     }
-    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') s.add(programFilter)
-    return [...s].sort((a, b) => a.localeCompare(b, 'vi'))
-  }, [leads, programFilter])
+    for (const p of scopeProgramOptions) add(p)
+    for (const p of loadRecentIntakePrograms()) add(p)
+    for (const l of leads) add(l.intakeProgram ?? '')
+    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') add(programFilter)
+    return [...byLower.values()].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [leads, programFilter, scopeProgramOptions])
 
   const filtered = useMemo(() => {
     const minScore =
@@ -706,6 +743,9 @@ export function LeadManagement() {
     }
     if (programFilter === '__UNSET__') {
       rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
+    } else if (programFilter !== 'ALL') {
+      // Client filter: bắt buộc khi fullScope (TVV / combo); idempotent khi server đã lọc exact.
+      rows = rows.filter((l) => intakeProgramsMatch(l.intakeProgram, programFilter))
     }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
@@ -1453,7 +1493,14 @@ export function LeadManagement() {
             ...touch,
           } as Partial<Lead>
           applyLocalLeadPatch(id, localPatch)
-          setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
+          setSelected((p) => {
+            if (p?.id !== id) return p
+            if (clear) {
+              const { intakeProgram: _drop, ...rest } = { ...p, ...touch }
+              return rest as Lead
+            }
+            return { ...p, ...localPatch }
+          })
         }
       }
       try {
@@ -1999,6 +2046,10 @@ export function LeadManagement() {
             label="Chương trình"
             title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
             value={programFilter}
+            onFocus={() => {
+              if (!programCatalogRequested) setProgramCatalogRequested(true)
+              else void fetchScopeProgramOptions()
+            }}
             onChange={(v) => {
               setProgramFilter(v)
               setPage(1)
