@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Phone } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Phone, PhoneCall } from 'lucide-react'
 import type { OmicallCallTarget } from '../types'
 import { useOmicallOptional } from '../contexts/OmicallProvider'
 import { normalizePhoneForDial } from '../utils/omicallConfig'
+import { prefersNativePhoneDial } from '../utils/preferNativePhoneDial'
 
 type Props = {
   leadId: string
@@ -22,42 +23,61 @@ function nativeDialHref(raw: string): string | null {
 const BTN_BASE =
   'inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition whitespace-nowrap'
 
+/**
+ * Nút gọi hồ sơ.
+ * - Điện thoại / cảm ứng: ưu tiên `tel:` (máy điện thoại) — WebRTC OMICall thường không ổn định trên mobile.
+ * - Máy tính: ưu tiên softphone / máy bàn; vẫn có nút «Gọi máy» khi có số.
+ */
 export function OmicallCallButton({ leadId, leadName, phone, target, disabled, className }: Props) {
   const omicall = useOmicallOptional()
   const [busy, setBusy] = useState<'sdk' | 'c2c' | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
+  const preferNative = useMemo(() => prefersNativePhoneDial(), [])
   const dialable = Boolean(normalizePhoneForDial(phone))
   const nativeHref = nativeDialHref(phone)
   const omicallEnabled = omicall?.config.enabled === true
   const useDeskMode = omicall?.config.callMode === 'deskPhone'
+  const sipReady = omicall?.connectionStatus === 'connected' || omicall?.canCall === true
   const sipConnecting =
     omicall?.connectionStatus === 'registering' || omicall?.connectionStatus === 'loading'
+
   const canSdk =
     (Boolean(omicall?.canCall) || (omicallEnabled && sipConnecting)) &&
     dialable &&
     !disabled &&
     !useDeskMode
   const canClick2 = Boolean(omicall?.canClick2Call) && dialable && !disabled
-  const canUse = (useDeskMode ? canClick2 : canSdk) || (!canSdk && canClick2)
-  const showDeskButton = canClick2 && !useDeskMode && canSdk
-  const useTelFallback = Boolean(nativeHref && !disabled && !canUse && !canClick2)
-  const showButton = dialable || Boolean(String(phone ?? '').trim())
+  const softphoneAvailable = (useDeskMode ? canClick2 : canSdk) || (!canSdk && canClick2)
+
+  /** Luôn cho phép gọi bằng máy khi có số — đặc biệt quan trọng trên điện thoại. */
+  const canNative = Boolean(nativeHref && !disabled && dialable)
+
+  /**
+   * Primary:
+   * - Mobile + có tel → luôn tel (đáng tin nhất)
+   * - Desktop desk mode → click2call
+   * - Desktop softphone sẵn sàng → SDK
+   * - Còn lại: tel nếu có, không thì softphone / disabled
+   */
+  const primaryIsNative = canNative && (preferNative || !softphoneAvailable)
+  const primaryIsSoftphone = !primaryIsNative && softphoneAvailable
+  const showNativeSecondary = canNative && primaryIsSoftphone
+  const showDeskSecondary = canClick2 && !useDeskMode && canSdk && !preferNative
 
   const callInput = { leadId, leadName, phone, target }
 
   const titleSdk = omicall?.canCall
     ? 'Gọi qua micro trình duyệt — cho phép micro nếu được hỏi'
     : sipConnecting
-      ? 'Đang kết nối tổng đài — bấm gọi sẽ chờ «Sẵn sàng gọi» rồi quay số'
+      ? 'Đang kết nối tổng đài — bấm sẽ chờ rồi quay số (trên điện thoại nên dùng «Gọi máy»)'
       : omicallEnabled && dialable
         ? omicall?.connectionLabel || 'Chờ tổng đài sẵn sàng gọi (micro)'
         : 'Chưa gọi được qua micro'
 
   const titleDesk =
     'Gọi máy bàn / app — số nội bộ đổ chuông trước, nhấc máy rồi nối ra khách (API click-to-call)'
-
-  const primaryLabel = busy === 'sdk' || busy === 'c2c' ? 'Đang gọi…' : useDeskMode ? 'Gọi tổng đài' : canSdk ? 'Gọi (micro)' : canClick2 ? 'Gọi tổng đài' : useTelFallback ? 'Gọi điện' : dialable ? 'Chờ tổng đài' : 'Chưa gọi được'
+  const titleNative = 'Gọi bằng ứng dụng Điện thoại của máy này'
 
   const runSdk = async () => {
     if (!omicall || !canSdk) return
@@ -85,66 +105,104 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
     }
   }
 
-  const onPrimaryClick = () => {
+  const onSoftphoneClick = () => {
     if (useDeskMode || (!canSdk && canClick2)) void runClick2()
     else void runSdk()
   }
 
-  if (!showButton) return null
+  if (!dialable && !String(phone ?? '').trim()) return null
 
   const primaryClass =
     className ??
     [
       BTN_BASE,
-      canUse
-        ? 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100'
-        : useTelFallback
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-          : dialable && omicallEnabled
-            ? 'border-amber-200 bg-amber-50 text-amber-900 cursor-not-allowed'
-            : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
+      primaryIsNative || primaryIsSoftphone
+        ? primaryIsNative
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+          : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100'
+        : dialable && omicallEnabled
+          ? 'border-amber-200 bg-amber-50 text-amber-900'
+          : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
     ]
       .filter(Boolean)
       .join(' ')
 
+  const secondaryClass = `${BTN_BASE} border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-60`
   const deskClass = `${BTN_BASE} border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100 disabled:opacity-60`
+
+  let primaryLabel = 'Chưa gọi được'
+  if (busy) primaryLabel = 'Đang gọi…'
+  else if (primaryIsNative) primaryLabel = 'Gọi máy'
+  else if (useDeskMode && canClick2) primaryLabel = 'Gọi tổng đài'
+  else if (canSdk) primaryLabel = 'Gọi (micro)'
+  else if (canClick2) primaryLabel = 'Gọi tổng đài'
+  else if (dialable && omicallEnabled) primaryLabel = sipReady ? 'Gọi (micro)' : 'Chờ tổng đài'
 
   const helperText =
     err ||
     omicall?.lastCallHint ||
-    (!canUse && omicallEnabled && dialable && !canClick2 ? omicall?.connectionLabel : '') ||
-    (!canUse && !omicallEnabled && dialable ? 'OMICall chưa bật — vẫn gọi được qua «Gọi điện».' : '') ||
-    (showDeskButton ? 'Micro: nút trái · Máy bàn/app: nút phải.' : '')
-
-  const primaryTitle = useDeskMode || (!canSdk && canClick2) ? titleDesk : titleSdk
+    (preferNative && softphoneAvailable
+      ? 'Điện thoại: bấm «Gọi máy» để mở ứng dụng gọi. Micro trình duyệt thường không ổn định trên mobile.'
+      : '') ||
+    (!softphoneAvailable && omicallEnabled && dialable && canNative && !preferNative
+      ? omicall?.connectionLabel || 'Tổng đài chưa sẵn sàng — vẫn gọi được bằng «Gọi máy».'
+      : '') ||
+    (!omicallEnabled && dialable && canNative
+      ? 'Gọi bằng ứng dụng điện thoại của máy.'
+      : '') ||
+    (showDeskSecondary ? 'Micro: nút chính · Máy bàn/app: nút phụ.' : '')
 
   return (
     <span className="flex w-full shrink-0 flex-col items-stretch sm:inline-flex sm:w-auto sm:max-w-none">
       <span className="flex flex-wrap items-center gap-2">
-        {canUse || (dialable && omicallEnabled && canClick2 && !useDeskMode) ? (
+        {primaryIsNative ? (
+          <a
+            href={nativeHref!}
+            title={titleNative}
+            className={primaryClass}
+            aria-label={titleNative}
+          >
+            <Phone className="h-4 w-4 shrink-0" aria-hidden />
+            <span>{primaryLabel}</span>
+          </a>
+        ) : primaryIsSoftphone ? (
           <button
             type="button"
-            title={primaryTitle}
-            disabled={Boolean(busy) || (!canUse && !canClick2)}
-            onClick={onPrimaryClick}
+            title={useDeskMode || (!canSdk && canClick2) ? titleDesk : titleSdk}
+            disabled={Boolean(busy)}
+            onClick={onSoftphoneClick}
             className={primaryClass}
-            aria-label={primaryTitle}
+            aria-label={useDeskMode || (!canSdk && canClick2) ? titleDesk : titleSdk}
           >
             <Phone className="h-4 w-4 shrink-0" aria-hidden />
             <span>{primaryLabel}</span>
           </button>
-        ) : useTelFallback ? (
-          <a href={nativeHref!} title="Gọi bằng ứng dụng điện thoại" className={primaryClass} aria-label="Gọi điện">
-            <Phone className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{primaryLabel}</span>
-          </a>
         ) : (
-          <button type="button" title={primaryTitle} disabled className={primaryClass} aria-label={primaryTitle}>
+          <button
+            type="button"
+            title={titleSdk}
+            disabled
+            className={primaryClass}
+            aria-label={titleSdk}
+          >
             <Phone className="h-4 w-4 shrink-0" aria-hidden />
             <span>{primaryLabel}</span>
           </button>
         )}
-        {showDeskButton ? (
+
+        {showNativeSecondary ? (
+          <a
+            href={nativeHref!}
+            title={titleNative}
+            className={secondaryClass}
+            aria-label={titleNative}
+          >
+            <PhoneCall className="h-4 w-4 shrink-0" aria-hidden />
+            <span>Gọi máy</span>
+          </a>
+        ) : null}
+
+        {showDeskSecondary ? (
           <button
             type="button"
             title={titleDesk}
