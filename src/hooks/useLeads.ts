@@ -287,6 +287,9 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       ...(profileNote2Raw ? { profileNote2: profileNote2Raw } : {}),
       ...(otherAttentionRaw ? { otherAttentionNotes: otherAttentionRaw } : {}),
       ...(dateOfBirth ? { dateOfBirth } : {}),
+      ...(String(data.gender ?? '').trim()
+        ? { gender: String(data.gender).trim().slice(0, 32) }
+        : {}),
       ...(data.nationalIdNotAvailable === true
         ? { nationalIdNotAvailable: true }
         : (() => {

@@ -359,6 +359,8 @@ export interface Lead {
   currentResidence?: string
   /** Ngày sinh (chuỗi theo Excel, vd. dd/MM/yyyy hoặc YYYY-MM-DD) */
   dateOfBirth?: string
+  /** Giới tính (chuỗi tự do từ Excel mẫu 2+) */
+  gender?: string
   /** Ghi chú 1 — cột Excel quy chuẩn; `targetField` chấm điểm: profileNote1 */
   profileNote1?: string
   /** Ghi chú 2 — targetField: profileNote2 */

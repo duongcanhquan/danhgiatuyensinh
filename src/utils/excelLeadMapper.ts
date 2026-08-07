@@ -30,6 +30,10 @@ export type ExcelLeadRow = {
   studyIntention?: string
   schoolType?: string
   fieldTripNotes?: string
+  /** Mẫu 2+ : email sinh viên */
+  studentEmail?: string
+  /** Mẫu 2+ : giới tính (chuỗi tự do) */
+  gender?: string
 }
 
 /** Map tiêu đề cột Excel (sau chuẩn hoá) → khóa parser. Giữ alias cũ để file mẫu cũ vẫn đọc được. */
@@ -38,8 +42,18 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'ma khach hang': 'customerId',
   'ten khach hang': 'fullName',
   'ten sinh vien': 'fullName',
+  'ho ten': 'fullName',
+  'ho va ten': 'fullName',
   'ngay sinh': 'dateOfBirth',
   'dien thoai': 'phone',
+  'sdt': 'phone',
+  'so dien thoai': 'phone',
+  email: 'studentEmail',
+  'e-mail': 'studentEmail',
+  'email sinh vien': 'studentEmail',
+  'gioi tinh': 'gender',
+  'diem tot nghiep': 'academicPerformance',
+  'diem tn': 'academicPerformance',
   'dien thoai nguoi lien he chinh': 'parentPhone',
   'dt nguoi lien he': 'parentPhone',
   'dien thoai nguoi lien he': 'parentPhone',
@@ -121,7 +135,10 @@ export function mapSheetRow(raw: Record<string, unknown>): Partial<ExcelLeadRow>
   return out
 }
 
-export function parseWorkbookToRows(file: ArrayBuffer): Partial<ExcelLeadRow>[] {
+export function parseWorkbookToRows(
+  file: ArrayBuffer,
+  opts?: { headerRowIndex?: number },
+): Partial<ExcelLeadRow>[] {
   const wb = XLSX.read(file, {
     type: 'array',
     cellStyles: false,
@@ -139,9 +156,12 @@ export function parseWorkbookToRows(file: ArrayBuffer): Partial<ExcelLeadRow>[] 
   const sheetName = preferred
   if (!sheetName) return []
   const sheet = wb.Sheets[sheetName]
+  /** Hàng tiêu đề 0-based; dữ liệu từ hàng tiếp theo (= Excel hàng 2 khi headerRowIndex=0). */
+  const headerRowIndex = Math.max(0, Math.floor(opts?.headerRowIndex ?? 0))
   const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: '',
     raw: true,
+    range: headerRowIndex,
   })
   return json.map((row) => mapSheetRow(row))
 }
@@ -223,6 +243,8 @@ export function buildLeadFirestorePayload(
     priorityTag,
     uniqueHash: identity?.uniqueHash ?? '',
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
+    ...(row.studentEmail?.trim() ? { studentEmail: row.studentEmail.trim() } : {}),
+    ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
     ...(row.aspirations?.trim() ? { aspirations: row.aspirations.trim() } : {}),
     ...(row.hobbies?.trim() ? { hobbies: row.hobbies.trim() } : {}),
     ...(row.fieldTripNotes?.trim() ? { fieldTripNotes: row.fieldTripNotes.trim() } : {}),
@@ -313,5 +335,5 @@ export function downloadStandardIntakeTemplate(): void {
   ws2['!cols'] = [{ wch: 88 }]
   XLSX.utils.book_append_sheet(wb, ws2, 'Hướng dẫn')
 
-  XLSX.writeFile(wb, 'VietMy_Mau_nhap_ho_so.xlsx')
+  XLSX.writeFile(wb, 'VietMy_Mau_1_nhap_ho_so.xlsx')
 }

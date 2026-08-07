@@ -71,6 +71,10 @@ describe('mapSheetRow', () => {
     expect(row.parentPhone).toBe('090')
     expect(row.statusRaw).toBe('Mới')
   })
+
+  it('maps họ tên alias', () => {
+    expect(mapSheetRow({ 'Họ tên': 'A' }).fullName).toBe('A')
+  })
 })
 
 describe('normalizeStaffMatchKey', () => {

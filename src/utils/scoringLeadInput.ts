@@ -14,6 +14,8 @@ export function partialLeadFromExcelRow(row: Partial<ExcelLeadRow>): Partial<Lea
     parentPhone: row.parentPhone,
     source,
     source1: source || undefined,
+    ...(row.studentEmail?.trim() ? { studentEmail: row.studentEmail.trim() } : {}),
+    ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
     ...(row.assignedToRaw?.trim() ? { assignedTo: row.assignedToRaw.trim() } : {}),
     educationLevel: studyFormat || row.educationLevel,
     studyIntention: studyFormat || row.studyIntention,

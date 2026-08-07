@@ -13,11 +13,16 @@ import {
 } from 'firebase/firestore'
 import {
   buildLeadFirestorePayload,
-  downloadStandardIntakeTemplate,
   parseWorkbookToRows,
   resolveAssignedCounselorUid,
   type ExcelLeadRow,
 } from '../utils/excelLeadMapper'
+import {
+  downloadLeadIntakeTemplate,
+  getLeadIntakeTemplate,
+  LEAD_INTAKE_TEMPLATES,
+  type LeadIntakeTemplateId,
+} from '../utils/leadIntakeTemplates'
 import { evaluateLead, evaluationRecordFromLeadLike } from '../utils/scoring'
 import { evaluateLeadWithClassification, classificationFirestorePatch } from '../utils/leadClassificationScore'
 import { partialLeadFromExcelRow } from '../utils/scoringLeadInput'
@@ -183,7 +188,9 @@ export function DataIntake() {
   const [banner, setBanner] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
+  const [templateId, setTemplateId] = useState<LeadIntakeTemplateId>('standard_v1')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const selectedTemplate = useMemo(() => getLeadIntakeTemplate(templateId), [templateId])
 
   const masterBuckets = useMemo(
     () => ({
@@ -258,9 +265,12 @@ export function DataIntake() {
       try {
         const buf = await file.arrayBuffer()
         await yieldToMain()
-        const rows = parseWorkbookToRows(buf)
+        const tpl = getLeadIntakeTemplate(templateId)
+        const rows = parseWorkbookToRows(buf, { headerRowIndex: tpl.headerRowIndex })
         if (!rows.length) {
-          setBanner('Không tìm thấy dữ liệu trong sheet «Hồ sơ» / «Leads» hoặc sheet đầu tiên.')
+          setBanner(
+            `Không tìm thấy dữ liệu (${tpl.label}). Kiểm tra sheet «Hồ sơ» / «Leads» — hàng 1 tiêu đề, dữ liệu từ hàng 2.`,
+          )
           setBusy(false)
           return
         }
@@ -330,7 +340,7 @@ export function DataIntake() {
         setBusy(false)
       }
     },
-    [db, profiles, canIntake, profile, effectiveOrgId],
+    [db, profiles, canIntake, profile, effectiveOrgId, templateId],
   )
 
   const cancelPreview = () => {
@@ -491,8 +501,11 @@ export function DataIntake() {
 
   const onDownloadTemplate = () => {
     try {
-      downloadStandardIntakeTemplate()
-      setBanner('Đã tải mẫu VietMy_Mau_nhap_ho_so.xlsx — điền sheet «Hồ sơ» rồi tải lên lại tại đây.')
+      downloadLeadIntakeTemplate(templateId)
+      const tpl = getLeadIntakeTemplate(templateId)
+      setBanner(
+        `Đã tải ${tpl.downloadFileName} — điền sheet «${tpl.sheetName}» (hàng 1 tiêu đề, dữ liệu từ hàng 2) rồi tải lên lại.`,
+      )
     } catch (e) {
       console.error(e)
       setBanner('Không tạo được file mẫu.')
@@ -531,6 +544,44 @@ export function DataIntake() {
         ) : null}
 
         <div className="app-surface-elevated rounded-2xl p-5 md:p-6">
+          <fieldset className="mb-4 text-left">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Chọn mẫu Excel
+            </legend>
+            <div className="mt-2 space-y-2">
+              {LEAD_INTAKE_TEMPLATES.map((tpl) => {
+                const active = templateId === tpl.id
+                return (
+                  <label
+                    key={tpl.id}
+                    className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                      active
+                        ? 'border-amber-400 bg-amber-50/90 ring-1 ring-amber-300/70'
+                        : 'border-slate-200 bg-white hover:border-amber-300/80'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="intake-template"
+                      className="mt-1 accent-amber-600"
+                      checked={active}
+                      disabled={busy}
+                      onChange={() => {
+                        setTemplateId(tpl.id)
+                        setPreview(null)
+                        setBanner(null)
+                      }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-900">{tpl.label}</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-slate-600">{tpl.description}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+
           <input
             ref={fileInputRef}
             type="file"
@@ -549,7 +600,7 @@ export function DataIntake() {
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400 bg-gradient-to-r from-amber-50 to-stone-50 px-4 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:border-amber-500 hover:shadow disabled:opacity-40"
             >
               <Download className="h-4 w-4 shrink-0" aria-hidden />
-              Tải mẫu Excel
+              Tải mẫu đang chọn
             </button>
             <button
               type="button"
@@ -580,8 +631,9 @@ export function DataIntake() {
           >
             <FileSpreadsheet className="mb-2 h-8 w-8 text-amber-600" strokeWidth={1.25} aria-hidden />
             <p className="text-sm font-medium text-slate-800">Hoặc kéo thả file vào đây</p>
-            <p className="mt-1 max-w-xs text-xs text-slate-500">
-              Sheet «Hồ sơ». Trùng trong file / đã có trên hệ thống → không nhập.
+            <p className="mt-1 max-w-sm text-xs text-slate-500">
+              Đang dùng: <strong>{selectedTemplate.label}</strong>. Sheet «{selectedTemplate.sheetName}» — hàng 1
+              tiêu đề, dữ liệu từ hàng 2. Trùng → không nhập.
             </p>
             {busy && !preview ? (
               <p className="mt-2 text-xs font-medium text-emerald-700">Đang xử lý…</p>
