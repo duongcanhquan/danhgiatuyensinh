@@ -89,10 +89,27 @@ export function resolveOmicallSipCredentials(
   profile: Pick<VietMyUserProfile, 'omicallSipUser' | 'omicallSipPassword'> | null | undefined,
 ): { sipRealm: string; sipUser: string; sipPassword: string } | null {
   const sipRealm = config.sipRealm.trim()
-  const sipUser = (profile?.omicallSipUser ?? config.defaultSipUser ?? '').trim()
-  const sipPassword = (profile?.omicallSipPassword ?? config.defaultSipPassword ?? '').trim()
+  // Chuỗi rỗng trên hồ sơ TVV không được «khóa» — vẫn lấy mặc định trường nếu có.
+  const sipUser = (profile?.omicallSipUser?.trim() || config.defaultSipUser?.trim() || '')
+  const sipPassword = (profile?.omicallSipPassword?.trim() || config.defaultSipPassword?.trim() || '')
   if (!sipRealm || !sipUser || !sipPassword) return null
   return { sipRealm, sipUser, sipPassword }
+}
+
+/** Thiếu gì để đăng ký SIP — dùng cho thông báo trạng thái. */
+export function describeMissingOmicallSipParts(
+  config: OmicallIntegrationConfig,
+  profile: Pick<VietMyUserProfile, 'omicallSipUser' | 'omicallSipPassword'> | null | undefined,
+): string | null {
+  if (resolveOmicallSipCredentials(config, profile)) return null
+  const missing: string[] = []
+  if (!config.sipRealm.trim()) missing.push('domain tổng đài')
+  const hasUser = Boolean(profile?.omicallSipUser?.trim() || config.defaultSipUser?.trim())
+  const hasPass = Boolean(profile?.omicallSipPassword?.trim() || config.defaultSipPassword?.trim())
+  if (!hasUser) missing.push('số nội bộ')
+  if (!hasPass) missing.push('mật khẩu SIP')
+  if (!missing.length) return 'Thiếu thông số kết nối tổng đài'
+  return `Thiếu ${missing.join(' / ')} — mở Cài đặt → Gọi điện hoặc đồng bộ số nội bộ TVV`
 }
 
 /** Đầu số gọi ra: TVV → cấu hình trường → public_number từ sync. */

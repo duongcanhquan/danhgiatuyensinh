@@ -24,9 +24,11 @@ export function OmicallAutoBootstrap() {
 
     void (async () => {
       const sipUser = (profile.omicallSipUser ?? '').trim()
+      const sipPassword = (profile.omicallSipPassword ?? '').trim()
+      const hasCompleteSipCreds = Boolean(sipUser && sipPassword)
       const counselorMsg = await runOmicallCounselorBootstrap({
         configEnabled: config.enabled,
-        hasSipUser: Boolean(sipUser),
+        hasCompleteSipCreds,
       })
       if (counselorMsg) {
         await reloadProfile().catch(() => {})
@@ -41,7 +43,8 @@ export function OmicallAutoBootstrap() {
         if (admin.errors.length) {
           console.warn('[OMICall auto]', admin.errors.join(' · '))
         }
-        if (admin.phones && !sipUser) {
+        // Có số nhưng thiếu mật khẩu (hoặc chưa có số) — tải lại hồ sơ sau đồng bộ admin.
+        if (admin.phones && !hasCompleteSipCreds) {
           await reloadProfile().catch(() => {})
           omicall.reconnect()
         }
@@ -51,6 +54,7 @@ export function OmicallAutoBootstrap() {
     status,
     profile?.id,
     profile?.omicallSipUser,
+    profile?.omicallSipPassword,
     omicall,
     omicall?.configLoading,
     omicall?.config.enabled,

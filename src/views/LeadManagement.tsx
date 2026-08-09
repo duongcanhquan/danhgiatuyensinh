@@ -133,6 +133,7 @@ import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
 import { LeadActivityTimeline } from '../components/LeadActivityTimeline'
 import { LeadProfileFinanceSection } from '../components/LeadProfileFinanceSection'
 import { LeadProfileInviteSection } from '../components/LeadProfileInviteSection'
+import { OmicallCallButton } from '../components/OmicallCallButton'
 import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft, mergeCoreDraftIntoLead } from '../utils/leadProfileEdit'
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
@@ -5076,7 +5077,7 @@ function LeadDetailPanel({
                           detailLeftTab === 'counselor' ? 'text-amber-50/95' : 'text-slate-600',
                         ].join(' ')}
                       >
-                        Ghi chú · funnel · hành vi
+                        Ghi chú · gọi điện · funnel
                       </span>
                     </span>
                     {hasUnsavedProgress && detailLeftTab !== 'counselor' ? (
@@ -5126,6 +5127,71 @@ function LeadDetailPanel({
                     ) : null}
                   </button>
                 </nav>
+                {/* SĐT dùng chung — hiện khi đang ở Thao tác TVV hoặc Hồ sơ ứng viên */}
+                <section
+                  className="shrink-0 rounded-xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 via-white to-white p-2 shadow-sm sm:p-2.5"
+                  aria-label="Điện thoại liên hệ"
+                >
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-sky-950">
+                      Điện thoại liên hệ
+                    </p>
+                    {showCounselorProgressForm && coreDirty ? (
+                      <button
+                        type="button"
+                        disabled={saving || financeSaving}
+                        onClick={() => void saveCoreProfile()}
+                        className="rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {saving ? 'Đang lưu…' : 'Lưu số / hồ sơ'}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className="block min-w-0 text-xs font-medium text-slate-800">
+                      Điện thoại sinh viên
+                      <div className="mt-0.5 flex min-w-0 flex-col gap-1.5">
+                        <input
+                          className="vm-input w-full min-w-0"
+                          inputMode="tel"
+                          value={coreDraft.phone}
+                          disabled={!showCounselorProgressForm || saving || financeSaving}
+                          onChange={(e) => setCoreDraft({ ...coreDraft, phone: e.target.value })}
+                          placeholder="Số điện thoại sinh viên"
+                        />
+                        <OmicallCallButton
+                          leadId={lead.id}
+                          leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
+                          phone={coreDraft.phone}
+                          target="student"
+                          disabled={saving || financeSaving}
+                          className="self-start"
+                        />
+                      </div>
+                    </label>
+                    <label className="block min-w-0 text-xs font-medium text-slate-800">
+                      Điện thoại người liên hệ
+                      <div className="mt-0.5 flex min-w-0 flex-col gap-1.5">
+                        <input
+                          className="vm-input w-full min-w-0"
+                          inputMode="tel"
+                          value={coreDraft.parentPhone}
+                          disabled={!showCounselorProgressForm || saving || financeSaving}
+                          onChange={(e) => setCoreDraft({ ...coreDraft, parentPhone: e.target.value })}
+                          placeholder="Số điện thoại người liên hệ"
+                        />
+                        <OmicallCallButton
+                          leadId={lead.id}
+                          leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
+                          phone={coreDraft.parentPhone}
+                          target="parent"
+                          disabled={saving || financeSaving}
+                          className="self-start"
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </section>
                 <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                   {detailLeftTab === 'profile' ? (
                     <aside className="flex min-h-0 flex-1 flex-col space-y-2 text-sm leading-snug text-slate-800">

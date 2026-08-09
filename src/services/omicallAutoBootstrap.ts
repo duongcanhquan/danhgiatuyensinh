@@ -62,13 +62,14 @@ export async function runOmicallAdminBootstrap(opts: {
   return out
 }
 
-/** TVV: tự lấy số nội bộ theo email (một lần mỗi phiên). */
+/** TVV: tự lấy số nội bộ + mật khẩu SIP theo email (khi còn thiếu một trong hai). */
 export async function runOmicallCounselorBootstrap(opts: {
   configEnabled: boolean
-  hasSipUser: boolean
+  /** Đã đủ số nội bộ và mật khẩu trên hồ sơ — bỏ qua đồng bộ. */
+  hasCompleteSipCreds: boolean
 }): Promise<string | null> {
   if (!opts.configEnabled) return null
-  if (opts.hasSipUser) return null
+  if (opts.hasCompleteSipCreds) return null
   if (!throttleKey(SESSION_MY_EXT, 8 * 60_000)) return null
   try {
     const r = await syncOmicallMyExtension()

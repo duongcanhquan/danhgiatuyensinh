@@ -22,6 +22,7 @@ import {
   parseOmicallConfigDoc,
   parseOmicallUserData,
   resolveOmicallSipCredentials,
+  describeMissingOmicallSipParts,
   resolveOmicallOutboundNumber,
   canUseOmicallClick2Call,
 } from '../utils/omicallConfig'
@@ -595,7 +596,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       clearReconnectTimer()
       setSipReady(false)
       setConnectionStatus('error')
-      setConnectionLabel('Thiếu domain tổng đài hoặc số nội bộ / mật khẩu SIP')
+      setConnectionLabel(
+        describeMissingOmicallSipParts(config, profile) ||
+          'Thiếu domain tổng đài hoặc số nội bộ / mật khẩu SIP',
+      )
       return
     }
 
