@@ -271,6 +271,61 @@ function createSilentOmiToastify() {
 }
 
 /**
+ * OMICall core.min.js chèn `@layer base { … :root{--omi-*} }` — xung đột Tailwind v4
+ * (preflight/theme cũng ở `@layer base`) và làm layout app «hỏng» sau khi SDK init.
+ * Bóc lớp `@layer base` để chỉ còn font-face + biến --omi-*.
+ */
+export function unwrapOmicallBaseLayerCss(css: string): string {
+  const trimmed = String(css ?? '').trim()
+  if (!trimmed) return trimmed
+  const m = trimmed.match(/^@layer\s+base\s*\{([\s\S]*)\}\s*$/i)
+  return m ? m[1].trim() : trimmed
+}
+
+function styleLooksLikeOmicallTheme(css: string): boolean {
+  const t = css.toLowerCase()
+  return t.includes('@layer base') && (t.includes('--omi-') || t.includes('omiroboto'))
+}
+
+/** Sửa các thẻ <style> OMICall đã (hoặc sắp) chèn vào document. */
+export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
+  if (!doc?.querySelectorAll) return
+  const styles = doc.querySelectorAll('style')
+  for (const el of Array.from(styles)) {
+    const css = el.textContent ?? ''
+    if (!styleLooksLikeOmicallTheme(css)) continue
+    const next = unwrapOmicallBaseLayerCss(css)
+    if (next !== css) el.textContent = next
+  }
+}
+
+let omicallStyleObserver: MutationObserver | null = null
+
+function watchOmicallStyleInjection(doc: Document): void {
+  if (omicallStyleObserver || typeof MutationObserver === 'undefined' || !doc.head) return
+  try {
+    omicallStyleObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of Array.from(m.addedNodes)) {
+          if (node.nodeType !== 1) continue
+          const el = node as HTMLElement
+          if (el.tagName === 'STYLE') {
+            const css = el.textContent ?? ''
+            if (styleLooksLikeOmicallTheme(css)) {
+              const next = unwrapOmicallBaseLayerCss(css)
+              if (next !== css) el.textContent = next
+            }
+          }
+        }
+      }
+    })
+    omicallStyleObserver.observe(doc.head, { childList: true })
+  } catch {
+    omicallStyleObserver = null
+  }
+}
+
+/**
  * Chặn toast vendor OMICall — app đã có dải trạng thái tổng đài riêng.
  * Gọi sau khi tải SDK (và khi SDK đã có sẵn trên window).
  */
@@ -285,6 +340,9 @@ export function suppressOmicallVendorToasts(host?: OmicallToastSuppressHost): vo
     style.textContent = OMICALL_TOAST_SUPPRESS_CSS
     doc.head.appendChild(style)
   }
+
+  sanitizeOmicallInjectedStyles(doc)
+  watchOmicallStyleInjection(doc)
 
   const silent = createSilentOmiToastify()
   win.OMIToastify = silent

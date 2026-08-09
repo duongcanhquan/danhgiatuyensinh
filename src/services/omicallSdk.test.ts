@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   hangUpOmicallCall,
+  sanitizeOmicallInjectedStyles,
   suppressOmicallVendorToasts,
   tryEndOmicallCallInstance,
+  unwrapOmicallBaseLayerCss,
   type OmicallSdkGlobal,
 } from './omicallSdk'
 
@@ -11,6 +13,7 @@ function makeToastSuppressHost() {
   const doc = {
     getElementById: (id: string) => nodes.get(id) ?? null,
     querySelectorAll: (sel: string) => {
+      if (sel === 'style') return []
       if (sel !== '#vm-omicall-toast-suppress') return []
       const el = nodes.get('vm-omicall-toast-suppress')
       return el ? [el] : []
@@ -30,6 +33,35 @@ function makeToastSuppressHost() {
   }
   return { document: doc as unknown as Document, window: win as unknown as Window, nodes, win }
 }
+
+describe('unwrapOmicallBaseLayerCss', () => {
+  it('strips @layer base wrapper that OMICall injects into Tailwind base', () => {
+    const raw =
+      '@layer base{@font-face{font-family:OMIRoboto}:root{--omi-font-size:15px;--omi-primary:#4d60e8}}'
+    expect(unwrapOmicallBaseLayerCss(raw)).toBe(
+      '@font-face{font-family:OMIRoboto}:root{--omi-font-size:15px;--omi-primary:#4d60e8}',
+    )
+  })
+
+  it('leaves unrelated CSS unchanged', () => {
+    expect(unwrapOmicallBaseLayerCss('.x{color:red}')).toBe('.x{color:red}')
+  })
+})
+
+describe('sanitizeOmicallInjectedStyles', () => {
+  it('rewrites OMICall theme style tags out of @layer base', () => {
+    const style = {
+      textContent:
+        '@layer base{@font-face{font-family:OMIRoboto}:root{--omi-font-size:15px}}',
+    }
+    const doc = {
+      querySelectorAll: (sel: string) => (sel === 'style' ? [style] : []),
+    }
+    sanitizeOmicallInjectedStyles(doc as unknown as Document)
+    expect(style.textContent).not.toMatch(/@layer\s+base/i)
+    expect(style.textContent).toContain('--omi-font-size')
+  })
+})
 
 describe('suppressOmicallVendorToasts', () => {
   it('injects CSS that hides OMICall toastify nodes', () => {

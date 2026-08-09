@@ -865,3 +865,12 @@ a {
   pointer-events: none !important;
   opacity: 0 !important;
 }
+
+/*
+ * Khi OMICall từng chèn @layer base (đã sanitize ở omicallSdk), vẫn khóa font/chữ app
+ * để layout CRM không bị «nuốt» sang OMIRoboto / cỡ chữ SDK.
+ */
+#root {
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+}
