@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
 import { Copy, ExternalLink, Save } from 'lucide-react'
 import {
   defaultPublicRegistrationConfig,
@@ -20,9 +20,12 @@ const INPUT =
 function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrationConfig {
   const base = defaultPublicRegistrationConfig()
   if (!data) return base
+  const en = data.enabled
+  const enabled =
+    en === true || en === 1 || en === '1' || String(en ?? '').trim().toLowerCase() === 'true'
   return {
     schemaVersion: 1,
-    enabled: data.enabled === true,
+    enabled,
     portalTitle: String(data.portalTitle ?? base.portalTitle).trim() || base.portalTitle,
     introText: String(data.introText ?? base.introText).trim() || base.introText,
     successMessage: String(data.successMessage ?? base.successMessage).trim() || base.successMessage,
@@ -45,6 +48,7 @@ export function PublicRegistrationSettingsPanel() {
   const [remoteLoaded, setRemoteLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [legacyEnabledHint, setLegacyEnabledHint] = useState(false)
 
   const orgSlug = useMemo(() => {
     const hit = organizations.find((o) => o.id === effectiveOrgId)
@@ -55,13 +59,33 @@ export function PublicRegistrationSettingsPanel() {
     if (!db) return
     let cancelled = false
     setRemoteLoaded(false)
+    setLegacyEnabledHint(false)
     const ref = doc(db, ...orgSettingsDocSegments(effectiveOrgId, PUBLIC_REGISTRATION_DOC_ID))
     const unsub = onSnapshot(
       ref,
       (snap) => {
         if (cancelled) return
-        setDraft(parseConfig(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined))
-        setRemoteLoaded(true)
+        void (async () => {
+          const orgParsed = parseConfig(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+          let next = orgParsed
+          if (effectiveOrgId === DEFAULT_ORG_ID) {
+            try {
+              const legacy = await getDoc(doc(db, FS_COLLECTIONS.scoringAux, PUBLIC_REGISTRATION_DOC_ID))
+              if (legacy.exists()) {
+                const leg = parseConfig(legacy.data() as Record<string, unknown>)
+                if (!orgParsed.enabled && leg.enabled) {
+                  next = { ...orgParsed, ...leg, enabled: true }
+                  setLegacyEnabledHint(true)
+                }
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          if (cancelled) return
+          setDraft(next)
+          setRemoteLoaded(true)
+        })()
       },
       (err) => {
         console.error(err)
@@ -94,6 +118,7 @@ export function PublicRegistrationSettingsPanel() {
       const ref = doc(db, ...orgSettingsDocSegments(effectiveOrgId, PUBLIC_REGISTRATION_DOC_ID))
       const payload: PublicRegistrationConfig = {
         ...draft,
+        enabled: Boolean(draft.enabled),
         portalPublicUrl: draft.portalPublicUrl?.trim() || portalPath,
         updatedAt: new Date().toISOString(),
         updatedBy: profile?.email ?? profile?.id ?? 'admin',
@@ -108,7 +133,7 @@ export function PublicRegistrationSettingsPanel() {
         { orgId: effectiveOrgId, updatedAt: Timestamp.now() },
         { merge: true },
       )
-      // Mirror VietMy → scoringAux để tương thích Function/legacy
+      // Mirror VietMy → scoringAux để Function/cổng công khai đọc đúng
       if (effectiveOrgId === DEFAULT_ORG_ID) {
         await setDoc(
           doc(db, FS_COLLECTIONS.scoringAux, PUBLIC_REGISTRATION_DOC_ID),
@@ -117,7 +142,8 @@ export function PublicRegistrationSettingsPanel() {
         )
       }
       setDraft(payload)
-      setMsg(`Đã lưu — áp dụng ngay cho /dang-ky/${orgSlug}.`)
+      setLegacyEnabledHint(false)
+      setMsg(`Đã lưu — cổng ${payload.enabled ? 'đang mở' : 'đang đóng'} tại /dang-ky/${orgSlug}.`)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không lưu được cấu hình.')
     } finally {
@@ -184,7 +210,14 @@ export function PublicRegistrationSettingsPanel() {
         />
         <span>
           <span className="block text-sm font-semibold text-slate-900">Bật cổng đăng ký</span>
-          <span className="mt-0.5 block text-xs text-slate-600">Khi tắt, sinh viên thấy thông báo «cổng đang đóng».</span>
+          <span className="mt-0.5 block text-xs text-slate-600">
+            Khi tắt, sinh viên thấy thông báo «cổng đang đóng». Nhớ bấm <strong>Lưu</strong> sau khi đổi.
+          </span>
+          {legacyEnabledHint ? (
+            <span className="mt-1 block text-xs font-medium text-amber-800">
+              Phát hiện cấu hình cũ đang mở — hãy bấm Lưu để đồng bộ, tránh trang công khai báo tạm đóng.
+            </span>
+          ) : null}
         </span>
       </label>
 

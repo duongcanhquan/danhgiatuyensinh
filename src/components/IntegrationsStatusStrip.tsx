@@ -12,6 +12,7 @@ import {
   SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID,
 } from '../types'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { resolveAIIntegrationConfig } from '../utils/aiEngine'
 import {
   emptyOrgN8nWebhooks,
@@ -82,7 +83,21 @@ export function IntegrationsStatusStrip() {
           doc(db, ...orgSettingsDocSegments(effectiveOrgId, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID)),
         )
         if (orgPortal.exists()) {
-          if (!cancelled) setPortalEnabled((orgPortal.data() as { enabled?: boolean }).enabled === true)
+          const orgEn = (orgPortal.data() as { enabled?: unknown }).enabled === true
+          if (orgEn) {
+            if (!cancelled) setPortalEnabled(true)
+            return
+          }
+          if (effectiveOrgId === 'vietmy' || effectiveOrgId === DEFAULT_ORG_ID) {
+            const legacy = await getDoc(
+              doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID),
+            )
+            const legEn =
+              legacy.exists() && (legacy.data() as { enabled?: unknown }).enabled === true
+            if (!cancelled) setPortalEnabled(orgEn || legEn)
+            return
+          }
+          if (!cancelled) setPortalEnabled(false)
           return
         }
         const legacy = await getDoc(doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID))

@@ -118,9 +118,12 @@ async function allocateSystemCode(db: Firestore, at = new Date()): Promise<strin
 }
 
 function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrationConfig {
+  const en = data?.enabled
+  const enabled =
+    en === true || en === 1 || en === '1' || String(en ?? '').trim().toLowerCase() === 'true'
   return {
     schemaVersion: 1,
-    enabled: data?.enabled === true,
+    enabled,
     portalTitle: str(data?.portalTitle) || 'Đăng ký tuyển sinh — Cao đẳng Việt Mỹ',
     introText:
       str(data?.introText) ||
@@ -134,6 +137,52 @@ function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrat
     n8nWebhookUrl: str(data?.n8nWebhookUrl),
     portalPublicUrl: str(data?.portalPublicUrl),
   }
+}
+
+async function loadPublicRegistrationConfig(
+  db: Firestore,
+  orgId?: string,
+): Promise<PublicRegistrationConfig & { orgId: string }> {
+  const resolvedOrg = (orgId ?? '').trim() || 'vietmy'
+  let orgCfg: PublicRegistrationConfig | null = null
+  try {
+    const orgSnap = await db
+      .collection('orgSettings')
+      .doc(resolvedOrg)
+      .collection('settings')
+      .doc(PUBLIC_REGISTRATION_DOC_ID)
+      .get()
+    if (orgSnap.exists) {
+      orgCfg = parseConfig(orgSnap.data() as Record<string, unknown>)
+    }
+  } catch (e) {
+    console.warn('[publicRegistration] orgSettings read', resolvedOrg, e)
+  }
+
+  let legacyCfg: PublicRegistrationConfig | null = null
+  if (resolvedOrg === 'vietmy') {
+    try {
+      const snap = await db.collection('scoringAux').doc(PUBLIC_REGISTRATION_DOC_ID).get()
+      if (snap.exists) {
+        legacyCfg = parseConfig(snap.data() as Record<string, unknown>)
+      }
+    } catch (e) {
+      console.warn('[publicRegistration] scoringAux read', e)
+    }
+  }
+
+  // Bản copy orgSettings hay để enabled:false trong khi scoringAux vẫn đang bật — OR để cổng không bị «tạm đóng» giả.
+  if (orgCfg && legacyCfg) {
+    return {
+      ...legacyCfg,
+      ...orgCfg,
+      enabled: orgCfg.enabled || legacyCfg.enabled,
+      orgId: resolvedOrg,
+    }
+  }
+  if (orgCfg) return { ...orgCfg, orgId: resolvedOrg }
+  if (legacyCfg) return { ...legacyCfg, orgId: resolvedOrg }
+  return { ...parseConfig(undefined), orgId: resolvedOrg, enabled: false }
 }
 
 async function resolveActiveOrgId(db: Firestore, slugOrId: string): Promise<string> {
@@ -163,35 +212,6 @@ async function resolveActiveOrgId(db: Firestore, slugOrId: string): Promise<stri
   // Bootstrap VietMy trước khi có doc organizations
   if (key === 'vietmy') return 'vietmy'
   throw new HttpsError('not-found', 'Không tìm thấy trường tương ứng với đường dẫn đăng ký.')
-}
-
-async function loadPublicRegistrationConfig(
-  db: Firestore,
-  orgId?: string,
-): Promise<PublicRegistrationConfig & { orgId: string }> {
-  const resolvedOrg = (orgId ?? '').trim() || 'vietmy'
-  try {
-    const orgSnap = await db
-      .collection('orgSettings')
-      .doc(resolvedOrg)
-      .collection('settings')
-      .doc(PUBLIC_REGISTRATION_DOC_ID)
-      .get()
-    if (orgSnap.exists) {
-      return { ...parseConfig(orgSnap.data() as Record<string, unknown>), orgId: resolvedOrg }
-    }
-  } catch (e) {
-    console.warn('[publicRegistration] orgSettings read', resolvedOrg, e)
-  }
-  // Legacy fallback chỉ cho VietMy
-  if (resolvedOrg === 'vietmy') {
-    const snap = await db.collection('scoringAux').doc(PUBLIC_REGISTRATION_DOC_ID).get()
-    return {
-      ...parseConfig(snap.exists ? (snap.data() as Record<string, unknown>) : undefined),
-      orgId: resolvedOrg,
-    }
-  }
-  return { ...parseConfig(undefined), orgId: resolvedOrg, enabled: false }
 }
 
 async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLite[]> {
@@ -314,7 +334,7 @@ function normalizeOrgSlugParam(raw: unknown): string {
 }
 
 export function registerPublicRegistrationFunctions(db: Firestore) {
-  const getPublicRegistrationMeta = onCall(async (request) => {
+  const getPublicRegistrationMeta = onCall({ invoker: 'public' }, async (request) => {
     const slug = normalizeOrgSlugParam((request.data as { orgSlug?: string } | undefined)?.orgSlug)
     const orgId = await resolveActiveOrgId(db, slug)
     const config = await loadPublicRegistrationConfig(db, orgId)
@@ -341,7 +361,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     }
   })
 
-  const submitPublicLead = onCall(async (request) => {
+  const submitPublicLead = onCall({ invoker: 'public' }, async (request) => {
     const data = (request.data ?? {}) as PublicLeadInput & { orgSlug?: string }
     const slug = normalizeOrgSlugParam(data.orgSlug)
     const orgId = await resolveActiveOrgId(db, slug)

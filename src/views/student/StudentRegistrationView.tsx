@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { AuthSessionExitBar } from '../../components/AuthSessionControls'
 import { GraduationCap, Loader2, Send } from 'lucide-react'
@@ -307,18 +307,8 @@ export function StudentRegistrationView() {
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center text-sm text-amber-950">
             <p>{error ?? 'Cổng đăng ký chưa mở.'}</p>
-            <p className="mt-2 text-xs text-amber-800">
-              Quản trị viên: bật tại <strong>Cài đặt → Tích hợp → Cổng đăng ký SV</strong>.
-            </p>
           </div>
         )}
-
-        <p className="mt-8 text-center text-xs text-slate-500">
-          Nhân viên tuyển sinh?{' '}
-          <Link to="/login" className="font-semibold text-emerald-700 hover:underline">
-            Đăng nhập hệ thống quản trị
-          </Link>
-        </p>
       </main>
       <StaffLoginCornerGate />
     </div>
