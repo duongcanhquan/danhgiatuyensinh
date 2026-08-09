@@ -93,7 +93,10 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
   const [summaryTab, setSummaryTab] = useState<'personnel' | 'pipeline'>(
     showPersonnelTab ? 'personnel' : 'pipeline',
   )
-  const { leads, loading, error, totalLeadCount, totalLeadCountError, totalPages, currentPage } = useLeads()
+  const { leads, loading, error, totalLeadCount, totalLeadCountError, totalPages, currentPage } = useLeads({
+    // Admin Tổng kết dùng aggregates — không tải/chấm điểm cả trang hồ sơ song song.
+    enabled: !isAdmin,
+  })
   const adminAgg = useAdminDashboardAggregates(isAdmin)
   const {
     scoringProfiles,
@@ -107,6 +110,10 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
   const adminChartsReady = Boolean(isAdmin && adminAgg.data)
   const adminChartsFailed = Boolean(isAdmin && adminAgg.error && !adminAgg.data)
   const chartsBusy = isAdmin ? !adminChartsReady && !adminChartsFailed : loading
+  const adminTotalLeads = useMemo(() => {
+    if (!adminChartsReady || !adminAgg.data) return null
+    return PIPELINE_STACK.reduce((sum, k) => sum + (adminAgg.data!.pipeline[k] ?? 0), 0)
+  }, [adminChartsReady, adminAgg.data])
 
   const yieldGauge = useMemo(() => {
     if (adminChartsReady) return adminAgg.data!.yieldGauge
@@ -312,11 +319,15 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
           <DashboardKpiTile
             label="Tổng hồ sơ"
             value={
-              loading && totalLeadCount === null
-                ? '…'
-                : totalLeadCount !== null
-                  ? totalLeadCount
-                  : leads.length
+              isAdmin
+                ? chartsBusy
+                  ? '…'
+                  : (adminTotalLeads ?? 0)
+                : loading && totalLeadCount === null
+                  ? '…'
+                  : totalLeadCount !== null
+                    ? totalLeadCount
+                    : leads.length
             }
             valueClass="text-slate-900"
             shellClass="border-l-4 border-l-slate-500 bg-white/95"

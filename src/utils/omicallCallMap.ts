@@ -31,6 +31,7 @@ export function mapOmicallCallDoc(id: string, data: Record<string, unknown>): Om
     leadId: data.leadId ? String(data.leadId) : undefined,
     counselorUid: data.counselorUid ? String(data.counselorUid) : undefined,
     teamLeadUid: data.teamLeadUid ? String(data.teamLeadUid) : undefined,
+    orgId: data.orgId ? String(data.orgId) : undefined,
     startedAt: data.startedAt as Timestamp | undefined,
     answeredAt: data.answeredAt as Timestamp | undefined,
     endedAt: data.endedAt as Timestamp | undefined,

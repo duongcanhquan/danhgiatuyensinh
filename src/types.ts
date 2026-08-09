@@ -1591,6 +1591,8 @@ export interface OmicallCallRecord {
   leadId?: DocumentId | null
   counselorUid?: UserId | null
   teamLeadUid?: UserId | null
+  /** Trường sở hữu cuộc gọi (từ lead / pending click2call). */
+  orgId?: string | null
   startedAt?: Timestamp
   answeredAt?: Timestamp
   endedAt?: Timestamp
@@ -1746,9 +1748,11 @@ export interface OmicallCallUserData {
   phone: string
   /** UID TVV khởi tạo cuộc gọi — giúp map KPI khi webhook thiếu sip_user/agent_id. */
   counselorUid?: string
+  /** Trường đang làm việc — webhook khớp lead trong cùng org. */
+  orgId?: string
 }
 
-/** Lưu Firestore — `scoringAux/omicallIntegration` */
+/** Lưu Firestore — `orgSettings/{orgId}/settings/omicallIntegration` (+ mirror `scoringAux` cho vietmy). */
 export type OmicallIntegrationConfig = {
   schemaVersion: 1
   /** Bật nút gọi & đăng ký SDK */

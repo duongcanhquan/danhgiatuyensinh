@@ -550,6 +550,11 @@ export type UseLeadsOptions = {
    * Quét tối đa {@link SOURCE_CATALOG_BATCH} hồ sơ (cùng RBAC, bỏ lọc `intakeProgram`) để gợi ý chương trình / đợt.
    */
   includeScopeProgramOptions?: boolean
+  /**
+   * Khi false: không gọi Firestore (vd. admin Tổng kết chỉ dùng aggregates).
+   * Mặc định true.
+   */
+  enabled?: boolean
 }
 
 function rbacConstraint(
@@ -734,36 +739,40 @@ async function getDocsListWithOrgFallback(
     buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'strict'),
   )
 
-  let scopedSnap: QuerySnapshot<DocumentData> | null = null
-  let scopedErr: unknown
-  try {
-    scopedSnap = await getDocs(scopedQ)
-  } catch (e) {
-    scopedErr = e
-    if (!isFsPermissionDenied(e)) throw e
-  }
-
   if (!allowLegacy) {
-    if (scopedSnap) return scopedSnap
-    throw scopedErr instanceof Error ? scopedErr : new Error('Không đọc được danh sách hồ sơ.')
+    try {
+      return await getDocs(scopedQ)
+    } catch (e) {
+      if (!isFsPermissionDenied(e)) throw e
+      throw e instanceof Error ? e : new Error('Không đọc được danh sách hồ sơ.')
+    }
   }
 
-  try {
-    const legacyQ = withConstraints(
-      buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'auto'),
-    )
-    const legacySnap = await getDocs(legacyQ)
-    // Unscoped gồm cả thiếu orgId; ưu tiên khi có ít nhất bằng số bản ghi đã gắn org
-    if (legacySnap.docs.length >= (scopedSnap?.docs.length ?? 0)) {
-      return legacySnap
-    }
+  // Song song scoped + legacy — cắt nửa thời gian chờ so với tuần tự (đặc biệt Superadmin VietMy).
+  const legacyQ = withConstraints(
+    buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'auto'),
+  )
+  const [scopedSettled, legacySettled] = await Promise.allSettled([getDocs(scopedQ), getDocs(legacyQ)])
+
+  const scopedSnap =
+    scopedSettled.status === 'fulfilled'
+      ? scopedSettled.value
+      : isFsPermissionDenied(scopedSettled.reason)
+        ? null
+        : (() => {
+            throw scopedSettled.reason
+          })()
+
+  if (legacySettled.status === 'fulfilled') {
+    const legacySnap = legacySettled.value
+    if (legacySnap.docs.length >= (scopedSnap?.docs.length ?? 0)) return legacySnap
     if (scopedSnap && scopedSnap.docs.length > 0) return scopedSnap
     return legacySnap
-  } catch (e) {
-    console.warn('[useLeads] legacy VietMy unscoped failed — dùng orgId==', orgId, e)
-    if (scopedSnap) return scopedSnap
-    throw e
   }
+
+  console.warn('[useLeads] legacy VietMy unscoped failed — dùng orgId==', orgId, legacySettled.reason)
+  if (scopedSnap) return scopedSnap
+  throw legacySettled.reason
 }
 
 function applyRoleClientFilter(
@@ -1019,6 +1028,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
   const includeScopeSourceOptions = Boolean(opts?.includeScopeSourceOptions)
   const includeScopeProgramOptions = Boolean(opts?.includeScopeProgramOptions)
+  const fetchEnabled = opts?.enabled !== false
 
   const hoDQueryLabels = useMemo(() => {
     const ids = profile?.managedMajorIds ?? []
@@ -1180,6 +1190,24 @@ export function useLeads(opts?: UseLeadsOptions) {
         setError(
           configured ? null : 'Chưa cấu hình Firebase. Thêm biến môi trường theo .env.example.',
         )
+      })
+      return
+    }
+
+    if (!fetchEnabled) {
+      queueMicrotask(() => {
+        setLoading(false)
+        setLoadingPage(false)
+        setLeads([])
+        setError(null)
+        setTotalLeadCount(null)
+        setTotalLeadCountError(null)
+        setScopeTagCounts(null)
+        setScopeSourceOptions([])
+        setScopeProgramOptions([])
+        setSearchHitTotal(null)
+        setScopeFetchTruncated(false)
+        setTotalPages(1)
       })
       return
     }
@@ -1693,6 +1721,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     includeScopeTagCounts,
     includeScopeSourceOptions,
     includeScopeProgramOptions,
+    fetchEnabled,
     manualRefreshKey,
     effectiveOrgId,
     canReadGlobal,

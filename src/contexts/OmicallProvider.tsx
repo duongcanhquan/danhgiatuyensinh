@@ -14,6 +14,11 @@ import type { OmicallCallTarget, OmicallCallUserData, OmicallIntegrationConfig }
 import { FS_COLLECTIONS, SCORING_AUX_OMICALL_DOC_ID } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
+import { pickOrgSettingsSnapshot } from '../tenancy/dualReadOrgSettings'
+import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
+import { readStoredActiveOrgId } from '../tenancy/activeOrgStorage'
 import {
   getDefaultOmicallConfig,
   mergeOmicallConfig,
@@ -115,9 +120,25 @@ export function useOmicallOptional(): OmicallContextValue | null {
 
 export function OmicallProvider({ children }: { children: ReactNode }) {
   const { profile, status: authStatus } = useAuth()
+  // Provider nằm ngoài Layout/OrgProvider — resolve org từ profile + bộ nhớ chuyển trường.
+  const orgKey = resolveEffectiveOrgId({
+    role: profile?.role,
+    profileOrgId: profile?.orgId,
+    activeOrgId: readStoredActiveOrgId(),
+  })
   const [config, setConfig] = useState<OmicallIntegrationConfig>(() => getDefaultOmicallConfig())
   const [configFromRemote, setConfigFromRemote] = useState(false)
   const [configLoading, setConfigLoading] = useState(true)
+  const [orgConfigSnap, setOrgConfigSnap] = useState<{
+    exists: boolean
+    data: Record<string, unknown> | null
+  }>({ exists: false, data: null })
+  const [legacyConfigSnap, setLegacyConfigSnap] = useState<{
+    exists: boolean
+    data: Record<string, unknown> | null
+  }>({ exists: false, data: null })
+  const [orgConfigReady, setOrgConfigReady] = useState(false)
+  const [legacyConfigReady, setLegacyConfigReady] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<OmicallConnectionStatus>('off')
   const [connectionLabel, setConnectionLabel] = useState('Chưa bật tổng đài')
   const [lastError, setLastError] = useState<string | null>(null)
@@ -191,24 +212,62 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConfigLoading(false)
       return
     }
-    const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
-    const unsub = onSnapshot(
-      ref,
+    setConfigLoading(true)
+    setOrgConfigReady(false)
+    setLegacyConfigReady(false)
+
+    const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, SCORING_AUX_OMICALL_DOC_ID))
+    const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
+
+    const unsubOrg = onSnapshot(
+      orgRef,
       (snap) => {
-        const parsed = snap.exists() ? parseOmicallConfigDoc(snap.data() as Record<string, unknown>) : null
-        setConfigFromRemote(Boolean(parsed))
-        setConfig(mergeOmicallConfig(parsed))
-        setConfigLoading(false)
+        setOrgConfigSnap({
+          exists: snap.exists(),
+          data: snap.exists() ? (snap.data() as Record<string, unknown>) : null,
+        })
+        setOrgConfigReady(true)
+      },
+      (e) => {
+        console.warn('[omicall] orgSettings read failed', e)
+        setOrgConfigSnap({ exists: false, data: null })
+        setOrgConfigReady(true)
+      },
+    )
+    const unsubLegacy = onSnapshot(
+      legacyRef,
+      (snap) => {
+        setLegacyConfigSnap({
+          exists: snap.exists(),
+          data: snap.exists() ? (snap.data() as Record<string, unknown>) : null,
+        })
+        setLegacyConfigReady(true)
       },
       (e) => {
         console.error(e)
-        setConfig(getDefaultOmicallConfig())
-        setConfigFromRemote(false)
-        setConfigLoading(false)
+        setLegacyConfigSnap({ exists: false, data: null })
+        setLegacyConfigReady(true)
       },
     )
-    return () => unsub()
-  }, [])
+    return () => {
+      unsubOrg()
+      unsubLegacy()
+    }
+  }, [orgKey])
+
+  useEffect(() => {
+    if (!orgConfigReady || !legacyConfigReady) return
+    const picked = pickOrgSettingsSnapshot({
+      orgSettingsExists: orgConfigSnap.exists,
+      orgSettingsData: orgConfigSnap.data,
+      legacyExists: legacyConfigSnap.exists,
+      legacyData: legacyConfigSnap.data,
+    })
+    const parsed = picked.data ? parseOmicallConfigDoc(picked.data) : null
+    setConfigFromRemote(Boolean(parsed))
+    setConfig(mergeOmicallConfig(parsed))
+    setConfigLoading(false)
+  }, [orgConfigReady, legacyConfigReady, orgConfigSnap, legacyConfigSnap])
 
   const sipCreds = useMemo(
     () => (config.enabled ? resolveOmicallSipCredentials(config, profile) : null),
@@ -656,9 +715,18 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       sessionActiveRef.current = false
       clearReconnectTimer()
       setSipReady(false)
-      setConnectionStatus('ready')
-      setConnectionLabel('Chưa kết nối tổng đài — bấm «Thử kết nối lại» hoặc gọi từ hồ sơ')
-      setLastError(null)
+      const deskClick2Call =
+        config.callMode === 'deskPhone' &&
+        canUseOmicallClick2Call(config, profile, resolvedOutbound || availableHotlines[0])
+      if (deskClick2Call) {
+        setConnectionStatus('ready')
+        setConnectionLabel('Máy bàn sẵn sàng — gọi từ hồ sơ (không cần SIP trên trình duyệt)')
+        setLastError(null)
+      } else {
+        setConnectionStatus('ready')
+        setConnectionLabel('Chưa kết nối tổng đài — bấm «Thử kết nối lại» hoặc gọi từ hồ sơ')
+        setLastError(null)
+      }
       return
     }
 
@@ -794,6 +862,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     bootToken,
     sipSessionArmed,
     clearReconnectTimer,
+    config.callMode,
+    config.click2callEnabled,
+    resolvedOutbound,
+    availableHotlines,
   ])
 
   /** Tự kết nối lại khi quay lại tab hoặc khi mất kết nối lâu. */
@@ -1006,6 +1078,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
         phone: normalized,
         counselorUid: profile?.id,
+        orgId: orgKey,
       }
       pendingCallDisplayRef.current = {
         leadId: input.leadId,
@@ -1049,7 +1122,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       )
       setLastCallHint(res.hint)
     },
-    [canClick2Call, config, profile, resolvedOutbound, availableHotlines],
+    [canClick2Call, config, profile, resolvedOutbound, availableHotlines, orgKey],
   )
 
   const waitForSipReady = useCallback(async (maxMs = 22_000): Promise<boolean> => {
@@ -1101,6 +1174,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         target: input.target,
         phone: normalized,
         counselorUid: profile?.id,
+        orgId: orgKey,
       }
       pendingCallMetaRef.current = userData
       pendingCallDisplayRef.current = {
@@ -1139,7 +1213,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           : `Đang gọi ${normalized} qua trình duyệt…`,
       )
     },
-    [canClick2Call, config, profile, resolvedOutbound, availableHotlines, makeLeadCallClick2Call, waitForSipReady],
+    [canClick2Call, config, profile, resolvedOutbound, availableHotlines, makeLeadCallClick2Call, waitForSipReady, orgKey],
   )
 
   const saveConfig = useCallback(async (next: OmicallIntegrationConfig) => {
@@ -1147,9 +1221,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     if (!db) throw new Error('Firestore chưa cấu hình.')
     const realm = next.sipRealm.trim()
     if (next.enabled && !realm) throw new Error('Cần nhập domain tổng đài (sipRealm) khi bật tích hợp.')
-    const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
+    const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, SCORING_AUX_OMICALL_DOC_ID))
+    const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
     const payload: Record<string, unknown> = {
       schemaVersion: 1,
+      orgId: orgKey,
       enabled: next.enabled,
       sdkVersion: next.sdkVersion.trim() || getDefaultOmicallConfig().sdkVersion,
       sipRealm: realm,
@@ -1180,17 +1256,25 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         : 180
     payload.historyMaxPages =
       next.historyMaxPages !== undefined ? Math.max(1, Math.min(100, Number(next.historyMaxPages))) : 20
-    await setDoc(ref, payload, { merge: true })
+    await setDoc(orgRef, payload, { merge: true })
+    // Mirror VietMy → scoringAux trong giai đoạn chuyển multi-tenant (CF/webhook vẫn đọc legacy).
+    if (orgKey === DEFAULT_ORG_ID) {
+      await setDoc(legacyRef, payload, { merge: true })
+    }
     setBootToken((t) => t + 1)
-  }, [])
+  }, [orgKey])
 
   const resetConfig = useCallback(async () => {
     const db = getFirestoreDb()
     if (!db) return
-    const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
-    await deleteDoc(ref)
+    const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, SCORING_AUX_OMICALL_DOC_ID))
+    const ops = [deleteDoc(orgRef)]
+    if (orgKey === DEFAULT_ORG_ID) {
+      ops.push(deleteDoc(doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)))
+    }
+    await Promise.allSettled(ops)
     setBootToken((t) => t + 1)
-  }, [])
+  }, [orgKey])
 
   const reconnect = useCallback(() => {
     reconnectAttemptRef.current = 0

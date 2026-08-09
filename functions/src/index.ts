@@ -138,25 +138,41 @@ type LeadMatch = {
 const PAYMENT_KEYS = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4'] as const
 const LPXT_SUPPLEMENT_SLOTS = ['supplementL1', 'supplementL2', 'supplementL3', 'supplementL4'] as const
 const OMICALL_CONFIG_DOC_ID = 'omicallIntegration'
+const DEFAULT_ORG_ID = 'vietmy'
 
-async function loadOmicallServerConfig() {
-  const snap = await db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID).get()
-  const data = snap.exists ? snap.data() ?? {} : {}
-  const apiVersion = str(data.historyApiVersion) === 'v2' ? 'v2' : 'v3'
+function parseOmicallConfigData(data: Record<string, unknown> | undefined) {
+  const d = data ?? {}
+  const apiVersion = str(d.historyApiVersion) === 'v2' ? 'v2' : 'v3'
   return {
-    enabled: data.enabled === true,
-    apiKey: str(data.apiKey),
-    apiBaseUrl: str(data.apiBaseUrl),
-    webhookSecret: str(data.webhookSecret),
-    click2callEnabled: data.click2callEnabled !== false,
-    sipRealm: str(data.sipRealm),
-    defaultOutboundNumber: str(data.defaultOutboundNumber),
-    dialFormat: data.dialFormat === 'local' ? ('local' as const) : ('intl84' as const),
-    historySyncEnabled: data.historySyncEnabled !== false,
-    historyLookbackMinutes: Math.max(15, Math.min(4320, Math.round(num(data.historyLookbackMinutes) || 180))),
-    historyMaxPages: Math.max(1, Math.min(100, Math.round(num(data.historyMaxPages) || 20))),
+    enabled: d.enabled === true,
+    apiKey: str(d.apiKey),
+    apiBaseUrl: str(d.apiBaseUrl),
+    webhookSecret: str(d.webhookSecret),
+    click2callEnabled: d.click2callEnabled !== false,
+    sipRealm: str(d.sipRealm),
+    defaultOutboundNumber: str(d.defaultOutboundNumber),
+    dialFormat: d.dialFormat === 'local' ? ('local' as const) : ('intl84' as const),
+    historySyncEnabled: d.historySyncEnabled !== false,
+    historyLookbackMinutes: Math.max(15, Math.min(4320, Math.round(num(d.historyLookbackMinutes) || 180))),
+    historyMaxPages: Math.max(1, Math.min(100, Math.round(num(d.historyMaxPages) || 20))),
     historyApiVersion: apiVersion as OmicallHistoryApiVersion,
   }
+}
+
+/** Prefer orgSettings/{orgId}/settings/omicallIntegration; fall back to scoringAux (Phase 0). */
+async function loadOmicallServerConfig(orgId?: string) {
+  const oid = str(orgId) || DEFAULT_ORG_ID
+  const orgSnap = await db
+    .collection('orgSettings')
+    .doc(oid)
+    .collection('settings')
+    .doc(OMICALL_CONFIG_DOC_ID)
+    .get()
+  if (orgSnap.exists) return parseOmicallConfigData(orgSnap.data() as Record<string, unknown>)
+  const legacySnap = await db.collection(COLLECTIONS.scoringAux).doc(OMICALL_CONFIG_DOC_ID).get()
+  return parseOmicallConfigData(
+    legacySnap.exists ? (legacySnap.data() as Record<string, unknown>) : undefined,
+  )
 }
 
 function envSecret(secret: ReturnType<typeof defineSecret>, fallbackName: string): string {
@@ -299,6 +315,7 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
 
   let leadId: string | undefined = call.userDataLeadId
   let pendingCounselorUid: string | undefined
+  let pendingOrgId: string | undefined
   const pendingId = call.callUuid || call.transactionId
   if (pendingId) {
     const pendingSnap = await fs.collection(COLLECTIONS.omicallPendingCalls).doc(pendingId).get()
@@ -310,11 +327,20 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
       }
       const pendingUid = str(p.counselorUid)
       if (pendingUid) pendingCounselorUid = pendingUid
+      const pOrg = str(p.orgId)
+      if (pOrg) pendingOrgId = pOrg
     }
   }
 
   // Người thực sự gọi: userData / SIP → pending click2call (admin/superadmin) — không lấy assignedTo làm người gọi.
   const counselorUid = sipOrUserDataUid || pendingCounselorUid || undefined
+
+  let counselorOrgId: string | undefined
+  if (counselorUid) {
+    const uSnap = await fs.collection(COLLECTIONS.users).doc(counselorUid).get()
+    counselorOrgId = str(uSnap.data()?.orgId) || undefined
+  }
+  const preferredOrgId = pendingOrgId || counselorOrgId || undefined
 
   if (leadId) {
     const leadSnap = await fs.collection(COLLECTIONS.leads).doc(leadId).get()
@@ -326,7 +352,7 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
         leadId,
         counselorUid: uid,
         teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
-        orgId: str(leadSnap.data()?.orgId) || undefined,
+        orgId: str(leadSnap.data()?.orgId) || preferredOrgId || undefined,
       }
     }
   }
@@ -336,8 +362,37 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
     const fields = ['phone', 'parentPhone', 'fatherPhone', 'motherPhone']
     for (const field of fields) {
       for (const variant of phoneVariants) {
-        const snap = await fs.collection(COLLECTIONS.leads).where(field, '==', variant).limit(1).get()
-        if (!snap.empty) {
+        let snap = preferredOrgId
+          ? await fs
+              .collection(COLLECTIONS.leads)
+              .where(field, '==', variant)
+              .where('orgId', '==', preferredOrgId)
+              .limit(1)
+              .get()
+          : null
+        // Legacy lead thiếu orgId: chỉ khi chưa có preferredOrg mới quét toàn cục.
+        if ((!snap || snap.empty) && !preferredOrgId) {
+          snap = await fs.collection(COLLECTIONS.leads).where(field, '==', variant).limit(1).get()
+        } else if (snap && snap.empty && preferredOrgId) {
+          // Fallback nhẹ: cùng SĐT, thiếu orgId (VietMy Phase 0) — chỉ lấy 1 doc.
+          const loose = await fs.collection(COLLECTIONS.leads).where(field, '==', variant).limit(3).get()
+          const match = loose.docs.find((d) => {
+            const oid = str(d.data().orgId)
+            return !oid || oid === preferredOrgId
+          })
+          if (match) {
+            leadId = match.id
+            const assignedTo = str(match.data().assignedTo || match.data().assignedCounselorId)
+            const uid = counselorUid || assignedTo || undefined
+            return {
+              leadId,
+              counselorUid: uid,
+              teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
+              orgId: str(match.data().orgId) || preferredOrgId,
+            }
+          }
+        }
+        if (snap && !snap.empty) {
           const doc = snap.docs[0]
           leadId = doc.id
           const assignedTo = str(doc.data().assignedTo || doc.data().assignedCounselorId)
@@ -346,7 +401,7 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
             leadId,
             counselorUid: uid,
             teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
-            orgId: str(doc.data().orgId) || undefined,
+            orgId: str(doc.data().orgId) || preferredOrgId,
           }
         }
       }
@@ -355,6 +410,7 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
   return {
     counselorUid,
     teamLeadUid: counselorUid ? teamLeadMap.get(counselorUid) : undefined,
+    orgId: preferredOrgId,
   }
 }
 
@@ -1647,7 +1703,8 @@ export const omicallClick2Call = onCall(
     const userSnap = await db.collection(COLLECTIONS.users).doc(uid).get()
     if (!userSnap.exists) throw new HttpsError('not-found', 'Không tìm thấy hồ sơ user.')
     const user = userSnap.data() ?? {}
-    const serverConfig = await loadOmicallServerConfig()
+    const callerOrgId = str(user.orgId) || DEFAULT_ORG_ID
+    const serverConfig = await loadOmicallServerConfig(callerOrgId)
     if (!serverConfig.enabled) {
       throw new HttpsError('failed-precondition', 'Tích hợp OMICall chưa bật trong Cài đặt.')
     }
@@ -1669,6 +1726,12 @@ export const omicallClick2Call = onCall(
     const result = await postOmicallClick2Call(baseUrl, apiKey, { extension, hotline, phoneNumber })
     const now = Timestamp.now()
     const expiresAt = Timestamp.fromMillis(now.toMillis() + 2 * 60 * 60 * 1000)
+    let leadOrgId = callerOrgId
+    if (leadId) {
+      const leadSnap = await db.collection(COLLECTIONS.leads).doc(leadId).get()
+      const fromLead = str(leadSnap.data()?.orgId)
+      if (fromLead) leadOrgId = fromLead
+    }
     await db
       .collection(COLLECTIONS.omicallPendingCalls)
       .doc(result.callUuid)
@@ -1680,6 +1743,7 @@ export const omicallClick2Call = onCall(
         extension,
         hotline,
         counselorUid: uid,
+        orgId: leadOrgId,
         createdAt: now,
         expiresAt,
       })

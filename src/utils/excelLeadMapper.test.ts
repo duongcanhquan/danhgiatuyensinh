@@ -157,6 +157,26 @@ describe('parseWorkbookToRows compact v2', () => {
     expect(rows[0]?.academicPerformance).toBe('8.2')
   })
 
+  it('maps by Mẫu 2 column order when only Họ tên header is filled (empty other headers)', () => {
+    const buf = workbookBuf({
+      'Hồ sơ': [
+        ['Họ tên', '', '', '', '', '', '', ''],
+        ['Chỉ Tên', 'Nam', '01/01/2008', 'THPT EmptyHdr', '0912000111', 'e@x.com', 'HN', '7'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.fullName).toBe('Chỉ Tên')
+    expect(rows[0]?.gender).toBe('Nam')
+    expect(rows[0]?.phone).toBe('0912000111')
+    expect(rows[0]?.studentEmail).toBe('e@x.com')
+    expect(rows[0]?.highSchool).toBe('THPT EmptyHdr')
+    expect(rows[0]?.academicPerformance).toBe('7')
+  })
+
   it('keeps STT column from stealing Họ tên when real headers are present', () => {
     const buf = workbookBuf({
       'Hồ sơ': [

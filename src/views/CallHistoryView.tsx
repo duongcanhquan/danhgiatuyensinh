@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { BarChart3, Headphones, PhoneCall, PhoneMissed, TrendingUp, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useLeadCallOutcomes } from '../hooks/useLeadCallOutcomes'
@@ -128,6 +129,7 @@ function CallRow({
 export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
   void embedded
   const { can, profile, firebaseUser } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const [searchParams] = useSearchParams()
   const { users, counselors } = useCounselorDirectory()
   const canTeam = can('dashboard:team_lead') || can('leads:read:team_scope')
@@ -164,7 +166,7 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
 
   const fromDate = useMemo(() => new Date(`${range.from}T00:00:00`), [range.from])
   const toDate = useMemo(() => new Date(`${range.to}T23:59:59`), [range.to])
-  const maxRows = viewMode === 'global' && !counselorFilter ? 2000 : 1000
+  const maxRows = viewMode === 'global' && !counselorFilter ? 800 : 500
 
   const { calls, loading, error, notice } = useOmicallCalls({
     scope,
@@ -172,6 +174,7 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
     to: toDate,
     maxRows,
     viewerSipUser: profile?.omicallSipUser ?? undefined,
+    orgId: effectiveOrgId,
   })
 
   const filteredCalls = useMemo(() => {

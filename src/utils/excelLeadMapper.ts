@@ -45,6 +45,7 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'ho ten': 'fullName',
   'ho va ten': 'fullName',
   'ho ten hoc sinh': 'fullName',
+  'ho va ten hoc sinh': 'fullName',
   'ho ten sv': 'fullName',
   'ten hoc sinh': 'fullName',
   ten: 'fullName',
@@ -63,6 +64,8 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'so dien thoai': 'phone',
   'so dt': 'phone',
   'dien thoai sinh vien': 'phone',
+  'dien thoai lien he': 'phone',
+  'so dien thoai lien he': 'phone',
   tel: 'phone',
   phone: 'phone',
   mobile: 'phone',
@@ -72,11 +75,22 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'mail': 'studentEmail',
   'gioi tinh': 'gender',
   sex: 'gender',
+  gt: 'gender',
   'diem tot nghiep': 'academicPerformance',
   'diem tn': 'academicPerformance',
   'diem thi tot nghiep': 'academicPerformance',
   'tot nghiep': 'academicPerformance',
   'hoc luc xep loai': 'academicPerformance',
+  'dia chi': 'address',
+  'dia chi thuong tru': 'address',
+  'dia chi lien he': 'address',
+  'truong hoc': 'highSchool',
+  truong: 'highSchool',
+  'truong thpt': 'highSchool',
+  'ten truong': 'highSchool',
+  thpt: 'highSchool',
+  'truong dang hoc': 'highSchool',
+  // --- Các cột Mẫu 1 / legacy (giữ nguyên) ---
   'dien thoai nguoi lien he chinh': 'parentPhone',
   'dt nguoi lien he': 'parentPhone',
   'dien thoai nguoi lien he': 'parentPhone',
@@ -120,18 +134,12 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'so thich': 'hobbies',
   'ghi chu di truong': 'fieldTripNotes',
   'ghi chu khao sat / thuc te': 'fieldTripNotes',
-  'truong hoc': 'highSchool',
-  truong: 'highSchool',
-  'truong thpt': 'highSchool',
-  'ten truong': 'highSchool',
-  'thpt': 'highSchool',
   lop: 'gradeClass',
   'lop hien dang hoc': 'gradeClass',
   'tinh thanh pho': 'province',
   'tinh /thanh pho': 'province',
   'tinh / thanh pho': 'province',
   'tinh/thanh pho': 'province',
-  'dia chi': 'address',
 }
 
 function normalizeHeader(h: string): string {
@@ -322,9 +330,8 @@ function sheetMappedRows(
 
   if (!sparse && rows.length > 0) return rows
 
-  const minCols = Math.min(4, fallbackOrderedHeaders.length)
-  if (nonEmptyHeaders.length < minCols && rows.length > 0) return rows
-
+  // Trước đây: nếu < 4 ô tiêu đề có chữ thì bỏ hybrid → file chỉ còn «Họ tên» trên hàng 1
+  // (cột còn lại trống / xóa tiêu đề) thì chỉ ghi tên. Khi đã chọn mẫu (fallback) vẫn map theo vị trí.
   const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     defval: '',
@@ -333,11 +340,23 @@ function sheetMappedRows(
   })
   if (aoa.length < 2) return rows
 
+  // Ước lượng số cột dữ liệu thực tế trên sheet (kể cả tiêu đề trống).
+  const maxValueCols = aoa.slice(1).reduce((m, line) => {
+    const vals = Array.isArray(line) ? line : []
+    let last = -1
+    for (let i = 0; i < vals.length; i++) {
+      if (String(vals[i] ?? '').trim()) last = i
+    }
+    return Math.max(m, last + 1)
+  }, 0)
+  if (maxValueCols < 2 && rows.length > 0) return rows
+
   const hybridRows = aoa
     .slice(1)
     .map((line) => {
       const vals = Array.isArray(line) ? line : []
-      if (aliasHits === 0) {
+      // Ít tiêu đề khớp / tiêu đề trống: ưu tiên thứ tự cột của mẫu đang chọn.
+      if (aliasHits === 0 || nonEmptyHeaders.length < Math.min(4, fallbackOrderedHeaders.length)) {
         return mapRowByHeaderOrder(vals, [...fallbackOrderedHeaders])
       }
       return mapRowHybridColumns(vals, headers, fallbackOrderedHeaders)

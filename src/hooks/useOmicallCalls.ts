@@ -28,6 +28,8 @@ export type UseOmicallCallsOpts = {
   maxRows?: number
   /** Máy lẻ OMICall của người xem — bù khi doc chưa có counselorUid. */
   viewerSipUser?: string
+  /** Lọc theo trường (client) khi doc đã có orgId. */
+  orgId?: string
 }
 
 const CHUNK_DAYS = 7
@@ -237,6 +239,7 @@ export function useOmicallCalls({
   to,
   maxRows = 500,
   viewerSipUser,
+  orgId,
 }: UseOmicallCallsOpts) {
   const [calls, setCalls] = useState<OmicallCallRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -247,6 +250,7 @@ export function useOmicallCalls({
   const toMs = to.getTime()
   const fromTs = useMemo(() => Timestamp.fromDate(new Date(fromMs)), [fromMs])
   const toTs = useMemo(() => Timestamp.fromDate(new Date(toMs)), [toMs])
+  const orgFilter = orgId?.trim() || ''
 
   useEffect(() => {
     const db = getFirestoreDb()
@@ -281,8 +285,8 @@ export function useOmicallCalls({
 
     const fetchCap =
       scope.mode === 'global'
-        ? Math.min(Math.max(maxRows * 2, maxRows), 2500)
-        : Math.min(Math.max(maxRows * 2, maxRows), 2000)
+        ? Math.min(Math.max(maxRows * 2, maxRows), 1200)
+        : Math.min(Math.max(maxRows * 2, maxRows), 1000)
 
     const scopeFilter: OmicallServerScopeFilter =
       scope.mode === 'counselor'
@@ -291,24 +295,63 @@ export function useOmicallCalls({
           ? { kind: 'team', teamLeadUid: scope.teamLeadUid }
           : { kind: 'none' }
 
+    const applyOrgFilter = (rows: OmicallCallRecord[]) => {
+      if (!orgFilter) return rows
+      return rows.filter((c) => !c.orgId || c.orgId === orgFilter)
+    }
+
     ;(async () => {
       try {
-        const { rows: rawPrimary, truncated, startedAtFallback } = await fetchCallsByDateChunks(
-          db,
-          fromTs,
-          toTs,
-          fetchCap,
-          scopeFilter,
-        )
-        if (cancelled) return
-
-        let raw = rawPrimary
-        let truncatedOut = truncated
-        let startedAtFallbackOut = startedAtFallback
+        let raw: OmicallCallRecord[] = []
+        let truncatedOut = false
+        let startedAtFallbackOut = false
         let fallbackSource: FallbackSource = 'none'
         let serverFallbackError: string | null = null
         let serverFallbackWarning: string | null = null
         let serverFallbackUsed = false
+
+        const serverScope =
+          scope.mode === 'global'
+            ? ({ mode: 'global' } as const)
+            : scope.mode === 'team'
+              ? ({ mode: 'team', teamLeadUid: scope.teamLeadUid } as const)
+              : ({ mode: 'counselor', counselorUid: scope.counselorUid } as const)
+
+        // Admin global: ưu tiên CF (một round-trip) trước khi quét chunk trên client.
+        if (scope.mode === 'global') {
+          try {
+            const serverRes = await fetchOmicallCallsViaFunction({
+              fromMs: fromTs.toMillis(),
+              toMs: toTs.toMillis(),
+              maxRows,
+              scope: serverScope,
+            })
+            if (serverRes.calls.length > 0) {
+              raw = applyOrgFilter(serverRes.calls)
+              serverFallbackUsed = true
+              fallbackSource = serverRes.source === 'interactions_fallback' ? 'interactions' : 'none'
+            } else if (serverRes.warning) {
+              serverFallbackWarning = serverRes.warning
+            }
+          } catch (e) {
+            serverFallbackError =
+              e instanceof Error ? e.message : 'Không gọi được Cloud Function fetchOmicallCallsForClient.'
+          }
+        }
+
+        if (raw.length === 0) {
+          const { rows: rawPrimary, truncated, startedAtFallback } = await fetchCallsByDateChunks(
+            db,
+            fromTs,
+            toTs,
+            fetchCap,
+            scopeFilter,
+          )
+          if (cancelled) return
+          raw = applyOrgFilter(rawPrimary)
+          truncatedOut = truncated
+          startedAtFallbackOut = startedAtFallback
+        }
 
         // Doc cũ có thể chỉ có sipUser, chưa gắn counselorUid — bù nhẹ theo SIP (trần thấp).
         const sip = viewerSipUser?.trim()
@@ -318,7 +361,7 @@ export function useOmicallCalls({
           if (sipFill.truncated) truncatedOut = true
           if (sipFill.startedAtFallback) startedAtFallbackOut = true
           const seen = new Set(raw.map((r) => r.id))
-          for (const row of sipFill.rows) {
+          for (const row of applyOrgFilter(sipFill.rows)) {
             if (seen.has(row.id)) continue
             if (row.counselorUid) continue
             if (row.sipUser?.trim() !== sip) continue
@@ -331,15 +374,8 @@ export function useOmicallCalls({
           }
         }
 
-        const serverScope =
-          scope.mode === 'global'
-            ? ({ mode: 'global' } as const)
-            : scope.mode === 'team'
-              ? ({ mode: 'team', teamLeadUid: scope.teamLeadUid } as const)
-              : ({ mode: 'counselor', counselorUid: scope.counselorUid } as const)
-
-        // Khi client trống: nhờ Cloud Function (warmlist / bù theo hồ sơ TVV). Không quét collectionGroup trên trình duyệt.
-        if (raw.length === 0) {
+        // Khi client trống (không phải global đã thử CF): nhờ Cloud Function.
+        if (raw.length === 0 && scope.mode !== 'global') {
           try {
             const serverRes = await fetchOmicallCallsViaFunction({
               fromMs: fromTs.toMillis(),
@@ -348,7 +384,7 @@ export function useOmicallCalls({
               scope: serverScope,
             })
             if (serverRes.calls.length > 0) {
-              raw = serverRes.calls
+              raw = applyOrgFilter(serverRes.calls)
               serverFallbackUsed = true
               fallbackSource = serverRes.source === 'interactions_fallback' ? 'interactions' : 'none'
             } else if (serverRes.warning) {
@@ -421,7 +457,7 @@ export function useOmicallCalls({
     return () => {
       cancelled = true
     }
-  }, [scope, fromTs, toTs, maxRows, viewerSipUser])
+  }, [scope, fromTs, toTs, maxRows, viewerSipUser, orgFilter])
 
   return { calls, loading, error, notice }
 }
