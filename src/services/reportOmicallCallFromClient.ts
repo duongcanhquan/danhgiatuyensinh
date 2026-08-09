@@ -23,7 +23,7 @@ function durationFromSdk(call: OmicallCallData): number {
 /** Ghi omicallCalls + kpiDaily qua Cloud Functions (bổ sung log interaction trên client). */
 export async function reportOmicallCallFromClient(
   call: OmicallCallData,
-  meta: { leadId: string; phone: string; target?: OmicallCallTarget },
+  meta: { leadId: string; phone: string; target?: OmicallCallTarget; sipUser?: string },
 ): Promise<void> {
   if (!isFirebaseConfigured()) return
   const app = getFirebaseApp()
@@ -45,7 +45,8 @@ export async function reportOmicallCallFromClient(
     billSeconds,
     answerSeconds: billSeconds,
     displayNumber: call.displayNumber || meta.phone,
-    sipUser: call.sipNumber?.number,
+    // Ưu tiên số nội bộ TVV — không nhầm với đầu số gọi ra (hotline trên sipNumber).
+    sipUser: meta.sipUser?.trim() || undefined,
     callUuid: call.uuid,
   })
 }

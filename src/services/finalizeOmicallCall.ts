@@ -3,6 +3,7 @@ import type { OmicallCallTarget, OmicallCallUserData, VietMyUserProfile } from '
 import { formatCallDuration } from '../utils/omicallCallMap'
 import { logOmicallInteraction } from './logOmicallInteraction'
 import { reportOmicallCallFromClient } from './reportOmicallCallFromClient'
+import { upsertOmicallCallFromClient } from './upsertOmicallCallFromClient'
 import type { OmicallCallData } from './omicallSdk'
 
 export type FinalizeOmicallInput = {
@@ -12,9 +13,13 @@ export type FinalizeOmicallInput = {
   phone: string
   target?: OmicallCallTarget
   counselorUid?: string
+  orgId?: string
   direction?: 'inbound' | 'outbound'
   billSeconds?: number
+  /** Đầu số gọi ra (hotline). */
   sipNumber?: string
+  /** Số nội bộ SIP của TVV — map lịch sử / KPI. */
+  sipUser?: string
   userDataJson?: string
 }
 
@@ -47,11 +52,33 @@ export async function finalizeOmicallCallLogging(
 ): Promise<{ leadId: string } | null> {
   const call = buildEndedOmicallData(input)
   const logged = await logOmicallInteraction(db, call, profile)
+
+  // 1) Ghi omicallCalls ngay trên client — Lịch sử cuộc gọi không phụ thuộc webhook/CF.
+  try {
+    await upsertOmicallCallFromClient(db, {
+      transactionId: input.callUid,
+      callUuid: input.callUuid ?? input.callUid,
+      leadId: input.leadId,
+      phone: input.phone,
+      counselorUid: input.counselorUid || profile.id,
+      orgId: input.orgId,
+      target: input.target,
+      direction: input.direction === 'inbound' ? 'inbound' : 'outbound',
+      billSeconds: input.billSeconds,
+      hotline: input.sipNumber,
+      sipUser: input.sipUser || profile.omicallSipUser,
+    })
+  } catch (e) {
+    console.warn('[OMICall] upsert omicallCalls client', e)
+  }
+
+  // 2) CF bổ sung KPI / merge webhook — lỗi không chặn đã ghi ở trên.
   try {
     await reportOmicallCallFromClient(call, {
       leadId: input.leadId,
       phone: input.phone,
       target: input.target,
+      sipUser: input.sipUser || profile.omicallSipUser,
     })
   } catch (e) {
     console.warn('[OMICall] report KPI', e)

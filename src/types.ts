@@ -1610,7 +1610,7 @@ export interface OmicallCallRecord {
   outcome: OmicallCallOutcome
   state?: string
   isFinal?: boolean
-  syncSource?: 'webhook' | 'history_sync'
+  syncSource?: 'webhook' | 'history_sync' | 'sdk'
   syncedAt?: Timestamp
   interactionId?: string
   kpiAppliedAt?: Timestamp

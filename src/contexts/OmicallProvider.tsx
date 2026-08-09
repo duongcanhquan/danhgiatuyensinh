@@ -47,7 +47,7 @@ import {
 import { formatCallDuration } from '../utils/omicallCallMap'
 import { OmicallActiveCallPanel } from '../components/OmicallActiveCallPanel'
 import { CallSessionDraftProvider } from './CallSessionDraftProvider'
-import { finalizeOmicallCallLogging } from '../services/finalizeOmicallCall'
+import { finalizeOmicallCallLogging, type FinalizeOmicallInput } from '../services/finalizeOmicallCall'
 import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
 
 const SIP_ARM_STORAGE_KEY = 'vietmy.omicall.sipSessionArmed'
@@ -185,6 +185,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const hadSuccessfulRegisterRef = useRef(false)
   const resolvedOutboundRef = useRef(resolvedOutbound)
   const availableHotlinesRef = useRef(availableHotlines)
+  /** Snapshot ghi nhận cuộc gọi — sống sót khi đóng panel trước khi SDK bắn `ended`. */
+  const pendingFinalizeRef = useRef<FinalizeOmicallInput | null>(null)
   const onEndedRef = useRef<(raw: unknown) => void>(() => {})
   const onRegisterRef = useRef<(raw: unknown) => void>(() => {})
   const onCallEventRef = useRef<(raw: unknown) => void>(() => {})
@@ -337,71 +339,106 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const captureFinalizeSnapshot = useCallback(
+    (overrides?: Partial<FinalizeOmicallInput>) => {
+      if (!profile) return
+      const call = activeCallRef.current
+      const pendingMeta = pendingCallMetaRef.current
+      const prev = pendingFinalizeRef.current
+      const leadId = overrides?.leadId ?? call?.leadId ?? pendingMeta?.leadId ?? prev?.leadId
+      let callUid = overrides?.callUid ?? call?.uid ?? prev?.callUid
+      if (!leadId || !callUid) return
+
+      // Ưu tiên UID thật từ SDK — thay placeholder pending-/c2c-.
+      const overrideUid = overrides?.callUid?.trim()
+      if (
+        overrideUid &&
+        !overrideUid.startsWith('pending-') &&
+        !overrideUid.startsWith('c2c-')
+      ) {
+        callUid = overrideUid
+      } else if (
+        (callUid.startsWith('pending-') || callUid.startsWith('c2c-')) &&
+        prev?.callUid &&
+        !prev.callUid.startsWith('pending-') &&
+        !prev.callUid.startsWith('c2c-')
+      ) {
+        callUid = prev.callUid
+      }
+
+      const talkStart = activeCallTalkStartedMsRef.current
+      const started = activeCallStartedMsRef.current
+      let billSeconds = overrides?.billSeconds ?? call?.durationSec ?? prev?.billSeconds ?? 0
+      if (talkStart && started) {
+        billSeconds = Math.max(billSeconds, Math.floor((Date.now() - talkStart) / 1000))
+      } else if (started) {
+        billSeconds = Math.max(billSeconds, Math.floor((Date.now() - started) / 1000))
+      }
+
+      const phone =
+        overrides?.phone ?? call?.phone ?? pendingMeta?.phone ?? prev?.phone ?? ''
+      const target =
+        overrides?.target ?? call?.target ?? pendingMeta?.target ?? prev?.target ?? 'student'
+      const userDataJson =
+        overrides?.userDataJson ??
+        (pendingMeta ? JSON.stringify(pendingMeta) : prev?.userDataJson)
+
+      pendingFinalizeRef.current = {
+        callUid,
+        callUuid: overrides?.callUuid ?? callUid,
+        leadId,
+        phone,
+        target,
+        counselorUid: profile.id,
+        orgId: pendingMeta?.orgId ?? orgKey,
+        direction: overrides?.direction ?? call?.direction ?? prev?.direction ?? 'outbound',
+        billSeconds,
+        sipNumber: overrides?.sipNumber ?? call?.outbound ?? prev?.sipNumber,
+        sipUser: profile.omicallSipUser,
+        userDataJson,
+      }
+    },
+    [profile, orgKey],
+  )
+
   const runFinalizeIfNeeded = useCallback(async () => {
     if (!config.autoLogCalls || !profile) return
-    const call = activeCallRef.current
-    if (!call?.uid || call.phase !== 'wrapup') return
-    const uid = call.uid
-    if (loggedCallUidsRef.current.has(uid)) return
+    if (activeCallRef.current?.phase === 'wrapup' || activeCallRef.current?.state === 'ended') {
+      captureFinalizeSnapshot()
+    }
+    const snap = pendingFinalizeRef.current
+    if (!snap?.callUid || !snap.leadId) return
+    if (loggedCallUidsRef.current.has(snap.callUid)) return
 
-    const pendingMeta = pendingCallMetaRef.current
-    const meta = pendingMeta ?? (call.leadId
-      ? {
-          leadId: call.leadId,
-          phone: call.phone,
-          target: call.target ?? ('student' as OmicallCallTarget),
-          counselorUid: profile.id,
-        }
-      : null)
-    const leadId = call.leadId ?? meta?.leadId
-    if (!leadId) return
-
-    loggedCallUidsRef.current.add(uid)
+    loggedCallUidsRef.current.add(snap.callUid)
     const db = getFirestoreDb()
-    if (!db) return
-
-    const talkStart = activeCallTalkStartedMsRef.current
-    const started = activeCallStartedMsRef.current
-    let billSeconds = call.durationSec
-    if (talkStart && started) {
-      billSeconds = Math.max(billSeconds, Math.floor((Date.now() - talkStart) / 1000))
-    } else if (started) {
-      billSeconds = Math.max(billSeconds, Math.floor((Date.now() - started) / 1000))
+    if (!db) {
+      loggedCallUidsRef.current.delete(snap.callUid)
+      return
     }
 
     try {
-      await finalizeOmicallCallLogging(db, profile, {
-        callUid: uid,
-        callUuid: uid,
-        leadId,
-        phone: call.phone || meta?.phone || '',
-        target: meta?.target ?? call.target,
-        counselorUid: profile.id,
-        direction: call.direction,
-        billSeconds,
-        sipNumber: call.outbound,
-        userDataJson: pendingMeta ? JSON.stringify(pendingMeta) : undefined,
-      })
-      // Kéo CDR từ API ngay sau cuộc gọi (không đợi cron 15 phút).
+      await finalizeOmicallCallLogging(db, profile, snap)
       void triggerOmicallHistorySync(60).catch((err) => {
         console.warn('[OMICall] sync history after call', err)
       })
-    } catch (e) {
-      console.error('[OMICall] finalize call logging', e)
-      loggedCallUidsRef.current.delete(uid)
-    } finally {
+      pendingFinalizeRef.current = null
       pendingCallMetaRef.current = null
       pendingCallDisplayRef.current = null
+    } catch (e) {
+      console.error('[OMICall] finalize call logging', e)
+      loggedCallUidsRef.current.delete(snap.callUid)
     }
-  }, [config.autoLogCalls, profile])
+  }, [config.autoLogCalls, profile, captureFinalizeSnapshot])
 
   const scheduleFinalizeLogging = useCallback(() => {
+    captureFinalizeSnapshot()
     if (finalizeTimerRef.current) window.clearTimeout(finalizeTimerRef.current)
     finalizeTimerRef.current = window.setTimeout(() => {
       finalizeTimerRef.current = null
       void runFinalizeIfNeeded()
-    }, 1200)
-  }, [runFinalizeIfNeeded])
+    }, 400)
+  }, [runFinalizeIfNeeded, captureFinalizeSnapshot])
 
   useEffect(() => {
     scheduleFinalizeLoggingRef.current = scheduleFinalizeLogging
@@ -412,47 +449,41 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const call = normalizeOmicallSdkPayload(raw)
       if (!call?.uid || !config.autoLogCalls || !profile) return
       if (loggedCallUidsRef.current.has(call.uid)) return
-      const db = getFirestoreDb()
-      if (!db) return
-      try {
-        const pendingMeta = pendingCallMetaRef.current
-        const callWithMeta: OmicallCallData =
-          call.userData || !pendingMeta
-            ? call
-            : {
-                ...call,
-                userData: JSON.stringify(pendingMeta),
-                displayNumber: call.displayNumber || pendingMeta.phone,
-                remoteNumber: call.remoteNumber || pendingMeta.phone,
-              }
-        const meta = pendingMeta ?? (callWithMeta.userData ? parseOmicallUserData(callWithMeta.userData) : null)
-        // Chưa có leadId → không đánh dấu đã log (tránh chặn finalize sau khi meta kịp gắn).
-        if (!meta?.leadId) return
-        loggedCallUidsRef.current.add(call.uid)
-        await finalizeOmicallCallLogging(db, profile, {
-          callUid: callWithMeta.uid,
-          callUuid: callWithMeta.uuid ?? callWithMeta.uid,
-          leadId: meta.leadId,
-          phone: meta.phone || callWithMeta.displayNumber || '',
-          target: meta.target,
-          counselorUid: profile.id,
-          direction: callWithMeta.direction,
-          billSeconds: callWithMeta.callingDuration?.value,
-          sipNumber: callWithMeta.sipNumber?.number,
-          userDataJson: callWithMeta.userData,
-        })
-        void triggerOmicallHistorySync(60).catch((err) => {
-          console.warn('[OMICall] sync history after ended', err)
-        })
-      } catch (e) {
-        console.error('[OMICall] log interaction', e)
-        loggedCallUidsRef.current.delete(call.uid)
-      } finally {
-        pendingCallMetaRef.current = null
-        pendingCallDisplayRef.current = null
+
+      const pendingMeta = pendingCallMetaRef.current
+      const callWithMeta: OmicallCallData =
+        call.userData || !pendingMeta
+          ? call
+          : {
+              ...call,
+              userData: JSON.stringify(pendingMeta),
+              displayNumber: call.displayNumber || pendingMeta.phone,
+              remoteNumber: call.remoteNumber || pendingMeta.phone,
+            }
+      const meta =
+        pendingMeta ??
+        (callWithMeta.userData ? parseOmicallUserData(callWithMeta.userData) : null)
+      const leadId =
+        meta?.leadId ?? activeCallRef.current?.leadId ?? pendingFinalizeRef.current?.leadId
+      if (!leadId) {
+        // Giữ pendingCallMeta — chờ hangup/dismiss flush khi đã có lead trên panel.
+        return
       }
+
+      captureFinalizeSnapshot({
+        callUid: callWithMeta.uid,
+        callUuid: callWithMeta.uuid ?? callWithMeta.uid,
+        leadId,
+        phone: meta?.phone || callWithMeta.displayNumber || activeCallRef.current?.phone || '',
+        target: meta?.target ?? activeCallRef.current?.target,
+        direction: callWithMeta.direction,
+        billSeconds: callWithMeta.callingDuration?.value,
+        sipNumber: callWithMeta.sipNumber?.number,
+        userDataJson: callWithMeta.userData,
+      })
+      await runFinalizeIfNeeded()
     },
-    [config.autoLogCalls, profile],
+    [config.autoLogCalls, profile, captureFinalizeSnapshot, runFinalizeIfNeeded],
   )
 
   const onRegister = useCallback((raw: unknown) => {
@@ -984,8 +1015,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     activeSdkCallRawRef.current = null
     activeCallStartedMsRef.current = null
     activeCallTalkStartedMsRef.current = null
-    pendingCallMetaRef.current = null
-    pendingCallDisplayRef.current = null
+    // Không xóa pendingFinalizeRef ở đây — dismiss phải flush ghi nhận trước.
     setActiveCall(null)
   }, [])
 
@@ -1059,11 +1089,17 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   }, [activeCall?.uid, activeCall?.source, clearActiveCallUi, touchCallClock])
 
   const dismissActiveCall = useCallback(() => {
-    clearActiveCallUi()
-    setLastCallHint(
-      'Đã đóng trạng thái cuộc gọi trên CRM. Nếu máy bàn / điện thoại vẫn đổ chuông, hãy cắt trên thiết bị.',
-    )
-  }, [clearActiveCallUi])
+    void (async () => {
+      captureFinalizeSnapshot()
+      await runFinalizeIfNeeded()
+      pendingCallMetaRef.current = null
+      pendingCallDisplayRef.current = null
+      clearActiveCallUi()
+      setLastCallHint(
+        'Đã đóng trạng thái cuộc gọi trên CRM. Nếu máy bàn / điện thoại vẫn đổ chuông, hãy cắt trên thiết bị.',
+      )
+    })()
+  }, [clearActiveCallUi, captureFinalizeSnapshot, runFinalizeIfNeeded])
 
   const hangUpCall = useCallback(() => {
     const sdk = sdkRef.current
@@ -1096,6 +1132,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
 
     const enterWrapup = () => {
       setActiveCall((prev) => (prev ? { ...prev, state: 'ended', phase: 'wrapup' } : null))
+      captureFinalizeSnapshot()
+      void runFinalizeIfNeeded()
       scheduleFinalizeLogging()
     }
 
@@ -1113,10 +1151,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // Vẫn ghi nhận trên CRM dù SDK không xác nhận dập máy.
     setLastCallHint(
-      'Không gửi được lệnh dập máy qua SDK — thử lại hoặc cắt trên thiết bị. Panel vẫn mở để bạn ghi chú sau khi cúp máy.',
+      'Không gửi được lệnh dập máy qua SDK — thử lại hoặc cắt trên thiết bị. Đã lưu trạng thái kết thúc trên CRM để ghi nhận cuộc gọi.',
     )
-  }, [scheduleFinalizeLogging])
+    enterWrapup()
+  }, [scheduleFinalizeLogging, captureFinalizeSnapshot, runFinalizeIfNeeded])
 
   /** Tự đóng panel nếu kẹt ở «đang kết nối / đổ chuông» quá lâu. */
   useEffect(() => {
