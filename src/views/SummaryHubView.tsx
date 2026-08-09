@@ -17,6 +17,7 @@ import { ScorecardView } from './ScorecardView'
 import { CallHistoryView } from './CallHistoryView'
 import { CommandCenterView } from './CommandCenterView'
 import { PerformanceReportView } from './PerformanceReportView'
+import { TeamRosterSummaryView } from './TeamRosterSummaryView'
 
 const SUMMARY_PANEL_ID = 'summary-tabpanel'
 
@@ -49,7 +50,7 @@ export function SummaryHubView() {
       <BentoCell variant="hero" colSpan={4} className="!p-4 sm:!p-5">
         <AppPageHeader
           title="Tổng kết"
-          meta="KPI · bảng điểm · lịch gọi"
+          meta="Nhóm · KPI · bảng điểm · lịch gọi"
           className="[&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
         >
           <TabStrip
@@ -70,6 +71,7 @@ export function SummaryHubView() {
           aria-labelledby={`tab-${activeTab}`}
         >
           {activeTab === 'tong-quan' ? <DashboardView embedded /> : null}
+          {activeTab === 'nhom-cua-toi' ? <TeamRosterSummaryView /> : null}
           {activeTab === 'kpi-nhan-su' ? <PerformanceReportView /> : null}
           {activeTab === 'bang-diem' ? <ScorecardView embedded /> : null}
           {activeTab === 'lich-goi' ? <CallHistoryView embedded /> : null}

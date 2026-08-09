@@ -1,9 +1,17 @@
 import type { Permission } from '../types'
+import { canAccessTeamRosterTab } from './teamRosterMembers'
 
-export type SummaryTabId = 'tong-quan' | 'kpi-nhan-su' | 'bang-diem' | 'lich-goi' | 'van-hanh'
+export type SummaryTabId =
+  | 'tong-quan'
+  | 'kpi-nhan-su'
+  | 'bang-diem'
+  | 'lich-goi'
+  | 'van-hanh'
+  | 'nhom-cua-toi'
 
 export const SUMMARY_TAB_ORDER: SummaryTabId[] = [
   'tong-quan',
+  'nhom-cua-toi',
   'kpi-nhan-su',
   'bang-diem',
   'lich-goi',
@@ -12,6 +20,7 @@ export const SUMMARY_TAB_ORDER: SummaryTabId[] = [
 
 export const SUMMARY_TAB_LABELS: Record<SummaryTabId, string> = {
   'tong-quan': 'Tổng quan',
+  'nhom-cua-toi': 'Nhóm của tôi',
   'kpi-nhan-su': 'Báo cáo đánh giá',
   'bang-diem': 'Bảng điểm tháng',
   'lich-goi': 'Lịch sử gọi',
@@ -22,6 +31,8 @@ export function canAccessSummaryTab(tab: SummaryTabId, can: (p: Permission) => b
   switch (tab) {
     case 'tong-quan':
       return true
+    case 'nhom-cua-toi':
+      return canAccessTeamRosterTab(can)
     case 'kpi-nhan-su':
       return can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead')
     case 'bang-diem':
