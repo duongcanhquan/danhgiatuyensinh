@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   hangUpOmicallCall,
+  normalizeOmicallInjectedCss,
   sanitizeOmicallInjectedStyles,
   suppressOmicallVendorToasts,
   tryEndOmicallCallInstance,
@@ -61,8 +62,19 @@ describe('unwrapOmicallBaseLayerCss', () => {
   })
 })
 
+describe('normalizeOmicallInjectedCss', () => {
+  it('moves OMICall theme into @layer omicall (not unlayered — Chrome)', () => {
+    const out = normalizeOmicallInjectedCss(
+      '@layer base{@font-face{font-family:OMIRoboto}:root{--omi-font-size:15px}}',
+    )
+    expect(out).toMatch(/^@layer\s+omicall\{/)
+    expect(out).not.toMatch(/@layer\s+base/i)
+    expect(out).toContain('--omi-font-size:15px')
+  })
+})
+
 describe('sanitizeOmicallInjectedStyles', () => {
-  it('rewrites OMICall theme style tags out of @layer base', () => {
+  it('rewrites OMICall theme style tags into @layer omicall', () => {
     const style = {
       textContent:
         '@layer base{@font-face{font-family:OMIRoboto}:root{--omi-font-size:15px}}',
@@ -71,6 +83,7 @@ describe('sanitizeOmicallInjectedStyles', () => {
       querySelectorAll: (sel: string) => (sel === 'style' ? [style] : []),
     }
     sanitizeOmicallInjectedStyles(doc as unknown as Document)
+    expect(style.textContent).toMatch(/@layer\s+omicall/i)
     expect(style.textContent).not.toMatch(/@layer\s+base/i)
     expect(style.textContent).toContain('--omi-font-size')
   })

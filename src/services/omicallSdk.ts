@@ -270,17 +270,14 @@ function createSilentOmiToastify() {
   return factory
 }
 
-/**
- * OMICall core.min.js chèn `@layer base { … :root{--omi-*} }` — xung đột Tailwind v4
- * (preflight/theme cũng ở `@layer base`) và làm layout app «hỏng» sau khi SDK init.
- * Bóc mọi khối `@layer base {…}` (khớp ngoặc), giữ font-face + biến --omi-*.
- */
-export function unwrapOmicallBaseLayerCss(css: string): string {
+/** Bóc khối `@layer <name> {…}` (khớp ngoặc). */
+export function unwrapCssLayer(css: string, layerName: string): string {
   let out = String(css ?? '')
   if (!out) return out
-  // Lặp vì SDK có thể chèn nhiều khối / khoảng trắng lẫn @font-face.
+  const safeName = layerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   for (let guard = 0; guard < 8; guard++) {
-    const match = /@layer\s+base\s*\{/i.exec(out)
+    const re = new RegExp(`@layer\\s+${safeName}\\s*\\{`, 'i')
+    const match = re.exec(out)
     if (!match || match.index === undefined) break
     const start = match.index
     const open = out.indexOf('{', start)
@@ -304,19 +301,33 @@ export function unwrapOmicallBaseLayerCss(css: string): string {
   return out.trim()
 }
 
+/**
+ * OMICall chèn `@layer base { … }` — trên Chrome dễ phá Tailwind v4.
+ * Không để CSS đó **unlayered** (unlayered > utilities trên Chrome): chuyển sang `@layer omicall`
+ * (khai báo trước `@import tailwindcss` trong index.css).
+ */
+export function unwrapOmicallBaseLayerCss(css: string): string {
+  return unwrapCssLayer(css, 'base')
+}
+
+export function normalizeOmicallInjectedCss(css: string): string {
+  let inner = unwrapCssLayer(String(css ?? ''), 'base')
+  inner = unwrapCssLayer(inner, 'omicall')
+  if (!inner.trim()) return inner
+  return `@layer omicall{${inner}}`
+}
+
 function styleLooksLikeOmicallTheme(css: string): boolean {
   const t = css.toLowerCase()
-  return (
-    (t.includes('@layer base') || t.includes('--omi-') || t.includes('omiroboto')) &&
-    (t.includes('--omi-') || t.includes('omiroboto') || t.includes('@layer base'))
-  )
+  return t.includes('--omi-') || t.includes('omiroboto') || t.includes('@layer base')
 }
 
 function rewriteOmicallStyleEl(el: { textContent: string | null }): void {
   const css = el.textContent ?? ''
   if (!styleLooksLikeOmicallTheme(css)) return
-  if (!/@layer\s+base/i.test(css)) return
-  const next = unwrapOmicallBaseLayerCss(css)
+  // Đã nằm đúng layer omicall và không còn @layer base.
+  if (/@layer\s+omicall\s*\{/i.test(css) && !/@layer\s+base/i.test(css)) return
+  const next = normalizeOmicallInjectedCss(css)
   if (next !== css) el.textContent = next
 }
 
