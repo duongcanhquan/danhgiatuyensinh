@@ -892,6 +892,76 @@ export async function fetchLeadsInScopeForRescore(
   return { leads, truncated: hitCap }
 }
 
+/**
+ * Quét phạm vi theo con trỏ, chỉ giữ id khớp `match` — dùng xóa cả lô (không kẹt cap UI 1500).
+ */
+export async function collectMatchingLeadIdsInScope(
+  firestore: Firestore,
+  profile: VietMyUserProfile,
+  hoDQueryLabels: string[],
+  filters: LeadListServerFilters | undefined,
+  match: (lead: Lead) => boolean,
+  opts?: {
+    maxMatchIds?: number
+    maxScanDocs?: number
+    chunkSize?: number
+    orgId?: string
+    canReadGlobal?: boolean
+    onProgress?: (scanned: number, matched: number) => void
+  },
+): Promise<{ ids: string[]; scanTruncated: boolean; matchTruncated: boolean; scanned: number }> {
+  const maxMatchIds = Math.min(100_000, Math.max(1, opts?.maxMatchIds ?? 100_000))
+  const maxScanDocs = Math.min(200_000, Math.max(maxMatchIds, opts?.maxScanDocs ?? 100_000))
+  const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
+  const canReadGlobal = Boolean(opts?.canReadGlobal)
+  let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
+  const ids: string[] = []
+  let scanned = 0
+  let scanTruncated = false
+  let matchTruncated = false
+
+  while (scanned < maxScanDocs && ids.length < maxMatchIds) {
+    const snap: QuerySnapshot<DocumentData> = await getDocsListWithOrgFallback(
+      firestore,
+      profile,
+      hoDQueryLabels,
+      filters,
+      opts?.orgId,
+      canReadGlobal,
+      (base) =>
+        lastSnap === null
+          ? query(base, orderBy('updatedAt', 'desc'), limit(chunkSize))
+          : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize)),
+    )
+    if (!snap.docs.length) break
+    const mapped: Lead[] = []
+    for (const d of snap.docs) {
+      const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+      if (row) mapped.push(row)
+    }
+    const filtered = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, opts?.orgId)
+    scanned += snap.docs.length
+    for (const lead of filtered) {
+      if (!match(lead)) continue
+      ids.push(lead.id)
+      if (ids.length >= maxMatchIds) {
+        matchTruncated = true
+        break
+      }
+    }
+    opts?.onProgress?.(scanned, ids.length)
+    lastSnap = snap.docs[snap.docs.length - 1]!
+    if (snap.docs.length < chunkSize) break
+    if (scanned >= maxScanDocs) {
+      scanTruncated = true
+      break
+    }
+    if (matchTruncated) break
+  }
+
+  return { ids, scanTruncated, matchTruncated, scanned }
+}
+
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile, can } = useAuth()
   const canReadGlobal = Boolean(profile && (can('leads:read:global') || profile.role === 'super_admin'))

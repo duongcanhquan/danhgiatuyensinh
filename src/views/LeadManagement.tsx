@@ -113,6 +113,10 @@ import {
 } from '../utils/bulkLeadIntakeProgram'
 import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDeleteLeads'
 import {
+  collectLeadIdsByIntakeProgram,
+  PURGE_PROGRAM_HARD_CAP,
+} from '../utils/purgeLeadsByIntakeProgram'
+import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
   rememberIntakeProgram,
@@ -1955,21 +1959,131 @@ export function LeadManagement() {
 
       setSelectScopeBusy(true)
       setRescoreMsg(`Đang quét hồ sơ thuộc ${scopeLabel}…`)
+
+      /** Xóa theo chương trình: quét + xóa lặp đến hết (không kẹt ~1500). */
+      if (mode === 'program') {
+        try {
+          let totalDeleted = 0
+          let round = 0
+          let firstConfirmDone = false
+
+          while (round < 50) {
+            round += 1
+            const collected = await collectLeadIdsByIntakeProgram(
+              db,
+              profile,
+              hoDQueryLabels,
+              prog,
+              {
+                canReadGlobal: can('leads:read:global'),
+                orgId: effectiveOrgId,
+                onProgress: (scanned, matched) =>
+                  setRescoreMsg(
+                    `Đang quét… đã xem ${scanned.toLocaleString('vi-VN')} · khớp ${matched.toLocaleString('vi-VN')}`,
+                  ),
+              },
+            )
+
+            if (!collected.ids.length) {
+              if (round === 1) {
+                setRescoreMsg(`Không có hồ sơ nào thuộc ${scopeLabel}.`)
+              } else {
+                setRescoreMsg(
+                  `Đã xóa hết ${totalDeleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
+                )
+                void refetchLeads()
+              }
+              return
+            }
+
+            if (!firstConfirmDone) {
+              firstConfirmDone = true
+              const n = collected.ids.length
+              const moreNote = collected.mayHaveMore
+                ? `\n\nĐã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — sẽ xóa lô này rồi tự quét tiếp đến hết.`
+                : ''
+              if (
+                !window.confirm(
+                  `XÓA VĨNH VIỄN ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}?${moreNote}\n\nKhông hoàn tác được.`,
+                )
+              ) {
+                setRescoreMsg(null)
+                return
+              }
+              const confirmToken = prog === '__UNSET__' ? 'CHUA GAN' : prog
+              const typed = window.prompt(
+                `Nhập «${confirmToken}» để xác nhận xóa cả lô ${scopeLabel}:`,
+              )
+              if ((typed ?? '').trim() !== confirmToken) {
+                setRescoreMsg('Đã hủy xóa — xác nhận không khớp.')
+                return
+              }
+              setSelectScopeBusy(false)
+              setBulkBusy(true)
+            }
+
+            setRescoreMsg(`Đang xóa ${totalDeleted.toLocaleString('vi-VN')}… (+${collected.ids.length})`)
+            try {
+              const { deleted, deletedIds } = await bulkDeleteLeads(db, collected.ids, {
+                onProgress: (done, total) =>
+                  setRescoreMsg(
+                    `Đang xóa ${(totalDeleted + done).toLocaleString('vi-VN')} (lô ${done}/${total})…`,
+                  ),
+              })
+              totalDeleted += deleted
+              removeLocalLeads(deletedIds)
+              const deletedSet = new Set(deletedIds)
+              if (selected && deletedSet.has(selected.id)) {
+                setSelected(null)
+                leadDetailUnsavedRef.current = false
+              }
+            } catch (e) {
+              if (e instanceof BulkDeleteLeadsPartialError) {
+                totalDeleted += e.deletedIds.length
+                removeLocalLeads(e.deletedIds)
+                setRescoreMsg(
+                  `${e.message}\nĐã xóa cộng dồn ${totalDeleted.toLocaleString('vi-VN')} hồ sơ.`,
+                )
+                void refetchLeads()
+                return
+              }
+              throw e
+            }
+
+            if (!collected.mayHaveMore) break
+            setRescoreMsg(
+              `Đã xóa ${totalDeleted.toLocaleString('vi-VN')} — đang quét tiếp phần còn lại…`,
+            )
+          }
+
+          setSelectedIds(new Set())
+          selectScopeLeadsRef.current = new Map()
+          const performer = profile.displayName?.trim() || profile.email || profile.id
+          await commitAuditLog(db, {
+            leadId: 'batch',
+            actionType: 'SYSTEM_UPDATE',
+            description: `Xóa cả lô (${totalDeleted} hồ sơ) — ${scopeLabel}`,
+            performedBy: profile.id,
+            performedByName: performer,
+          }).catch(() => {})
+          setRescoreMsg(
+            `Đã xóa hết ${totalDeleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
+          )
+          void refetchLeads()
+        } catch (e) {
+          console.error(e)
+          setRescoreMsg(e instanceof Error ? e.message : 'Không xóa được cả lô.')
+        } finally {
+          setSelectScopeBusy(false)
+          setBulkBusy(false)
+        }
+        return
+      }
+
       let rows: Lead[] = []
       let truncated = false
       try {
-        if (mode === 'program') {
-          const fetched = await fetchLeadsInScopeForRescore(db, profile, hoDQueryLabels, undefined, {
-            maxLeads: LEADS_UI_FULL_SCOPE_MAX,
-            canReadGlobal: can('leads:read:global'),
-            orgId: effectiveOrgId,
-          })
-          truncated = fetched.truncated
-          rows =
-            prog === '__UNSET__'
-              ? fetched.leads.filter((l) => !(l.intakeProgram ?? '').trim())
-              : fetched.leads.filter((l) => intakeProgramsMatch(l.intakeProgram, prog))
-        } else if (listNeedsFullScope) {
+        if (listNeedsFullScope) {
           rows = filtered
           truncated = Boolean(scopeFetchTruncated)
         } else {
@@ -1979,7 +2093,7 @@ export function LeadManagement() {
             hoDQueryLabels,
             leadServerFilters,
             {
-              maxLeads: LEADS_UI_FULL_SCOPE_MAX,
+              maxLeads: PURGE_PROGRAM_HARD_CAP,
               canReadGlobal: can('leads:read:global'),
               orgId: effectiveOrgId,
             },
@@ -2040,7 +2154,7 @@ export function LeadManagement() {
 
       const n = rows.length
       const truncWarn = truncated
-        ? `\n\nCẢNH BÁO: đã đạt giới hạn tải ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} — có thể còn hồ sơ chưa nằm trong lô xóa này.`
+        ? `\n\nCẢNH BÁO: đã đạt giới hạn ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ; chạy lại sau khi xóa.`
         : ''
       if (
         !window.confirm(
@@ -2589,12 +2703,12 @@ export function LeadManagement() {
                 className={`${LEAD_BTN} border-rose-400 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40`}
                 title={
                   programFilter === '__UNSET__'
-                    ? 'Xóa toàn bộ hồ sơ chưa gắn chương trình trong phạm vi của bạn'
-                    : `Xóa toàn bộ hồ sơ thuộc chương trình «${programFilter}»`
+                    ? 'Xóa hết hồ sơ chưa gắn chương trình (quét đến hết, không giới hạn 1500)'
+                    : `Xóa hết hồ sơ chương trình «${programFilter}» (quét đến hết, không giới hạn 1500)`
                 }
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa cả lô'}
+                {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa hết lô'}
               </button>
             ) : null}
             {canDeleteLeads && !programFilterActive && activeFilterChips.length > 0 ? (
