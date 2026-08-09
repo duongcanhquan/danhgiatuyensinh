@@ -129,9 +129,10 @@ service cloud.firestore {
 
     // ----- Users -----
     match /users/{uid} {
+      // Giống leads: VietMy legacy thiếu orgId vẫn đọc được khi token.orgId == vietmy.
       allow read: if isPlatform()
         || (signedIn() && request.auth.uid == uid)
-        || (hasTokenOrg() && schoolOrgActive() && resource.data.orgId == tokenOrg());
+        || (hasTokenOrg() && schoolOrgActive() && matchesOrgData(resource.data));
 
       allow create: if isPlatform()
         || (hasTokenOrg()
@@ -145,8 +146,11 @@ service cloud.firestore {
             .hasAny(['role', 'orgId', 'isActive', 'extraPermissions', 'deniedPermissions']))
         || (hasTokenOrg()
           && schoolOrgActive()
-          && resource.data.orgId == tokenOrg()
-          && request.resource.data.orgId == tokenOrg());
+          && matchesOrgData(resource.data)
+          && (
+            (dataHasOrg(request.resource.data) && request.resource.data.orgId == tokenOrg())
+            || (!dataHasOrg(request.resource.data) && tokenOrg() == 'vietmy')
+          ));
 
       allow delete: if isPlatform();
     }

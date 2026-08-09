@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useOrg } from './OrgProvider'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
+import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
 
 function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile | null {
   try {
@@ -20,7 +21,8 @@ function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile |
         ? null
         : typeof rawOrg === 'string' && rawOrg.trim()
           ? rawOrg.trim()
-          : DEFAULT_ORG_ID
+          : // Legacy thiếu orgId — gắn mặc định VietMy ở client (đồng bộ leadBelongsToOrg).
+            DEFAULT_ORG_ID
     return {
       id,
       email: String(data.email ?? ''),
@@ -40,12 +42,36 @@ function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile |
         data.maxConcurrentLeads !== undefined ? Number(data.maxConcurrentLeads) : undefined,
       isActive: data.isActive !== false,
       allowLlmAndAiTasks: data.allowLlmAndAiTasks === true ? true : undefined,
+      omicallSipUser: data.omicallSipUser ? String(data.omicallSipUser) : undefined,
+      omicallSipPassword: data.omicallSipPassword ? String(data.omicallSipPassword) : undefined,
+      omicallAgentId: data.omicallAgentId ? String(data.omicallAgentId) : undefined,
+      omicallOutboundNumber: data.omicallOutboundNumber
+        ? String(data.omicallOutboundNumber)
+        : undefined,
+      extraPermissions: Array.isArray(data.extraPermissions)
+        ? (data.extraPermissions as VietMyUserProfile['extraPermissions'])
+        : undefined,
+      deniedPermissions: Array.isArray(data.deniedPermissions)
+        ? (data.deniedPermissions as VietMyUserProfile['deniedPermissions'])
+        : undefined,
       createdAt: (data.createdAt as Timestamp) ?? now,
       updatedAt: (data.updatedAt as Timestamp) ?? now,
     }
   } catch {
     return null
   }
+}
+
+/** Doc Firestore thuộc trường đang xem (kể cả thiếu orgId trên VietMy). */
+function userDocBelongsToOrg(data: Record<string, unknown>, scopeOrgId: string): boolean {
+  const role = normalizeUserRole(String(data.role ?? 'counselor'))
+  // Super admin nền tảng: luôn hiện khi đang xem VietMy (danh sách vận hành).
+  if (role === 'super_admin') {
+    return shouldUseLegacyMissingOrgIdRead(scopeOrgId)
+  }
+  const raw = data.orgId
+  const orgId = typeof raw === 'string' ? raw.trim() : ''
+  return leadBelongsToOrg({ orgId: orgId || null }, scopeOrgId)
 }
 
 type CounselorDirectoryState = {
@@ -70,8 +96,10 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     if (isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)) {
       return effectiveOrgId || DEFAULT_ORG_ID
     }
-    return (profile?.orgId?.trim() || DEFAULT_ORG_ID)
+    return profile?.orgId?.trim() || DEFAULT_ORG_ID
   }, [profile?.role, profile?.orgId, effectiveOrgId])
+
+  const isPlatform = isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)
 
   const counselors = useMemo(
     () => users.filter((u) => u.role === 'counselor' && u.isActive),
@@ -95,14 +123,26 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     }
 
     setLoading(true)
-    const qy = query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
+
+    /**
+     * Superadmin + VietMy: bỏ where(orgId) để lấy nhân sự cũ thiếu orgId (Rules isPlatform).
+     * Admin trường / org khác: where(orgId==) — bắt buộc theo multi-tenant Rules.
+     */
+    const omitOrgFilter = isPlatform && shouldUseLegacyMissingOrgIdRead(scopeOrgId)
+    const qy = omitOrgFilter
+      ? query(collection(firestore, FS_COLLECTIONS.users))
+      : query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
+
     const unsub = onSnapshot(
       qy,
       (snap) => {
         const next: VietMyUserProfile[] = []
         snap.forEach((d) => {
-          const row = mapUser(d.id, d.data() as Record<string, unknown>)
-          if (row) next.push(row)
+          const raw = d.data() as Record<string, unknown>
+          if (!omitOrgFilter || userDocBelongsToOrg(raw, scopeOrgId)) {
+            const row = mapUser(d.id, raw)
+            if (row) next.push(row)
+          }
         })
         setUsers(next)
         setLoading(false)
@@ -116,7 +156,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       },
     )
     return () => unsub()
-  }, [configured, scopeOrgId])
+  }, [configured, scopeOrgId, isPlatform])
 
   const value = useMemo(
     (): CounselorDirectoryState => ({ users, counselors, fieldStaff, loading, error }),
