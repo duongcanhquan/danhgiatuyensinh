@@ -387,27 +387,49 @@ export function ensureOmicallLayoutShield(doc?: Document | null): void {
     el.id = OMICALL_LAYOUT_SHIELD_STYLE_ID
     el.textContent = OMICALL_LAYOUT_SHIELD_CSS
     doc.head.appendChild(el)
-  } else {
+    return
+  }
+  if (el.textContent !== OMICALL_LAYOUT_SHIELD_CSS) {
     el.textContent = OMICALL_LAYOUT_SHIELD_CSS
-    // Đưa xuống cuối head để thắng style OMICall vừa inject.
+  }
+  // Chỉ đưa xuống cuối khi chưa phải node cuối — tránh appendChild lặp → MutationObserver xoay vòng.
+  if (doc.head.lastElementChild !== el) {
     doc.head.appendChild(el)
   }
 }
 
+let sanitizeReentrancy = 0
+
 /** Sửa các thẻ <style> OMICall đã (hoặc sắp) chèn vào document. */
 export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
   if (!doc?.querySelectorAll) return
-  const styles = doc.querySelectorAll('style')
-  for (const el of Array.from(styles)) {
-    if ((el as HTMLElement).id === OMICALL_LAYOUT_SHIELD_STYLE_ID) continue
-    if ((el as HTMLElement).id === OMICALL_TOAST_SUPPRESS_STYLE_ID) continue
-    rewriteOmicallStyleEl(el)
+  if (sanitizeReentrancy > 0) return
+  sanitizeReentrancy++
+  try {
+    const styles = doc.querySelectorAll('style')
+    for (const el of Array.from(styles)) {
+      const id = (el as HTMLElement).id
+      if (id === OMICALL_LAYOUT_SHIELD_STYLE_ID || id === OMICALL_TOAST_SUPPRESS_STYLE_ID) continue
+      rewriteOmicallStyleEl(el)
+    }
+    ensureOmicallLayoutShield(doc)
+  } finally {
+    sanitizeReentrancy--
   }
-  ensureOmicallLayoutShield(doc)
 }
 
 let omicallStyleObserver: MutationObserver | null = null
 let sanitizeBurstTimers: ReturnType<typeof setTimeout>[] = []
+let sanitizeScheduled = false
+
+function queueSanitizeOmicallStyles(doc: Document): void {
+  if (sanitizeScheduled) return
+  sanitizeScheduled = true
+  queueMicrotask(() => {
+    sanitizeScheduled = false
+    sanitizeOmicallInjectedStyles(doc)
+  })
+}
 
 /** Quét lại nhiều lần — theme OMICall thường gắn lúc init / sau register SIP. */
 export function scheduleOmicallStyleSanitizeBurst(doc?: Document | null): void {
@@ -425,38 +447,40 @@ export function scheduleOmicallStyleSanitizeBurst(doc?: Document | null): void {
   }
 }
 
+function isVmOmicallManagedStyle(el: Element): boolean {
+  const id = (el as HTMLElement).id
+  return id === OMICALL_LAYOUT_SHIELD_STYLE_ID || id === OMICALL_TOAST_SUPPRESS_STYLE_ID
+}
+
 /** Gọi sớm (kể cả trước khi tải SDK) — bắt style inject vào head/body. */
 export function watchOmicallStyleInjection(doc?: Document | null): void {
   if (!doc?.documentElement || omicallStyleObserver || typeof MutationObserver === 'undefined') return
   try {
     omicallStyleObserver = new MutationObserver((mutations) => {
-      let touched = false
+      let sawForeignStyle = false
       for (const m of mutations) {
-        if (m.type === 'characterData') {
-          touched = true
-          continue
-        }
         for (const node of Array.from(m.addedNodes)) {
           if (node.nodeType !== 1) continue
           const el = node as HTMLElement
           if (el.tagName === 'STYLE') {
+            if (isVmOmicallManagedStyle(el)) continue
             rewriteOmicallStyleEl(el)
-            touched = true
+            sawForeignStyle = true
           } else if (typeof el.querySelectorAll === 'function') {
             for (const st of Array.from(el.querySelectorAll('style'))) {
+              if (isVmOmicallManagedStyle(st)) continue
               rewriteOmicallStyleEl(st)
-              touched = true
+              sawForeignStyle = true
             }
           }
         }
       }
-      // SDK đôi khi ghi textContent sau khi gắn node (không luôn có childList).
-      if (touched || mutations.length) sanitizeOmicallInjectedStyles(doc)
+      // Không observe characterData toàn document (React text node → treo UI / kẹt «đang đăng nhập»).
+      if (sawForeignStyle) queueSanitizeOmicallStyles(doc)
     })
     omicallStyleObserver.observe(doc.documentElement, {
       childList: true,
       subtree: true,
-      characterData: true,
     })
   } catch {
     omicallStyleObserver = null

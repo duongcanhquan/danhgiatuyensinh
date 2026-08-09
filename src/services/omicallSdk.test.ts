@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   hangUpOmicallCall,
+  ensureOmicallLayoutShield,
   normalizeOmicallInjectedCss,
   sanitizeOmicallInjectedStyles,
   isOmicallVendorCloseSaveLabel,
@@ -82,6 +83,31 @@ describe('normalizeOmicallInjectedCss', () => {
     expect(out).not.toMatch(/body\s*\{/i)
     expect(out).toContain('--omi-primary')
     expect(out).toMatch(/@layer\s+omicall/i)
+  })
+})
+
+describe('ensureOmicallLayoutShield', () => {
+  it('does not re-append when already last head child (avoids MutationObserver loop)', () => {
+    const appendChild = vi.fn((el: { id: string }) => {
+      headKids.push(el)
+      return el
+    })
+    const headKids: { id: string; textContent: string }[] = []
+    const doc = {
+      head: {
+        get lastElementChild() {
+          return headKids[headKids.length - 1] ?? null
+        },
+        appendChild,
+      },
+      getElementById: (id: string) => headKids.find((x) => x.id === id) ?? null,
+      createElement: (tag: string) => ({ id: '', tagName: tag.toUpperCase(), textContent: '' }),
+      querySelectorAll: () => [],
+    }
+    ensureOmicallLayoutShield(doc as unknown as Document)
+    expect(appendChild).toHaveBeenCalledTimes(1)
+    ensureOmicallLayoutShield(doc as unknown as Document)
+    expect(appendChild).toHaveBeenCalledTimes(1)
   })
 })
 
