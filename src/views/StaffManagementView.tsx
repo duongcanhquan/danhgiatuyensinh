@@ -627,7 +627,7 @@ export function StaffManagementView({
         <div className="app-surface-elevated p-4 sm:p-5">
           <h2 className="app-section-heading">Danh sách nhân sự</h2>
           {loading ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p> : null}
-          <ul className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto text-sm">
+          <ul className="mt-3 max-h-[min(75vh,56rem)] min-h-[28rem] space-y-2 overflow-y-auto text-sm">
             {sortedUsers.map((u) => {
               const isSelf = selfUid !== null && u.id === selfUid
               const inactive = u.isActive === false
