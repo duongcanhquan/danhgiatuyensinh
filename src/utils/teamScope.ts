@@ -1,12 +1,16 @@
 import type { VietMyUserProfile } from '../types'
-import { isAssignableFieldStaffRole, isTeamLeadRole, normalizeUserRole } from '../auth/roleUtils'
+import {
+  canOwnFieldStaffTeam,
+  isAssignableFieldStaffRole,
+  normalizeUserRole,
+} from '../auth/roleUtils'
 
-/** UID tư vấn viên thuộc phạm vi quản lý của trưởng nhóm. */
+/** UID tư vấn viên thuộc phạm vi quản lý của trưởng nhóm / quản lý cầm nhóm. */
 export function counselorIdsInManagerScope(
   manager: VietMyUserProfile,
   directory: readonly VietMyUserProfile[],
 ): string[] {
-  if (!isTeamLeadRole(manager.role)) return []
+  if (!canOwnFieldStaffTeam(manager.role)) return []
 
   const explicit = manager.managedCounselorIds ?? []
   if (explicit.length) return [...new Set(explicit.map(String))]
@@ -56,18 +60,18 @@ export function canManagerEditScoringProfile(
   return team.has(profileCreatedBy.trim())
 }
 
-/** Trưởng nhóm có `managedCounselorIds` rõ ràng (không chỉ fallback khoa/phòng). */
+/** Trưởng nhóm / Quản lý có `managedCounselorIds` rõ ràng (không chỉ fallback khoa/phòng). */
 export function teamLeadUsesExplicitRoster(lead: VietMyUserProfile): boolean {
-  return isTeamLeadRole(lead.role) && (lead.managedCounselorIds?.length ?? 0) > 0
+  return canOwnFieldStaffTeam(lead.role) && (lead.managedCounselorIds?.length ?? 0) > 0
 }
 
-/** Các trưởng nhóm mà TVV này thuộc phạm vi quản lý. */
+/** Các trưởng nhóm / quản lý cầm nhóm mà TVV này thuộc phạm vi. */
 export function teamLeadsForCounselor(
   counselorId: string,
   directory: readonly VietMyUserProfile[],
 ): VietMyUserProfile[] {
   return directory.filter(
-    (u) => isTeamLeadRole(u.role) && counselorIdsInManagerScope(u, directory).includes(counselorId),
+    (u) => canOwnFieldStaffTeam(u.role) && counselorIdsInManagerScope(u, directory).includes(counselorId),
   )
 }
 
@@ -84,7 +88,7 @@ export function primaryTeamLeadForCounselor(
 export type TeamLeadRosterPatch = { userId: string; managedCounselorIds: string[] }
 
 /**
- * Gán TVV vào đúng một trưởng nhóm (`newTeamLeadId`), gỡ khỏi các trưởng nhóm khác.
+ * Gán TVV vào đúng một trưởng nhóm / quản lý cầm nhóm (`newTeamLeadId`), gỡ khỏi các nhóm khác.
  * `newTeamLeadId === null` → chỉ gỡ khỏi mọi nhóm.
  */
 export function patchesForCounselorTeamAssignment(
@@ -94,7 +98,7 @@ export function patchesForCounselorTeamAssignment(
 ): TeamLeadRosterPatch[] {
   const patches: TeamLeadRosterPatch[] = []
   for (const lead of directory) {
-    if (!isTeamLeadRole(lead.role)) continue
+    if (!canOwnFieldStaffTeam(lead.role)) continue
     const ids = [...(lead.managedCounselorIds ?? [])]
     const has = ids.includes(counselorId)
     const shouldHave = lead.id === newTeamLeadId

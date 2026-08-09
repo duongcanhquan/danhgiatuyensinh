@@ -5357,25 +5357,74 @@ function LeadDetailPanel({
                                     </select>
                                   </label>
                                 </div>
-                                <label className="mt-2 block text-xs font-medium text-slate-800">
-                                  Note sau gọi{' '}
-                                  <span className="font-normal text-slate-500">(đưa hồ sơ vào Chưa gọi / Gọi lại / Đã gọi)</span>
-                                  <select
-                                    value={dispositionDraft}
-                                    onChange={(e) => {
-                                      const v = e.target.value
-                                      setDispositionDraft(v && isCallDispositionId(v) ? v : '')
-                                    }}
-                                    className="mt-0.5 w-full rounded-md border border-amber-300/90 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                  >
-                                    <option value="">— Chưa chọn note —</option>
-                                    {CALL_DISPOSITIONS.map((d) => (
-                                      <option key={d.id} value={d.id}>
-                                        {d.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
+                                <div className="mt-2" role="group" aria-label="Note sau gọi">
+                                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                    <p className="text-xs font-medium text-slate-800">
+                                      Note sau gọi{' '}
+                                      <span className="font-normal text-slate-500">
+                                        (bấm chọn nhanh — đưa hồ sơ vào Gọi lại / Đã gọi)
+                                      </span>
+                                    </p>
+                                    {dispositionDraft ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setDispositionDraft('')}
+                                        className="text-[11px] font-semibold text-slate-600 underline-offset-2 hover:text-amber-800 hover:underline"
+                                      >
+                                        Bỏ chọn
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                  {dispositionDraft ? (
+                                    <p className="mt-1 text-[11px] text-amber-900">
+                                      Đang chọn:{' '}
+                                      <span className="font-semibold">
+                                        {getCallDisposition(dispositionDraft)?.label ?? dispositionDraft}
+                                      </span>
+                                    </p>
+                                  ) : (
+                                    <p className="mt-1 text-[11px] text-slate-500">Chưa chọn note</p>
+                                  )}
+                                  {(
+                                    [
+                                      { bucket: 'callback' as const, title: 'Gọi lại' },
+                                      { bucket: 'called' as const, title: 'Đã gọi' },
+                                    ] as const
+                                  ).map((group) => {
+                                    const items = CALL_DISPOSITIONS.filter((d) => d.bucket === group.bucket)
+                                    if (!items.length) return null
+                                    return (
+                                      <div key={group.bucket} className="mt-2">
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                          {group.title}
+                                        </p>
+                                        <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                          {items.map((d) => {
+                                            const selected = dispositionDraft === d.id
+                                            return (
+                                              <button
+                                                key={d.id}
+                                                type="button"
+                                                aria-pressed={selected}
+                                                onClick={() =>
+                                                  setDispositionDraft(selected ? '' : d.id)
+                                                }
+                                                className={[
+                                                  'min-h-10 rounded-lg border px-2.5 py-2 text-left text-xs font-semibold leading-snug transition',
+                                                  selected
+                                                    ? 'border-amber-600 bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/45'
+                                                    : 'border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50',
+                                                ].join(' ')}
+                                              >
+                                                {d.label}
+                                              </button>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
                                 <label className="mt-2 block text-xs font-medium text-slate-800">
                                   Ghi chú tương tác
                                   <textarea

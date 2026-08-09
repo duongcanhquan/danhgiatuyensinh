@@ -58,4 +58,15 @@ describe('teamScope roster', () => {
     expect(primaryTeamLeadForCounselor('c1', dir)?.id).toBe('lead-explicit')
     expect(counselorIdsInManagerScope(dir[0], dir)).toContain('c1')
   })
+
+  it('allows assigning counselor into an admin who owns a team roster', () => {
+    const dir = [
+      u('mgr', 'admin', { managedCounselorIds: [] }),
+      u('lead-a', 'team_lead', { managedCounselorIds: ['c1'] }),
+      u('c1', 'counselor'),
+    ]
+    const patches = patchesForCounselorTeamAssignment('c1', 'mgr', dir)
+    expect(patches.find((p) => p.userId === 'mgr')?.managedCounselorIds).toEqual(['c1'])
+    expect(patches.find((p) => p.userId === 'lead-a')?.managedCounselorIds).toEqual([])
+  })
 })

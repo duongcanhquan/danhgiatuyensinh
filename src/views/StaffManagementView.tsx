@@ -3,11 +3,15 @@ import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { USER_ROLE_LABELS, type Permission, type UserRole, type VietMyUserProfile } from '../types'
-import { isSuperAdminRole, isAdminLikeRole } from '../auth/roleUtils'
+import {
+  canOwnFieldStaffTeam,
+  isAdminLikeRole,
+  isFieldStaffRole,
+  isSuperAdminRole,
+} from '../auth/roleUtils'
 import { STAFF_ASSIGNABLE_PERMISSIONS } from '../utils/roleCapabilitiesConfig'
 import { defaultPermissionsForRole } from '../auth/permissions'
 import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
-import { isTeamLeadRole } from '../auth/roleUtils'
 import {
   counselorIdsInManagerScope,
   isUserInManagerTeamScope,
@@ -78,7 +82,6 @@ export function StaffManagementView({
   const [editOmicallOutbound, setEditOmicallOutbound] = useState('')
   const [editTeamIds, setEditTeamIds] = useState<string[]>([])
   const [omicallSyncBusy, setOmicallSyncBusy] = useState(false)
-  const [bulkAiBusy, setBulkAiBusy] = useState(false)
   /** Trưởng nhóm phụ trách (khi sửa TVV — admin). */
   const [editTeamLeadId, setEditTeamLeadId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
@@ -95,8 +98,9 @@ export function StaffManagementView({
     return fieldStaff
   }, [fieldStaff, teamScopeOnly, profile, users])
 
+  /** Trưởng nhóm Sale + Quản lý (có thể cầm nhóm sale). */
   const teamLeads = useMemo(
-    () => users.filter((u) => isTeamLeadRole(u.role) && u.isActive !== false),
+    () => users.filter((u) => canOwnFieldStaffTeam(u.role) && u.isActive !== false),
     [users],
   )
 
@@ -152,65 +156,6 @@ export function StaffManagementView({
     return isUserInManagerTeamScope(profile, u, users)
   }
 
-  const enableAiForTeam = async () => {
-    const targets = sortedUsers.filter((u) => {
-      if (isSuperAdminRole(u.role) || isAdminLikeRole(u.role)) return false
-      if (u.isActive === false) return false
-      if (u.allowLlmAndAiTasks === true) return false
-      return canManageUser(u)
-    })
-    if (!targets.length) {
-      setMsg('Không có TVV / Trưởng nhóm nào trong phạm vi cần bật AI.')
-      return
-    }
-    if (
-      !window.confirm(
-        `Bật «Cho phép dùng AI trên hồ sơ» cho ${targets.length} tài khoản trong phạm vi của bạn?`,
-      )
-    ) {
-      return
-    }
-    setBulkAiBusy(true)
-    setEditErr(null)
-    setMsg(null)
-    try {
-      for (const u of targets) {
-        await updateStaffProfile({ userId: u.id, allowLlmAndAiTasks: true })
-      }
-      setMsg(`Đã bật quyền AI cho ${targets.length} tài khoản. Cấu hình API/tác vụ toàn trường đã áp dụng tự động.`)
-    } catch (e: unknown) {
-      setEditErr(e instanceof Error ? e.message : 'Không bật hàng loạt được')
-    } finally {
-      setBulkAiBusy(false)
-    }
-  }
-
-  const aiPermissionBanner = (
-    <div className="rounded-xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm leading-relaxed text-violet-950">
-      <p className="font-semibold text-violet-900">Phân quyền AI — cấu hình toàn trường vs từng nhân sự</p>
-      <p className="mt-1">
-        <strong>Admin / Siêu quản trị cài một lần</strong> (Cài đặt → AI &amp; LLM): khóa API, tác vụ phân tích, bảng đánh giá gọi —{' '}
-        <strong>cả team dùng chung</strong> trên Firestore.
-      </p>
-      <p className="mt-1">
-        Riêng quyền <strong>«Cho phép dùng AI trên hồ sơ»</strong> bật từng TVV / Trưởng nhóm trong form{' '}
-        <strong>Sửa</strong> bên dưới. Admin / Siêu quản trị dùng AI mặc định, không cần tick.
-      </p>
-      <p className="mt-1 text-xs text-violet-800">
-        Danh sách hiện nhãn <span className="rounded bg-sky-100 px-1 font-semibold text-sky-900">LLM</span> hoặc{' '}
-        <span className="rounded bg-amber-100 px-1 font-semibold text-amber-900">Chưa AI</span>. Sau khi bật, nhân viên thấy quyền ngay (F5 nếu cần).
-      </p>
-      <button
-        type="button"
-        disabled={bulkAiBusy}
-        onClick={() => void enableAiForTeam()}
-        className="mt-3 rounded-lg border border-violet-300 bg-violet-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-900 disabled:opacity-50"
-      >
-        {bulkAiBusy ? 'Đang bật…' : 'Bật AI cho tất cả TVV / Trưởng nhóm trong phạm vi'}
-      </button>
-    </div>
-  )
-
   const omicallSyncBanner =
     canOmicallConfig && !teamScopeOnly ? (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
@@ -265,7 +210,7 @@ export function StaffManagementView({
         displayName,
         role,
         orgId: role === 'super_admin' ? null : effectiveOrgId,
-        ...(role === 'team_lead' ? { managedCounselorIds: createTeamIds } : {}),
+        ...(canOwnFieldStaffTeam(role) ? { managedCounselorIds: createTeamIds } : {}),
         ...omicallPayload,
       })
       setMsg(`Đã tạo tài khoản cho ${email}`)
@@ -357,13 +302,16 @@ export function StaffManagementView({
             }
           : {}),
         ...(!isSelf ? { role: editRole, isActive: editActive } : {}),
-        ...(editRole === 'team_lead' || editing.role === 'team_lead'
-          ? { managedCounselorIds: editTeamIds }
+        ...(canOwnFieldStaffTeam(editRole) || canOwnFieldStaffTeam(editing.role)
+          ? {
+              managedCounselorIds: canOwnFieldStaffTeam(editRole) ? editTeamIds : [],
+            }
           : {}),
       })
       if (
         canStaffAll &&
-        (editRole === 'counselor' || (editing.role === 'counselor' && editRole !== 'team_lead'))
+        (isFieldStaffRole(editRole) ||
+          (isFieldStaffRole(editing.role) && !canOwnFieldStaffTeam(editRole)))
       ) {
         const patches = patchesForCounselorTeamAssignment(
           editing.id,
@@ -436,9 +384,9 @@ export function StaffManagementView({
     idPrefix: string,
   ) => (
     <fieldset className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-      <legend className="px-1 text-sm font-medium text-slate-800">TVV trong nhóm</legend>
+      <legend className="px-1 text-sm font-medium text-slate-800">Sale / CTV trong nhóm</legend>
       {counselorPickList.length === 0 ? (
-        <p className="text-xs text-slate-600">Chưa có TVV trong danh bạ.</p>
+        <p className="text-xs text-slate-600">Chưa có sale / CTV trong danh bạ.</p>
       ) : (
         <ul className="max-h-40 space-y-1.5 overflow-y-auto text-sm">
           {counselorPickList.map((c) => (
@@ -471,16 +419,15 @@ export function StaffManagementView({
       )}
 
       {teamBanner}
-      {aiPermissionBanner}
       {omicallSyncBanner}
 
       {canStaffAll && !teamScopeOnly ? (
         <section className="app-surface-elevated p-4 sm:p-5">
-          <h2 className="app-section-heading">Phân nhóm TVV ↔ Trưởng nhóm</h2>
+          <h2 className="app-section-heading">Phân nhóm sale ↔ Trưởng nhóm / Quản lý</h2>
           {teamLeads.length === 0 ? (
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              Chưa có tài khoản <strong>Trưởng nhóm</strong>. Tạo user với vai trò Trưởng nhóm, rồi chọn TVV trong form hoặc
-              nút «Chỉnh nhóm» bên dưới.
+              Chưa có tài khoản <strong>Trưởng nhóm Sale</strong> hoặc <strong>Quản lý</strong> để cầm nhóm. Tạo / chọn
+              vai trò đó, rồi gán sale ở «Chỉnh nhóm» hoặc form Sửa.
             </p>
           ) : (
             <ul className="mt-4 space-y-3">
@@ -495,7 +442,9 @@ export function StaffManagementView({
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900">{lead.displayName || lead.email}</p>
-                        <p className="text-xs text-slate-500">{lead.email}</p>
+                        <p className="text-xs text-slate-500">
+                          {USER_ROLE_LABELS[lead.role]} · {lead.email}
+                        </p>
                         {!explicit ? (
                           <p className="mt-1 text-xs text-amber-800">
                             Đang dùng fallback khoa/phòng (legacy) — nên chọn TVV rõ trong «Chỉnh nhóm».
@@ -598,7 +547,7 @@ export function StaffManagementView({
               onChange={(e) => {
                 const r = e.target.value as UserRole
                 setRole(r)
-                if (r !== 'team_lead') setCreateTeamIds([])
+                if (!canOwnFieldStaffTeam(r)) setCreateTeamIds([])
               }}
               className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
             >
@@ -609,12 +558,13 @@ export function StaffManagementView({
               ))}
             </select>
           </label>
-          {role === 'team_lead' && canStaffAll
+          {canOwnFieldStaffTeam(role) && canStaffAll
             ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create')
             : null}
-          {role === 'team_lead' && canStaffAll && createTeamIds.length === 0 ? (
+          {canOwnFieldStaffTeam(role) && canStaffAll && createTeamIds.length === 0 ? (
             <p className="mt-2 text-xs text-amber-800">
-              Nên chọn ít nhất một TVV — có thể chỉnh lại sau ở mục «Phân nhóm» phía trên.
+              Có thể chọn sẵn sale trong nhóm — hoặc chỉnh sau ở mục «Phân nhóm» phía trên. Quản lý vẫn xem được toàn
+              trường; danh sách này là nhóm trực tiếp.
             </p>
           ) : null}
           {role === 'counselor' && canOmicallConfig ? (
@@ -686,11 +636,12 @@ export function StaffManagementView({
               const canStaffEdit = !targetSuper || viewerSuper
               const llmOk = targetSuper || u.allowLlmAndAiTasks === true
               const teamCount = u.managedCounselorIds?.length ?? 0
-              const members = u.role === 'team_lead' ? (teamLeadMembers.get(u.id) ?? []) : []
-              const primaryLead =
-                u.role === 'counselor' ? primaryTeamLeadForCounselor(u.id, users) : null
+              const members = canOwnFieldStaffTeam(u.role) ? (teamLeadMembers.get(u.id) ?? []) : []
+              const primaryLead = isFieldStaffRole(u.role)
+                ? primaryTeamLeadForCounselor(u.id, users)
+                : null
               const unassignedCounselor =
-                u.role === 'counselor' && teamLeadsForCounselor(u.id, users).length === 0
+                isFieldStaffRole(u.role) && teamLeadsForCounselor(u.id, users).length === 0
               return (
                 <li
                   key={u.id}
@@ -705,22 +656,23 @@ export function StaffManagementView({
                       <p className="truncate text-xs text-slate-500">{u.email}</p>
                       <p className="mt-0.5 text-xs font-medium text-[var(--color-primary)]">
                         {USER_ROLE_LABELS[u.role]}
-                        {u.role === 'team_lead' ? (
+                        {canOwnFieldStaffTeam(u.role) ? (
                           <span className="ml-2 font-normal text-slate-600">
                             · {members.length > 0
                               ? members.map((m) => m.displayName || m.email).join(', ')
                               : teamCount > 0
-                                ? `${teamCount} TVV`
-                                : 'Chưa gán TVV'}
+                                ? `${teamCount} sale`
+                                : 'Chưa gán sale'}
                           </span>
                         ) : null}
                         {primaryLead ? (
                           <span className="ml-2 block font-normal text-slate-600">
-                            Trưởng nhóm: {primaryLead.displayName || primaryLead.email}
+                            Nhóm: {primaryLead.displayName || primaryLead.email}
+                            {primaryLead.role === 'admin' ? ' (Quản lý)' : ''}
                           </span>
                         ) : null}
                         {unassignedCounselor ? (
-                          <span className="ml-2 block font-normal text-amber-800">Chưa gán trưởng nhóm</span>
+                          <span className="ml-2 block font-normal text-amber-800">Chưa gán nhóm</span>
                         ) : null}
                         {inactive ? (
                           <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">Đã vô hiệu</span>
@@ -820,7 +772,7 @@ export function StaffManagementView({
                   onChange={(e) => {
                     const r = e.target.value as UserRole
                     setEditRole(r)
-                    if (r !== 'team_lead') setEditTeamIds([])
+                    if (!canOwnFieldStaffTeam(r)) setEditTeamIds([])
                   }}
                   disabled={selfUid === editing.id}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-60"
@@ -835,12 +787,12 @@ export function StaffManagementView({
                   <span className="mt-1 block text-xs text-amber-800">Không đổi vai trò trên chính bạn từ đây.</span>
                 ) : null}
               </label>
-              {editRole === 'team_lead' && canStaffAll
+              {canOwnFieldStaffTeam(editRole) && canStaffAll
                 ? teamMemberPicker(editTeamIds, setEditTeamIds, 'edit')
                 : null}
-              {editRole === 'counselor' && canStaffAll ? (
+              {isFieldStaffRole(editRole) && canStaffAll ? (
                 <label className="block text-sm font-medium text-slate-700">
-                  Trưởng nhóm phụ trách
+                  Nhóm phụ trách (Trưởng nhóm / Quản lý)
                   <select
                     value={editTeamLeadId}
                     onChange={(e) => setEditTeamLeadId(e.target.value)}
@@ -850,11 +802,12 @@ export function StaffManagementView({
                     {teamLeads.map((lead) => (
                       <option key={lead.id} value={lead.id}>
                         {lead.displayName || lead.email}
+                        {lead.role === 'admin' ? ' — Quản lý' : ' — Trưởng nhóm'}
                       </option>
                     ))}
                   </select>
                   <span className="mt-1 block text-xs text-slate-500">
-                    Một TVV chỉ nên thuộc một trưởng nhóm. Lưu sẽ cập nhật danh sách TVV của trưởng nhóm tương ứng.
+                    Sale / CTV thuộc một nhóm. Có thể gán vào Trưởng nhóm Sale hoặc Quản lý đang cầm nhóm.
                   </span>
                 </label>
               ) : null}

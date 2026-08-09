@@ -19,6 +19,15 @@ export function isTeamLeadRole(role: UserRole | string | undefined | null): bool
   return normalizeUserRole(role) === 'team_lead'
 }
 
+/**
+ * Có thể cầm roster sale/CTV (`managedCounselorIds`).
+ * Trưởng nhóm Sale và Quản lý (admin) — Quản lý vừa xem toàn trường vừa có thể dẫn một nhóm.
+ */
+export function canOwnFieldStaffTeam(role: UserRole | string | undefined | null): boolean {
+  const r = normalizeUserRole(role)
+  return r === 'team_lead' || r === 'admin'
+}
+
 /** TVV + CTV — cùng phạm vi hồ sơ được gán. */
 export function isFieldStaffRole(role: UserRole | string | undefined | null): boolean {
   const r = normalizeUserRole(role)
