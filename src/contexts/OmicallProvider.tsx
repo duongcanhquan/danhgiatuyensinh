@@ -370,13 +370,22 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionStatus('registering')
       setConnectionLabel(data.name || 'Đang kết nối tổng đài…')
     } else {
+      // disconnect / chưa đăng ký — nhờ scheduleAutoReconnect (tối đa 5 lần), không fullReload.
       setSipReady(false)
+      if (connectionStatusRef.current === 'error' && reconnectAttemptRef.current >= 5) {
+        setConnectionLabel(data.name || 'Chưa kết nối được tổng đài')
+        return
+      }
       setConnectionStatus('registering')
-      setConnectionLabel(data.name || 'Mất kết nối tạm — đang tự kết nối lại…')
-      setLastError(null)
+      setConnectionLabel(data.name || 'Mất kết nối tạm — đang thử lại…')
+      setLastError(
+        (prev) =>
+          prev ||
+          `SIP chưa đăng ký được (domain «${sipCreds?.sipRealm ?? '?'}», số «${sipCreds?.sipUser ?? '?'}»). Kiểm tra mật khẩu số nội bộ trên OMICall.`,
+      )
       scheduleAutoReconnectRef.current()
     }
-  }, [config, profile, sipCreds?.sipUser, refreshCallContext, clearReconnectTimer])
+  }, [config, sipCreds?.sipUser, sipCreds?.sipRealm, refreshCallContext, clearReconnectTimer])
 
   const syncActiveCallFromSdk = useCallback(
     (raw: unknown) => {
@@ -501,8 +510,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       clearReconnectTimer()
       if (!sessionActiveRef.current) return
 
+      // fullReload chỉ khi user bấm «Thử kết nối lại» — không dùng khi fail tự động
+      // (tránh vòng lặp vô hạn boot lại SDK).
       if (fullReload) {
         reconnectAttemptRef.current = 0
+        setLastError(null)
         setBootToken((t) => t + 1)
         return
       }
@@ -510,15 +522,31 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const creds = sipCredsRef.current
       if (!creds) return
 
+      // Đã dừng ở lỗi cứng — không tự nối tiếp.
+      if (connectionStatusRef.current === 'error' && reconnectAttemptRef.current >= 5) {
+        return
+      }
+
       const attempt = reconnectAttemptRef.current
-      const delayMs = Math.min(2000 * 1.45 ** attempt, 25_000)
+      if (attempt >= 5) {
+        setSipReady(false)
+        setConnectionStatus('error')
+        setConnectionLabel('Không kết nối được tổng đài')
+        setLastError(
+          (prev) =>
+            prev ||
+            `SIP đăng ký thất bại sau ${attempt} lần (domain «${creds.sipRealm}», số «${creds.sipUser}»). Kiểm tra mật khẩu số nội bộ / domain trên OMICall, rồi bấm «Thử kết nối lại».`,
+        )
+        return
+      }
+
+      const delayMs = Math.min(1500 * 1.5 ** attempt, 12_000)
 
       setSipReady(false)
       setConnectionStatus('registering')
       setConnectionLabel(
-        attempt === 0 ? 'Đang giữ kết nối tổng đài…' : `Đang kết nối lại tổng đài (lần ${attempt + 1})…`,
+        attempt === 0 ? 'Đang đăng ký số nội bộ…' : `Đang thử lại kết nối (lần ${attempt + 1}/5)…`,
       )
-      setLastError(null)
 
       reconnectTimerRef.current = setTimeout(() => {
         reconnectTimerRef.current = null
@@ -527,7 +555,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         const s = sdkRef.current
         const c = sipCredsRef.current
         if (!s || !c) {
-          scheduleAutoReconnectRef.current(true)
+          setConnectionStatus('error')
+          setConnectionLabel('SDK chưa sẵn sàng')
+          setLastError('Không tải được OMICall SDK — tải lại trang hoặc bấm «Thử kết nối lại».')
+          reconnectAttemptRef.current = 5
           return
         }
 
@@ -542,24 +573,28 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           .then((reg) => {
             if (!sessionActiveRef.current) return
             if (!reg.status) {
-              if (reconnectAttemptRef.current >= 8) {
-                reconnectAttemptRef.current = 0
+              const detail =
+                reg.error || reg.message || 'Đăng ký tổng đài thất bại (sai mật khẩu / domain / số nội bộ?).'
+              setLastError(
+                `${detail} — đang dùng domain «${c.sipRealm}», số «${c.sipUser}».`,
+              )
+              if (reconnectAttemptRef.current >= 5) {
                 setConnectionStatus('error')
                 setConnectionLabel(reg.message || 'Chưa kết nối được tổng đài')
-                setLastError(reg.error || reg.message || 'Đăng ký tổng đài thất bại — thử «Kết nối lại».')
-                scheduleAutoReconnectRef.current(true)
               } else {
                 scheduleAutoReconnectRef.current()
               }
               return
             }
-            setConnectionLabel('Đang chờ tổng đài xác nhận… (Sẵn sàng gọi)')
+            setConnectionLabel('Đang chờ tổng đài xác nhận…')
           })
-          .catch(() => {
+          .catch((e) => {
             if (!sessionActiveRef.current) return
-            if (reconnectAttemptRef.current >= 6) {
-              reconnectAttemptRef.current = 0
-              scheduleAutoReconnectRef.current(true)
+            const msg = e instanceof Error ? e.message : String(e)
+            setLastError(`${msg} — domain «${c.sipRealm}», số «${c.sipUser}».`)
+            if (reconnectAttemptRef.current >= 5) {
+              setConnectionStatus('error')
+              setConnectionLabel('Lỗi kết nối tổng đài')
             } else {
               scheduleAutoReconnectRef.current()
             }
@@ -679,19 +714,23 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         if (cancelled) return
         if (!reg.status) {
           setSipReady(false)
+          const detail =
+            reg.error || reg.message || 'Đăng ký tổng đài thất bại'
+          setLastError(
+            `${detail} — domain «${sipCreds.sipRealm}», số «${sipCreds.sipUser}». Kiểm tra mật khẩu SIP trên OMICall.`,
+          )
           setConnectionStatus('registering')
           setConnectionLabel(reg.message || 'Đang thử kết nối tổng đài…')
-          setLastError(null)
           scheduleAutoReconnectRef.current()
           return
         }
-        setConnectionLabel('Đang chờ tổng đài xác nhận… (Sẵn sàng gọi)')
+        setConnectionLabel('Đang chờ tổng đài xác nhận…')
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
+        setLastError(`${msg} — domain «${sipCreds.sipRealm}», số «${sipCreds.sipUser}».`)
         setConnectionStatus('registering')
         setConnectionLabel('Lỗi kết nối — đang thử lại…')
-        setLastError(msg)
         scheduleAutoReconnectRef.current()
       }
     })()
@@ -736,7 +775,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       if (!sessionActiveRef.current) return
       if (sipReadyRef.current) return
       const st = connectionStatusRef.current
-      if (st === 'loading' || st === 'registering') return
+      // Đừng tự nối lại khi đã dừng ở lỗi cứng — tránh vòng lặp vô hạn.
+      if (st === 'loading' || st === 'registering' || st === 'error' || st === 'off') return
       scheduleAutoReconnectRef.current()
     }
 
@@ -978,7 +1018,14 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     while (Date.now() < deadline) {
       if (sipReadyRef.current && sdkRef.current) return true
       const st = connectionStatusRef.current
-      if (st === 'error' || st === 'off' || st === 'ready') {
+      if (st === 'off') return false
+      if (st === 'error') {
+        // Một lần full reload khi user đang cố gọi — không lặp trong vòng chờ.
+        if (reconnectAttemptRef.current < 5) scheduleAutoReconnectRef.current(true)
+        await new Promise((r) => setTimeout(r, 800))
+        continue
+      }
+      if (st === 'ready') {
         scheduleAutoReconnectRef.current()
       }
       await new Promise((r) => setTimeout(r, 450))

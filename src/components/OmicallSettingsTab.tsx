@@ -239,7 +239,8 @@ export function OmicallSettingsTab() {
     Boolean(projectId && draft.webhookSecret?.trim()) &&
     config.webhookRegisteredUrl === buildOmicallWebhookUrl(projectId, draft.webhookSecret!.trim())
 
-  const sipReady = Boolean(resolveOmicallSipCredentials(draft, profile))
+  const resolvedSip = useMemo(() => resolveOmicallSipCredentials(draft, profile), [draft, profile])
+  const sipReady = Boolean(resolvedSip)
   const sipMissingHint = describeMissingOmicallSipParts(draft, profile)
 
   const setupSteps = [
@@ -473,7 +474,18 @@ export function OmicallSettingsTab() {
             {sipMissingHint}
           </p>
         ) : null}
-        {lastError ? <p className="mt-2 text-xs text-red-700">{lastError}</p> : null}
+        {resolvedSip ? (
+          <p className="mt-2 text-xs text-slate-600">
+            Đang dùng domain <span className="font-mono text-slate-800">{resolvedSip.sipRealm}</span>, số nội bộ{' '}
+            <span className="font-mono text-slate-800">{resolvedSip.sipUser}</span>
+            {resolvedSip.sipPassword ? ' (đã có mật khẩu)' : ' (chưa có mật khẩu)'}
+          </p>
+        ) : null}
+        {lastError ? (
+          <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+            {lastError}
+          </p>
+        ) : null}
         {lastCallHint ? <p className="mt-2 text-xs text-slate-700">{lastCallHint}</p> : null}
         {connectionStatus === 'connected' ? (
           <p className="mt-2 text-xs text-emerald-800">Đã kết nối tổng đài — có thể gọi từ hồ sơ.</p>
@@ -487,6 +499,12 @@ export function OmicallSettingsTab() {
             Thử kết nối lại
           </button>
         )}
+        {connectionStatus === 'error' ? (
+          <p className="mt-2 text-xs text-slate-500">
+            App đã dừng tự kết nối lại. Sửa domain / số / mật khẩu trên OMICall (hoặc «Đồng bộ số theo email tôi»),
+            rồi bấm «Thử kết nối lại».
+          </p>
+        ) : null}
         {configLoading ? <p className="mt-2 text-xs text-slate-500">Đang đọc cấu hình…</p> : null}
       </section>
 
