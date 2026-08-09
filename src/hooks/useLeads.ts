@@ -129,10 +129,10 @@ export const MAX_FULL_SCOPE_LEADS = 25_000
 export const LEADS_UI_FULL_SCOPE_MAX = 1500
 
 /**
- * Khi lọc chương trình (kể cả «Chưa gắn»): quét sâu theo documentId để tìm khớp,
- * không chỉ lấy 1500 hồ sơ `updatedAt` mới nhất rồi lọc client (bỏ lỡ hồ sơ cũ).
+ * Chỉ dùng khi lọc «Chưa gắn chương trình» (thiếu field — không query server được).
+ * Trần quét vừa đủ tìm hồ sơ cũ, tránh treo UI với hàng trăm nghìn getDocs.
  */
-export const LEADS_UI_PROGRAM_SCAN_MAX = 100_000
+export const LEADS_UI_PROGRAM_SCAN_MAX = 12_000
 
 /** Cap riêng cho Dashboard TVV — chỉ khi lọc client bắt buộc (follow-up / HOT SLA / chưa gán). */
 export const DASHBOARD_FULL_SCOPE_MAX = 1000

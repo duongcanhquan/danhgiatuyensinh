@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useDeferredValue, useMemo } from 'react'
 import type { Lead, PriorityTag, ProfileCustomScoringSignal } from '../types'
 import { evaluateLead, leadToEvaluationRecord, type EvaluateLeadOptions, type MasterDataBuckets } from '../utils/scoring'
 import type { InfoScoreRuntime } from '../utils/infoScoreRules'
@@ -81,10 +81,13 @@ export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
     [infoScoreRuntime, classificationRuntime],
   )
 
+  // Defer chấm điểm khi danh sách lớn thay đổi — giữ UI bấm/lọc mượt.
+  const deferredLeads = useDeferredValue(leads)
+
   const scoreByLeadId = useMemo(() => {
     const m = new Map<string, LeadScorePreview>()
     if (!activeScoringProfile) return m
-    for (const l of leads) {
+    for (const l of deferredLeads) {
       try {
         m.set(
           l.id,
@@ -101,7 +104,7 @@ export function useLeadScoring(leads: Lead[], options?: UseLeadScoringOptions) {
       }
     }
     return m
-  }, [leads, activeScoringProfile, masterBuckets, schoolTvvSignalDefs, evalOpts])
+  }, [deferredLeads, activeScoringProfile, masterBuckets, schoolTvvSignalDefs, evalOpts])
 
   return {
     scoringProfiles,

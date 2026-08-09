@@ -2,7 +2,6 @@ import type { MouseEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
-import { motion } from 'motion/react'
 import { BookOpen, Bot, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, Library, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
@@ -363,6 +362,7 @@ export function LeadManagement() {
   const [crmStatusFilter, setCrmStatusFilter] = useState<string>('ALL')
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
   const [sourceCatalogRequested, setSourceCatalogRequested] = useState(false)
+  const [programCatalogRequested, setProgramCatalogRequested] = useState(false)
   /** ALL | __UNSET__ | nhãn chương trình */
   const [programFilter, setProgramFilter] = useState<string>('ALL')
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
@@ -427,13 +427,13 @@ export function LeadManagement() {
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
-  /**
-   * Chương trình / đợt: luôn fullScope + lọc client.
-   * Tránh lỗi «The query requires an index» khi composite intakeProgram+orgId+updatedAt
-   * chưa kịp build trên Firestore (warmlist).
-   */
+  /** Có chọn chương trình (kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
   const programFilterActive = programFilter !== 'ALL'
-  const programNeedsScope = programFilterActive
+  /**
+   * Chỉ «Chưa gắn» cần fullScope (thiếu field — không where được).
+   * Chương trình có nhãn → lọc server `intakeProgram` + phân trang (nhanh).
+   */
+  const programNeedsScope = programFilter === '__UNSET__'
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -465,7 +465,9 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
-    // intakeProgram: luôn fullScope + lọc client (programNeedsScope) — không đẩy lên query server.
+    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') {
+      o.intakeProgram = programFilter
+    }
     if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
@@ -485,6 +487,7 @@ export function LeadManagement() {
     regionFilter,
     majorFilter,
     sourceFilter,
+    programFilter,
     schoolFilter,
     assigneeFilter,
     scoreMinInput,
@@ -499,15 +502,11 @@ export function LeadManagement() {
   const listNeedsFullScope =
     tagClientEval || callQueueNeedsScope || assigneeUnsetNeedsScope || programNeedsScope
 
-  /** Lọc chương trình: quét theo id + chỉ giữ khớp — tránh cửa sổ 1500 `updatedAt` bỏ sót hồ sơ cũ. */
-  const programFullScopeKeepMatch = useMemo(() => {
+  /** «Chưa gắn»: quét theo id + chỉ giữ hồ sơ không có intakeProgram. */
+  const unsetProgramKeepMatch = useMemo(() => {
     if (!programNeedsScope) return undefined
     return (l: Lead) => {
-      if (programFilter === '__UNSET__') {
-        if ((l.intakeProgram ?? '').trim()) return false
-      } else if (programFilter !== 'ALL') {
-        if (!intakeProgramsMatch(l.intakeProgram, programFilter)) return false
-      }
+      if ((l.intakeProgram ?? '').trim()) return false
       if (callWorkBucketFilter !== 'all' && !leadMatchesCallWorkBucket(l, callWorkBucketFilter)) {
         return false
       }
@@ -519,13 +518,7 @@ export function LeadManagement() {
       }
       return true
     }
-  }, [
-    programNeedsScope,
-    programFilter,
-    callWorkBucketFilter,
-    dispositionFilter,
-    assigneeFilter,
-  ])
+  }, [programNeedsScope, callWorkBucketFilter, dispositionFilter, assigneeFilter])
 
   const {
     leads,
@@ -554,13 +547,14 @@ export function LeadManagement() {
     maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     fullScopeOrderMode: programNeedsScope ? 'docId' : undefined,
     maxFullScopeScanDocs: programNeedsScope ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
-    fullScopeKeepMatch: programFullScopeKeepMatch,
+    fullScopeKeepMatch: unsetProgramKeepMatch,
     fullScopeMatchKey: programNeedsScope
-      ? `prog:${programFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|as:${assigneeFilter}`
+      ? `unset|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|as:${assigneeFilter}`
       : undefined,
-    includeScopeTagCounts: !tagClientEval,
+    // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
+    includeScopeTagCounts: false,
     includeScopeSourceOptions: sourceCatalogRequested,
-    includeScopeProgramOptions: true,
+    includeScopeProgramOptions: programCatalogRequested,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -631,7 +625,8 @@ export function LeadManagement() {
     if (urlQuery.trim()) return null
     if (tagClientEval) return tagCountsFromLoadedLeads
     if (scopeTagCounts) return scopeTagCounts
-    return null
+    // Ước lượng từ dữ liệu đã tải — không gọi 4× getCount mỗi lần mở Hồ sơ.
+    return tagCountsFromLoadedLeads
   }, [urlQuery, tagClientEval, scopeTagCounts, tagCountsFromLoadedLeads])
 
   const {
@@ -1000,7 +995,8 @@ export function LeadManagement() {
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
    * để «Chọn tất cả trên trang» không chọn hàng nghìn hồ sơ một lúc.
    */
-  const clientPagingActive = tagClientEval || callQueueNeedsScope
+  /** fullScope trả về cả mảng — luôn phân trang client để không mount hàng nghìn dòng. */
+  const clientPagingActive = listNeedsFullScope
   const clientPageSlice = useMemo(
     () =>
       clientPagingActive
@@ -3120,7 +3116,8 @@ export function LeadManagement() {
                 title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
                 value={draftFilters.program}
                 onFocus={() => {
-                  void fetchScopeProgramOptions()
+                  if (!programCatalogRequested) setProgramCatalogRequested(true)
+                  else void fetchScopeProgramOptions()
                 }}
                 onChange={(v) => patchDraftFilters({ program: v })}
                 options={[
@@ -3584,13 +3581,11 @@ export function LeadManagement() {
                 const callAiLine = formatLeadLastCallAiLine(l)
                 const callQueueLine = formatLeadLastCallLine(l)
                 return (
-                <motion.tr
+                <tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
-                  layout
-                  transition={{ type: 'spring', stiffness: 380, damping: 28 }}
                   onClick={() => setSelected(l)}
                   title="Bấm để xem chi tiết: hồ sơ sinh viên, ghi chú, đánh giá, lịch sử tương tác, AI…"
-                  className="group cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
+                  className="group cursor-pointer border-b border-slate-100 hover:bg-amber-50/50"
                 >
                   <td
                     className="sticky left-0 z-[2] bg-white px-0.5 py-1.5 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)] group-hover:bg-amber-50/90"
@@ -3681,9 +3676,7 @@ export function LeadManagement() {
                     <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
                   </td>
                   <td className="px-1.5 py-1.5">
-                    <motion.span layout key={`${l.id}-${displayTag}`}>
-                      <TagBadge tag={displayTag} />
-                    </motion.span>
+                    <TagBadge tag={displayTag} />
                   </td>
                   <td
                     className="truncate px-1.5 py-1.5 text-slate-600"
@@ -3691,7 +3684,7 @@ export function LeadManagement() {
                   >
                     {formatAssignedCounselorLabel(l, counselorDisplayNameById)}
                   </td>
-                </motion.tr>
+                </tr>
                 )
               })}
             </tbody>
