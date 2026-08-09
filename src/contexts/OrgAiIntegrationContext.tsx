@@ -10,6 +10,7 @@ import {
   saveOrgAiIntegration,
 } from '../services/orgAiIntegration'
 import { setOrgAiIntegrationCache } from '../utils/aiEngine'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 import { useAuth } from '../hooks/useAuth'
 
 type Ctx = {
@@ -57,28 +58,31 @@ export function OrgAiIntegrationProvider({ children }: { children: ReactNode }) 
       setLoading(false)
       return
     }
-    setLoading(true)
+    setLoading(false)
     setError(null)
     const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_ORG_AI_DOC_ID)
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        const exists = snap.exists()
-        setDocExists(exists)
-        const parsed = exists ? parseOrgAiIntegrationDoc(snap.data() as Record<string, unknown>) : null
-        setOrgConfig(parsed)
-        setOrgAiIntegrationCache(parsed)
-        setLoading(false)
-      },
-      (e) => {
-        console.error(e)
-        setError('Không đọc được cấu hình AI toàn trường (scoringAux/orgAiIntegration).')
-        setOrgAiIntegrationCache(null)
-        setOrgConfig(null)
-        setLoading(false)
-      },
+    return scheduleIdleAttach(
+      () =>
+        onSnapshot(
+          ref,
+          (snap) => {
+            const exists = snap.exists()
+            setDocExists(exists)
+            const parsed = exists ? parseOrgAiIntegrationDoc(snap.data() as Record<string, unknown>) : null
+            setOrgConfig(parsed)
+            setOrgAiIntegrationCache(parsed)
+            setLoading(false)
+          },
+          (e) => {
+            console.error(e)
+            setError('Không đọc được cấu hình AI toàn trường (scoringAux/orgAiIntegration).')
+            setOrgAiIntegrationCache(null)
+            setOrgConfig(null)
+            setLoading(false)
+          },
+        ),
+      { timeoutMs: 2_000 },
     )
-    return () => unsub()
   }, [])
 
   const saveOrgConfig = useCallback(

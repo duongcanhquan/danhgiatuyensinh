@@ -362,7 +362,6 @@ export function SettingsView() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { profiles } = useScoringProfiles()
   const { catalogs, byKind, loading: mdLoading, error: mdError } = useMasterData()
-  const { playbooks, loading: pbLoading, error: pbError } = useConsultingPlaybooks()
 
   const [demoJson, setDemoJson] = useState(
     '{"province":"Điện Biên","majorInterest":"Công nghệ thông tin","academicLevel":"Giỏi","schoolType":"Liên kết / hợp tác"}',
@@ -584,6 +583,9 @@ export function SettingsView() {
   }, [db, editSnippetParam, tabParam, subParam, settingsAccessCtx])
   const activeMainTab = route.main
   const activeSubTab = route.sub
+  const { playbooks, loading: pbLoading, error: pbError } = useConsultingPlaybooks({
+    enabled: activeMainTab === 'connect' && activeSubTab === 'consulting',
+  })
 
   const mainTabs = useMemo(() => enabledMainTabs(settingsAccessCtx), [settingsAccessCtx])
   const subTabs = useMemo(

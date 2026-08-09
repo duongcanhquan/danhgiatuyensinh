@@ -14,6 +14,7 @@ import type { MasterCatalogDefinition, MasterDataEntry } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { processMasterDataDocs } from '../utils/masterDataRegistry'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 const MASTER_SNAPSHOT_DEBOUNCE_MS = 80
 
@@ -85,34 +86,36 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
       })
     }
 
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        pendingSnapRef.current = snap
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-        const flush = () => {
+    const unsubIdle = scheduleIdleAttach(() =>
+      onSnapshot(
+        q,
+        (snap) => {
+          pendingSnapRef.current = snap
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+          const flush = () => {
+            debounceTimerRef.current = null
+            const latest = pendingSnapRef.current
+            pendingSnapRef.current = null
+            if (latest) applySnapshot(latest)
+          }
+          if (isFirstMasterSnapRef.current) {
+            isFirstMasterSnapRef.current = false
+            flush()
+            return
+          }
+          debounceTimerRef.current = setTimeout(flush, MASTER_SNAPSHOT_DEBOUNCE_MS)
+        },
+        (err) => {
+          console.error(err)
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
           debounceTimerRef.current = null
-          const latest = pendingSnapRef.current
-          pendingSnapRef.current = null
-          if (latest) applySnapshot(latest)
-        }
-        if (isFirstMasterSnapRef.current) {
-          isFirstMasterSnapRef.current = false
-          flush()
-          return
-        }
-        debounceTimerRef.current = setTimeout(flush, MASTER_SNAPSHOT_DEBOUNCE_MS)
-      },
-      (err) => {
-        console.error(err)
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-        debounceTimerRef.current = null
-        setError(err.message || 'Lỗi đọc masterData')
-        setLoading(false)
-      },
+          setError(err.message || 'Lỗi đọc masterData')
+          setLoading(false)
+        },
+      ),
     )
     return () => {
-      unsub()
+      unsubIdle()
       isFirstMasterSnapRef.current = true
       lastSigRef.current = null
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)

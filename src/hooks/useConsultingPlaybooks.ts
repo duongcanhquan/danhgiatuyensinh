@@ -37,13 +37,23 @@ function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlayb
   }
 }
 
-export function useConsultingPlaybooks() {
+export function useConsultingPlaybooks(opts?: { enabled?: boolean }) {
+  const enabled = opts?.enabled !== false
   const [playbooks, setPlaybooks] = useState<ConsultingPlaybook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const configured = useMemo(() => isFirebaseConfigured(), [])
 
   useEffect(() => {
+    if (!enabled) {
+      queueMicrotask(() => {
+        setPlaybooks([])
+        setLoading(false)
+        setError(null)
+      })
+      return
+    }
+
     const firestore = getFirestoreDb()
     if (!firestore) {
       queueMicrotask(() => {
@@ -54,6 +64,7 @@ export function useConsultingPlaybooks() {
       return
     }
 
+    setLoading(true)
     const q = query(collection(firestore, FS_COLLECTIONS.consultingPlaybooks))
     const unsub = onSnapshot(
       q,
@@ -74,7 +85,7 @@ export function useConsultingPlaybooks() {
       },
     )
     return () => unsub()
-  }, [configured])
+  }, [configured, enabled])
 
   return { playbooks, loading, error }
 }

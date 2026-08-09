@@ -10,6 +10,7 @@ import {
   mergeCallEvaluationConfig,
   parseCallEvaluationConfigDoc,
 } from '../utils/callSessionEvaluation'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 type Ctx = {
   dimensions: CallEvalDimension[]
@@ -53,27 +54,30 @@ export function CallSessionConfigProvider({ children }: { children: ReactNode })
       setLoading(false)
       return
     }
-    setLoading(true)
+    setLoading(false)
     setError(null)
     const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_CALL_SESSION_DOC_ID)
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        const exists = snap.exists()
-        const parsed = exists ? parseCallEvaluationConfigDoc(snap.data() as Record<string, unknown>) : null
-        setConfigFromRemote(Boolean(parsed))
-        setDimensions(mergeCallEvaluationConfig(parsed))
-        setLoading(false)
-      },
-      (e) => {
-        console.error(e)
-        setError('Không đọc được bảng đánh giá cuộc gọi.')
-        setDimensions(getDefaultCallEvaluationConfig())
-        setConfigFromRemote(false)
-        setLoading(false)
-      },
+    return scheduleIdleAttach(
+      () =>
+        onSnapshot(
+          ref,
+          (snap) => {
+            const exists = snap.exists()
+            const parsed = exists ? parseCallEvaluationConfigDoc(snap.data() as Record<string, unknown>) : null
+            setConfigFromRemote(Boolean(parsed))
+            setDimensions(mergeCallEvaluationConfig(parsed))
+            setLoading(false)
+          },
+          (e) => {
+            console.error(e)
+            setError('Không đọc được bảng đánh giá cuộc gọi.')
+            setDimensions(getDefaultCallEvaluationConfig())
+            setConfigFromRemote(false)
+            setLoading(false)
+          },
+        ),
+      { timeoutMs: 2_000 },
     )
-    return () => unsub()
   }, [])
 
   const saveDimensions = useCallback(async (next: CallEvalDimension[]) => {

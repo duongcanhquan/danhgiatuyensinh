@@ -171,16 +171,15 @@ async function loadPublicRegistrationConfig(
     }
   }
 
-  // Bản copy orgSettings hay để enabled:false trong khi scoringAux vẫn đang bật — OR để cổng không bị «tạm đóng» giả.
-  if (orgCfg && legacyCfg) {
+  // Có doc orgSettings → org thắng (tắt/mở đúng sau Lưu). Chỉ fallback scoringAux khi chưa có bản org.
+  if (orgCfg) {
     return {
-      ...legacyCfg,
+      ...(legacyCfg ?? {}),
       ...orgCfg,
-      enabled: orgCfg.enabled || legacyCfg.enabled,
+      enabled: orgCfg.enabled,
       orgId: resolvedOrg,
     }
   }
-  if (orgCfg) return { ...orgCfg, orgId: resolvedOrg }
   if (legacyCfg) return { ...legacyCfg, orgId: resolvedOrg }
   return { ...parseConfig(undefined), orgId: resolvedOrg, enabled: false }
 }

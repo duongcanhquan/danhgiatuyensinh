@@ -767,7 +767,7 @@ export function DataIntake() {
               «Người phụ trách»: khớp → gán đúng; không khớp → Admin — điều chuyển sau tại «Hồ sơ».
             </div>
 
-            <div className="flex justify-center pt-1">
+            <div className="flex flex-col items-center gap-1.5 pt-1">
               <button
                 type="button"
                 disabled={
@@ -786,6 +786,13 @@ export function DataIntake() {
                 <Upload className="h-4 w-4 shrink-0" aria-hidden />
                 Xác nhận nhập ({previewStats.acceptedNew})
               </button>
+              {previewStats.acceptedNew === 0 ? (
+                <p className="text-center text-xs text-slate-600">Không có dòng mới để nhập.</p>
+              ) : !normalizeIntakeProgramLabel(intakeProgram) ? (
+                <p className="text-center text-xs font-medium text-rose-700">
+                  Điền «Chương trình / đợt» bên dưới rồi mới xác nhận được.
+                </p>
+              ) : null}
             </div>
           </div>
           ) : null}

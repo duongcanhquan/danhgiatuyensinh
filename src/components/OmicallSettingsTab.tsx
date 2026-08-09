@@ -58,6 +58,7 @@ export function OmicallSettingsTab() {
   } = useOmicall()
 
   const [draft, setDraft] = useState<OmicallIntegrationConfig>(config)
+  const [draftDirty, setDraftDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [quickBusy, setQuickBusy] = useState(false)
   const [webhookBusy, setWebhookBusy] = useState(false)
@@ -76,10 +77,12 @@ export function OmicallSettingsTab() {
   }, [draft.webhookSecret, projectId])
 
   useEffect(() => {
+    if (draftDirty) return
     setDraft(config)
-  }, [config])
+  }, [config, draftDirty])
 
   const patch = useCallback((partial: Partial<OmicallIntegrationConfig>) => {
+    setDraftDirty(true)
     setDraft((d) => ({ ...d, ...partial }))
   }, [])
 
@@ -125,6 +128,7 @@ export function OmicallSettingsTab() {
     try {
       await saveConfig(payload)
       setDraft(payload)
+      setDraftDirty(false)
       // Ghi mặc định vào hồ sơ đang đăng nhập — nếu không, số cũ trên hồ sơ (vd. 112) vẫn thắng.
       const appliedSip = await applyDefaultsToMyProfile(payload)
       if (canEdit && payload.enabled && payload.apiKey?.trim() && payload.webhookSecret?.trim()) {
@@ -234,6 +238,7 @@ export function OmicallSettingsTab() {
       )
       await saveConfig(toSave)
       setDraft(toSave)
+      setDraftDirty(false)
       const bootstrap = await runOmicallAdminBootstrap({
         config: toSave,
         projectId: getFirebaseApp()?.options.projectId ?? '',
@@ -275,6 +280,7 @@ export function OmicallSettingsTab() {
       if (!configFromRemote || payload.webhookSecret !== draft.webhookSecret || !draft.webhookSecret?.trim()) {
         await saveConfig(payload)
         setDraft(payload)
+        setDraftDirty(false)
       }
       const r = await registerOmicallWebhookOnServer()
       setMsg(r.message || 'Đã đăng ký webhook trên OMICall.')
@@ -452,8 +458,9 @@ export function OmicallSettingsTab() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={quickBusy || busy}
+              disabled={quickBusy || busy || configLoading}
               onClick={() => void runQuickSetup()}
+              title={configLoading ? 'Đang đọc cấu hình từ server…' : undefined}
               className="inline-flex items-center gap-2 rounded-xl bg-sky-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-900 disabled:opacity-50"
             >
               <Sparkles className="h-4 w-4" aria-hidden />
@@ -461,8 +468,9 @@ export function OmicallSettingsTab() {
             </button>
             <button
               type="button"
-              disabled={busy || quickBusy}
+              disabled={busy || quickBusy || configLoading}
               onClick={() => void onSave()}
+              title={configLoading ? 'Đang đọc cấu hình từ server…' : undefined}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
             >
               <Save className="h-4 w-4" aria-hidden />

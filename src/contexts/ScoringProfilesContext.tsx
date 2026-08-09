@@ -5,6 +5,7 @@ import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { mapScoringProfileDoc } from '../utils/scoringProfileFirestore'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 type ScoringProfilesState = {
   profiles: ScoringProfile[]
@@ -33,26 +34,27 @@ export function ScoringProfilesProvider({ children }: { children: ReactNode }) {
     }
 
     const q = query(collection(firestore, FS_COLLECTIONS.scoringProfiles))
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next: ScoringProfile[] = []
-        snap.forEach((d) => {
-          const p = mapScoringProfileDoc(d.id, d.data() as Record<string, unknown>)
-          if (p) next.push(p)
-        })
-        next.sort((a, b) => a.profileName.localeCompare(b.profileName, 'vi'))
-        setProfiles(next)
-        setLoading(false)
-        setError(null)
-      },
-      (err) => {
-        console.error(err)
-        setError(err.message || 'Lỗi đọc scoringProfiles')
-        setLoading(false)
-      },
+    return scheduleIdleAttach(() =>
+      onSnapshot(
+        q,
+        (snap) => {
+          const next: ScoringProfile[] = []
+          snap.forEach((d) => {
+            const p = mapScoringProfileDoc(d.id, d.data() as Record<string, unknown>)
+            if (p) next.push(p)
+          })
+          next.sort((a, b) => a.profileName.localeCompare(b.profileName, 'vi'))
+          setProfiles(next)
+          setLoading(false)
+          setError(null)
+        },
+        (err) => {
+          console.error(err)
+          setError(err.message || 'Lỗi đọc scoringProfiles')
+          setLoading(false)
+        },
+      ),
     )
-    return () => unsub()
   }, [configured])
 
   const value = useMemo(

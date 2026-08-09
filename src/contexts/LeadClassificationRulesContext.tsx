@@ -11,6 +11,7 @@ import {
   parseLeadClassificationDoc,
   type LeadClassificationRuntime,
 } from '../utils/leadClassificationConfig'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 type Ctx = {
   merged: LeadClassificationConfigPersisted
@@ -44,25 +45,26 @@ export function LeadClassificationRulesProvider({ children }: { children: ReactN
       setLoading(false)
       return
     }
-    setLoading(true)
+    setLoading(false)
     const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_LEAD_CLASSIFICATION_DOC_ID)
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        const parsed = snap.exists() ? parseLeadClassificationDoc(snap.data() as Record<string, unknown>) : null
-        setRulesFromRemote(Boolean(parsed))
-        setMerged(mergeLeadClassificationConfig(parsed))
-        setLoading(false)
-      },
-      (e) => {
-        console.error(e)
-        setError('Không đọc được cấu hình phân loại nhãn.')
-        setMerged(getDefaultLeadClassificationConfig())
-        setRulesFromRemote(false)
-        setLoading(false)
-      },
+    return scheduleIdleAttach(() =>
+      onSnapshot(
+        ref,
+        (snap) => {
+          const parsed = snap.exists() ? parseLeadClassificationDoc(snap.data() as Record<string, unknown>) : null
+          setRulesFromRemote(Boolean(parsed))
+          setMerged(mergeLeadClassificationConfig(parsed))
+          setLoading(false)
+        },
+        (e) => {
+          console.error(e)
+          setError('Không đọc được cấu hình phân loại nhãn.')
+          setMerged(getDefaultLeadClassificationConfig())
+          setRulesFromRemote(false)
+          setLoading(false)
+        },
+      ),
     )
-    return () => unsub()
   }, [])
 
   const runtime = useMemo(() => buildLeadClassificationRuntime(merged), [merged])

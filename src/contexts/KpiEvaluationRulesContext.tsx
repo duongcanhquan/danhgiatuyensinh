@@ -11,6 +11,7 @@ import {
   parseKpiEvaluationDoc,
   type KpiEvaluationRuntime,
 } from '../utils/kpiEvaluationRules'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 type Ctx = {
   merged: KpiEvaluationConfigPersisted
@@ -62,29 +63,30 @@ export function KpiEvaluationRulesProvider({ children }: { children: ReactNode }
       setLoading(false)
       return
     }
-    setLoading(true)
+    setLoading(false)
     setError(null)
     const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_KPI_EVAL_DOC_ID)
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        const exists = snap.exists()
-        setDocExists(exists)
-        const parsed = exists ? parseKpiEvaluationDoc(snap.data() as Record<string, unknown>) : null
-        setRulesFromRemote(Boolean(parsed))
-        setMerged(mergeKpiEvaluationRules(parsed))
-        setLoading(false)
-      },
-      (e) => {
-        console.error(e)
-        setError('Không đọc được cấu hình KPI (scoringAux/kpiEvaluationConfig).')
-        setMerged(getDefaultKpiEvaluationRules())
-        setDocExists(false)
-        setRulesFromRemote(false)
-        setLoading(false)
-      },
+    return scheduleIdleAttach(() =>
+      onSnapshot(
+        ref,
+        (snap) => {
+          const exists = snap.exists()
+          setDocExists(exists)
+          const parsed = exists ? parseKpiEvaluationDoc(snap.data() as Record<string, unknown>) : null
+          setRulesFromRemote(Boolean(parsed))
+          setMerged(mergeKpiEvaluationRules(parsed))
+          setLoading(false)
+        },
+        (e) => {
+          console.error(e)
+          setError('Không đọc được cấu hình KPI (scoringAux/kpiEvaluationConfig).')
+          setMerged(getDefaultKpiEvaluationRules())
+          setDocExists(false)
+          setRulesFromRemote(false)
+          setLoading(false)
+        },
+      ),
     )
-    return () => unsub()
   }, [])
 
   const runtime = useMemo(() => buildKpiEvaluationRuntime(merged), [merged])

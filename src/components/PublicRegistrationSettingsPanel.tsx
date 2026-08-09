@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { doc, getDoc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
 import { Copy, ExternalLink, Save } from 'lucide-react'
 import {
@@ -45,10 +45,16 @@ export function PublicRegistrationSettingsPanel() {
   const canEdit = can('config:master_data')
   const db = getFirestoreDb()
   const [draft, setDraft] = useState<PublicRegistrationConfig>(defaultPublicRegistrationConfig())
+  const [draftDirty, setDraftDirty] = useState(false)
+  const draftDirtyRef = useRef(false)
   const [remoteLoaded, setRemoteLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [legacyEnabledHint, setLegacyEnabledHint] = useState(false)
+
+  useEffect(() => {
+    draftDirtyRef.current = draftDirty
+  }, [draftDirty])
 
   const orgSlug = useMemo(() => {
     const hit = organizations.find((o) => o.id === effectiveOrgId)
@@ -60,6 +66,8 @@ export function PublicRegistrationSettingsPanel() {
     let cancelled = false
     setRemoteLoaded(false)
     setLegacyEnabledHint(false)
+    setDraftDirty(false)
+    draftDirtyRef.current = false
     const ref = doc(db, ...orgSettingsDocSegments(effectiveOrgId, PUBLIC_REGISTRATION_DOC_ID))
     const unsub = onSnapshot(
       ref,
@@ -68,14 +76,16 @@ export function PublicRegistrationSettingsPanel() {
         void (async () => {
           const orgParsed = parseConfig(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
           let next = orgParsed
+          let hint = false
           if (effectiveOrgId === DEFAULT_ORG_ID) {
             try {
               const legacy = await getDoc(doc(db, FS_COLLECTIONS.scoringAux, PUBLIC_REGISTRATION_DOC_ID))
               if (legacy.exists()) {
                 const leg = parseConfig(legacy.data() as Record<string, unknown>)
-                if (!orgParsed.enabled && leg.enabled) {
-                  next = { ...orgParsed, ...leg, enabled: true }
-                  setLegacyEnabledHint(true)
+                if (!snap.exists()) {
+                  next = leg
+                } else if (orgParsed.enabled !== leg.enabled) {
+                  hint = true
                 }
               }
             } catch {
@@ -83,7 +93,8 @@ export function PublicRegistrationSettingsPanel() {
             }
           }
           if (cancelled) return
-          setDraft(next)
+          setLegacyEnabledHint(hint)
+          if (!draftDirtyRef.current) setDraft(next)
           setRemoteLoaded(true)
         })()
       },
@@ -102,6 +113,7 @@ export function PublicRegistrationSettingsPanel() {
   }, [db, effectiveOrgId])
 
   const patch = useCallback((partial: Partial<PublicRegistrationConfig>) => {
+    setDraftDirty(true)
     setDraft((d) => ({ ...d, ...partial }))
   }, [])
 
@@ -142,6 +154,8 @@ export function PublicRegistrationSettingsPanel() {
         )
       }
       setDraft(payload)
+      setDraftDirty(false)
+      draftDirtyRef.current = false
       setLegacyEnabledHint(false)
       setMsg(`Đã lưu — cổng ${payload.enabled ? 'đang mở' : 'đang đóng'} tại /dang-ky/${orgSlug}.`)
     } catch (e) {
@@ -215,7 +229,8 @@ export function PublicRegistrationSettingsPanel() {
           </span>
           {legacyEnabledHint ? (
             <span className="mt-1 block text-xs font-medium text-amber-800">
-              Phát hiện cấu hình cũ đang mở — hãy bấm Lưu để đồng bộ, tránh trang công khai báo tạm đóng.
+              Bản cũ và bản trường đang lệch trạng thái mở/đóng. Cổng công khai theo bản trường — bấm Lưu để đồng bộ
+              cả hai.
             </span>
           ) : null}
         </span>

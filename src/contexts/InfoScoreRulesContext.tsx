@@ -11,6 +11,7 @@ import {
   mergeInfoScoreRules,
   parseInfoScoreDoc,
 } from '../utils/infoScoreRules'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 type Ctx = {
   merged: InfoScoreRulesPersisted
@@ -50,29 +51,31 @@ export function InfoScoreRulesProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    setLoading(true)
+    // Đừng chặn paint: dùng mặc định trước, gắn snapshot khi rảnh.
+    setLoading(false)
     setError(null)
-    const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_INFO_SCORE_DOC_ID)
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        const exists = snap.exists()
-        setDocExists(exists)
-        const parsed = exists ? parseInfoScoreDoc(snap.data() as Record<string, unknown>) : null
-        setRulesFromRemote(Boolean(parsed))
-        setMerged(mergeInfoScoreRules(parsed))
-        setLoading(false)
-      },
-      (e) => {
-        console.error(e)
-        setError('Không đọc được cấu hình điểm thông tin (scoringAux/infoScoreConfig).')
-        setMerged(getDefaultInfoScoreRules())
-        setDocExists(false)
-        setRulesFromRemote(false)
-        setLoading(false)
-      },
-    )
-    return () => unsub()
+    return scheduleIdleAttach(() => {
+      const ref = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_INFO_SCORE_DOC_ID)
+      return onSnapshot(
+        ref,
+        (snap) => {
+          const exists = snap.exists()
+          setDocExists(exists)
+          const parsed = exists ? parseInfoScoreDoc(snap.data() as Record<string, unknown>) : null
+          setRulesFromRemote(Boolean(parsed))
+          setMerged(mergeInfoScoreRules(parsed))
+          setLoading(false)
+        },
+        (e) => {
+          console.error(e)
+          setError('Không đọc được cấu hình điểm thông tin (scoringAux/infoScoreConfig).')
+          setMerged(getDefaultInfoScoreRules())
+          setDocExists(false)
+          setRulesFromRemote(false)
+          setLoading(false)
+        },
+      )
+    })
   }, [])
 
   const runtime = useMemo(() => buildInfoScoreRuntime(merged, rulesFromRemote), [merged, rulesFromRemote])
