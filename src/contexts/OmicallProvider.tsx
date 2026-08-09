@@ -16,7 +16,6 @@ import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
-import { pickOrgSettingsSnapshot } from '../tenancy/dualReadOrgSettings'
 import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
 import { readStoredActiveOrgId } from '../tenancy/activeOrgStorage'
 import {
@@ -129,16 +128,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<OmicallIntegrationConfig>(() => getDefaultOmicallConfig())
   const [configFromRemote, setConfigFromRemote] = useState(false)
   const [configLoading, setConfigLoading] = useState(true)
-  const [orgConfigSnap, setOrgConfigSnap] = useState<{
-    exists: boolean
-    data: Record<string, unknown> | null
-  }>({ exists: false, data: null })
-  const [legacyConfigSnap, setLegacyConfigSnap] = useState<{
-    exists: boolean
-    data: Record<string, unknown> | null
-  }>({ exists: false, data: null })
-  const [orgConfigReady, setOrgConfigReady] = useState(false)
-  const [legacyConfigReady, setLegacyConfigReady] = useState(false)
+  /** Chỉ đọc scoringAux khi orgSettings chưa có doc. */
+  const [needLegacyOmicall, setNeedLegacyOmicall] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<OmicallConnectionStatus>('off')
   const [connectionLabel, setConnectionLabel] = useState('Chưa bật tổng đài')
   const [lastError, setLastError] = useState<string | null>(null)
@@ -205,69 +196,63 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConfig(getDefaultOmicallConfig())
       setConfigFromRemote(false)
       setConfigLoading(false)
+      setNeedLegacyOmicall(false)
       return
     }
     const db = getFirestoreDb()
     if (!db) {
       setConfigLoading(false)
+      setNeedLegacyOmicall(false)
       return
     }
     setConfigLoading(true)
-    setOrgConfigReady(false)
-    setLegacyConfigReady(false)
+    setNeedLegacyOmicall(false)
 
     const orgRef = doc(db, ...orgSettingsDocSegments(orgKey, SCORING_AUX_OMICALL_DOC_ID))
-    const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
-
     const unsubOrg = onSnapshot(
       orgRef,
       (snap) => {
-        setOrgConfigSnap({
-          exists: snap.exists(),
-          data: snap.exists() ? (snap.data() as Record<string, unknown>) : null,
-        })
-        setOrgConfigReady(true)
+        if (snap.exists()) {
+          const parsed = parseOmicallConfigDoc(snap.data() as Record<string, unknown>)
+          setConfigFromRemote(Boolean(parsed))
+          setConfig(mergeOmicallConfig(parsed))
+          setNeedLegacyOmicall(false)
+          setConfigLoading(false)
+          return
+        }
+        setNeedLegacyOmicall(true)
       },
       (e) => {
         console.warn('[omicall] orgSettings read failed', e)
-        setOrgConfigSnap({ exists: false, data: null })
-        setOrgConfigReady(true)
+        setNeedLegacyOmicall(true)
       },
     )
-    const unsubLegacy = onSnapshot(
-      legacyRef,
-      (snap) => {
-        setLegacyConfigSnap({
-          exists: snap.exists(),
-          data: snap.exists() ? (snap.data() as Record<string, unknown>) : null,
-        })
-        setLegacyConfigReady(true)
-      },
-      (e) => {
-        console.error(e)
-        setLegacyConfigSnap({ exists: false, data: null })
-        setLegacyConfigReady(true)
-      },
-    )
-    return () => {
-      unsubOrg()
-      unsubLegacy()
-    }
+    return () => unsubOrg()
   }, [orgKey])
 
   useEffect(() => {
-    if (!orgConfigReady || !legacyConfigReady) return
-    const picked = pickOrgSettingsSnapshot({
-      orgSettingsExists: orgConfigSnap.exists,
-      orgSettingsData: orgConfigSnap.data,
-      legacyExists: legacyConfigSnap.exists,
-      legacyData: legacyConfigSnap.data,
-    })
-    const parsed = picked.data ? parseOmicallConfigDoc(picked.data) : null
-    setConfigFromRemote(Boolean(parsed))
-    setConfig(mergeOmicallConfig(parsed))
-    setConfigLoading(false)
-  }, [orgConfigReady, legacyConfigReady, orgConfigSnap, legacyConfigSnap])
+    if (!needLegacyOmicall) return
+    if (!isFirebaseConfigured()) return
+    const db = getFirestoreDb()
+    if (!db) return
+    const legacyRef = doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_OMICALL_DOC_ID)
+    const unsubLegacy = onSnapshot(
+      legacyRef,
+      (snap) => {
+        const parsed = snap.exists() ? parseOmicallConfigDoc(snap.data() as Record<string, unknown>) : null
+        setConfigFromRemote(Boolean(parsed))
+        setConfig(mergeOmicallConfig(parsed))
+        setConfigLoading(false)
+      },
+      (e) => {
+        console.error(e)
+        setConfig(getDefaultOmicallConfig())
+        setConfigFromRemote(false)
+        setConfigLoading(false)
+      },
+    )
+    return () => unsubLegacy()
+  }, [needLegacyOmicall, orgKey])
 
   const sipCreds = useMemo(
     () => (config.enabled ? resolveOmicallSipCredentials(config, profile) : null),

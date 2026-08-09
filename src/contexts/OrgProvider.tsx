@@ -8,12 +8,6 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 import { readStoredActiveOrgId, writeStoredActiveOrgId } from '../tenancy/activeOrgStorage'
-import { loadOrgN8nWebhooks } from '../utils/n8nWebhooksConfig'
-import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
-import { loadInviteDocumentsConfig } from '../utils/inviteDocumentsConfig'
-import { loadReceiptStorageConfig } from '../utils/receiptStorageConfig'
-import { loadRoleCapabilities } from '../utils/roleCapabilitiesConfig'
-import { loadCommsAutomationConfig } from '../utils/commsAutomationConfig'
 
 export type OrgOption = { id: string; name: string; slug: string; status: 'active' | 'suspended' }
 
@@ -102,20 +96,6 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     )
     return () => unsub()
   }, [isPlatformSuperAdmin])
-
-  /** Nạp webhook n8n + hub + giấy mời + chứng từ + email/tin nhắn theo trường đang chọn. */
-  useEffect(() => {
-    if (!profile) return
-    if (!isFirebaseConfigured()) return
-    const db = getFirestoreDb()
-    if (!db) return
-    void loadOrgN8nWebhooks(db, effectiveOrgId)
-    void loadOrgIntegrationHub(db, effectiveOrgId)
-    void loadInviteDocumentsConfig(db, effectiveOrgId)
-    void loadReceiptStorageConfig(db, effectiveOrgId)
-    void loadRoleCapabilities(db, effectiveOrgId)
-    void loadCommsAutomationConfig(db, effectiveOrgId)
-  }, [profile, effectiveOrgId])
 
   const currentOrgLabel = useMemo(() => {
     const hit = organizations.find((o) => o.id === effectiveOrgId)

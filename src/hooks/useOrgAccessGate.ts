@@ -44,6 +44,9 @@ export function useOrgAccessGate(profile: {
       return
     }
     let cancelled = false
+    const failOpenTimer = window.setTimeout(() => {
+      if (!cancelled) setGate({ state: 'allowed' })
+    }, 2_500)
     void (async () => {
       try {
         const snap = await getDoc(doc(db, FS_COLLECTIONS.organizations, orgId))
@@ -69,6 +72,7 @@ export function useOrgAccessGate(profile: {
     })()
     return () => {
       cancelled = true
+      window.clearTimeout(failOpenTimer)
     }
   }, [profile?.role, profile?.orgId])
 
