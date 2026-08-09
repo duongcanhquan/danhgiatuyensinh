@@ -137,6 +137,7 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
 function normalizeHeader(h: string): string {
   return h
     .replace(/^\uFEFF/, '')
+    .replace(/\u00a0/g, ' ')
     .trim()
     .toLowerCase()
     .replace(/đ/g, 'd')
@@ -148,6 +149,49 @@ function normalizeHeader(h: string): string {
     .replace(/[_/\\|]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function countFilledExcelFields(row: Partial<ExcelLeadRow>): number {
+  let n = 0
+  for (const v of Object.values(row)) {
+    if (String(v ?? '').trim()) n += 1
+  }
+  return n
+}
+
+function mergeExcelRowPreferFilled(
+  primary: Partial<ExcelLeadRow>,
+  secondary: Partial<ExcelLeadRow>,
+): Partial<ExcelLeadRow> {
+  const out: Partial<ExcelLeadRow> = { ...primary }
+  for (const [key, val] of Object.entries(secondary) as [keyof ExcelLeadRow, string | undefined][]) {
+    if (!String(val ?? '').trim()) continue
+    if (String(out[key] ?? '').trim()) continue
+    out[key] = val
+  }
+  return out
+}
+
+/** Số serial ngày Excel (1900 date system) → dd/MM/yyyy. */
+export function excelSerialToDateString(serial: number): string | null {
+  if (!Number.isFinite(serial)) return null
+  const n = Math.round(serial)
+  // Học sinh: khoảng năm ~1985–2020 → serial ~31000–45000; nới biên an toàn.
+  if (n < 25000 || n > 60000) return null
+  const utc = Date.UTC(1899, 11, 30) + n * 86400000
+  const d = new Date(utc)
+  if (Number.isNaN(d.getTime())) return null
+  const dd = String(d.getUTCDate()).padStart(2, '0')
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const yyyy = d.getUTCFullYear()
+  return `${dd}/${mm}/${yyyy}`
+}
+
+function cellToFieldString(val: unknown, field: keyof ExcelLeadRow): string {
+  if (field === 'dateOfBirth' && typeof val === 'number' && Number.isFinite(val)) {
+    return excelSerialToDateString(val) ?? excelCellToPlainString(val)
+  }
+  return excelCellToPlainString(val)
 }
 
 function isMappedRowEmpty(row: Partial<ExcelLeadRow>): boolean {
@@ -180,7 +224,8 @@ export function mapSheetRow(raw: Record<string, unknown>): Partial<ExcelLeadRow>
   for (const [header, val] of Object.entries(raw)) {
     const field = resolveFieldKey(header)
     if (!field) continue
-    out[field] = excelCellToPlainString(val)
+    const v = cellToFieldString(val, field)
+    if (v) out[field] = v
   }
   return out
 }
@@ -218,8 +263,32 @@ function mapRowByHeaderOrder(
   for (let i = 0; i < n; i++) {
     const field = resolveFieldKey(orderedHeaders[i] ?? '')
     if (!field) continue
-    const v = excelCellToPlainString(values[i])
+    const v = cellToFieldString(values[i], field)
     if (v) out[field] = v
+  }
+  return out
+}
+
+/**
+ * Map theo cột: ưu tiên tên tiêu đề thật trên file; ô nào chưa gắn được thì dùng tiêu đề mẫu cùng vị trí
+ * (vá lỗi chỉ khớp «Họ tên» rồi bỏ qua các cột còn lại).
+ */
+function mapRowHybridColumns(
+  values: unknown[],
+  actualHeaders: string[],
+  fallbackOrderedHeaders: readonly string[],
+): Partial<ExcelLeadRow> {
+  const out: Partial<ExcelLeadRow> = {}
+  const n = Math.max(values.length, actualHeaders.length, fallbackOrderedHeaders.length)
+  for (let i = 0; i < n; i++) {
+    const fromActual = resolveFieldKey(actualHeaders[i] ?? '')
+    const fromTemplate = resolveFieldKey(fallbackOrderedHeaders[i] ?? '')
+    const field = fromActual ?? fromTemplate
+    if (!field) continue
+    const v = cellToFieldString(values[i], field)
+    if (!v) continue
+    if (String(out[field] ?? '').trim()) continue
+    out[field] = v
   }
   return out
 }
@@ -235,34 +304,57 @@ function sheetMappedRows(
     range: headerRowIndex,
   })
   let rows = json.map((row) => mapSheetRow(row)).filter((row) => !isMappedRowEmpty(row))
-  if (rows.length > 0) return rows
 
-  // Chỉ fallback theo thứ tự cột khi hàng tiêu đề gần như không khớp alias
-  // (tránh coi dòng chữ «Báo cáo…» là tiêu đề rồi nuốt cả cột header thành dữ liệu).
-  if (fallbackOrderedHeaders?.length) {
-    const headers = sheetHeaderCells(sheet, headerRowIndex)
-    const nonEmptyHeaders = headers.filter((h) => h.trim())
-    const aliasHits = nonEmptyHeaders.filter((h) => resolveFieldKey(h)).length
-    const minCols = Math.min(4, fallbackOrderedHeaders.length)
-    if (aliasHits === 0 && nonEmptyHeaders.length >= minCols) {
-      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-        header: 1,
-        defval: '',
-        raw: true,
-        range: headerRowIndex,
-      })
-      if (aoa.length >= 2) {
-        rows = aoa
-          .slice(1)
-          .map((line) => {
-            const vals = Array.isArray(line) ? line : []
-            return mapRowByHeaderOrder(vals, [...fallbackOrderedHeaders])
-          })
-          .filter((row) => Boolean((row.fullName ?? '').trim() || (row.phone ?? '').trim()))
+  if (!fallbackOrderedHeaders?.length) return rows
+
+  const headers = sheetHeaderCells(sheet, headerRowIndex)
+  const nonEmptyHeaders = headers.filter((h) => h.trim())
+  const aliasHits = nonEmptyHeaders.filter((h) => resolveFieldKey(h)).length
+  const expectedFieldCount = fallbackOrderedHeaders.filter((h) => resolveFieldKey(h)).length
+  const avgFilled =
+    rows.length > 0
+      ? rows.reduce((s, r) => s + countFilledExcelFields(r), 0) / rows.length
+      : 0
+  // Chỉ còn ~1–2 field (thường chỉ họ tên) trong khi mẫu có nhiều cột → cần map lại theo vị trí/mẫu.
+  const sparse =
+    rows.length === 0 ||
+    (expectedFieldCount >= 4 && avgFilled < Math.max(3, Math.ceil(expectedFieldCount * 0.45)))
+
+  if (!sparse && rows.length > 0) return rows
+
+  const minCols = Math.min(4, fallbackOrderedHeaders.length)
+  if (nonEmptyHeaders.length < minCols && rows.length > 0) return rows
+
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: true,
+    range: headerRowIndex,
+  })
+  if (aoa.length < 2) return rows
+
+  const hybridRows = aoa
+    .slice(1)
+    .map((line) => {
+      const vals = Array.isArray(line) ? line : []
+      if (aliasHits === 0) {
+        return mapRowByHeaderOrder(vals, [...fallbackOrderedHeaders])
       }
-    }
+      return mapRowHybridColumns(vals, headers, fallbackOrderedHeaders)
+    })
+    .filter((row) => Boolean((row.fullName ?? '').trim() || (row.phone ?? '').trim()))
+
+  if (!hybridRows.length) return rows
+
+  if (!rows.length) return hybridRows
+
+  if (hybridRows.length === rows.length) {
+    return rows.map((r, i) => mergeExcelRowPreferFilled(r, hybridRows[i] ?? {}))
   }
-  return rows
+
+  const hybridAvg =
+    hybridRows.reduce((s, r) => s + countFilledExcelFields(r), 0) / hybridRows.length
+  return hybridAvg > avgFilled ? hybridRows : rows
 }
 
 export type ParseWorkbookDiag = {
@@ -462,6 +554,8 @@ export function buildLeadFirestorePayload(
     gradeClass: row.gradeClass ?? '',
     province: row.province ?? '',
     address: row.address ?? '',
+    // Form hồ sơ ưu tiên permanentAddress — đồng bộ khi nhập Excel có «địa chỉ».
+    ...(row.address?.trim() ? { permanentAddress: row.address.trim() } : {}),
     calculatedScore,
     priorityTag,
     uniqueHash: identity?.uniqueHash ?? '',

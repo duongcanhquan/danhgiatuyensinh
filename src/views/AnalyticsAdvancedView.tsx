@@ -434,6 +434,7 @@ export function AnalyticsAdvancedView() {
             aggregates={callEvalStats.aggregates}
             loading={callEvalStats.loading}
             error={callEvalStats.error}
+            notice={callEvalStats.notice}
             days={90}
             scopeLabel={counselorUid ? scopeLabel : 'Đánh giá gọi'}
           />

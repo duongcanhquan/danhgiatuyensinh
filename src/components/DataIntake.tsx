@@ -4,8 +4,6 @@ import {
   collection,
   doc,
   getDocs,
-  limit,
-  orderBy,
   query,
   Timestamp,
   where,
@@ -32,7 +30,8 @@ import {
 import { evaluateLead, evaluationRecordFromLeadLike } from '../utils/scoring'
 import { evaluateLeadWithClassification, classificationFirestorePatch } from '../utils/leadClassificationScore'
 import { partialLeadFromExcelRow } from '../utils/scoringLeadInput'
-import { countAssignments, pickCounselorByLowestLoad, pickPrimaryAdminUid } from '../utils/routing'
+import { resolveImportAssigneeUid } from '../utils/importAssignee'
+import { pickPrimaryAdminUid } from '../utils/routing'
 import {
   computeLeadUniqueHash,
   leadDedupeStrength,
@@ -54,7 +53,6 @@ import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesC
 /** Giới hạn Firestore mỗi batch commit. */
 const BATCH_SIZE = 500
 /** Mẫu lead gần đây để cân bằng tải TVV khi import (tránh phụ thuộc listener paginated). */
-const ROUTING_ASSIGNMENT_SAMPLE = 500
 /** Firestore `in` tối đa 30 giá trị; chunk lớn hơn = ít round-trip hơn. */
 const IN_QUERY_CHUNK = 30
 /** Số truy vấn `in` chạy song song (Firestore cho tối đa 30 giá trị/`in`). */
@@ -157,29 +155,6 @@ async function fetchExistingIdsByHash(
   return map
 }
 
-async function fetchAssignmentCountsForImport(
-  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
-): Promise<Map<string, number>> {
-  const q = query(
-    collection(db, FS_COLLECTIONS.leads),
-    orderBy('updatedAt', 'desc'),
-    limit(ROUTING_ASSIGNMENT_SAMPLE),
-  )
-  const snap = await getDocs(q)
-  const minimal: { assignedCounselorId: string | null }[] = []
-  snap.forEach((d) => {
-    const data = d.data()
-    const id =
-      data.assignedTo === null || data.assignedTo === undefined || data.assignedTo === ''
-        ? data.assignedCounselorId === null || data.assignedCounselorId === undefined
-          ? null
-          : String(data.assignedCounselorId)
-        : String(data.assignedTo)
-    minimal.push({ assignedCounselorId: id }) // legacy field name; mirror of assignedTo
-  })
-  return countAssignments(minimal)
-}
-
 export function DataIntake() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
@@ -188,7 +163,7 @@ export function DataIntake() {
   const { profiles } = useScoringProfiles()
   const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
   const { regionLabels, highSchoolLabels, majorLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
-  const { counselors, users: directoryUsers } = useCounselorDirectory()
+  const { users: directoryUsers } = useCounselorDirectory()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
 
@@ -268,7 +243,11 @@ export function DataIntake() {
       else if (raw) assignUnresolvedRaw += 1
       else assignEmptyRouted += 1
     }
-    const mappingSuspect = total > 0 && withPhone === 0 && withName < Math.max(1, Math.floor(total * 0.2))
+    // Nghi ngờ map cột: hầu như chỉ còn họ tên, thiếu SĐT / trường / email (lỗi Mẫu 2 cũ).
+    const mappingSuspect =
+      total > 0 &&
+      ((withPhone === 0 && withName >= Math.max(1, Math.floor(total * 0.5))) ||
+        (withPhone === 0 && withName < Math.max(1, Math.floor(total * 0.2))))
     return {
       total,
       acceptedNew,
@@ -458,7 +437,6 @@ export function DataIntake() {
     setBusy(true)
     setBanner('Đang ghi dữ liệu…')
     try {
-      const counts = await fetchAssignmentCountsForImport(db)
       const { prepared, uploadBatchId, uploadedBy, uploaderName } = preview
       const ownership = {
         uploadedBy,
@@ -488,19 +466,12 @@ export function DataIntake() {
           ? resolveAssignedCounselorUid(rawAssign, matchStaffForImport)
           : null
 
-        let counselorId: string | null = null
-        if (fromExcel) {
-          counselorId = fromExcel
-        } else if (rawAssign) {
-          importAssignUnresolved += 1
-          counselorId = adminPoolUid ?? pickCounselorByLowestLoad(counselors, counts)
-        } else {
-          counselorId = pickCounselorByLowestLoad(counselors, counts)
-        }
-
-        if (counselorId) {
-          counts.set(counselorId, (counts.get(counselorId) ?? 0) + 1)
-        }
+        if (rawAssign && !fromExcel) importAssignUnresolved += 1
+        const counselorId = resolveImportAssigneeUid({
+          rawAssign,
+          matchedCounselorUid: fromExcel,
+          adminPoolUid,
+        })
 
         const record = evaluationRecordFromLeadLike(partialLeadFromExcelRow(pr.row))
         const now = Timestamp.now()
@@ -570,8 +541,8 @@ export function DataIntake() {
         toCreate.length > 0
           ? `Đã nhập ${toCreate.length} hồ sơ mới · chương trình «${programLabel}» (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.${
               importAssignUnresolved > 0
-                ? ` Trong đó ${importAssignUnresolved} dòng có «Người phụ trách» không khớp danh bạ — đã gán Admin chờ điều phối (hoặc TVV theo tải nếu chưa có Admin).`
-                : ''
+                ? ` Trong đó ${importAssignUnresolved} dòng có «Tư vấn viên» không khớp danh bạ — đã gán Admin chờ điều phối.`
+                : ' Hồ sơ chưa ghi TVV trên Excel → gán Admin chờ điều phối (không tự chia tải).'
             }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
@@ -589,7 +560,6 @@ export function DataIntake() {
     profile,
     profiles,
     masterBuckets,
-    counselors,
     directoryUsers,
     matchStaffForImport,
     schoolTvvSignalDefs,
@@ -757,8 +727,8 @@ export function DataIntake() {
                 {previewStats.acceptedNew > 0 ? (
                   <p className="mt-2 text-xs leading-relaxed text-slate-600">
                     <span className="font-semibold text-slate-800">Phân công:</span> {previewStats.assignMatched} khớp
-                    cột «Người phụ trách»; {previewStats.assignUnresolvedRaw} không khớp → Admin (hoặc theo tải);{' '}
-                    {previewStats.assignEmptyRouted} để trống → chia tải TVV.
+                    cột «Tư vấn viên»; {previewStats.assignUnresolvedRaw} không khớp → Admin;{' '}
+                    {previewStats.assignEmptyRouted} để trống → gán Admin (chờ điều phối), không tự chia TVV.
                   </p>
                 ) : null}
                 <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm text-amber-950">

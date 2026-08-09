@@ -177,6 +177,14 @@ const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
 
 const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
+/** Nhãn + ô lọc gọn trên toolbar Hồ sơ (cùng chiều cao). */
+const LEAD_FILTER_LABEL =
+  'flex min-w-0 flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500'
+const LEAD_FILTER_CONTROL =
+  'h-8 w-full rounded-md border border-slate-200/95 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
+const LEAD_BTN =
+  'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold shadow-sm transition'
+
 const EVALUATION_TAGS = [
   'Tích cực',
   'Cần follow-up',
@@ -290,7 +298,6 @@ export function LeadManagement() {
   const [sourceCatalogRequested, setSourceCatalogRequested] = useState(false)
   /** ALL | __UNSET__ | nhãn chương trình */
   const [programFilter, setProgramFilter] = useState<string>('ALL')
-  const [programCatalogRequested, setProgramCatalogRequested] = useState(false)
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
   /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
   const [assigneeFilter, setAssigneeFilter] = useState<string>('')
@@ -398,6 +405,8 @@ export function LeadManagement() {
     applyLocalLeadPatch,
     removeLocalLeads,
     refetchLeads,
+    totalLeadCount,
+    searchHitTotal,
   } = useLeads({
     serverFilters: leadServerFilters,
     searchText: urlQuery,
@@ -406,7 +415,7 @@ export function LeadManagement() {
     maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
-    includeScopeProgramOptions: programCatalogRequested,
+    includeScopeProgramOptions: true,
   })
 
   const scoringMasterBuckets = useMemo(
@@ -861,6 +870,60 @@ export function LeadManagement() {
   const displayTotalPages = clientPageSlice.totalPages
   const pagedRows = clientPageSlice.pageRows
 
+  /** Tổng hồ sơ trong phạm vi (cache khi chưa lọc) — không đổi khi đang áp bộ lọc. */
+  const [scopeBaselineTotal, setScopeBaselineTotal] = useState<number | null>(null)
+
+  const filterMatchCount = useMemo(() => {
+    // Khi fullScope / hàng chờ / chương trình: `listNeedsFullScope` đã true → đếm client.
+    if (listNeedsFullScope || clientPagingActive) return sortedFiltered.length
+    const q = (searchParams.get(LWF.Q) ?? '').trim()
+    if (q) return searchHitTotal ?? sortedFiltered.length
+    if (
+      scoreMinInput.trim() !== '' ||
+      scoreMaxInput.trim() !== '' ||
+      dispositionFilter !== 'all' ||
+      callWorkBucketFilter !== 'all' ||
+      aiShortlistOnly
+    ) {
+      return sortedFiltered.length
+    }
+    return totalLeadCount ?? sortedFiltered.length
+  }, [
+    listNeedsFullScope,
+    clientPagingActive,
+    sortedFiltered.length,
+    searchParams,
+    searchHitTotal,
+    scoreMinInput,
+    scoreMaxInput,
+    dispositionFilter,
+    callWorkBucketFilter,
+    aiShortlistOnly,
+    totalLeadCount,
+  ])
+
+  const programSummary = useMemo(() => {
+    const source =
+      listNeedsFullScope || clientPagingActive || (searchParams.get(LWF.Q) ?? '').trim()
+        ? sortedFiltered
+        : leads
+    const map = new Map<string, number>()
+    let unset = 0
+    for (const l of source) {
+      const p = (l.intakeProgram ?? '').trim()
+      if (!p) {
+        unset += 1
+        continue
+      }
+      map.set(p, (map.get(p) ?? 0) + 1)
+    }
+    const rows = [...map.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'vi'))
+      .slice(0, 8)
+    const sampleOnly = !(listNeedsFullScope || clientPagingActive) && !(searchParams.get(LWF.Q) ?? '').trim()
+    return { rows, unset, sampleSize: source.length, sampleOnly }
+  }, [listNeedsFullScope, clientPagingActive, sortedFiltered, leads, searchParams])
+
   useEffect(() => {
     if (currentPage > displayTotalPages) setPage(displayTotalPages)
   }, [currentPage, displayTotalPages, setPage])
@@ -1140,6 +1203,12 @@ export function LeadManagement() {
     setSearchParams,
     setPage,
   ])
+
+  useEffect(() => {
+    if (activeFilterChips.length === 0 && totalLeadCount != null) {
+      setScopeBaselineTotal(totalLeadCount)
+    }
+  }, [activeFilterChips.length, totalLeadCount])
 
   const scoringPersistOpts = useMemo(
     () => ({
@@ -1848,6 +1917,226 @@ export function LeadManagement() {
     refetchLeads,
   ])
 
+  /**
+   * Xóa nhanh cả lô theo chương trình (vd. file Excel nhập sai),
+   * hoặc theo đúng bộ lọc đang bật — chỉ Admin (`leads:delete`).
+   */
+  const deleteEntireBatch = useCallback(
+    async (mode: 'program' | 'filters', programKey?: string) => {
+      if (!db || !profile || !canDeleteLeads || bulkBusy || selectScopeBusy) return
+
+      const prog =
+        mode === 'program'
+          ? (programKey ?? (programFilterActive ? programFilter : '')).trim()
+          : ''
+      if (mode === 'program' && !prog) {
+        setRescoreMsg('Chọn hoặc lọc theo chương trình trước khi xóa cả lô.')
+        return
+      }
+      if (mode === 'filters' && activeFilterChips.length === 0) {
+        setRescoreMsg('Hãy lọc trước (chương trình, nguồn…) rồi mới xóa cả lô theo lọc.')
+        return
+      }
+
+      const scopeLabel =
+        mode === 'program'
+          ? prog === '__UNSET__'
+            ? 'chưa gắn chương trình'
+            : `chương trình «${prog}»`
+          : `bộ lọc hiện tại (${activeFilterChips.length} điều kiện)`
+
+      if (
+        !window.confirm(
+          `Xóa TOÀN BỘ hồ sơ thuộc ${scopeLabel}?\n\nBước tiếp theo sẽ đếm số hồ sơ rồi hỏi xác nhận lần nữa. Không hoàn tác được.`,
+        )
+      ) {
+        return
+      }
+
+      setSelectScopeBusy(true)
+      setRescoreMsg(`Đang quét hồ sơ thuộc ${scopeLabel}…`)
+      let rows: Lead[] = []
+      let truncated = false
+      try {
+        if (mode === 'program') {
+          const fetched = await fetchLeadsInScopeForRescore(db, profile, hoDQueryLabels, undefined, {
+            maxLeads: LEADS_UI_FULL_SCOPE_MAX,
+            canReadGlobal: can('leads:read:global'),
+            orgId: effectiveOrgId,
+          })
+          truncated = fetched.truncated
+          rows =
+            prog === '__UNSET__'
+              ? fetched.leads.filter((l) => !(l.intakeProgram ?? '').trim())
+              : fetched.leads.filter((l) => intakeProgramsMatch(l.intakeProgram, prog))
+        } else if (listNeedsFullScope) {
+          rows = filtered
+          truncated = Boolean(scopeFetchTruncated)
+        } else {
+          const fetched = await fetchLeadsInScopeForRescore(
+            db,
+            profile,
+            hoDQueryLabels,
+            leadServerFilters,
+            {
+              maxLeads: LEADS_UI_FULL_SCOPE_MAX,
+              canReadGlobal: can('leads:read:global'),
+              orgId: effectiveOrgId,
+            },
+          )
+          truncated = fetched.truncated
+          rows = fetched.leads
+          const minScore =
+            scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput))
+              ? null
+              : Number(scoreMinInput)
+          const maxScore =
+            scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput))
+              ? null
+              : Number(scoreMaxInput)
+          if (minScore != null || maxScore != null) {
+            rows = rows.filter((l) => {
+              const displayScore = profileScoringActive
+                ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
+                : l.calculatedScore
+              if (minScore != null && displayScore < minScore) return false
+              if (maxScore != null && displayScore > maxScore) return false
+              return true
+            })
+          }
+          if (tagClientEval && tagFilter !== 'ALL') {
+            rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
+          }
+          if (assigneeFilter === '__UNASSIGNED__') {
+            rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
+          } else if (assigneeFilter) {
+            rows = rows.filter((l) => effectiveLeadAssigneeUid(l) === assigneeFilter)
+          }
+          if (callWorkBucketFilter !== 'all') {
+            rows = rows.filter((l) => leadMatchesCallWorkBucket(l, callWorkBucketFilter))
+          }
+          if (dispositionFilter !== 'all') {
+            rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
+          }
+          if (urlQuery.trim()) {
+            rows = rows.filter((l) =>
+              leadMatchesClientSearch(l, urlQuery.trim().toLowerCase(), counselorDirectoryLabelById),
+            )
+          }
+        }
+      } catch (e) {
+        console.error(e)
+        setRescoreMsg(e instanceof Error ? e.message : 'Không quét được hồ sơ để xóa.')
+        setSelectScopeBusy(false)
+        return
+      } finally {
+        setSelectScopeBusy(false)
+      }
+
+      if (!rows.length) {
+        setRescoreMsg(`Không có hồ sơ nào thuộc ${scopeLabel}.`)
+        return
+      }
+
+      const n = rows.length
+      const truncWarn = truncated
+        ? `\n\nCẢNH BÁO: đã đạt giới hạn tải ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} — có thể còn hồ sơ chưa nằm trong lô xóa này.`
+        : ''
+      if (
+        !window.confirm(
+          `XÓA VĨNH VIỄN ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}?${truncWarn}\n\nKhông hoàn tác được.`,
+        )
+      ) {
+        setRescoreMsg(null)
+        return
+      }
+      if (n >= 10) {
+        const typed = window.prompt(
+          `Nhập đúng số ${n} để xác nhận xóa ${n.toLocaleString('vi-VN')} hồ sơ:`,
+        )
+        if (typed?.trim() !== String(n)) {
+          setRescoreMsg('Đã hủy xóa — số xác nhận không khớp.')
+          return
+        }
+      }
+
+      const ids = rows.map((l) => l.id)
+      setBulkBusy(true)
+      setRescoreMsg(`Đang xóa 0/${n}…`)
+      try {
+        const { deleted, deletedIds } = await bulkDeleteLeads(db, ids, {
+          onProgress: (done, total) => setRescoreMsg(`Đang xóa ${done}/${total}…`),
+        })
+        const deletedSet = new Set(deletedIds)
+        removeLocalLeads(deletedIds)
+        setSelectedIds(new Set())
+        selectScopeLeadsRef.current = new Map()
+        if (selected && deletedSet.has(selected.id)) {
+          setSelected(null)
+          leadDetailUnsavedRef.current = false
+        }
+        const performer = profile.displayName?.trim() || profile.email || profile.id
+        await commitAuditLog(db, {
+          leadId: deletedIds[0] ?? 'batch',
+          actionType: 'SYSTEM_UPDATE',
+          description: `Xóa cả lô (${deleted} hồ sơ) — ${scopeLabel}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        }).catch(() => {})
+        setRescoreMsg(`Đã xóa ${deleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`)
+        void refetchLeads()
+      } catch (e) {
+        if (e instanceof BulkDeleteLeadsPartialError) {
+          removeLocalLeads(e.deletedIds)
+          setSelectedIds(new Set(e.remainingIds))
+          if (selected && e.deletedIds.includes(selected.id)) {
+            setSelected(null)
+            leadDetailUnsavedRef.current = false
+          }
+          setRescoreMsg(e.message)
+          void refetchLeads()
+        } else {
+          console.error(e)
+          setRescoreMsg(e instanceof Error ? e.message : 'Không xóa được cả lô.')
+        }
+      } finally {
+        setBulkBusy(false)
+      }
+    },
+    [
+      db,
+      profile,
+      canDeleteLeads,
+      bulkBusy,
+      selectScopeBusy,
+      programFilterActive,
+      programFilter,
+      activeFilterChips.length,
+      hoDQueryLabels,
+      can,
+      effectiveOrgId,
+      listNeedsFullScope,
+      filtered,
+      scopeFetchTruncated,
+      leadServerFilters,
+      scoreMinInput,
+      scoreMaxInput,
+      profileScoringActive,
+      scoreByLeadId,
+      tagClientEval,
+      tagFilter,
+      effectiveLeadTag,
+      assigneeFilter,
+      callWorkBucketFilter,
+      dispositionFilter,
+      urlQuery,
+      counselorDirectoryLabelById,
+      selected,
+      removeLocalLeads,
+      refetchLeads,
+    ],
+  )
+
   const applyBulkIntakeProgram = useCallback(
     async (mode: 'set' | 'clear' = 'set') => {
       if (!db || !profile || !selectedIds.size) return
@@ -2099,209 +2388,272 @@ export function LeadManagement() {
         </div>
       ) : null}
 
-      <section className="app-surface-elevated space-y-2 p-2 sm:p-3">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
-          <details className="group min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white/50 px-2 py-1 shadow-sm open:bg-white/85 sm:px-2.5">
-            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs font-bold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
-              <ChevronDown
-                className="h-4 w-4 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
-                strokeWidth={2}
-                aria-hidden
-              />
-              <span className="shrink-0">Bộ chấm điểm</span>
-              <span
-                className="min-w-0 flex-1 truncate text-left text-xs font-semibold normal-case tracking-normal text-slate-800 group-open:hidden"
-                title={
-                  profilesLoading
-                    ? undefined
-                    : activeScoringProfile?.profileName?.trim() || undefined
-                }
-              >
-                {profilesLoading
-                  ? 'Đang tải…'
-                  : activeScoringProfile?.profileName?.trim() || (!scoringProfiles.length ? 'Chưa có profile' : '—')}
+      <section className="app-surface-elevated space-y-2 p-2.5 sm:p-3">
+        {/* Tổng kết nhẹ — luôn hiện */}
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-xs text-slate-600"
+          role="status"
+          aria-live="polite"
+        >
+          <span>
+            Tổng{' '}
+            <strong className="tabular-nums text-slate-900">
+              {(scopeBaselineTotal ?? totalLeadCount)?.toLocaleString('vi-VN') ?? '…'}
+            </strong>
+          </span>
+          <span className="hidden h-3 w-px bg-slate-200 sm:inline" aria-hidden />
+          <span>
+            {activeFilterChips.length > 0 ? 'Khớp lọc' : 'Đang xem'}{' '}
+            <strong className="tabular-nums text-amber-900">
+              {loading ? '…' : filterMatchCount.toLocaleString('vi-VN')}
+            </strong>
+            {activeFilterChips.length > 0 ? (
+              <span className="text-slate-500"> · {activeFilterChips.length} điều kiện</span>
+            ) : null}
+          </span>
+          {tagChipCounts ? (
+            <>
+              <span className="hidden h-3 w-px bg-slate-200 sm:inline" aria-hidden />
+              <span className="inline-flex flex-wrap items-center gap-1.5 tabular-nums">
+                <span className="text-rose-700">HOT {tagChipCounts.HOT}</span>
+                <span className="text-amber-800">WARM {tagChipCounts.WARM}</span>
+                <span className="text-sky-800">COLD {tagChipCounts.COLD}</span>
               </span>
-            </summary>
-            <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/60 pt-2 sm:flex-row sm:items-end">
-              <label className="min-w-0 flex-1 text-xs font-bold uppercase tracking-wide text-slate-500">
-                Chọn profile
-                <div className="relative mt-0.5">
-                  <select
-                    value={resolvedScoringProfileId ?? ''}
-                    disabled={!scoringProfiles.length || profilesLoading}
-                    onChange={(e) => setScoringProfileId(e.target.value || null)}
-                    className="w-full appearance-none rounded-lg border border-slate-200/95 bg-white/95 py-1.5 pl-2 pr-7 text-xs font-medium text-slate-900 shadow-inner outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100 disabled:opacity-50 sm:min-w-[12rem]"
-                  >
-                    {!scoringProfiles.length ? (
-                      <option value="">Chưa có profile — Cấu hình</option>
-                    ) : null}
-                    {scoringProfiles.map((p) => (
-                      <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                        {p.profileName} · HOT≥{p.thresholds?.hotMinScore ?? '—'} · WARM≥{p.thresholds?.warmMinScore ?? '—'}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-                    ▾
-                  </span>
-                </div>
-              </label>
-              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={!profileScoringLive || rescoreBusy || !db}
-                  onClick={() => void runBulkRescore()}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-primary)] bg-[var(--color-primary)] px-2 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--color-primary-hover)] disabled:opacity-40"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${rescoreBusy ? 'animate-spin' : ''}`} aria-hidden />
-                  {rescoreBusy ? 'Đang tính…' : 'Tính lại'}
-                </button>
-                <button
-                  type="button"
-                  disabled={!activeScoringProfile}
-                  onClick={() => setInspectProfileOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200/95 bg-white px-2 py-1.5 text-xs font-medium text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40"
-                >
-                  <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Quy tắc
-                </button>
-                <button
-                  type="button"
-                  disabled={!sortedFiltered.length}
-                  onClick={handleExportEvaluated}
-                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-900 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40"
-                >
-                  <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Xuất Excel (trang hiện tại)
-                </button>
-              </div>
-            </div>
-            <div className="mt-2 flex flex-col gap-1.5 border-t border-amber-100/90 pt-2">
-              {activeScoringProfile ? (
-                <ScoringViewModeHint
-                  profileName={activeScoringProfile.profileName}
-                  liveRules={profileScoringLive}
-                  compact
-                />
-              ) : null}
-              {rescoreMsg ? (
-                <p className="text-xs font-medium text-sky-900" role="status">
-                  {rescoreMsg}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc nhanh nhãn chấm điểm">
-                <button
-                  type="button"
-                  disabled={!scoringProfiles.length}
-                  onClick={() => {
-                    setTagFilter('ALL')
-                    setPage(1)
-                    mergeListFilterUrl({ [LWF.TAG]: null })
-                  }}
-                  className={[
-                    'rounded-full border px-2.5 py-1 text-xs font-semibold transition',
-                    tagFilter === 'ALL'
-                      ? 'border-slate-700 bg-slate-800 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
-                  ].join(' ')}
-                >
-                  Tất cả
-                </button>
-                {TAG_OPTIONS.map((tg) => {
-                  const on = tagFilter === tg
-                  const cnt = tagChipCounts?.[tg]
-                  return (
-                    <button
-                      key={tg}
-                      type="button"
-                      disabled={!scoringProfiles.length}
-                      onClick={() => {
-                        setTagFilter(tg)
-                        setPage(1)
-                        mergeListFilterUrl({ [LWF.TAG]: tg })
-                      }}
+            </>
+          ) : null}
+          {programSummary.rows.length > 0 || programSummary.unset > 0 ? (
+            <>
+              <span className="hidden h-3 w-px bg-slate-200 sm:inline" aria-hidden />
+              <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+                <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Chương trình{programSummary.sampleOnly ? ' (trang này)' : ''}
+                </span>
+                <span className="inline-flex flex-wrap gap-1">
+                  {programSummary.rows.map(([name, n]) => (
+                    <span
+                      key={name}
                       className={[
-                        'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition',
-                        on
-                          ? tg === 'HOT'
-                            ? 'border-rose-500 bg-rose-600 text-white shadow-sm'
-                            : tg === 'WARM'
-                              ? 'border-amber-500 bg-amber-500 text-amber-950 shadow-sm'
-                              : tg === 'COLD'
-                                ? 'border-sky-400 bg-sky-600 text-white shadow-sm'
-                                : 'border-slate-600 bg-slate-700 text-white shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+                        'inline-flex h-6 max-w-[14rem] items-stretch overflow-hidden rounded border',
+                        programFilter === name
+                          ? 'border-amber-400 bg-amber-100 text-amber-950'
+                          : 'border-slate-200/90 bg-white text-slate-700',
                       ].join(' ')}
                     >
-                      <span className="font-bold tracking-wide">{tg}</span>
-                      {cnt !== undefined ? <span className="tabular-nums opacity-90">({cnt})</span> : null}
-                    </button>
-                  )
-                })}
-              </div>
-              {(tagClientEval || callQueueNeedsScope) && scopeFetchTruncated ? (
-                <p className="text-xs font-medium text-amber-900">
-                  Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
-                  phần ở đuôi danh sách.
-                </p>
-              ) : null}
-            </div>
-          </details>
-          <label className="min-w-0 w-full text-xs font-bold uppercase tracking-wide text-slate-500 lg:max-w-md lg:flex-1">
-            Tìm kiếm
+                      <button
+                        type="button"
+                        title={`Lọc chương trình «${name}»`}
+                        onClick={() => {
+                          setProgramFilter(name)
+                          setPage(1)
+                          mergeListFilterUrl({ [LWF.PROG]: name })
+                        }}
+                        className="inline-flex min-w-0 max-w-[11rem] items-center gap-1 truncate px-1.5 text-[11px] font-medium transition hover:bg-amber-50/80"
+                      >
+                        <span className="truncate">{name}</span>
+                        <span className="shrink-0 tabular-nums text-slate-500">{n}</span>
+                      </button>
+                      {canDeleteLeads ? (
+                        <button
+                          type="button"
+                          title={`Xóa cả lô chương trình «${name}»`}
+                          disabled={bulkBusy || selectScopeBusy}
+                          onClick={() => void deleteEntireBatch('program', name)}
+                          className="inline-flex shrink-0 items-center border-l border-inherit px-1 text-rose-700 transition hover:bg-rose-100 disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                          <span className="sr-only">Xóa cả lô</span>
+                        </button>
+                      ) : null}
+                    </span>
+                  ))}
+                  {programSummary.unset > 0 ? (
+                    <span
+                      className={[
+                        'inline-flex h-6 items-stretch overflow-hidden rounded border',
+                        programFilter === '__UNSET__'
+                          ? 'border-slate-500 bg-slate-700 text-white'
+                          : 'border-dashed border-slate-300 bg-white text-slate-600',
+                      ].join(' ')}
+                    >
+                      <button
+                        type="button"
+                        title="Lọc hồ sơ chưa gắn chương trình"
+                        onClick={() => {
+                          setProgramFilter('__UNSET__')
+                          setPage(1)
+                          mergeListFilterUrl({ [LWF.PROG]: '__UNSET__' })
+                        }}
+                        className="inline-flex items-center gap-1 px-1.5 text-[11px] font-medium"
+                      >
+                        Chưa gắn <span className="tabular-nums">{programSummary.unset}</span>
+                      </button>
+                      {canDeleteLeads ? (
+                        <button
+                          type="button"
+                          title="Xóa cả lô hồ sơ chưa gắn chương trình"
+                          disabled={bulkBusy || selectScopeBusy}
+                          onClick={() => void deleteEntireBatch('program', '__UNSET__')}
+                          className="inline-flex shrink-0 items-center border-l border-inherit px-1 text-rose-300 transition hover:bg-rose-900/40 disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                          <span className="sr-only">Xóa cả lô</span>
+                        </button>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+            </>
+          ) : null}
+        </div>
+
+        {/* Tìm kiếm + thao tác chính */}
+        <div className="flex flex-wrap items-end gap-2">
+          <label className={`${LEAD_FILTER_LABEL} min-w-[12rem] flex-1`}>
+            <span>Tìm kiếm</span>
             <input
               value={searchParams.get(LWF.Q) ?? ''}
               onChange={(e) => setUrlQuery(e.target.value)}
               placeholder="Tên, SĐT, mã KH, TVV…"
-              title="Tìm trong các thông tin hiển thị trên hồ sơ (tên, SĐT, mã KH, mô tả, TVV…). Có thể dùng chung với các lọc bên dưới."
-              className="mt-0.5 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
+              title="Tìm trong các thông tin hiển thị trên hồ sơ (tên, SĐT, mã KH, mô tả, TVV…)."
+              className={LEAD_FILTER_CONTROL}
             />
           </label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {canCreateManualLead && configured && db ? (
+              <button
+                type="button"
+                onClick={() => setCreateLeadOpen(true)}
+                className={`${LEAD_BTN} border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700`}
+                title="Tạo hồ sơ ứng viên mới"
+              >
+                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Tạo mới
+              </button>
+            ) : null}
+            <button
+              type="button"
+              title="Chỉ hiện hồ sơ AI đã đánh dấu ưu tiên."
+              onClick={() => {
+                setAiShortlistOnly((v) => !v)
+                setPage(1)
+              }}
+              className={[
+                LEAD_BTN,
+                aiShortlistOnly
+                  ? 'border-amber-400 bg-amber-400 text-amber-950'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
+              ].join(' ')}
+            >
+              <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+              AI
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiShortlistGuideOpen(true)}
+              className={`${LEAD_BTN} border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80`}
+              title="Hướng dẫn AI Shortlist"
+            >
+              <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
+              HD
+            </button>
+            {canBulkWrite && showBulkReassign ? (
+              <button
+                type="button"
+                disabled={selectScopeBusy || loading || !filtered.length}
+                onClick={() => void selectAllMatchingFilters()}
+                className={`${LEAD_BTN} border-violet-300 bg-violet-50 text-violet-950 hover:border-violet-400 hover:bg-violet-100 disabled:opacity-40`}
+                title={`Chọn mọi hồ sơ khớp lọc (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}).`}
+              >
+                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {selectScopeBusy
+                  ? 'Đang chọn…'
+                  : listNeedsFullScope
+                    ? `Chọn lọc (${filtered.length.toLocaleString('vi-VN')})`
+                    : 'Chọn theo lọc'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={clearQuickFilters}
+              disabled={activeFilterChips.length === 0}
+              className={`${LEAD_BTN} border-slate-300 bg-white text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900 disabled:opacity-40`}
+            >
+              Xóa lọc
+            </button>
+            {canDeleteLeads && programFilterActive ? (
+              <button
+                type="button"
+                disabled={bulkBusy || selectScopeBusy || loading}
+                onClick={() => void deleteEntireBatch('program', programFilter)}
+                className={`${LEAD_BTN} border-rose-400 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40`}
+                title={
+                  programFilter === '__UNSET__'
+                    ? 'Xóa toàn bộ hồ sơ chưa gắn chương trình trong phạm vi của bạn'
+                    : `Xóa toàn bộ hồ sơ thuộc chương trình «${programFilter}»`
+                }
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa cả lô'}
+              </button>
+            ) : null}
+            {canDeleteLeads && !programFilterActive && activeFilterChips.length > 0 ? (
+              <button
+                type="button"
+                disabled={bulkBusy || selectScopeBusy || loading}
+                onClick={() => void deleteEntireBatch('filters')}
+                className={`${LEAD_BTN} border-rose-300 bg-rose-50 text-rose-900 hover:border-rose-400 hover:bg-rose-100 disabled:opacity-40`}
+                title="Xóa toàn bộ hồ sơ đang khớp bộ lọc hiện tại"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa theo lọc'}
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        {/* Hàng chờ gọi — tab Chưa gọi → Gọi lại → Đã gọi */}
-        <div className="space-y-2 border-t border-slate-200/70 pt-2">
-          <div
-            className="flex flex-wrap gap-1.5"
-            role="tablist"
-            aria-label="Hàng chờ gọi"
-          >
-            {(
-              [
-                { id: 'all' as const, label: 'Tất cả' },
-                { id: 'uncalled' as const, label: 'Chưa gọi' },
-                { id: 'callback' as const, label: 'Gọi lại' },
-                { id: 'called' as const, label: 'Đã gọi' },
-              ] as const
-            ).map((tab) => {
-              const active = callWorkBucketFilter === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => {
-                    setCallWorkBucketFilter(tab.id)
-                    setPage(1)
-                    mergeListFilterUrl({ [LWF.CQ]: tab.id === 'all' ? null : tab.id })
-                  }}
-                  className={`min-h-10 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                    active
-                      ? 'bg-amber-500 text-white shadow-sm'
-                      : 'border border-slate-200/95 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/60'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              )
-            })}
+        {/* Hàng chờ gọi + nhãn nhanh */}
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-t border-slate-200/60 pt-2">
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hàng chờ gọi</p>
+            <div className="flex flex-wrap gap-1" role="tablist" aria-label="Hàng chờ gọi">
+              {(
+                [
+                  { id: 'all' as const, label: 'Tất cả' },
+                  { id: 'uncalled' as const, label: 'Chưa gọi' },
+                  { id: 'callback' as const, label: 'Gọi lại' },
+                  { id: 'called' as const, label: 'Đã gọi' },
+                ] as const
+              ).map((tab) => {
+                const active = callWorkBucketFilter === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => {
+                      setCallWorkBucketFilter(tab.id)
+                      setPage(1)
+                      mergeListFilterUrl({ [LWF.CQ]: tab.id === 'all' ? null : tab.id })
+                    }}
+                    className={`inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold transition ${
+                      active
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'border border-slate-200/95 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/60'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
           <label
-            className="flex max-w-md flex-col text-xs font-bold uppercase tracking-wide text-slate-500"
-            title="Lọc theo note kết quả sau gọi — dùng khi quản lý rà soát"
+            className={`${LEAD_FILTER_LABEL} w-[9.5rem] shrink-0`}
+            title="Lọc theo note kết quả sau gọi"
           >
-            Note sau gọi
+            <span>Note sau gọi</span>
             <select
               value={dispositionFilter === 'all' ? 'all' : dispositionFilter}
               onChange={(e) => {
@@ -2312,7 +2664,7 @@ export function LeadManagement() {
                 setPage(1)
                 mergeListFilterUrl({ [LWF.DISP]: next === 'all' ? null : next })
               }}
-              className="mt-0.5 min-h-10 w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+              className={`${LEAD_FILTER_CONTROL} normal-case tracking-normal`}
             >
               <option value="all">Tất cả note</option>
               {CALL_DISPOSITIONS.map((d) => (
@@ -2322,271 +2674,368 @@ export function LeadManagement() {
               ))}
             </select>
           </label>
-        </div>
-
-        <div className="flex flex-nowrap items-end gap-1.5 overflow-x-auto scroll-smooth border-t border-slate-200/70 pb-0.5 pt-2 [scrollbar-width:thin] md:flex-wrap md:overflow-visible">
-          <FilterSelect
-            compact
-            label="Nhãn"
-            title="Nhãn HOT / WARM / COLD theo bộ chấm điểm đang chọn ở đầu trang (khi đang tìm kiếm có thể dùng nhãn đã lưu trên hồ sơ)."
-            value={tagFilter}
-            onChange={(v) => {
-              setTagFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
-            }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              ...TAG_OPTIONS.map((t) => ({ v: t, t })),
-            ]}
-          />
-          <SearchableFilterSelect
-            compact
-            label="Vùng"
-            title="Tỉnh / thành trên hồ sơ."
-            value={regionFilter}
-            onChange={(v) => {
-              setRegionFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
-            }}
-            options={regions.map((p) => ({ v: p, t: p }))}
-          />
-          <FilterSelect
-            compact
-            label="Hệ ĐT"
-            title="Ngành / hệ đào tạo ghi trên hồ sơ."
-            value={majorFilter}
-            onChange={(v) => {
-              setMajorFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
-            }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              ...majors.map((p) => ({ v: p, t: p })),
-            ]}
-          />
-          <FilterSelect
-            compact
-            label="Funnel"
-            title="Giai đoạn tuyển sinh trên hồ sơ (khác với cột «Tư vấn» — tiến độ làm việc với TVV)."
-            value={statusFilter}
-            onChange={(v) => {
-              setStatusFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
-            }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
-                v: k,
-                t: PIPELINE_LABEL[k],
-              })),
-            ]}
-          />
-          <FilterSelect
-            compact
-            label="Tư vấn"
-            title="Tiến độ làm việc với tư vấn viên (CRM)."
-            value={crmStatusFilter}
-            onChange={(v) => {
-              setCrmStatusFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
-            }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
-            ]}
-          />
-          <FilterSelect
-            compact
-            label="Nguồn"
-            title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
-            value={sourceFilter}
-            onFocus={() => {
-              if (!sourceCatalogRequested) setSourceCatalogRequested(true)
-              else void fetchScopeSourceOptions()
-            }}
-            onChange={(v) => {
-              setSourceFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
-            }}
-            options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
-          />
-          <FilterSelect
-            compact
-            label="Chương trình"
-            title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
-            value={programFilter}
-            onFocus={() => {
-              if (!programCatalogRequested) setProgramCatalogRequested(true)
-              else void fetchScopeProgramOptions()
-            }}
-            onChange={(v) => {
-              setProgramFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.PROG]: v === 'ALL' ? null : v })
-            }}
-            options={[
-              { v: 'ALL', t: 'Tất cả' },
-              { v: '__UNSET__', t: 'Chưa gắn chương trình' },
-              ...programOptions.map((p) => ({ v: p, t: p })),
-            ]}
-          />
-          <SearchableFilterSelect
-            compact
-            label="Trường THPT"
-            title="Trường THPT của thí sinh."
-            value={schoolFilter}
-            onChange={(v) => {
-              setSchoolFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
-            }}
-            options={schoolOptions.map((sc) => ({
-              v: sc,
-              t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
-            }))}
-          />
-          <FilterSelect
-            compact
-            label="Nhân viên"
-            title="Lọc theo người phụ trách. «Chưa gán» quét cả phạm vi để phân lead số lượng lớn."
-            value={assigneeFilter}
-            onChange={(v) => {
-              setAssigneeFilter(v)
-              setPage(1)
-              mergeListFilterUrl({ [LWF.ASSIGN]: v ? v : null })
-            }}
-            options={[
-              { v: '', t: 'Tất cả nhân viên' },
-              { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
-              ...reassignPickList.map((c) => ({
-                v: c.id,
-                t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
-              })),
-            ]}
-          />
-          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
-            Điểm từ
-            <input
-              type="number"
-              inputMode="numeric"
-              placeholder="—"
-              value={scoreMinInput}
-              onChange={(e) => setScoreMinInput(e.target.value)}
-              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
-            />
-          </label>
-          <label className="flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500" title="Lọc theo điểm đã lưu / điểm preview profile (cột Điểm).">
-            Điểm đến
-            <input
-              type="number"
-              inputMode="numeric"
-              placeholder="—"
-              value={scoreMaxInput}
-              onChange={(e) => setScoreMaxInput(e.target.value)}
-              className="mt-0.5 w-[4.5rem] shrink-0 rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-xs tabular-nums text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={clearQuickFilters}
-            className="min-h-10 shrink-0 self-end rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900"
-          >
-            Xóa lọc nhanh
-          </button>
-        </div>
-
-        {activeFilterChips.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/60 pt-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Đang lọc</span>
-            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-              {activeFilterChips.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => c.onClear()}
-                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50/95 px-2.5 py-1 text-xs font-medium text-amber-950 shadow-sm transition hover:border-amber-500 hover:bg-amber-100"
-                  title={`${c.label} — bấm để bỏ lọc`}
-                >
-                  <span className="min-w-0 truncate">{c.label}</span>
-                  <span className="shrink-0 font-bold text-amber-800" aria-hidden>
-                    ×
-                  </span>
-                </button>
-              ))}
+          <div className="min-w-0 flex-1">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Nhãn</p>
+            <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc nhanh nhãn">
+              <button
+                type="button"
+                disabled={!scoringProfiles.length}
+                onClick={() => {
+                  setTagFilter('ALL')
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.TAG]: null })
+                }}
+                className={[
+                  'inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold transition',
+                  tagFilter === 'ALL'
+                    ? 'border-slate-700 bg-slate-800 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+                ].join(' ')}
+              >
+                Tất cả
+              </button>
+              {TAG_OPTIONS.map((tg) => {
+                const on = tagFilter === tg
+                const cnt = tagChipCounts?.[tg]
+                return (
+                  <button
+                    key={tg}
+                    type="button"
+                    disabled={!scoringProfiles.length}
+                    onClick={() => {
+                      setTagFilter(tg)
+                      setPage(1)
+                      mergeListFilterUrl({ [LWF.TAG]: tg })
+                    }}
+                    className={[
+                      'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold transition',
+                      on
+                        ? tg === 'HOT'
+                          ? 'border-rose-500 bg-rose-600 text-white'
+                          : tg === 'WARM'
+                            ? 'border-amber-500 bg-amber-500 text-amber-950'
+                            : tg === 'COLD'
+                              ? 'border-sky-400 bg-sky-600 text-white'
+                              : 'border-slate-600 bg-slate-700 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
+                    ].join(' ')}
+                  >
+                    <span>{tg}</span>
+                    {cnt !== undefined ? <span className="tabular-nums opacity-90">({cnt})</span> : null}
+                  </button>
+                )
+              })}
             </div>
           </div>
-        ) : null}
+        </div>
 
-        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200/60 pt-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {canCreateManualLead && configured && db ? (
-              <button
-                type="button"
-                onClick={() => setCreateLeadOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500 bg-emerald-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-emerald-700 sm:px-3 sm:py-1.5 sm:text-xs"
-                title="Tạo hồ sơ ứng viên mới"
-              >
-                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Tạo hồ sơ mới
-              </button>
-            ) : null}
-            <button
-              type="button"
-              title="Chỉ hiện các hồ sơ đã được AI phân tích và đánh dấu ưu tiên (có tia sét vàng cạnh tên). Bấm lại để tắt."
-              onClick={() => {
-                setAiShortlistOnly((v) => !v)
-                setPage(1)
-              }}
-              className={[
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide transition sm:px-3 sm:py-1.5 sm:text-xs',
-                aiShortlistOnly
-                  ? 'border-amber-400 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 shadow-[0_0_22px_rgba(251,191,36,0.5)]'
-                  : 'border-slate-200/90 bg-white/90 text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
-              ].join(' ')}
-            >
-              <Zap className="h-3.5 w-3.5 shrink-0 text-current" strokeWidth={2.5} aria-hidden />
-              ⚡ AI Shortlist
-            </button>
-            <button
-              type="button"
-              onClick={() => setAiShortlistGuideOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-amber-400 hover:bg-amber-50/90 hover:text-amber-950"
-              title="Mở hướng dẫn từng bước (cửa sổ giữa màn hình)"
-            >
-              <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
-              Hướng dẫn
-            </button>
-            {canBulkWrite && showBulkReassign ? (
-              <button
-                type="button"
-                disabled={selectScopeBusy || loading || !filtered.length}
-                onClick={() => void selectAllMatchingFilters()}
-                className="inline-flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-violet-950 shadow-sm transition hover:border-violet-400 hover:bg-violet-100 disabled:opacity-40 sm:px-3 sm:py-1.5 sm:text-xs"
-                title={`Chọn mọi hồ sơ đang khớp bộ lọc (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}) rồi dùng «Giao việc hàng loạt».`}
-              >
-                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {selectScopeBusy
-                  ? 'Đang chọn…'
-                  : listNeedsFullScope
-                    ? `Chọn tất cả theo lọc (${filtered.length.toLocaleString('vi-VN')})`
-                    : 'Chọn tất cả theo lọc (quét phạm vi)'}
-              </button>
+        {/* Bộ lọc chi tiết */}
+        <details className="group rounded-md border border-slate-200/80 bg-white/60 open:bg-white/90">
+          <summary className="flex h-8 cursor-pointer list-none items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+            <ChevronDown
+              className="h-3.5 w-3.5 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <span>Bộ lọc</span>
+            {activeFilterChips.length > 0 ? (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold normal-case tracking-normal text-amber-900">
+                {activeFilterChips.length}
+              </span>
+            ) : (
+              <span className="font-normal normal-case tracking-normal text-slate-400">
+                nhãn, vùng, chương trình…
+              </span>
+            )}
+          </summary>
+          <div className="space-y-2 border-t border-slate-200/60 px-2 pb-2 pt-2">
+            <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+              <FilterSelect
+                compact
+                label="Nhãn"
+                title="Nhãn HOT / WARM / COLD theo bộ chấm điểm."
+                value={tagFilter}
+                onChange={(v) => {
+                  setTagFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
+                }}
+                options={[
+                  { v: 'ALL', t: 'Tất cả' },
+                  ...TAG_OPTIONS.map((t) => ({ v: t, t })),
+                ]}
+              />
+              <SearchableFilterSelect
+                compact
+                label="Vùng"
+                title="Tỉnh / thành trên hồ sơ."
+                value={regionFilter}
+                onChange={(v) => {
+                  setRegionFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
+                }}
+                options={regions.map((p) => ({ v: p, t: p }))}
+              />
+              <FilterSelect
+                compact
+                label="Hệ ĐT"
+                title="Ngành / hệ đào tạo ghi trên hồ sơ."
+                value={majorFilter}
+                onChange={(v) => {
+                  setMajorFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
+                }}
+                options={[
+                  { v: 'ALL', t: 'Tất cả' },
+                  ...majors.map((p) => ({ v: p, t: p })),
+                ]}
+              />
+              <FilterSelect
+                compact
+                label="Funnel"
+                title="Giai đoạn tuyển sinh trên hồ sơ."
+                value={statusFilter}
+                onChange={(v) => {
+                  setStatusFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
+                }}
+                options={[
+                  { v: 'ALL', t: 'Tất cả' },
+                  ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
+                    v: k,
+                    t: PIPELINE_LABEL[k],
+                  })),
+                ]}
+              />
+              <FilterSelect
+                compact
+                label="Tư vấn"
+                title="Tiến độ làm việc với tư vấn viên."
+                value={crmStatusFilter}
+                onChange={(v) => {
+                  setCrmStatusFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
+                }}
+                options={[
+                  { v: 'ALL', t: 'Tất cả' },
+                  ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
+                ]}
+              />
+              <FilterSelect
+                compact
+                label="Nguồn"
+                title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
+                value={sourceFilter}
+                onFocus={() => {
+                  if (!sourceCatalogRequested) setSourceCatalogRequested(true)
+                  else void fetchScopeSourceOptions()
+                }}
+                onChange={(v) => {
+                  setSourceFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
+                }}
+                options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
+              />
+              <FilterSelect
+                compact
+                label="Chương trình"
+                title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
+                value={programFilter}
+                onFocus={() => {
+                  void fetchScopeProgramOptions()
+                }}
+                onChange={(v) => {
+                  setProgramFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.PROG]: v === 'ALL' ? null : v })
+                }}
+                options={[
+                  { v: 'ALL', t: 'Tất cả' },
+                  { v: '__UNSET__', t: 'Chưa gắn chương trình' },
+                  ...programOptions.map((p) => ({ v: p, t: p })),
+                ]}
+              />
+              <SearchableFilterSelect
+                compact
+                label="Trường THPT"
+                title="Trường THPT của thí sinh."
+                value={schoolFilter}
+                onChange={(v) => {
+                  setSchoolFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
+                }}
+                options={schoolOptions.map((sc) => ({
+                  v: sc,
+                  t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
+                }))}
+              />
+              <FilterSelect
+                compact
+                label="Nhân viên"
+                title="Lọc theo người phụ trách."
+                value={assigneeFilter}
+                onChange={(v) => {
+                  setAssigneeFilter(v)
+                  setPage(1)
+                  mergeListFilterUrl({ [LWF.ASSIGN]: v ? v : null })
+                }}
+                options={[
+                  { v: '', t: 'Tất cả nhân viên' },
+                  { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
+                  ...reassignPickList.map((c) => ({
+                    v: c.id,
+                    t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
+                  })),
+                ]}
+              />
+              <label className={LEAD_FILTER_LABEL} title="Lọc theo điểm (cột Điểm).">
+                <span>Điểm từ</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="—"
+                  value={scoreMinInput}
+                  onChange={(e) => setScoreMinInput(e.target.value)}
+                  className={`${LEAD_FILTER_CONTROL} tabular-nums`}
+                />
+              </label>
+              <label className={LEAD_FILTER_LABEL} title="Lọc theo điểm (cột Điểm).">
+                <span>Điểm đến</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="—"
+                  value={scoreMaxInput}
+                  onChange={(e) => setScoreMaxInput(e.target.value)}
+                  className={`${LEAD_FILTER_CONTROL} tabular-nums`}
+                />
+              </label>
+            </div>
+            {activeFilterChips.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Đang lọc</span>
+                {activeFilterChips.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => c.onClear()}
+                    className="inline-flex h-7 max-w-full items-center gap-1 rounded-md border border-amber-300/80 bg-amber-50/95 px-2 text-xs font-medium text-amber-950 transition hover:border-amber-500 hover:bg-amber-100"
+                    title={`${c.label} — bấm để bỏ`}
+                  >
+                    <span className="min-w-0 truncate">{c.label}</span>
+                    <span className="shrink-0 font-bold text-amber-800" aria-hidden>
+                      ×
+                    </span>
+                  </button>
+                ))}
+              </div>
             ) : null}
           </div>
-          {aiShortlistOnly ? (
-            <span className="max-w-xl text-xs leading-snug text-slate-600">
-              Đang lọc: chỉ các hồ sơ đã được AI đánh dấu ưu tiên (có <strong className="text-amber-900">tia sét vàng</strong>{' '}
-              cạnh tên). Nếu chưa từng chạy bước phân tích AI cho nhóm WARM, danh sách có thể không có dòng nào — hãy
-              mở <strong>Hướng dẫn</strong> bên cạnh.
+        </details>
+
+        {/* Bộ chấm điểm — thu gọn */}
+        <details className="group rounded-md border border-slate-200/80 bg-white/50 open:bg-white/85">
+          <summary className="flex h-8 cursor-pointer list-none items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+            <ChevronDown
+              className="h-3.5 w-3.5 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <span className="shrink-0">Bộ chấm điểm</span>
+            <span
+              className="min-w-0 flex-1 truncate text-left text-xs font-medium normal-case tracking-normal text-slate-800"
+              title={
+                profilesLoading
+                  ? undefined
+                  : activeScoringProfile?.profileName?.trim() || undefined
+              }
+            >
+              {profilesLoading
+                ? 'Đang tải…'
+                : activeScoringProfile?.profileName?.trim() ||
+                  (!scoringProfiles.length ? 'Chưa có profile' : '—')}
             </span>
-          ) : null}
-        </div>
+          </summary>
+          <div className="space-y-2 border-t border-slate-200/60 px-2 pb-2 pt-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className={`${LEAD_FILTER_LABEL} min-w-0 flex-1`}>
+                <span>Profile</span>
+                <select
+                  value={resolvedScoringProfileId ?? ''}
+                  disabled={!scoringProfiles.length || profilesLoading}
+                  onChange={(e) => setScoringProfileId(e.target.value || null)}
+                  className={LEAD_FILTER_CONTROL}
+                >
+                  {!scoringProfiles.length ? (
+                    <option value="">Chưa có profile — Cấu hình</option>
+                  ) : null}
+                  {scoringProfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.profileName} · HOT≥{p.thresholds?.hotMinScore ?? '—'} · WARM≥
+                      {p.thresholds?.warmMinScore ?? '—'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={!profileScoringLive || rescoreBusy || !db}
+                  onClick={() => void runBulkRescore()}
+                  className={`${LEAD_BTN} border-[var(--color-primary)] bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-40`}
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 shrink-0 ${rescoreBusy ? 'animate-spin' : ''}`}
+                    aria-hidden
+                  />
+                  {rescoreBusy ? 'Đang tính…' : 'Tính lại'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!activeScoringProfile}
+                  onClick={() => setInspectProfileOpen(true)}
+                  className={`${LEAD_BTN} border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50/80 disabled:opacity-40`}
+                >
+                  <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Quy tắc
+                </button>
+                <button
+                  type="button"
+                  disabled={!sortedFiltered.length}
+                  onClick={handleExportEvaluated}
+                  className={`${LEAD_BTN} border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40`}
+                >
+                  <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Xuất Excel
+                </button>
+              </div>
+            </div>
+            {activeScoringProfile ? (
+              <ScoringViewModeHint
+                profileName={activeScoringProfile.profileName}
+                liveRules={profileScoringLive}
+                compact
+              />
+            ) : null}
+            {rescoreMsg ? (
+              <p className="text-xs font-medium text-sky-900" role="status">
+                {rescoreMsg}
+              </p>
+            ) : null}
+            {(tagClientEval || callQueueNeedsScope) && scopeFetchTruncated ? (
+              <p className="text-xs font-medium text-amber-900">
+                Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
+                phần ở đuôi danh sách.
+              </p>
+            ) : null}
+          </div>
+        </details>
       </section>
 
       {inspectProfileOpen && activeScoringProfile ? (
@@ -2609,14 +3058,12 @@ export function LeadManagement() {
         {sortedFiltered.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:px-4">
             <span className="text-slate-600">
-              Đang xem <span className="font-semibold text-slate-900">{pagedRows.length}</span>
-              {clientPagingActive && sortedFiltered.length !== pagedRows.length ? (
-                <>
-                  {' '}
-                  / <span className="font-semibold text-slate-900">{sortedFiltered.length}</span> khớp lọc
-                </>
-              ) : null}{' '}
-              (trang {currentPage}/{displayTotalPages})
+              Trang này <span className="font-semibold text-slate-900">{pagedRows.length}</span>
+              {' · '}
+              Khớp lọc{' '}
+              <span className="font-semibold text-amber-900">{filterMatchCount.toLocaleString('vi-VN')}</span>
+              {' · '}
+              trang {currentPage}/{displayTotalPages}
             </span>
             <div className="flex flex-wrap items-center gap-1.5">
               <button
@@ -3744,15 +4191,8 @@ function FilterSelect({
   compact?: boolean
 }) {
   return (
-    <label
-      title={title}
-      className={
-        compact
-          ? 'flex shrink-0 flex-col text-xs font-bold uppercase tracking-wide text-slate-500'
-          : 'flex flex-col text-xs font-medium text-slate-600'
-      }
-    >
-      {label}
+    <label title={title} className={compact ? LEAD_FILTER_LABEL : 'flex flex-col text-xs font-medium text-slate-600'}>
+      <span className="truncate">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -3760,7 +4200,7 @@ function FilterSelect({
         title={options.find((o) => o.v === value)?.t ?? title}
         className={
           compact
-            ? 'mt-0.5 max-w-[7.25rem] min-h-9 min-w-[3.75rem] shrink-0 truncate rounded-md border border-slate-200/95 bg-white px-1 py-1 text-xs font-medium text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+            ? LEAD_FILTER_CONTROL
             : 'mt-1 min-h-11 min-w-[140px] rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
         }
       >

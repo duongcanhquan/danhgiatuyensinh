@@ -36,6 +36,7 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
     customerId: norm(draft.customerId),
     fullName: norm(draft.fullName),
     dateOfBirth: norm(draft.dateOfBirth),
+    gender: norm(draft.gender),
     phone: norm(draft.phone),
     parentPhone: norm(draft.parentPhone),
     source: norm(draft.source1) || norm(draft.source),
@@ -57,6 +58,7 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
     profileNote1: norm(draft.profileNote1),
     profileNote2: norm(draft.profileNote2),
     otherAttentionNotes: norm(draft.otherAttentionNotes),
+    studentEmail: norm(draft.studentEmail),
     assignedToRaw: '',
   }
 }

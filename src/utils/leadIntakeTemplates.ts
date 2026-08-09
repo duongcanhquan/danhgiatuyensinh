@@ -110,7 +110,7 @@ export function downloadLeadIntakeTemplate(id: LeadIntakeTemplateId): void {
       0,
       ['2b. «điểm tốt nghiệp» lưu vào học lực / xếp loại trên hồ sơ.'],
       ['2c. «Giới Tính» và «email» lưu trên hồ sơ (gender, studentEmail).'],
-      ['2d. Nguồn / TVV để trống — điều phối sau trên app.'],
+      ['2d. Không ghi TVV trên file → hệ thống gán Admin chờ điều phối (không tự chia tải).'],
     )
   }
   const ws2 = XLSX.utils.aoa_to_sheet(instructions)

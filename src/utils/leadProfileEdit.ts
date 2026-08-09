@@ -7,6 +7,7 @@ export type LeadCoreDraft = {
   systemCode: string
   customerId: string
   dateOfBirth: string
+  gender: string
   phone: string
   parentPhone: string
   source: string
@@ -51,6 +52,7 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
     systemCode: '',
     customerId: '',
     dateOfBirth: '',
+    gender: '',
     phone: '',
     parentPhone: '',
     source: '',
@@ -96,6 +98,7 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     systemCode: lead.systemCode ?? '',
     customerId: lead.customerId ?? '',
     dateOfBirth: lead.dateOfBirth ?? '',
+    gender: lead.gender ?? '',
     phone: lead.phone ?? '',
     parentPhone: lead.parentPhone ?? '',
     source: lead.source1 ?? lead.source ?? '',
@@ -188,6 +191,7 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
     const v = norm(String(draft[k] ?? ''))
     if (v) o[key] = v
   }
+  opt('gender', 'gender')
   opt('majorInterest', 'majorInterest')
   opt('academicPerformance', 'academicPerformance')
   opt('ethnicity', 'ethnicity')
@@ -281,6 +285,7 @@ export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
     profileNote2: norm(draft.profileNote2) || undefined,
     otherAttentionNotes: norm(draft.otherAttentionNotes) || undefined,
     studentEmail: norm(draft.studentEmail) || undefined,
+    gender: norm(draft.gender) || undefined,
     source1: norm(draft.source1) || undefined,
     source2: norm(draft.source2) || undefined,
     source: norm(draft.source1) || norm(draft.source) || lead.source,

@@ -297,30 +297,6 @@ async function fetchInteractionsViaLeads(
   return [...merged.values()]
 }
 
-async function fetchInteractionsCollectionGroup(
-  db: Firestore,
-  fromTs: Timestamp,
-  toTs: Timestamp,
-  cap: number,
-  withProvider: boolean,
-): Promise<OmicallCallWire[]> {
-  let q: Query = db.collectionGroup(COLLECTIONS.interactions)
-  if (withProvider) q = q.where('provider', '==', 'OMICALL')
-  const snap = await q
-    .where('timestamp', '>=', fromTs)
-    .where('timestamp', '<=', toTs)
-    .limit(cap)
-    .get()
-  return snap.docs
-    .map((d) => {
-      const wire = toCallWireFromInteractionDoc(d.id, d.data() as Record<string, unknown>)
-      if (!wire) return null
-      const leadId = d.ref.parent.parent?.id
-      return leadId ? { ...wire, leadId: wire.leadId || leadId } : wire
-    })
-    .filter((v): v is OmicallCallWire => Boolean(v))
-}
-
 async function fetchInteractionsFallback(
   db: Firestore,
   fromTs: Timestamp,
@@ -328,15 +304,8 @@ async function fetchInteractionsFallback(
   cap: number,
   counselorUids: string[],
 ): Promise<OmicallCallWire[]> {
-  for (const withProvider of [true, false]) {
-    try {
-      const rows = await fetchInteractionsCollectionGroup(db, fromTs, toTs, cap, withProvider)
-      if (rows.length > 0) return rows
-    } catch (e) {
-      console.warn('[fetchOmicallCallsForClient] collectionGroup', e)
-    }
-  }
-
+  // P0 cost: không collectionGroup(interactions) — quét toàn DB rất đắt.
+  // Chỉ bù theo hồ sơ đã gán cho TVV trong phạm vi (subcollection từng lead).
   if (counselorUids.length > 0) {
     try {
       return await fetchInteractionsViaLeads(db, fromTs, toTs, cap, counselorUids)

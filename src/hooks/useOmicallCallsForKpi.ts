@@ -23,6 +23,6 @@ export function useOmicallCallsForKpi(from: string, to: string, counselorUidFilt
     return { mode: 'counselor', counselorUid: uid }
   }, [canGlobal, canTeam, counselorUidFilter, profile?.id, firebaseUser?.uid])
 
-  const maxRows = scope.mode === 'global' ? 3000 : 1500
+  const maxRows = scope.mode === 'global' ? 1500 : 800
   return useOmicallCalls({ scope, from: fromDate, to: toDate, maxRows, viewerSipUser: viewerSip })
 }

@@ -593,16 +593,17 @@ async function reconcileKpiFromStoredCalls(lookbackDays = 21): Promise<{ scanned
 }
 
 /** Bù từ interaction client (provider OMICALL) khi chưa có omicallCalls / KPI. */
-async function reconcileKpiFromClientInteractions(lookbackDays = 14): Promise<number> {
+async function reconcileKpiFromClientInteractions(lookbackDays = 7): Promise<number> {
   const since = Timestamp.fromMillis(Date.now() - lookbackDays * 86400000)
   let snap
   try {
+    // Trần thấp — collectionGroup toàn DB vẫn đắt; chỉ bù KPI khi thiếu omicallCalls.
     snap = await db
       .collectionGroup(COLLECTIONS.interactions)
       .where('provider', '==', 'OMICALL')
       .where('timestamp', '>=', since)
       .orderBy('timestamp', 'desc')
-      .limit(400)
+      .limit(200)
       .get()
   } catch {
     return 0

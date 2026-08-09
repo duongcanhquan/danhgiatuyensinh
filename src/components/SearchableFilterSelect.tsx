@@ -63,24 +63,24 @@ export function SearchableFilterSelect({
   }
 
   return (
-    <div ref={wrapRef} className={className ?? (compact ? 'relative shrink-0' : 'relative min-w-[10rem]')}>
+    <div ref={wrapRef} className={className ?? (compact ? 'relative min-w-0' : 'relative min-w-[10rem]')}>
       <label
         title={title}
         className={
           compact
-            ? 'flex flex-col text-xs font-bold uppercase tracking-wide text-slate-500'
+            ? 'flex min-w-0 flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500'
             : 'flex flex-col text-xs font-medium text-slate-600'
         }
       >
-        {label}
+        <span className="truncate">{label}</span>
         <button
           type="button"
           title={title ?? selectedLabel}
           onClick={() => setOpen((o) => !o)}
           className={
             compact
-              ? 'mt-0.5 flex max-w-[9.5rem] min-w-[4.5rem] items-center justify-between gap-1 truncate rounded-md border border-slate-200/95 bg-white px-1.5 py-1 text-left text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
-              : 'mt-1 flex min-w-[10rem] items-center justify-between gap-1 rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-left text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
+              ? 'flex h-8 w-full items-center justify-between gap-1 rounded-md border border-slate-200/95 bg-white px-2 text-left text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
+              : 'mt-1 flex min-h-11 min-w-[10rem] items-center justify-between gap-1 rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-left text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
           }
         >
           <span className="min-w-0 truncate">{selectedLabel}</span>

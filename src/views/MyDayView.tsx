@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Timestamp, collection, getDocs, query, where } from 'firebase/firestore'
+import { Timestamp, collection, getDocs, limit, query, where } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
+import { useOrg } from '../hooks/useOrg'
 import { AppPageHeader } from '../components/AppPageHeader'
 import { BentoGrid, BentoStat } from '../components/bento'
 import { KpiCallHint } from '../components/KpiCallHint'
@@ -12,6 +13,9 @@ import { KpiMetricsSections } from '../components/KpiMetricsSections'
 import { fmtKpiNum, todayDateKey } from '../utils/kpiDisplay'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+
+/** Trần đọc hồ sơ khi thống kê nguồn trên «Ngày của tôi» — tránh quét cả collection. */
+const MY_DAY_SOURCE_LEAD_CAP = 1500
 
 type SourceCountRow = { source: string; count: number }
 type SourceDayRow = { day: string; total: number; topSource: string }
@@ -25,6 +29,7 @@ const MY_DAY_TABS: { id: MyDayTab; label: string }[] = [
 
 export function MyDayView() {
   const { firebaseUser, profile, can } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const { users } = useCounselorDirectory()
   const today = todayDateKey()
   const { summaries, loading, error, kpiCallSource } = useCounselorKpi('today', today)
@@ -35,6 +40,7 @@ export function MyDayView() {
   const [reportCounselor, setReportCounselor] = useState<'all' | string>('all')
   const [sourceLoading, setSourceLoading] = useState(false)
   const [sourceError, setSourceError] = useState<string | null>(null)
+  const [sourceNotice, setSourceNotice] = useState<string | null>(null)
   const [sourceRows, setSourceRows] = useState<SourceCountRow[]>([])
   const [sourceByDayRows, setSourceByDayRows] = useState<SourceDayRow[]>([])
 
@@ -88,24 +94,52 @@ export function MyDayView() {
     let cancelled = false
     setSourceLoading(true)
     setSourceError(null)
+    setSourceNotice(null)
     ;(async () => {
       try {
         const fromTs = Timestamp.fromDate(new Date(`${reportFrom}T00:00:00`))
         const toDate = new Date(`${reportTo}T00:00:00`)
         toDate.setDate(toDate.getDate() + 1)
         const toTs = Timestamp.fromDate(toDate)
-        const snap = await getDocs(
-          query(
-            collection(db, FS_COLLECTIONS.leads),
-            where('createdAt', '>=', fromTs),
-            where('createdAt', '<', toTs),
-          ),
-        )
+        const orgId = effectiveOrgId.trim()
+        const col = collection(db, FS_COLLECTIONS.leads)
+        let snap
+        try {
+          snap = await getDocs(
+            orgId
+              ? query(
+                  col,
+                  where('orgId', '==', orgId),
+                  where('createdAt', '>=', fromTs),
+                  where('createdAt', '<', toTs),
+                  limit(MY_DAY_SOURCE_LEAD_CAP),
+                )
+              : query(
+                  col,
+                  where('createdAt', '>=', fromTs),
+                  where('createdAt', '<', toTs),
+                  limit(MY_DAY_SOURCE_LEAD_CAP),
+                ),
+          )
+        } catch {
+          // Index orgId+createdAt chưa sẵn → đọc theo ngày + trần, lọc org trên client.
+          snap = await getDocs(
+            query(
+              col,
+              where('createdAt', '>=', fromTs),
+              where('createdAt', '<', toTs),
+              limit(MY_DAY_SOURCE_LEAD_CAP),
+            ),
+          )
+        }
         if (cancelled) return
         const bySource = new Map<string, number>()
         const byDay = new Map<string, { total: number; bySource: Map<string, number> }>()
+        let scanned = 0
         snap.forEach((d) => {
+          scanned += 1
           const row = d.data() as Record<string, unknown>
+          if (orgId && String(row.orgId ?? '').trim() !== orgId) return
           const assignedTo = String(row.assignedTo ?? '').trim()
           if (selectedCounselorId && assignedTo !== selectedCounselorId) return
           if (!selectedCounselorId && allowedCounselorIds && !allowedCounselorIds.has(assignedTo)) return
@@ -132,8 +166,17 @@ export function MyDayView() {
 
         setSourceRows(sourceList)
         setSourceByDayRows(dayList)
+        if (scanned >= MY_DAY_SOURCE_LEAD_CAP) {
+          setSourceNotice(
+            `Đã đọc tối đa ${MY_DAY_SOURCE_LEAD_CAP.toLocaleString('vi-VN')} hồ sơ trong kỳ — thu hẹp ngày nếu thiếu nguồn.`,
+          )
+        }
       } catch (e) {
-        if (!cancelled) setSourceError(e instanceof Error ? e.message : 'Không đọc được dữ liệu nguồn.')
+        if (!cancelled) {
+          setSourceError(e instanceof Error ? e.message : 'Không đọc được dữ liệu nguồn.')
+          setSourceRows([])
+          setSourceByDayRows([])
+        }
       } finally {
         if (!cancelled) setSourceLoading(false)
       }
@@ -141,7 +184,7 @@ export function MyDayView() {
     return () => {
       cancelled = true
     }
-  }, [reportFrom, reportTo, selectedCounselorId, allowedCounselorIds, firebaseUser?.uid])
+  }, [reportFrom, reportTo, selectedCounselorId, allowedCounselorIds, firebaseUser?.uid, effectiveOrgId])
 
   const safeTab = MY_DAY_TABS.some((t) => t.id === activeTab) ? activeTab : 'today'
 
@@ -242,9 +285,9 @@ export function MyDayView() {
             </label>
           </div>
 
-          {(reportError || sourceError) ? (
+          {reportError ? (
             <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-              {reportError || sourceError}
+              {reportError}
             </p>
           ) : null}
 
@@ -338,6 +381,11 @@ export function MyDayView() {
             {sourceError ? (
               <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
                 {sourceError}
+              </p>
+            ) : null}
+            {sourceNotice ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                {sourceNotice}
               </p>
             ) : null}
 

@@ -18,6 +18,7 @@ type Props = {
   aggregates: CallEvaluationAggregates
   loading?: boolean
   error?: string | null
+  notice?: string | null
   days: number
   scopeLabel: string
   compact?: boolean
@@ -84,6 +85,7 @@ export function CallEvaluationAnalyticsPanel({
   aggregates,
   loading,
   error,
+  notice,
   days,
   scopeLabel,
   compact = false,
@@ -118,6 +120,9 @@ export function CallEvaluationAnalyticsPanel({
 
   return (
     <section className="app-card-glass space-y-4 p-5 md:p-6">
+      {notice ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">{notice}</p>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="app-section-heading">Đánh giá trực tiếp khi gọi</h2>

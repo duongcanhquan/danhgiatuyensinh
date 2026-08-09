@@ -579,6 +579,15 @@ export function LeadProfileCoreForm({
           <Field label="Ngày sinh">
             <input className={INPUT_CLS} value={draft.dateOfBirth} disabled={disabled} onChange={(e) => patch('dateOfBirth', e.target.value)} />
           </Field>
+          <Field label="Giới tính">
+            <input
+              className={INPUT_CLS}
+              value={draft.gender}
+              disabled={disabled}
+              placeholder="Nam / Nữ / …"
+              onChange={(e) => patch('gender', e.target.value)}
+            />
+          </Field>
           <Field label="CCCD">
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-xs font-medium text-slate-700">

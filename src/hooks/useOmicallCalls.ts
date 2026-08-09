@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   collection,
-  collectionGroup,
   getDocs,
   limit,
   orderBy,
@@ -15,8 +14,6 @@ import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { fetchOmicallCallsViaFunction } from '../services/fetchOmicallCallsViaFunction'
 import { mapOmicallCallDoc, tsMsCall } from '../utils/omicallCallMap'
-import { evaluateClientValidCall } from '../utils/kpiFromOmicallCalls'
-import { getDefaultKpiEvaluationRules } from '../utils/kpiEvaluationRules'
 import { firestoreDatabaseMismatchHint } from '../utils/firestoreDatabaseHint'
 
 export type OmicallCallsScope =
@@ -34,7 +31,8 @@ export type UseOmicallCallsOpts = {
 }
 
 const CHUNK_DAYS = 7
-const CHUNK_QUERY_LIMIT = 1200
+/** Mỗi tuần một lần đọc — giữ vừa để không vượt trần khi kỳ dài. */
+const CHUNK_QUERY_LIMIT = 600
 
 type DateField = 'endedAt' | 'startedAt'
 type FallbackSource = 'none' | 'interactions'
@@ -59,6 +57,20 @@ function userFacingLoadError(e: unknown): string {
   }
   if (e instanceof Error) return e.message || 'Không đọc được lịch sử cuộc gọi.'
   return 'Không đọc được lịch sử cuộc gọi.'
+}
+
+type OmicallServerScopeFilter =
+  | { kind: 'none' }
+  | { kind: 'counselor'; counselorUid: string }
+  | { kind: 'team'; teamLeadUid: string }
+
+function callMatchesServerScopeFilter(
+  c: OmicallCallRecord,
+  scopeFilter: OmicallServerScopeFilter,
+): boolean {
+  if (scopeFilter.kind === 'none') return true
+  if (scopeFilter.kind === 'counselor') return c.counselorUid === scopeFilter.counselorUid
+  return c.teamLeadUid === scopeFilter.teamLeadUid
 }
 
 function filterCallsByScope(
@@ -99,8 +111,16 @@ function dateRangeConstraints(
   fromTs: Timestamp,
   toTs: Timestamp,
   limitN: number,
+  scopeFilter: OmicallServerScopeFilter,
 ): QueryConstraint[] {
-  return [where(field, '>=', fromTs), where(field, '<=', toTs), orderBy(field, 'desc'), limit(limitN)]
+  const parts: QueryConstraint[] = []
+  if (scopeFilter.kind === 'counselor') {
+    parts.push(where('counselorUid', '==', scopeFilter.counselorUid))
+  } else if (scopeFilter.kind === 'team') {
+    parts.push(where('teamLeadUid', '==', scopeFilter.teamLeadUid))
+  }
+  parts.push(where(field, '>=', fromTs), where(field, '<=', toTs), orderBy(field, 'desc'), limit(limitN))
+  return parts
 }
 
 async function runOmicallQuery(
@@ -119,11 +139,12 @@ async function fetchChunkByField(
   field: DateField,
   fromTs: Timestamp,
   toTs: Timestamp,
+  scopeFilter: OmicallServerScopeFilter,
 ): Promise<{ rows: OmicallCallRecord[]; hitLimit: boolean; indexMissing: boolean }> {
   try {
     const batch = await runOmicallQuery(
       db,
-      dateRangeConstraints(field, fromTs, toTs, CHUNK_QUERY_LIMIT),
+      dateRangeConstraints(field, fromTs, toTs, CHUNK_QUERY_LIMIT, scopeFilter),
     )
     return { rows: batch, hitLimit: batch.length >= CHUNK_QUERY_LIMIT, indexMissing: false }
   } catch (e) {
@@ -138,6 +159,7 @@ async function fetchCallsByDateChunks(
   fromTs: Timestamp,
   toTs: Timestamp,
   cap: number,
+  scopeFilter: OmicallServerScopeFilter = { kind: 'none' },
 ): Promise<{ rows: OmicallCallRecord[]; truncated: boolean; startedAtFallback: boolean }> {
   const fromMs = fromTs.toMillis()
   const toMs = toTs.toMillis()
@@ -154,7 +176,7 @@ async function fetchCallsByDateChunks(
     const chunkFrom = Timestamp.fromMillis(start)
     const chunkTo = Timestamp.fromMillis(end)
 
-    const ended = await fetchChunkByField(db, 'endedAt', chunkFrom, chunkTo)
+    const ended = await fetchChunkByField(db, 'endedAt', chunkFrom, chunkTo, scopeFilter)
     if (ended.hitLimit) truncated = true
     for (const row of ended.rows) {
       if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
@@ -166,17 +188,35 @@ async function fetchCallsByDateChunks(
     }
     if (merged.size >= cap) break
 
-    const started = await fetchChunkByField(db, 'startedAt', chunkFrom, chunkTo)
-    if (started.indexMissing) startedAtIndexMissing = true
-    else if (started.rows.length > 0) startedAtFallback = true
-    if (started.hitLimit) truncated = true
-    for (const row of started.rows) {
-      if (merged.has(row.id)) continue
-      if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
-      merged.set(row.id, row)
-      if (merged.size >= cap) {
-        truncated = true
-        break
+    // startedAt + counselorUid/teamLeadUid có thể thiếu composite index → bỏ qua nếu lỗi.
+    const started = await fetchChunkByField(db, 'startedAt', chunkFrom, chunkTo, scopeFilter)
+    if (started.indexMissing && scopeFilter.kind !== 'none') {
+      const startedGlobal = await fetchChunkByField(db, 'startedAt', chunkFrom, chunkTo, { kind: 'none' })
+      if (startedGlobal.indexMissing) startedAtIndexMissing = true
+      else if (startedGlobal.rows.length > 0) startedAtFallback = true
+      if (startedGlobal.hitLimit) truncated = true
+      for (const row of startedGlobal.rows) {
+        if (merged.has(row.id)) continue
+        if (!callMatchesServerScopeFilter(row, scopeFilter)) continue
+        if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
+        merged.set(row.id, row)
+        if (merged.size >= cap) {
+          truncated = true
+          break
+        }
+      }
+    } else {
+      if (started.indexMissing) startedAtIndexMissing = true
+      else if (started.rows.length > 0) startedAtFallback = true
+      if (started.hitLimit) truncated = true
+      for (const row of started.rows) {
+        if (merged.has(row.id)) continue
+        if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
+        merged.set(row.id, row)
+        if (merged.size >= cap) {
+          truncated = true
+          break
+        }
       }
     }
   }
@@ -189,108 +229,6 @@ async function fetchCallsByDateChunks(
     (a, b) => tsMsCall(b.endedAt ?? b.startedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.startedAt ?? a.createdAt),
   )
   return { rows: rows.slice(0, cap), truncated, startedAtFallback }
-}
-
-function inferDirectionFromNote(note: string): 'inbound' | 'outbound' {
-  const n = note.toLowerCase()
-  if (n.includes('gọi vào')) return 'inbound'
-  return 'outbound'
-}
-
-function mapInteractionToCallFallback(
-  id: string,
-  data: Record<string, unknown>,
-): OmicallCallRecord | null {
-  const provider = String(data.provider ?? '').toUpperCase()
-  if (provider !== 'OMICALL') return null
-  const ts = data.timestamp as Timestamp | undefined
-  if (!ts) return null
-  const transactionId = String(data.providerCallId ?? id).trim()
-  const note = String(data.counselorNote ?? '')
-  const outcomeRaw = String(data.callOutcome ?? '').toUpperCase()
-  const outcome: OmicallCallRecord['outcome'] =
-    outcomeRaw === 'CONNECTED' ? 'CONNECTED' : outcomeRaw === 'NO_ANSWER' ? 'NO_ANSWER' : 'OTHER'
-  const answerSeconds = Number(data.answerSeconds ?? data.durationSeconds ?? 0) || 0
-  const billSeconds = Number(data.billSeconds ?? data.durationSeconds ?? 0) || 0
-  const leadId = String(data.leadId ?? '') || undefined
-  const counselorUid = String(data.authorUid ?? '') || undefined
-  const minBillSeconds = getDefaultKpiEvaluationRules().validCall.minBillSeconds
-  const validity = evaluateClientValidCall({
-    billSeconds: Math.max(answerSeconds, billSeconds),
-    leadId,
-    counselorUid,
-    minBillSeconds,
-  })
-
-  return {
-    id: `int-${id}`,
-    transactionId,
-    direction: inferDirectionFromNote(note),
-    phoneNumber: String(data.phone ?? ''),
-    displayNumber: String(data.displayNumber ?? ''),
-    hotline: String(data.hotline ?? '') || undefined,
-    sipUser: String(data.sipUser ?? '') || undefined,
-    leadId,
-    counselorUid,
-    teamLeadUid: undefined,
-    startedAt: ts,
-    answeredAt: undefined,
-    endedAt: ts,
-    createdAt: ts,
-    answerSeconds,
-    billSeconds,
-    durationSeconds: Math.max(answerSeconds, billSeconds),
-    recordSeconds: Number(data.recordSeconds ?? 0) || 0,
-    recordingFileUrl: String(data.recordingUrl ?? '') || undefined,
-    hangupCause: undefined,
-    endByName: undefined,
-    provider: 'OMICALL',
-    outcome,
-    state: 'ended',
-    isFinal: true,
-    syncSource: 'history_sync',
-    syncedAt: undefined,
-    interactionId: id,
-    kpiAppliedAt: undefined,
-    isValidCall: validity.isValidCall,
-    invalidReason: validity.isValidCall ? undefined : validity.invalidReason ?? 'interaction_fallback',
-    aiAnalysisId: undefined,
-    aiAnalysisSyncedAt: undefined,
-    aiAnalysisSummary: undefined,
-    disposition: undefined,
-    agentId: undefined,
-    agentName: undefined,
-    customerName: undefined,
-    callNote: note || undefined,
-    isAutoCall: false,
-    evaluationScore: undefined,
-  }
-}
-
-async function fetchCallsFromInteractionsFallback(
-  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
-  fromTs: Timestamp,
-  toTs: Timestamp,
-  cap: number,
-): Promise<OmicallCallRecord[]> {
-  // Query theo timestamp trước (không ép composite index provider+timestamp),
-  // rồi lọc provider OMICALL ở client để tăng khả năng chạy được trên môi trường chưa đủ index.
-  const fetchLimit = Math.min(Math.max(cap * 4, 600), 4000)
-  const q = query(
-    collectionGroup(db, FS_COLLECTIONS.interactions),
-    where('timestamp', '>=', fromTs),
-    where('timestamp', '<=', toTs),
-    limit(fetchLimit),
-  )
-  const snap = await getDocs(q)
-  const rows: OmicallCallRecord[] = []
-  snap.forEach((d) => {
-    const mapped = mapInteractionToCallFallback(d.id, d.data() as Record<string, unknown>)
-    if (mapped) rows.push(mapped)
-  })
-  rows.sort((a, b) => tsMsCall(b.endedAt ?? b.startedAt ?? b.createdAt) - tsMsCall(a.endedAt ?? a.startedAt ?? a.createdAt))
-  if (rows.length > cap) return rows.slice(0, cap)
-  return rows
 }
 
 export function useOmicallCalls({
@@ -343,8 +281,15 @@ export function useOmicallCalls({
 
     const fetchCap =
       scope.mode === 'global'
-        ? Math.min(Math.max(maxRows * 3, 3000), 8000)
-        : Math.min(Math.max(maxRows * 4, 2000), 6000)
+        ? Math.min(Math.max(maxRows * 2, maxRows), 2500)
+        : Math.min(Math.max(maxRows * 2, maxRows), 2000)
+
+    const scopeFilter: OmicallServerScopeFilter =
+      scope.mode === 'counselor'
+        ? { kind: 'counselor', counselorUid: scope.counselorUid }
+        : scope.mode === 'team'
+          ? { kind: 'team', teamLeadUid: scope.teamLeadUid }
+          : { kind: 'none' }
 
     ;(async () => {
       try {
@@ -353,15 +298,38 @@ export function useOmicallCalls({
           fromTs,
           toTs,
           fetchCap,
+          scopeFilter,
         )
         if (cancelled) return
 
         let raw = rawPrimary
+        let truncatedOut = truncated
+        let startedAtFallbackOut = startedAtFallback
         let fallbackSource: FallbackSource = 'none'
-        let interactionFallbackError = false
         let serverFallbackError: string | null = null
         let serverFallbackWarning: string | null = null
         let serverFallbackUsed = false
+
+        // Doc cũ có thể chỉ có sipUser, chưa gắn counselorUid — bù nhẹ theo SIP (trần thấp).
+        const sip = viewerSipUser?.trim()
+        if (scope.mode === 'counselor' && sip && raw.length < maxRows) {
+          const sipCap = Math.min(300, fetchCap)
+          const sipFill = await fetchCallsByDateChunks(db, fromTs, toTs, sipCap, { kind: 'none' })
+          if (sipFill.truncated) truncatedOut = true
+          if (sipFill.startedAtFallback) startedAtFallbackOut = true
+          const seen = new Set(raw.map((r) => r.id))
+          for (const row of sipFill.rows) {
+            if (seen.has(row.id)) continue
+            if (row.counselorUid) continue
+            if (row.sipUser?.trim() !== sip) continue
+            raw.push(row)
+            seen.add(row.id)
+            if (raw.length >= fetchCap) {
+              truncatedOut = true
+              break
+            }
+          }
+        }
 
         const serverScope =
           scope.mode === 'global'
@@ -370,13 +338,13 @@ export function useOmicallCalls({
               ? ({ mode: 'team', teamLeadUid: scope.teamLeadUid } as const)
               : ({ mode: 'counselor', counselorUid: scope.counselorUid } as const)
 
-        // Ưu tiên Cloud Function (Admin SDK + database warmlist) khi client không có dữ liệu.
+        // Khi client trống: nhờ Cloud Function (warmlist / bù theo hồ sơ TVV). Không quét collectionGroup trên trình duyệt.
         if (raw.length === 0) {
           try {
             const serverRes = await fetchOmicallCallsViaFunction({
               fromMs: fromTs.toMillis(),
               toMs: toTs.toMillis(),
-              maxRows: fetchCap,
+              maxRows,
               scope: serverScope,
             })
             if (serverRes.calls.length > 0) {
@@ -392,18 +360,6 @@ export function useOmicallCalls({
           }
         }
 
-        if (raw.length === 0) {
-          try {
-            const fallbackRows = await fetchCallsFromInteractionsFallback(db, fromTs, toTs, fetchCap)
-            if (fallbackRows.length > 0) {
-              raw = fallbackRows
-              fallbackSource = 'interactions'
-            }
-          } catch {
-            interactionFallbackError = true
-          }
-        }
-
         const scoped = filterCallsByScope(raw, scope, viewerSipUser)
         scoped.sort(
           (a, b) =>
@@ -416,12 +372,12 @@ export function useOmicallCalls({
         const notices: string[] = []
         const dbHint = firestoreDatabaseMismatchHint()
         if (dbHint && raw.length === 0) notices.push(dbHint)
-        if (truncated) {
+        if (truncatedOut) {
           notices.push(
             `Đã tải tối đa ${fetchCap.toLocaleString('vi-VN')} cuộc trong kỳ — thu hẹp khoảng ngày nếu thiếu cuộc cũ.`,
           )
         }
-        if (startedAtFallback) {
+        if (startedAtFallbackOut) {
           notices.push('Đã bù thêm cuộc gọi theo giờ bắt đầu (một số bản ghi chưa có giờ kết thúc).')
         }
         if (scope.mode !== 'global' && raw.length > 0 && scoped.length === 0) {
@@ -444,8 +400,6 @@ export function useOmicallCalls({
           notices.push(`Không tải được lịch sử gọi từ server: ${serverFallbackError}`)
         } else if (serverFallbackWarning) {
           notices.push(serverFallbackWarning)
-        } else if (interactionFallbackError && raw.length === 0) {
-          notices.push('Chưa đọc được tương tác OMICall trên trình duyệt — thử thu hẹp khoảng ngày hoặc gọi từ nút OMICall trên hồ sơ.')
         }
         if (raw.length === 0 && !dbHint && !serverFallbackError && !serverFallbackWarning) {
           notices.push(

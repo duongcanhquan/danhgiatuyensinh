@@ -125,10 +125,13 @@ export const MAX_FULL_SCOPE_LEADS = 25_000
  * Giới hạn đọc fullScope trên UI Kanban / lọc nhãn theo profile (tránh đọc hàng chục nghìn doc một lần).
  * Phân tích nâng cao có thể truyền `maxFullScopeLeads` cao hơn.
  */
-export const LEADS_UI_FULL_SCOPE_MAX = 4000
+export const LEADS_UI_FULL_SCOPE_MAX = 1500
+
+/** Cap riêng cho Dashboard TVV — chỉ khi lọc client bắt buộc (follow-up / HOT SLA / chưa gán). */
+export const DASHBOARD_FULL_SCOPE_MAX = 1000
 
 /** Giới hạn đọc fullScope trên màn Phân tích nâng cao (thay vì 25k). */
-export const ANALYTICS_FULL_SCOPE_MAX = 5000
+export const ANALYTICS_FULL_SCOPE_MAX = 2500
 
 /** Kích thước mỗi lần đọc Firestore trong `fullScope`. */
 export const FULL_SCOPE_CHUNK_SIZE = 400

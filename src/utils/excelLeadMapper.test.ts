@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
 import {
+  buildLeadFirestorePayload,
   mapSheetRow,
   normalizeStaffMatchKey,
   parseWorkbookToRows,
@@ -133,6 +134,45 @@ describe('parseWorkbookToRows compact v2', () => {
     expect(rows[0]?.studentEmail).toBe('b@y.com')
   })
 
+  it('recovers other Mẫu 2 columns when only Họ tên header matched (sparse alias bug)', () => {
+    const buf = workbookBuf({
+      'Hồ sơ': [
+        // Cột 2–8 lệch tên nên alias cũ chỉ lấy được họ tên → phải bù theo thứ tự mẫu.
+        ['Họ tên', 'GT', 'NS', 'TH', 'DT', 'EM', 'DC', 'DTN'],
+        ['Nguyễn Sparse', 'Nữ', '15/08/2007', 'THPT Sparse', '0909998877', 's@x.com', 'Cầu Giấy', '8.2'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.fullName).toBe('Nguyễn Sparse')
+    expect(rows[0]?.gender).toBe('Nữ')
+    expect(rows[0]?.dateOfBirth).toBe('15/08/2007')
+    expect(rows[0]?.highSchool).toBe('THPT Sparse')
+    expect(rows[0]?.phone).toBe('0909998877')
+    expect(rows[0]?.studentEmail).toBe('s@x.com')
+    expect(rows[0]?.address).toBe('Cầu Giấy')
+    expect(rows[0]?.academicPerformance).toBe('8.2')
+  })
+
+  it('keeps STT column from stealing Họ tên when real headers are present', () => {
+    const buf = workbookBuf({
+      'Hồ sơ': [
+        ['STT', 'Họ tên', 'Giới Tính', 'ngày sinh', 'Trường học', 'điện thoại', 'email', 'địa chỉ', 'điểm tốt nghiệp'],
+        [1, 'Phạm D', 'Nam', '04/04/2005', 'THPT D', '0911222333', 'd@z.com', 'Đống Đa', '7'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows.some((r) => r.fullName === 'Phạm D' && r.phone === '0911222333' && r.gender === 'Nam')).toBe(
+      true,
+    )
+  })
+
   it('finds header on row 2 when row 1 is a title banner', () => {
     const buf = workbookBuf({
       'Hồ sơ': [
@@ -169,5 +209,28 @@ describe('resolveAssignedCounselorUid', () => {
 
   it('picks deterministic uid when multiple share normalized display name', () => {
     expect(resolveAssignedCounselorUid('nguyen van a', team)).toBe('u1')
+  })
+})
+
+describe('buildLeadFirestorePayload compact fields', () => {
+  it('writes gender, studentEmail, permanentAddress from Mẫu 2 row', () => {
+    const payload = buildLeadFirestorePayload(
+      {
+        fullName: 'A',
+        phone: '0901',
+        gender: 'Nữ',
+        studentEmail: 'a@x.com',
+        address: 'HN',
+        academicPerformance: '8',
+      },
+      0,
+      'COLD',
+      null,
+    )
+    expect(payload.gender).toBe('Nữ')
+    expect(payload.studentEmail).toBe('a@x.com')
+    expect(payload.address).toBe('HN')
+    expect(payload.permanentAddress).toBe('HN')
+    expect(payload.academicPerformance).toBe('8')
   })
 })

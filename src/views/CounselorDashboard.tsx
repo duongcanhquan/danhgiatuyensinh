@@ -25,8 +25,10 @@ import { isAdminLikeRole, isTeamLeadRole } from '../auth/roleUtils'
 import { leadAssignedUid } from '../auth/leadAccess'
 import {
   leadMatchesClientSearch,
-  LEADS_UI_FULL_SCOPE_MAX,
+  DASHBOARD_FULL_SCOPE_MAX,
+  LEADS_PAGE_SIZE,
   useLeads,
+  type LeadListServerFilters,
 } from '../hooks/useLeads'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -62,6 +64,7 @@ import {
   parsePriorityTagStrict,
 } from '../utils/leadWorkspaceUrlFilters'
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
+import { counselorDashboardNeedsFullScope } from '../utils/counselorDashboardLeadScope'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 
 const TAG_BADGE: Record<PriorityTag, string> = {
@@ -80,8 +83,6 @@ const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
   LOST: 'Không còn tiềm năng',
   ARCHIVED: 'Lưu trữ',
 }
-
-const LIST_PAGE_SIZE = 40
 
 type Toast = { id: string; text: string }
 
@@ -519,27 +520,6 @@ export function CounselorDashboard() {
     return m
   }, [directoryUsers])
 
-  const { leads, loading, error, scopeFetchTruncated, applyLocalLeadPatch, refetchLeads } = useLeads({
-    dataMode: 'fullScope',
-    maxFullScopeLeads: LEADS_UI_FULL_SCOPE_MAX,
-    directoryLabels: counselorDirectoryLabelById,
-  })
-  const scoringMasterBuckets = useMemo(
-    () => ({
-      regionLabels,
-      highSchoolLabels,
-      majorLabels,
-      academicPerformanceLabels,
-      regionEntries: byKind.regions,
-      majorEntries: byKind.majors,
-      catalogs,
-      entriesByCatalogId: byKind,
-    }),
-    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
-  )
-  const { scoreByLeadId, activeScoringProfile, schoolTvvSignalDefs, scoringPersistOpts } = useLeadScoring(leads)
-  const dashboardScoringOpts = scoringPersistOpts
-
   const [searchParams, setSearchParams] = useSearchParams()
   const patchListUrl = useCallback(
     (patch: Partial<Record<(typeof LWF)[keyof typeof LWF], string | null | undefined>>) => {
@@ -566,6 +546,96 @@ export function CounselorDashboard() {
   const sourceUrlFilter: 'ALL' | string =
     !sourceUrlRaw || sourceUrlRaw.toUpperCase() === 'ALL' ? 'ALL' : sourceUrlRaw
 
+  const canReadGlobalLeads = can('leads:read:global') || profile?.role === 'super_admin'
+  const dateNeedsClientScope =
+    (Boolean(dateFrom.trim()) || Boolean(dateTo.trim())) && dateAxis === 'followup'
+  const listNeedsFullScope = counselorDashboardNeedsFullScope({
+    myDayFilter,
+    dueOnly,
+    counselorFilterUid,
+    canReadGlobalLeads,
+    dateAxis,
+    dateFrom,
+    dateTo,
+  })
+
+  const leadServerFilters = useMemo((): LeadListServerFilters | undefined => {
+    const o: LeadListServerFilters = {}
+    if (pipelineUrlFilter !== 'ALL') o.pipelineStatus = pipelineUrlFilter as LeadPipelineStatus
+    if (crmStageFilter !== 'ALL') o.crmStatus = crmStageFilter
+    if (tagFilter !== 'ALL') o.priorityTag = tagFilter
+    if (regionFilter !== 'ALL') o.province = regionFilter
+    if (majorFilter !== 'ALL') o.educationLevel = majorFilter
+    if (sourceUrlFilter !== 'ALL') o.source = sourceUrlFilter
+    if (schoolFilter !== 'ALL') o.highSchoolIn = [schoolFilter]
+    if (
+      counselorFilterUid &&
+      counselorFilterUid !== '__UNASSIGNED__' &&
+      canReadGlobalLeads
+    ) {
+      o.assignedCounselorIn = [counselorFilterUid]
+    }
+    if (!dateNeedsClientScope && (dateFrom.trim() || dateTo.trim())) {
+      o.adminDateField = dateAxis === 'created' ? 'created' : 'updated'
+      const fromMs = parseDayStartMs(dateFrom)
+      const toMs = parseDayEndMs(dateTo)
+      if (fromMs != null) o.adminDateFromMs = fromMs
+      if (toMs != null) o.adminDateToMs = toMs
+    }
+    return Object.keys(o).length ? o : undefined
+  }, [
+    pipelineUrlFilter,
+    crmStageFilter,
+    tagFilter,
+    regionFilter,
+    majorFilter,
+    sourceUrlFilter,
+    schoolFilter,
+    counselorFilterUid,
+    canReadGlobalLeads,
+    dateNeedsClientScope,
+    dateAxis,
+    dateFrom,
+    dateTo,
+  ])
+
+  const {
+    leads,
+    loading,
+    loadingPage,
+    error,
+    currentPage,
+    totalPages: firestoreTotalPages,
+    setPage,
+    scopeFetchTruncated,
+    applyLocalLeadPatch,
+    refetchLeads,
+    totalLeadCount,
+    searchHitTotal,
+  } = useLeads({
+    serverFilters: leadServerFilters,
+    searchText: urlQRaw,
+    directoryLabels: counselorDirectoryLabelById,
+    dataMode: listNeedsFullScope ? 'fullScope' : 'paged',
+    maxFullScopeLeads: listNeedsFullScope ? DASHBOARD_FULL_SCOPE_MAX : undefined,
+  })
+
+  const scoringMasterBuckets = useMemo(
+    () => ({
+      regionLabels,
+      highSchoolLabels,
+      majorLabels,
+      academicPerformanceLabels,
+      regionEntries: byKind.regions,
+      majorEntries: byKind.majors,
+      catalogs,
+      entriesByCatalogId: byKind,
+    }),
+    [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
+  )
+  const { scoreByLeadId, activeScoringProfile, schoolTvvSignalDefs, scoringPersistOpts } = useLeadScoring(leads)
+  const dashboardScoringOpts = scoringPersistOpts
+
   const [toasts, setToasts] = useState<Toast[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm'>(null)
@@ -573,7 +643,6 @@ export function CounselorDashboard() {
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(false)
-  const [listPage, setListPage] = useState(1)
   const [rowCrmBusyId, setRowCrmBusyId] = useState<string | null>(null)
 
   const pushToast = useCallback((text: string) => {
@@ -678,8 +747,8 @@ export function CounselorDashboard() {
   const listFilterSig = useMemo(() => counselorListFilterSignature(searchParams), [searchParams])
 
   useEffect(() => {
-    setListPage(1)
-  }, [listFilterSig])
+    setPage(1)
+  }, [listFilterSig, setPage])
 
   const filtered = useMemo(() => {
     const q = qLower
@@ -702,7 +771,8 @@ export function CounselorDashboard() {
       if (tagFilter !== 'ALL' && tag !== tagFilter) return false
       if (pipelineUrlFilter !== 'ALL' && l.pipelineStatus !== pipelineUrlFilter) return false
       if (sourceUrlFilter !== 'ALL' && (l.source ?? '').trim() !== sourceUrlFilter) return false
-      if (!q) return true
+      // Ô tìm đã quét trong useLeads (searchText); fullScope vẫn lọc lại cho chắc.
+      if (!q || !listNeedsFullScope) return true
       return leadMatchesClientSearch(l, q, counselorDirectoryLabelById)
     })
   }, [
@@ -722,6 +792,7 @@ export function CounselorDashboard() {
     dateTo,
     pipelineUrlFilter,
     sourceUrlFilter,
+    listNeedsFullScope,
   ])
 
   const listRows = useMemo(() => {
@@ -732,16 +803,24 @@ export function CounselorDashboard() {
     )
   }, [filtered, crmStageFilter])
 
-  const maxListPage = Math.max(1, Math.ceil(listRows.length / LIST_PAGE_SIZE))
-  const effectiveListPage = Math.min(Math.max(1, listPage), maxListPage)
+  const clientPagingActive = listNeedsFullScope
+  const maxListPage = clientPagingActive
+    ? Math.max(1, Math.ceil(listRows.length / LEADS_PAGE_SIZE))
+    : Math.max(1, firestoreTotalPages)
+  const effectiveListPage = Math.min(Math.max(1, currentPage), maxListPage)
   const pageSlice = useMemo(() => {
-    const start = (effectiveListPage - 1) * LIST_PAGE_SIZE
-    return listRows.slice(start, start + LIST_PAGE_SIZE)
-  }, [listRows, effectiveListPage])
+    if (!clientPagingActive) return listRows
+    const start = (effectiveListPage - 1) * LEADS_PAGE_SIZE
+    return listRows.slice(start, start + LEADS_PAGE_SIZE)
+  }, [listRows, effectiveListPage, clientPagingActive])
+
+  const listTotalForPager = clientPagingActive
+    ? listRows.length
+    : searchHitTotal ?? totalLeadCount ?? listRows.length
 
   useEffect(() => {
-    setListPage((p) => Math.min(Math.max(1, p), Math.max(1, Math.ceil(listRows.length / LIST_PAGE_SIZE))))
-  }, [listRows.length])
+    if (currentPage > maxListPage) setPage(maxListPage)
+  }, [currentPage, maxListPage, setPage])
 
   const allOnPageSelected =
     pageSlice.length > 0 && pageSlice.every((l) => selectedIds.has(l.id))
@@ -1094,11 +1173,11 @@ export function CounselorDashboard() {
                       const raw = e.target.value
                       const t = raw.trim()
                       patchListUrl({ [LWF.Q]: t ? raw : null })
-                      setListPage(1)
+                      setPage(1)
                     }}
                     onFocus={() => setFiltersExpanded(true)}
                     placeholder="Tên, SĐT, tỉnh, trường, ngành… (đồng bộ với Hồ sơ đầy đủ — tham số q)"
-                    className="w-full rounded-xl border border-slate-200/95 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white py-0 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
                   />
                 </div>
               </label>
@@ -1106,7 +1185,7 @@ export function CounselorDashboard() {
                 type="button"
                 onClick={() => setFiltersExpanded((x) => !x)}
                 title="Lọc nâng cao (CRM · khu vực · trường · nguồn…)"
-                className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/95 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 sm:w-auto"
+                className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-200/95 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80 sm:w-auto"
                 aria-expanded={filtersExpanded}
               >
                 <Filter className="h-3.5 w-3.5 text-amber-700" strokeWidth={2} />
@@ -1122,17 +1201,17 @@ export function CounselorDashboard() {
               </button>
             </div>
             {filtersExpanded ? (
-              <div className="mt-3 grid gap-3 border-t border-slate-200/80 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
-                <label className="block text-xs font-medium text-slate-600">
-                  Giai đoạn tư vấn (CRM)
+              <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-3 border-t border-slate-200/80 pt-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Giai đoạn tư vấn (CRM)</span>
                   <select
                     value={crmStageFilter}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value as 'ALL' | LeadCounselorStatus
                       patchListUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả giai đoạn</option>
                     {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
@@ -1142,16 +1221,16 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Khu vực
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Khu vực</span>
                   <select
                     value={regionFilter}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
                       patchListUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả khu vực</option>
                     {regionOptions.map((r) => (
@@ -1161,16 +1240,16 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Trường THPT
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Trường THPT</span>
                   <select
                     value={schoolFilter}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
                       patchListUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả trường</option>
                     {schoolOptions.slice(0, 80).map((sc) => (
@@ -1180,16 +1259,16 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Ngành / cấp (educationLevel)
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Ngành / cấp</span>
                   <select
                     value={majorFilter}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
                       patchListUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="ALL">Tất cả ngành</option>
                     {majorOptions.slice(0, 80).map((m) => (
@@ -1199,16 +1278,16 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Funnel tuyển sinh
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Funnel tuyển sinh</span>
                   <select
                     value={pipelineUrlFilter}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value
                       patchListUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                     title="Cùng bộ lọc với màn Hồ sơ khi chia sẻ link."
                   >
                     <option value="ALL">Tất cả giai đoạn funnel</option>
@@ -1219,16 +1298,16 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Nguồn
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Nguồn</span>
                   <select
                     value={sourceUrlFilter}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value === 'ALL' ? 'ALL' : e.target.value
                       patchListUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                     title="Cùng bộ lọc với màn Hồ sơ khi chia sẻ link."
                   >
                     <option value="ALL">Mọi nguồn</option>
@@ -1242,59 +1321,59 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Thời điểm theo
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Thời điểm theo</span>
                   <select
                     value={dateAxis}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value as DateAxisFilter
                       patchListUrl({ [LWF.DATE_AXIS]: v === 'updated' ? null : v })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   >
                     <option value="updated">Ngày cập nhật hồ sơ</option>
                     <option value="created">Ngày tạo hồ sơ</option>
                     <option value="followup">Ngày follow-up đã hẹn</option>
                   </select>
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Từ ngày
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Từ ngày</span>
                   <input
                     type="date"
                     value={dateFrom}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value
                       patchListUrl({ [LWF.DATE_FROM]: v ? v : null })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   />
                 </label>
-                <label className="block text-xs font-medium text-slate-600">
-                  Đến ngày
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="truncate">Đến ngày</span>
                   <input
                     type="date"
                     value={dateTo}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value
                       patchListUrl({ [LWF.DATE_TO]: v ? v : null })
                     }}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                   />
                 </label>
-                <label className="block text-xs font-medium text-slate-600 sm:col-span-2 lg:col-span-2">
-                  Tư vấn viên phụ trách
+                <label className="flex min-w-0 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:col-span-2">
+                  <span className="truncate">Tư vấn viên phụ trách</span>
                   <select
                     value={counselorFilterUid}
                     onChange={(e) => {
-                      setListPage(1)
+                      setPage(1)
                       const v = e.target.value
                       patchListUrl({ [LWF.ASSIGN]: v ? v : null })
                     }}
                     disabled={counselorsLoading && counselorUsers.length === 0}
-                    className="mt-1 w-full rounded-xl border border-slate-200/95 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
+                    className="h-9 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
                   >
                     <option value="">Mọi TVV (theo dữ liệu đã tải)</option>
                     <option value="__UNASSIGNED__">Chưa gán TVV</option>
@@ -1305,11 +1384,11 @@ export function CounselorDashboard() {
                     ))}
                   </select>
                 </label>
-                <div className="flex items-end sm:col-span-2 lg:col-span-2">
+                <div className="flex min-w-0 flex-col justify-end">
                   <button
                     type="button"
                     onClick={() => {
-                      setListPage(1)
+                      setPage(1)
                       patchListUrl({
                         [LWF.REGION]: null,
                         [LWF.SCHOOL]: null,
@@ -1323,9 +1402,9 @@ export function CounselorDashboard() {
                         [LWF.CRM]: null,
                       })
                     }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                    className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
-                    Xóa bộ lọc mở rộng
+                    Xóa lọc
                   </button>
                 </div>
               </div>
@@ -1337,7 +1416,7 @@ export function CounselorDashboard() {
                 type="checkbox"
                 checked={dueOnly}
                 onChange={(e) => {
-                  setListPage(1)
+                  setPage(1)
                   patchListUrl({ [LWF.DUE]: e.target.checked ? '1' : null })
                 }}
                 className="accent-amber-400"
@@ -1349,7 +1428,7 @@ export function CounselorDashboard() {
               <select
                 value={tagFilter}
                 onChange={(e) => {
-                  setListPage(1)
+                  setPage(1)
                   const v = e.target.value as typeof tagFilter
                   patchListUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
                 }}
@@ -1374,7 +1453,7 @@ export function CounselorDashboard() {
             <button
               type="button"
               onClick={() => {
-                setListPage(1)
+                setPage(1)
                 patchListUrl({ [LWF.MYDAY]: myDayFilter === 'followup' ? null : 'followup' })
               }}
               className={[
@@ -1385,12 +1464,18 @@ export function CounselorDashboard() {
               ].join(' ')}
             >
               <span aria-hidden>🔥</span>{' '}
-              <span className="font-semibold">{followUpCount}</span> follow-up hôm nay / quá hạn
+              {listNeedsFullScope || myDayFilter === 'followup' ? (
+                <>
+                  <span className="font-semibold">{followUpCount}</span> follow-up hôm nay / quá hạn
+                </>
+              ) : (
+                <>Follow-up hôm nay / quá hạn</>
+              )}
             </button>
             <button
               type="button"
               onClick={() => {
-                setListPage(1)
+                setPage(1)
                 patchListUrl({ [LWF.MYDAY]: myDayFilter === 'hot_sla' ? null : 'hotsla' })
               }}
               className={[
@@ -1401,7 +1486,13 @@ export function CounselorDashboard() {
               ].join(' ')}
             >
               <span aria-hidden>⚠️</span>{' '}
-              <span className="font-semibold">{hotSlaCount}</span> HOT giai đoạn Mới &gt;24h chưa chạm
+              {listNeedsFullScope || myDayFilter === 'hot_sla' ? (
+                <>
+                  <span className="font-semibold">{hotSlaCount}</span> HOT giai đoạn Mới &gt;24h chưa chạm
+                </>
+              ) : (
+                <>HOT giai đoạn Mới &gt;24h chưa chạm</>
+              )}
             </button>
           </div>
         </div>
@@ -1415,7 +1506,7 @@ export function CounselorDashboard() {
 
       {scopeFetchTruncated ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 shadow-sm">
-          Danh sách này chỉ tải tối đa <strong>{LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
+          Danh sách này chỉ tải tối đa <strong>{DASHBOARD_FULL_SCOPE_MAX.toLocaleString('vi-VN')}</strong> hồ sơ trong phạm vi
           quyền — có thể còn trên server. Dùng{' '}
           <Link to="/leads" className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950">
             Hồ sơ đầy đủ
@@ -1430,7 +1521,7 @@ export function CounselorDashboard() {
         </div>
       ) : null}
 
-      {loading ? (
+      {loading && !pageSlice.length ? (
         <div className="space-y-2 rounded-2xl border border-slate-200/80 bg-white/50 p-4 shadow-inner">
           <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200/80" />
           <div className="h-10 w-full animate-pulse rounded-lg bg-slate-200/60" />
@@ -1438,31 +1529,34 @@ export function CounselorDashboard() {
           <div className="h-10 w-full animate-pulse rounded-lg bg-slate-200/60" />
         </div>
       ) : (
-        <CounselorLeadWorklist
-          key={listFilterSig}
-          rows={pageSlice}
-          total={listRows.length}
-          page={effectiveListPage}
-          pageSize={LIST_PAGE_SIZE}
-          onPageChange={setListPage}
-          getPriorityTag={displayPriorityTag}
-          selectedIds={selectedIds}
-          toggleSelectId={toggleSelectId}
-          toggleSelectAllOnPage={toggleSelectAllOnPage}
-          allOnPageSelected={allOnPageSelected}
-          canWrite={canWrite}
-          canInteract={canInteract}
-          pushToast={pushToast}
-          onRowCrmChange={applyRowCrmChange}
-          rowCrmBusyId={rowCrmBusyId}
-          onLeadLocallyPatched={applyLocalLeadPatch}
-        />
+        <div className={loadingPage ? 'opacity-70 transition-opacity' : undefined}>
+          <CounselorLeadWorklist
+            key={listFilterSig}
+            rows={pageSlice}
+            total={listTotalForPager}
+            page={effectiveListPage}
+            pageSize={LEADS_PAGE_SIZE}
+            onPageChange={setPage}
+            getPriorityTag={displayPriorityTag}
+            selectedIds={selectedIds}
+            toggleSelectId={toggleSelectId}
+            toggleSelectAllOnPage={toggleSelectAllOnPage}
+            allOnPageSelected={allOnPageSelected}
+            canWrite={canWrite}
+            canInteract={canInteract}
+            pushToast={pushToast}
+            onRowCrmChange={applyRowCrmChange}
+            rowCrmBusyId={rowCrmBusyId}
+            onLeadLocallyPatched={applyLocalLeadPatch}
+          />
+        </div>
       )}
 
       <CallEvaluationAnalyticsPanel
         aggregates={callEvalStats.aggregates}
         loading={callEvalStats.loading}
         error={callEvalStats.error}
+        notice={callEvalStats.notice}
         days={30}
         scopeLabel={isElevatedLeadScope ? 'Toàn nhóm (đánh giá đã lưu)' : 'Đánh giá của bạn'}
         compact
