@@ -13,8 +13,10 @@ import { reconcileOmicallKpi } from '../services/reconcileOmicallKpi'
 import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
 import { probeOmicallInternalPhones } from '../services/omicallCallCenterProbe'
 import { registerOmicallWebhookOnServer } from '../services/omicallRegisterWebhook'
+import { syncOmicallMyExtension } from '../services/omicallSyncMyExtension'
 import { runOmicallAdminBootstrap } from '../services/omicallAutoBootstrap'
 import { getFirebaseApp } from '../services/firebase'
+import { firebaseCallableErrorMessage } from '../utils/firebaseCallableError'
 import {
   buildOmicallWebhookUrl,
   buildQuickOmicallConfig,
@@ -39,7 +41,7 @@ function statusBadge(status: string): string {
 }
 
 export function OmicallSettingsTab() {
-  const { can, profile } = useAuth()
+  const { can, profile, reloadProfile } = useAuth()
   const canEdit = can('config:omicall')
   const {
     config,
@@ -58,6 +60,7 @@ export function OmicallSettingsTab() {
   const [busy, setBusy] = useState(false)
   const [quickBusy, setQuickBusy] = useState(false)
   const [webhookBusy, setWebhookBusy] = useState(false)
+  const [mySipBusy, setMySipBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
   const [kpiReconcileBusy, setKpiReconcileBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -95,7 +98,14 @@ export function OmicallSettingsTab() {
 
   const onSave = async (next?: OmicallIntegrationConfig) => {
     if (!canEdit) return
-    const payload = ensureWebhookSecret(next ?? draft)
+    const base = ensureWebhookSecret(next ?? draft)
+    // Có API + domain → bật tích hợp để SDK/register không bị tắt.
+    const payload: OmicallIntegrationConfig = {
+      ...base,
+      enabled:
+        base.enabled ||
+        Boolean(base.apiKey?.trim() && base.sipRealm?.trim()),
+    }
     setBusy(true)
     setMsg(null)
     try {
@@ -105,21 +115,44 @@ export function OmicallSettingsTab() {
         void runOmicallAdminBootstrap({
           config: payload,
           projectId: getFirebaseApp()?.options.projectId ?? '',
+          force: true,
         }).then((b) => {
+          const parts = [b.webhook, b.phones, ...b.errors].filter(Boolean)
+          if (parts.length) setMsg(parts.join(' '))
           if (b.webhook || b.phones) reconnect()
         })
       }
       const sipGap = describeMissingOmicallSipParts(payload, profile)
       setMsg(
         sipGap
-          ? `Đã lưu. Webhook sẽ tự đăng ký nếu có API key. Để gọi từ trình duyệt: ${sipGap}.`
-          : 'Đã lưu — hệ thống tự đăng ký webhook & đồng bộ số nội bộ nếu cần.',
+          ? `Đã lưu. Để gọi được: ${sipGap} — hoặc bấm «Đồng bộ số theo email tôi».`
+          : 'Đã lưu — đang thử kết nối tổng đài.',
       )
       reconnect()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không lưu được')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const runSyncMySip = async () => {
+    setMySipBusy(true)
+    setMsg(null)
+    try {
+      const r = await syncOmicallMyExtension()
+      await reloadProfile().catch(() => {})
+      setMsg(r.message)
+      reconnect()
+    } catch (e) {
+      setMsg(
+        firebaseCallableErrorMessage(
+          e,
+          'Không đồng bộ được số nội bộ — kiểm tra email tài khoản trùng số trên OMICall.',
+        ),
+      )
+    } finally {
+      setMySipBusy(false)
     }
   }
 
@@ -191,12 +224,10 @@ export function OmicallSettingsTab() {
         setDraft(payload)
       }
       const r = await registerOmicallWebhookOnServer()
-      setMsg(r.message)
+      setMsg(r.message || 'Đã đăng ký webhook trên OMICall.')
     } catch (e) {
       setMsg(
-        e instanceof Error
-          ? `${e.message} — nếu báo không tìm thấy hàm, chạy npm run deploy:omicall rồi thử lại.`
-          : 'Không đăng ký webhook',
+        `${firebaseCallableErrorMessage(e, 'Không đăng ký webhook')}. Webhook chỉ nhận sự kiện cuộc gọi — muốn gọi điện cần số nội bộ + mật khẩu SIP.`,
       )
     } finally {
       setWebhookBusy(false)
@@ -336,7 +367,12 @@ export function OmicallSettingsTab() {
                 Tài khoản đang đăng nhập đã gắn số nội bộ <strong>{profile.omicallSipUser}</strong>
                 {profile.omicallSipPassword?.trim() ? ' (có mật khẩu trên hồ sơ).' : ' — chưa có mật khẩu trên hồ sơ.'}
               </p>
-            ) : null}
+            ) : (
+              <p className="mt-2 text-[11px] text-amber-900">
+                Superadmin / tài khoản này chưa gắn số nội bộ. Điền mặc định ở trên, hoặc bấm đồng bộ theo email nếu
+                OMICall đã tạo số trùng email đăng nhập.
+              </p>
+            )}
           </div>
         </fieldset>
 
@@ -359,6 +395,14 @@ export function OmicallSettingsTab() {
             >
               <Save className="h-4 w-4" aria-hidden />
               Chỉ lưu
+            </button>
+            <button
+              type="button"
+              disabled={mySipBusy || busy || !draft.apiKey?.trim()}
+              onClick={() => void runSyncMySip()}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {mySipBusy ? 'Đang đồng bộ…' : 'Đồng bộ số theo email tôi'}
             </button>
           </div>
         ) : null}

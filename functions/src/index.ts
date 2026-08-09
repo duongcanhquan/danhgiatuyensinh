@@ -1179,8 +1179,8 @@ export const syncOmicallCallHistory = onSchedule(
   { schedule: 'every 15 minutes', secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
   async (): Promise<void> => {
     const serverConfig = await loadOmicallServerConfig()
-    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
-    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
+    const apiKey = serverConfig.apiKey || envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY')
+    const baseUrl = serverConfig.apiBaseUrl || envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL')
     const runRef = db.collection(COLLECTIONS.omicallSyncRuns).doc()
     const startedAt = Timestamp.now()
     if (!serverConfig.historySyncEnabled) {
@@ -1244,12 +1244,7 @@ export const triggerOmicallHistorySync = onCall(
     if (role !== 'admin' && role !== 'super_admin') {
       throw new HttpsError('permission-denied', 'Chỉ quản trị mới chạy đồng bộ thủ công.')
     }
-    const serverConfig = await loadOmicallServerConfig()
-    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
-    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
-    if (!apiKey || !baseUrl) {
-      throw new HttpsError('failed-precondition', 'Thiếu API key hoặc base URL OMICall.')
-    }
+    const { apiKey, baseUrl, serverConfig } = await requireOmicallApiCreds()
     const lookbackMinutes = Math.max(
       15,
       Math.min(4320, Math.round(num(request.data?.lookbackMinutes) || serverConfig.historyLookbackMinutes)),
@@ -1319,12 +1314,7 @@ export const omicallCallCenterProbe = onCall(
     if (role !== 'admin' && role !== 'super_admin') {
       throw new HttpsError('permission-denied', 'Chỉ quản trị mới kiểm tra API Tổng đài.')
     }
-    const serverConfig = await loadOmicallServerConfig()
-    const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
-    const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
-    if (!apiKey || !baseUrl) {
-      throw new HttpsError('failed-precondition', 'Thiếu API key hoặc base URL OMICall.')
-    }
+    const { apiKey, baseUrl } = await requireOmicallApiCreds()
     const action = str(request.data?.action) as CallCenterProbeAction
     if (action === 'internal_phones') {
       const keyword = str(request.data?.keyword)
@@ -1359,12 +1349,19 @@ export const omicallCallCenterProbe = onCall(
   },
 )
 
+/**
+ * Ưu tiên API key / base URL đã lưu trong Cài đặt (Firestore).
+ * Secret Manager chỉ dùng khi Firestore trống — tránh secret cũ ghi đè key mới trên UI.
+ */
 async function requireOmicallApiCreds() {
   const serverConfig = await loadOmicallServerConfig()
-  const apiKey = envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY') || serverConfig.apiKey
-  const baseUrl = envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL') || serverConfig.apiBaseUrl
+  const apiKey = serverConfig.apiKey || envSecret(OMICALL_API_KEY, 'OMICALL_API_KEY')
+  const baseUrl = serverConfig.apiBaseUrl || envSecret(OMICALL_API_BASE_URL, 'OMICALL_API_BASE_URL')
   if (!apiKey || !baseUrl) {
-    throw new HttpsError('failed-precondition', 'Thiếu API key hoặc base URL OMICall.')
+    throw new HttpsError(
+      'failed-precondition',
+      'Thiếu API key hoặc địa chỉ API OMICall — lưu lại trong Cài đặt → Gọi điện.',
+    )
   }
   return { apiKey, baseUrl, serverConfig }
 }
