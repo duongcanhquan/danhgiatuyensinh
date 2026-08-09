@@ -128,6 +128,8 @@ export const PERMISSIONS = [
   'leads:reassign:peer',
   /** Trưởng nhóm: đổi TVV cho hồ sơ trong nhóm. */
   'leads:reassign:team',
+  /** Admin / Siêu quản trị: xóa hồ sơ (một hoặc hàng loạt). */
+  'leads:delete',
   'interactions:create:self_assigned',
   /** Trưởng nhóm: ghi tương tác trên hồ sơ TVV trong nhóm. */
   'interactions:create:team_scope',

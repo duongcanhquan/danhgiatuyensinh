@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { UserPlus, Download, GitBranch, Sparkles, X, Tags, Layers } from 'lucide-react'
+import { UserPlus, Download, GitBranch, Sparkles, X, Tags, Layers, Trash2 } from 'lucide-react'
 import type { PriorityTag } from '../../types'
 
 type Props = {
@@ -12,6 +12,8 @@ type Props = {
   onBulkPriorityTag?: () => void
   /** Gán chương trình / đợt nhập hàng loạt */
   onBulkIntakeProgram?: () => void
+  /** Admin: xóa hồ sơ đã chọn */
+  onBulkDelete?: () => void
   showReassign: boolean
   /** Chỉ hiện khi lọc WARM + có quyền AI — stage-2 shortlist miner */
   showAiMiner?: boolean
@@ -27,6 +29,7 @@ export function BulkLeadActionBar({
   onExport,
   onBulkPriorityTag,
   onBulkIntakeProgram,
+  onBulkDelete,
   showReassign,
   showAiMiner,
   onAiMiner,
@@ -125,6 +128,17 @@ export function BulkLeadActionBar({
                 <span className="sm:hidden">Xuất</span>
                 <span className="hidden sm:inline">Xuất đã chọn</span>
               </button>
+              {onBulkDelete ? (
+                <button
+                  type="button"
+                  onClick={onBulkDelete}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-rose-400 bg-rose-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 sm:flex-initial sm:min-h-10"
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  <span className="sm:hidden">Xóa</span>
+                  <span className="hidden sm:inline">Xóa đã chọn</span>
+                </button>
+              ) : null}
             </div>
           </div>
         </motion.div>

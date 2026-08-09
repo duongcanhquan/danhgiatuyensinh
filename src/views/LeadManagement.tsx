@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { BookOpen, Bot, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, Library, RefreshCw, Sparkles, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, Library, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -111,6 +111,7 @@ import {
   BulkIntakeProgramPartialError,
   bulkSetLeadIntakeProgram,
 } from '../utils/bulkLeadIntakeProgram'
+import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDeleteLeads'
 import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
@@ -346,10 +347,7 @@ export function LeadManagement() {
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
     if (sourceFilter !== 'ALL') o.source = sourceFilter
-    // Chỉ đẩy intakeProgram lên server khi không cần quét fullScope (admin, một mình lọc chương trình).
-    if (programFilter !== 'ALL' && programFilter !== '__UNSET__' && !programNeedsScope) {
-      o.intakeProgram = programFilter
-    }
+    // intakeProgram: luôn fullScope + lọc client (programNeedsScope) — không đẩy lên query server.
     if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
@@ -369,8 +367,6 @@ export function LeadManagement() {
     regionFilter,
     majorFilter,
     sourceFilter,
-    programFilter,
-    programNeedsScope,
     schoolFilter,
     assigneeFilter,
     scoreMinInput,
@@ -400,6 +396,7 @@ export function LeadManagement() {
     scopeProgramOptions,
     fetchScopeProgramOptions,
     applyLocalLeadPatch,
+    removeLocalLeads,
     refetchLeads,
   } = useLeads({
     serverFilters: leadServerFilters,
@@ -642,7 +639,10 @@ export function LeadManagement() {
   const isElevatedLeadScope = can('leads:read:global') || can('leads:reassign:team')
   const canPeerReassignLeads = Boolean(can('leads:reassign:peer'))
   const showBulkReassign = isElevatedLeadScope || canPeerReassignLeads
-  const canBulkWrite = Boolean(can('leads:write:self_assigned') || showBulkReassign)
+  const canDeleteLeads = Boolean(can('leads:delete'))
+  const canBulkWrite = Boolean(
+    can('leads:write:self_assigned') || showBulkReassign || canDeleteLeads,
+  )
   const canCreateManualLead = canCreateLead(profile, can)
 
   const wantsCreateFromUrl = searchParams.get('create') === '1'
@@ -1409,11 +1409,8 @@ export function LeadManagement() {
             leadMatchesClientSearch(l, urlQuery.trim().toLowerCase(), counselorDirectoryLabelById),
           )
         }
-        if (programFilter === '__UNSET__') {
-          rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
-        } else if (programFilter !== 'ALL') {
-          rows = rows.filter((l) => intakeProgramsMatch(l.intakeProgram, programFilter))
-        }
+        // Khi !listNeedsFullScope thì programNeedsScope = false → programFilter luôn 'ALL'
+        // (lọc chương trình đã đi nhánh fullScope + `filtered`). Không lọc lại ở đây.
       }
       const map = new Map<string, Lead>()
       for (const l of rows) map.set(l.id, l)
@@ -1453,7 +1450,6 @@ export function LeadManagement() {
     dispositionFilter,
     urlQuery,
     counselorDirectoryLabelById,
-    programFilter,
   ])
 
   const applyBulkReassign = useCallback(async () => {
@@ -1787,6 +1783,70 @@ export function LeadManagement() {
       setBulkBusy(false)
     }
   }, [db, profile, selectedIds, bulkPriorityTag, applyLocalLeadPatch, refetchLeads])
+
+  const applyBulkDelete = useCallback(async () => {
+    if (!db || !profile || !canDeleteLeads || !selectedIds.size || bulkBusy) return
+    const ids = [...selectedIds]
+    const n = ids.length
+    if (
+      !window.confirm(
+        `Xóa vĩnh viễn ${n} hồ sơ đã chọn?\n\nKhông hoàn tác được. Chỉ Admin được xóa.`,
+      )
+    ) {
+      return
+    }
+    setBulkBusy(true)
+    setRescoreMsg(null)
+    try {
+      const { deleted, deletedIds } = await bulkDeleteLeads(db, ids)
+      const deletedSet = new Set(deletedIds)
+      removeLocalLeads(deletedIds)
+      setSelectedIds(new Set())
+      if (selected && deletedSet.has(selected.id)) {
+        setSelected(null)
+        leadDetailUnsavedRef.current = false
+      }
+      const performer = profile.displayName?.trim() || profile.email || profile.id
+      for (const id of deletedIds.slice(0, 12)) {
+        const name = leads.find((l) => l.id === id)?.fullName?.trim() || id.slice(0, 8)
+        await commitAuditLog(db, {
+          leadId: id,
+          actionType: 'SYSTEM_UPDATE',
+          description: `Xóa hồ sơ «${name}»`,
+          performedBy: profile.id,
+          performedByName: performer,
+        }).catch(() => {})
+      }
+      setRescoreMsg(`Đã xóa ${deleted} hồ sơ.`)
+      void refetchLeads()
+    } catch (e) {
+      if (e instanceof BulkDeleteLeadsPartialError) {
+        removeLocalLeads(e.deletedIds)
+        setSelectedIds(new Set(e.remainingIds))
+        if (selected && e.deletedIds.includes(selected.id)) {
+          setSelected(null)
+          leadDetailUnsavedRef.current = false
+        }
+        setRescoreMsg(e.message)
+        void refetchLeads()
+      } else {
+        console.error(e)
+        setRescoreMsg(e instanceof Error ? e.message : 'Không xóa được hồ sơ.')
+      }
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [
+    db,
+    profile,
+    canDeleteLeads,
+    selectedIds,
+    selected,
+    leads,
+    bulkBusy,
+    removeLocalLeads,
+    refetchLeads,
+  ])
 
   const applyBulkIntakeProgram = useCallback(
     async (mode: 'set' | 'clear' = 'set') => {
@@ -2894,6 +2954,7 @@ export function LeadManagement() {
             setBulkModal('intakeProgram')
           }}
           onExport={() => exportBulkSelection()}
+          onBulkDelete={canDeleteLeads ? () => void applyBulkDelete() : undefined}
           showReassign={showBulkReassign}
           showAiMiner={tagFilter === 'WARM' && canRunLlmAnalysis}
           onAiMiner={() => void openAiMinerGatekeeper()}
@@ -3513,6 +3574,7 @@ export function LeadManagement() {
               counselorsLoading={counselorsLoading}
               canReassignLead={showBulkReassign}
               reassignElevated={isElevatedLeadScope}
+              canDeleteLead={canDeleteLeads}
               scoringMasterBuckets={scoringMasterBuckets}
               schoolTvvSignalDefs={schoolTvvSignalDefs}
               dynamicAssistantSlot={
@@ -3532,6 +3594,18 @@ export function LeadManagement() {
               onUpdated={(patch) => {
                 applyLocalLeadPatch(selected.id, patch)
                 setSelected((prev) => (prev ? { ...prev, ...patch } : prev))
+              }}
+              onDeleted={(leadId) => {
+                removeLocalLeads([leadId])
+                setSelectedIds((prev) => {
+                  if (!prev.has(leadId)) return prev
+                  const next = new Set(prev)
+                  next.delete(leadId)
+                  return next
+                })
+                setSelected(null)
+                leadDetailUnsavedRef.current = false
+                void refetchLeads()
               }}
             />,
             document.body,
@@ -4024,9 +4098,11 @@ function LeadDetailPanel({
   counselorsLoading,
   canReassignLead,
   reassignElevated,
+  canDeleteLead: canDeleteThisLead,
   onClose,
   onUnsavedChange,
   onUpdated,
+  onDeleted,
   dynamicAssistantSlot,
 }: {
   lead: Lead
@@ -4044,11 +4120,15 @@ function LeadDetailPanel({
   canReassignLead: boolean
   /** Admin / Trưởng khoa / Trưởng ngành: toàn quyền gán; TVV: chỉ chuyển trong team với quyền peer. */
   reassignElevated: boolean
+  /** Admin: xóa hồ sơ này khỏi hệ thống. */
+  canDeleteLead?: boolean
   /** Đóng panel — parent có thể bọc confirm khi còn dirty (đồng bộ qua onUnsavedChange). */
   onClose: () => void
   /** Báo parent có thay đổi chưa lưu (funnel / ghi chú / CRM trái) để onClose hỏi xác nhận. */
   onUnsavedChange?: (dirty: boolean) => void
   onUpdated: (patch: Partial<Lead>) => void
+  /** Sau khi xóa thành công — parent đóng panel và bỏ khỏi danh sách. */
+  onDeleted?: (leadId: string) => void
   /** Trợ lý kịch bản (nhúng trong layout fullscreen). */
   dynamicAssistantSlot?: ReactNode
 }) {
@@ -4191,9 +4271,39 @@ function LeadDetailPanel({
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
   const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
   const [closeDetailConfirmOpen, setCloseDetailConfirmOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
+
+  const deleteThisLead = useCallback(async () => {
+    if (!db || !profile || !canDeleteThisLead || deleteBusy) return
+    const label = lead.fullName?.trim() || 'hồ sơ này'
+    if (
+      !window.confirm(
+        `Xóa vĩnh viễn «${label}»?\n\nKhông hoàn tác được. Chỉ Admin được xóa.`,
+      )
+    ) {
+      return
+    }
+    setDeleteBusy(true)
+    setMsg(null)
+    try {
+      await bulkDeleteLeads(db, [lead.id])
+      await commitAuditLog(db, {
+        leadId: lead.id,
+        actionType: 'SYSTEM_UPDATE',
+        description: `Xóa hồ sơ «${label}»`,
+        performedBy: profile.id,
+        performedByName: profile.displayName?.trim() || profile.email || profile.id,
+      }).catch(() => {})
+      onDeleted?.(lead.id)
+    } catch (e) {
+      console.error(e)
+      setMsg(e instanceof Error ? e.message : 'Không xóa được hồ sơ.')
+      setDeleteBusy(false)
+    }
+  }, [db, profile, canDeleteThisLead, deleteBusy, lead.id, lead.fullName, onDeleted])
 
   useEffect(() => {
     setNote('')
@@ -4975,6 +5085,18 @@ function LeadDetailPanel({
               <span className="hidden sm:inline">LLM (khóa)</span>
             </button>
           )}
+          {canDeleteThisLead ? (
+            <button
+              type="button"
+              onClick={() => void deleteThisLead()}
+              disabled={deleteBusy}
+              title="Xóa hồ sơ khỏi hệ thống"
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-rose-400 bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+            >
+              <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+              <span className="hidden sm:inline">{deleteBusy ? 'Đang xóa…' : 'Xóa'}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={requestClosePanel}

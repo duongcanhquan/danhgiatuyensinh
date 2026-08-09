@@ -1566,6 +1566,17 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
   }, [])
 
+  /** Bỏ hồ sơ khỏi danh sách local ngay sau khi xóa trên Firestore (trước khi refetch). */
+  const removeLocalLeads = useCallback((ids: readonly string[]) => {
+    if (!ids.length) return
+    const drop = new Set(ids)
+    setLeads((rows) => rows.filter((r) => !drop.has(r.id)))
+    const bucket = searchBucketRef.current
+    if (bucket?.length) {
+      searchBucketRef.current = bucket.filter((r) => !drop.has(r.id))
+    }
+  }, [])
+
   return {
     leads,
     rawLeads: leads,
@@ -1582,6 +1593,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     searchHitTotal,
     scopeFetchTruncated,
     applyLocalLeadPatch,
+    removeLocalLeads,
     currentPage,
     totalPages,
     setPage,

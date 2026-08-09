@@ -83,6 +83,16 @@ service cloud.firestore {
         || (hasTokenOrg() && schoolOrgActive() && matchesOrgData(resource.data));
     }
 
+    /** Chỉ Admin trường / Siêu quản trị được xóa hồ sơ. */
+    function canDeleteLead() {
+      return isPlatform()
+        || (signedIn()
+          && request.auth.token.role == 'admin'
+          && hasTokenOrg()
+          && schoolOrgActive()
+          && matchesOrgData(resource.data));
+    }
+
     function orgScopedRead() {
       return signedIn() && schoolOrgActive() && matchesOrgData(resource.data);
     }
@@ -146,7 +156,7 @@ service cloud.firestore {
       allow read: if orgScopedRead();
       allow create: if orgScopedCreate();
       allow update: if orgScopedWrite();
-      allow delete: if deleteInOwnOrg();
+      allow delete: if canDeleteLead();
 
       match /interactions/{id} {
         allow read, write: if signedIn() && (

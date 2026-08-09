@@ -10,6 +10,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'leads:write:team_scope': 'Sửa hồ sơ TVV trong nhóm',
   'leads:reassign:peer': 'Chuyển hồ sơ của mình sang TVV khác (đồng nghiệp)',
   'leads:reassign:team': 'Đổi TVV cho hồ sơ trong nhóm',
+  'leads:delete': 'Xóa hồ sơ (một hoặc hàng loạt)',
   'interactions:create:self_assigned': 'Ghi tương tác trên hồ sơ của mình',
   'interactions:create:team_scope': 'Ghi tương tác trên hồ sơ nhóm',
   'interactions:read:team_scope': 'Xem lịch sử tương tác (nhóm)',
