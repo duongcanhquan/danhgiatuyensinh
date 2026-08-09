@@ -128,6 +128,12 @@ export const MAX_FULL_SCOPE_LEADS = 25_000
  */
 export const LEADS_UI_FULL_SCOPE_MAX = 1500
 
+/**
+ * Khi lọc chương trình (kể cả «Chưa gắn»): quét sâu theo documentId để tìm khớp,
+ * không chỉ lấy 1500 hồ sơ `updatedAt` mới nhất rồi lọc client (bỏ lỡ hồ sơ cũ).
+ */
+export const LEADS_UI_PROGRAM_SCAN_MAX = 100_000
+
 /** Cap riêng cho Dashboard TVV — chỉ khi lọc client bắt buộc (follow-up / HOT SLA / chưa gán). */
 export const DASHBOARD_FULL_SCOPE_MAX = 1000
 
@@ -517,6 +523,20 @@ export type UseLeadsOptions = {
   fullScopeChunkSize?: number
   /** Mặc định {@link MAX_FULL_SCOPE_LEADS}. */
   maxFullScopeLeads?: number
+  /**
+   * fullScope: sắp theo `updatedAt` (mặc định) hoặc `docId` (quét đều, không bỏ lỡ hồ sơ cũ).
+   */
+  fullScopeOrderMode?: 'updatedAt' | 'docId'
+  /**
+   * fullScope: trần số document quét khi có `fullScopeKeepMatch` (mặc định = maxFullScopeLeads).
+   */
+  maxFullScopeScanDocs?: number
+  /**
+   * fullScope: chỉ giữ hồ sơ khớp (vd. chưa gắn chương trình). Cần kèm `fullScopeMatchKey` ổn định.
+   */
+  fullScopeKeepMatch?: (lead: Lead) => boolean
+  /** Khóa ổn định cho `fullScopeKeepMatch` (đưa vào filterKey). */
+  fullScopeMatchKey?: string
   /**
    * Khi true: gọi thêm getCount theo từng nhãn `priorityTag` (4 lần) — tốn chi phí aggregation.
    * Chỉ bật nơi thật sự dùng `scopeTagCounts` (vd. Phân tích nâng cao). Mặc định false.
@@ -986,6 +1006,14 @@ export function useLeads(opts?: UseLeadsOptions) {
   const batchLimit = Math.min(500, Math.max(LEADS_PAGE_SIZE, opts?.batchLimit ?? 120))
   const fullScopeChunkSize = Math.min(500, Math.max(50, opts?.fullScopeChunkSize ?? FULL_SCOPE_CHUNK_SIZE))
   const maxFullScopeLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxFullScopeLeads ?? MAX_FULL_SCOPE_LEADS))
+  const fullScopeOrderMode = opts?.fullScopeOrderMode === 'docId' ? 'docId' : 'updatedAt'
+  const maxFullScopeScanDocs = Math.min(
+    1_000_000,
+    Math.max(maxFullScopeLeads, opts?.maxFullScopeScanDocs ?? maxFullScopeLeads),
+  )
+  const fullScopeMatchKey = opts?.fullScopeMatchKey ?? ''
+  const fullScopeKeepMatchRef = useRef(opts?.fullScopeKeepMatch)
+  fullScopeKeepMatchRef.current = opts?.fullScopeKeepMatch
   const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
   const includeScopeSourceOptions = Boolean(opts?.includeScopeSourceOptions)
   const includeScopeProgramOptions = Boolean(opts?.includeScopeProgramOptions)
@@ -1009,7 +1037,9 @@ export function useLeads(opts?: UseLeadsOptions) {
   }, [directoryLabels])
   const filterKey = useMemo(() => {
     const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}`
-    if (dataMode === 'fullScope') return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}`
+    if (dataMode === 'fullScope') {
+      return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}|om:${fullScopeOrderMode}|scan:${maxFullScopeScanDocs}|mk:${fullScopeMatchKey}`
+    }
     return b
   }, [
     serverFiltersKey,
@@ -1020,6 +1050,9 @@ export function useLeads(opts?: UseLeadsOptions) {
     directoryLabelsKey,
     fullScopeChunkSize,
     maxFullScopeLeads,
+    fullScopeOrderMode,
+    maxFullScopeScanDocs,
+    fullScopeMatchKey,
     canReadGlobal,
     effectiveOrgId,
   ])
@@ -1440,8 +1473,12 @@ export function useLeads(opts?: UseLeadsOptions) {
     const loadFullScope = async () => {
       let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
       const acc: Lead[] = []
+      let scanned = 0
       let hitCap = false
-      while (acc.length < maxFullScopeLeads) {
+      const keepMatch = fullScopeKeepMatchRef.current
+      const byDocId = fullScopeOrderMode === 'docId'
+      const scanCap = keepMatch ? maxFullScopeScanDocs : maxFullScopeLeads
+      while (acc.length < maxFullScopeLeads && scanned < scanCap) {
         const snap: QuerySnapshot<DocumentData> = await getDocsListWithOrgFallback(
           firestore,
           profile,
@@ -1449,26 +1486,51 @@ export function useLeads(opts?: UseLeadsOptions) {
           serverFilters,
           effectiveOrgId,
           canReadGlobal,
-          (base) =>
-            lastSnap === null
+          (base) => {
+            if (byDocId) {
+              return lastSnap === null
+                ? query(base, orderBy(documentId()), limit(fullScopeChunkSize))
+                : query(base, orderBy(documentId()), startAfter(lastSnap), limit(fullScopeChunkSize))
+            }
+            return lastSnap === null
               ? query(base, orderBy('updatedAt', 'desc'), limit(fullScopeChunkSize))
-              : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize)),
+              : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize))
+          },
         )
         if (cancelled) return
         if (!snap.docs.length) break
+        scanned += snap.docs.length
+        const mappedChunk: Lead[] = []
         for (const d of snap.docs) {
           const row = mapDoc(d.id, d.data() as Record<string, unknown>)
-          if (row) acc.push(row)
+          if (row) mappedChunk.push(row)
+        }
+        const roleFiltered = applyRoleClientFilter(
+          mappedChunk,
+          profile,
+          hoDQueryLabels,
+          canReadGlobal,
+          effectiveOrgId,
+        )
+        for (const row of roleFiltered) {
+          if (keepMatch && !keepMatch(row)) continue
+          acc.push(row)
+          if (acc.length >= maxFullScopeLeads) break
         }
         lastSnap = snap.docs[snap.docs.length - 1]!
         if (snap.docs.length < fullScopeChunkSize) break
         if (acc.length >= maxFullScopeLeads) {
+          // Còn có thể có khớp phía sau — đánh dấu cắt khi đang lọc keepMatch hoặc đã đầy cửa sổ.
+          hitCap = true
+          break
+        }
+        if (scanned >= scanCap) {
           hitCap = true
           break
         }
       }
       if (cancelled) return
-      let mapped = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+      let mapped = acc
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       setScopeFetchTruncated(hitCap)
       setSearchScanTruncated(false)
@@ -1591,10 +1653,13 @@ export function useLeads(opts?: UseLeadsOptions) {
     batchLimit,
     fullScopeChunkSize,
     maxFullScopeLeads,
+    fullScopeOrderMode,
+    maxFullScopeScanDocs,
+    fullScopeMatchKey,
     filterKey,
     directoryLabelsKey,
     hoDQueryLabels,
-    pagedFirestoreDep,
+    pagedReposDep,
     includeScopeTagCounts,
     includeScopeSourceOptions,
     includeScopeProgramOptions,

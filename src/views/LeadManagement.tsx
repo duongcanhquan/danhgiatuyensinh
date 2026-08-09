@@ -32,7 +32,17 @@ import {
   RULE_CATEGORY_LABELS,
 } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
-import { useLeads, mapDoc, fetchLeadsInScopeForRescore, serverFiltersForBulkRescore, leadMatchesClientSearch, type LeadListServerFilters, LEADS_PAGE_SIZE, LEADS_UI_FULL_SCOPE_MAX } from '../hooks/useLeads'
+import {
+  useLeads,
+  mapDoc,
+  fetchLeadsInScopeForRescore,
+  serverFiltersForBulkRescore,
+  leadMatchesClientSearch,
+  type LeadListServerFilters,
+  LEADS_PAGE_SIZE,
+  LEADS_UI_FULL_SCOPE_MAX,
+  LEADS_UI_PROGRAM_SCAN_MAX,
+} from '../hooks/useLeads'
 import { useMasterData } from '../hooks/useMasterData'
 import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
@@ -112,12 +122,7 @@ import {
   bulkSetLeadIntakeProgram,
 } from '../utils/bulkLeadIntakeProgram'
 import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDeleteLeads'
-import {
-  collectLeadIdsByIntakeProgram,
-  confirmTokenForProgramPurge,
-  PURGE_PROGRAM_HARD_CAP,
-  typedConfirmMatchesProgram,
-} from '../utils/purgeLeadsByIntakeProgram'
+import { collectLeadIdsByIntakeProgram, PURGE_PROGRAM_HARD_CAP } from '../utils/purgeLeadsByIntakeProgram'
 import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
@@ -494,6 +499,34 @@ export function LeadManagement() {
   const listNeedsFullScope =
     tagClientEval || callQueueNeedsScope || assigneeUnsetNeedsScope || programNeedsScope
 
+  /** Lọc chương trình: quét theo id + chỉ giữ khớp — tránh cửa sổ 1500 `updatedAt` bỏ sót hồ sơ cũ. */
+  const programFullScopeKeepMatch = useMemo(() => {
+    if (!programNeedsScope) return undefined
+    return (l: Lead) => {
+      if (programFilter === '__UNSET__') {
+        if ((l.intakeProgram ?? '').trim()) return false
+      } else if (programFilter !== 'ALL') {
+        if (!intakeProgramsMatch(l.intakeProgram, programFilter)) return false
+      }
+      if (callWorkBucketFilter !== 'all' && !leadMatchesCallWorkBucket(l, callWorkBucketFilter)) {
+        return false
+      }
+      if (dispositionFilter !== 'all' && !leadMatchesDisposition(l, dispositionFilter)) return false
+      if (assigneeFilter === '__UNASSIGNED__') {
+        if (effectiveLeadAssigneeUid(l)) return false
+      } else if (assigneeFilter && effectiveLeadAssigneeUid(l) !== assigneeFilter) {
+        return false
+      }
+      return true
+    }
+  }, [
+    programNeedsScope,
+    programFilter,
+    callWorkBucketFilter,
+    dispositionFilter,
+    assigneeFilter,
+  ])
+
   const {
     leads,
     loading,
@@ -519,6 +552,12 @@ export function LeadManagement() {
     directoryLabels: counselorDirectoryLabelById,
     dataMode: listNeedsFullScope ? 'fullScope' : 'paged',
     maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    fullScopeOrderMode: programNeedsScope ? 'docId' : undefined,
+    maxFullScopeScanDocs: programNeedsScope ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
+    fullScopeKeepMatch: programFullScopeKeepMatch,
+    fullScopeMatchKey: programNeedsScope
+      ? `prog:${programFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|as:${assigneeFilter}`
+      : undefined,
     includeScopeTagCounts: !tagClientEval,
     includeScopeSourceOptions: sourceCatalogRequested,
     includeScopeProgramOptions: true,
@@ -1137,6 +1176,17 @@ export function LeadManagement() {
     })
     setPage(1)
   }, [draftFilters, mergeListFilterUrl, setPage])
+
+  /** Chip chương trình: chọn + áp dụng ngay (không cần bấm «Áp dụng lọc»). */
+  const applyProgramFilterQuick = useCallback(
+    (program: string) => {
+      setDraftFilters((prev) => ({ ...prev, program }))
+      setProgramFilter(program)
+      mergeListFilterUrl({ [LWF.PROG]: program === 'ALL' ? null : program })
+      setPage(1)
+    },
+    [mergeListFilterUrl, setPage],
+  )
 
   const discardDraftFilters = useCallback(() => {
     setDraftFilters(appliedFiltersSnapshot)
@@ -2031,15 +2081,8 @@ export function LeadManagement() {
     if (!db || !profile || !canDeleteLeads || !selectedIds.size || bulkBusy) return
     const ids = [...selectedIds]
     const n = ids.length
-    if (
-      !window.confirm(
-        `Xóa vĩnh viễn ${n} hồ sơ đã chọn?\n\nKhông hoàn tác được. Chỉ Admin được xóa.`,
-      )
-    ) {
-      return
-    }
     setBulkBusy(true)
-    setRescoreMsg(null)
+    setRescoreMsg(`Đang xóa ${n.toLocaleString('vi-VN')} hồ sơ đã chọn…`)
     try {
       const { deleted, deletedIds } = await bulkDeleteLeads(db, ids)
       const deletedSet = new Set(deletedIds)
@@ -2126,15 +2169,9 @@ export function LeadManagement() {
             : `chương trình «${prog}»`
           : `bộ lọc hiện tại (${activeFilterChips.length} điều kiện)`
 
-      if (
-        !window.confirm(
-          `Xóa TOÀN BỘ hồ sơ thuộc ${scopeLabel}?\n\nBước tiếp theo sẽ đếm số hồ sơ rồi hỏi xác nhận lần nữa. Không hoàn tác được.`,
-        )
-      ) {
-        return
-      }
-
+      // Một lần bấm = xóa ngay (không confirm / không gõ lại tên).
       setSelectScopeBusy(true)
+      setBulkBusy(true)
       setRescoreMsg(`Đang quét hồ sơ thuộc ${scopeLabel}…`)
 
       /** Xóa theo chương trình: quét + xóa lặp đến hết (không kẹt ~1500). */
@@ -2142,7 +2179,6 @@ export function LeadManagement() {
         try {
           let totalDeleted = 0
           let round = 0
-          let firstConfirmDone = false
 
           while (round < 50) {
             round += 1
@@ -2172,32 +2208,6 @@ export function LeadManagement() {
                 void refetchLeads()
               }
               return
-            }
-
-            if (!firstConfirmDone) {
-              firstConfirmDone = true
-              const n = collected.ids.length
-              const moreNote = collected.mayHaveMore
-                ? `\n\nĐã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} / vòng — sẽ xóa rồi tự quét tiếp đến hết.`
-                : ''
-              if (
-                !window.confirm(
-                  `XÓA VĨNH VIỄN ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}?${moreNote}\n\nĐã quét ${collected.scanned.toLocaleString('vi-VN')} bản ghi. Không hoàn tác được.`,
-                )
-              ) {
-                setRescoreMsg(null)
-                return
-              }
-              const confirmToken = confirmTokenForProgramPurge(prog)
-              const typed = window.prompt(
-                `Nhập «${confirmToken}» để xác nhận xóa cả lô (không phân biệt hoa thường):`,
-              )
-              if (!typedConfirmMatchesProgram(typed ?? '', prog)) {
-                setRescoreMsg('Đã hủy xóa — xác nhận không khớp.')
-                return
-              }
-              setSelectScopeBusy(false)
-              setBulkBusy(true)
             }
 
             setRescoreMsg(`Đang xóa ${totalDeleted.toLocaleString('vi-VN')}… (+${collected.ids.length})`)
@@ -2320,6 +2330,7 @@ export function LeadManagement() {
         console.error(e)
         setRescoreMsg(e instanceof Error ? e.message : 'Không quét được hồ sơ để xóa.')
         setSelectScopeBusy(false)
+        setBulkBusy(false)
         return
       } finally {
         setSelectScopeBusy(false)
@@ -2327,34 +2338,17 @@ export function LeadManagement() {
 
       if (!rows.length) {
         setRescoreMsg(`Không có hồ sơ nào thuộc ${scopeLabel}.`)
+        setBulkBusy(false)
         return
       }
 
       const n = rows.length
-      const truncWarn = truncated
-        ? `\n\nCẢNH BÁO: đã đạt giới hạn ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ; chạy lại sau khi xóa.`
-        : ''
-      if (
-        !window.confirm(
-          `XÓA VĨNH VIỄN ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}?${truncWarn}\n\nKhông hoàn tác được.`,
-        )
-      ) {
-        setRescoreMsg(null)
-        return
-      }
-      if (n >= 10) {
-        const typed = window.prompt(
-          `Nhập đúng số ${n} để xác nhận xóa ${n.toLocaleString('vi-VN')} hồ sơ:`,
-        )
-        if (typed?.trim() !== String(n)) {
-          setRescoreMsg('Đã hủy xóa — số xác nhận không khớp.')
-          return
-        }
-      }
-
       const ids = rows.map((l) => l.id)
-      setBulkBusy(true)
-      setRescoreMsg(`Đang xóa 0/${n}…`)
+      setRescoreMsg(
+        truncated
+          ? `Đang xóa 0/${n}… (đã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ; chạy lại nếu cần)`
+          : `Đang xóa 0/${n}…`,
+      )
       try {
         const { deleted, deletedIds } = await bulkDeleteLeads(db, ids, {
           onProgress: (done, total) => setRescoreMsg(`Đang xóa ${done}/${total}…`),
@@ -2735,7 +2729,7 @@ export function LeadManagement() {
                       <button
                         type="button"
                         title={`Lọc chương trình «${name}»`}
-                        onClick={() => patchDraftFilters({ program: name })}
+                        onClick={() => applyProgramFilterQuick(name)}
                         className="inline-flex min-w-0 max-w-[11rem] items-center gap-1 truncate px-1.5 text-[11px] font-medium transition hover:bg-amber-50/80"
                       >
                         <span className="truncate">{name}</span>
@@ -2767,7 +2761,7 @@ export function LeadManagement() {
                       <button
                         type="button"
                         title="Lọc hồ sơ chưa gắn chương trình"
-                        onClick={() => patchDraftFilters({ program: '__UNSET__' })}
+                        onClick={() => applyProgramFilterQuick('__UNSET__')}
                         className="inline-flex items-center gap-1 px-1.5 text-[11px] font-medium"
                       >
                         Chưa gắn <span className="tabular-nums">{programSummary.unset}</span>
@@ -3324,10 +3318,11 @@ export function LeadManagement() {
                 {rescoreMsg}
               </p>
             ) : null}
-            {(tagClientEval || callQueueNeedsScope) && scopeFetchTruncated ? (
+            {(tagClientEval || callQueueNeedsScope || programNeedsScope) && scopeFetchTruncated ? (
               <p className="text-xs font-medium text-amber-900">
-                Đã đạt giới hạn tải ({LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một
-                phần ở đuôi danh sách.
+                {programNeedsScope
+                  ? `Đã quét tối đa ${LEADS_UI_PROGRAM_SCAN_MAX.toLocaleString('vi-VN')} hồ sơ hoặc đủ ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} kết quả — có thể còn hồ sơ khớp phía sau.`
+                  : `Đã đạt giới hạn tải (${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một phần ở đuôi danh sách.`}
               </p>
             ) : null}
           </div>
@@ -3541,7 +3536,17 @@ export function LeadManagement() {
                 <tr>
                   <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
                     <p>Không có hồ sơ khớp bộ lọc.</p>
-                    {isPlatformSuperAdmin ? (
+                    {programFilter === '__UNSET__' ? (
+                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
+                        Bộ lọc «Chưa gắn chương trình» tìm hồ sơ không có nhãn chương trình. Nếu trước đây đã gán
+                        chương trình hoặc đã xóa lô, danh sách sẽ trống — đây không phải lỗi quyền đọc Firestore.
+                      </p>
+                    ) : programFilter !== 'ALL' ? (
+                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
+                        Không thấy hồ sơ thuộc chương trình đã chọn trong phạm vi quét hiện tại. Thử bỏ lọc chương
+                        trình hoặc kiểm tra tên chương trình trên cột «Chương trình».
+                      </p>
+                    ) : isPlatformSuperAdmin ? (
                       <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
                         Đang xem trường <span className="font-semibold text-slate-800">{currentOrgLabel}</span>
                         {effectiveOrgId !== DEFAULT_ORG_ID ? (
@@ -3558,8 +3563,8 @@ export function LeadManagement() {
                           </>
                         ) : (
                           <>
-                            . Nếu vẫn trống: đăng xuất/đăng nhập lại, và deploy Firestore Rules (super_admin được đọc
-                            toàn hệ thống).
+                            . Nếu vẫn trống khi không lọc: đăng xuất/đăng nhập lại, và kiểm tra Firestore Rules
+                            (super_admin được đọc toàn hệ thống).
                           </>
                         )}
                       </p>
