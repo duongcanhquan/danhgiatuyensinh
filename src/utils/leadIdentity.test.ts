@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { computeLeadUniqueHash } from './leadIdentity'
+import {
+  computeLeadUniqueHash,
+  leadDedupeStrength,
+  shouldQueryExistingByUniqueHash,
+} from './leadIdentity'
 
 describe('computeLeadUniqueHash', () => {
   it('matches Node crypto SHA-256 for phone-based basis (stable vs Firestore)', () => {
@@ -16,5 +20,11 @@ describe('computeLeadUniqueHash', () => {
   it('is deterministic for identity fallback', () => {
     const row = { fullName: 'Nguyễn Văn A', customerId: 'KH01', educationLevel: 'ĐH', gradeClass: '12' }
     expect(computeLeadUniqueHash(row)).toBe(computeLeadUniqueHash(row))
+  })
+
+  it('does not collapse empty rows onto one shared hash when salted', () => {
+    expect(leadDedupeStrength({})).toBe('weak')
+    expect(shouldQueryExistingByUniqueHash({})).toBe(false)
+    expect(computeLeadUniqueHash({}, 0)).not.toBe(computeLeadUniqueHash({}, 1))
   })
 })

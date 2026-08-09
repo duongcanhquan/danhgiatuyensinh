@@ -117,7 +117,15 @@ function normalizeHeader(h: string): string {
     .replace(/đ/g, 'd')
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
+    // Excel hay thêm *, :, (ghi chú) sau tên cột
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[*：:]+/g, ' ')
     .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isMappedRowEmpty(row: Partial<ExcelLeadRow>): boolean {
+  return !Object.values(row).some((v) => String(v ?? '').trim())
 }
 
 function normalizeSheetTabName(name: string): string {
@@ -151,6 +159,18 @@ export function mapSheetRow(raw: Record<string, unknown>): Partial<ExcelLeadRow>
   return out
 }
 
+function sheetMappedRows(
+  sheet: XLSX.WorkSheet,
+  headerRowIndex: number,
+): Partial<ExcelLeadRow>[] {
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: '',
+    raw: true,
+    range: headerRowIndex,
+  })
+  return json.map((row) => mapSheetRow(row)).filter((row) => !isMappedRowEmpty(row))
+}
+
 export function parseWorkbookToRows(
   file: ArrayBuffer,
   opts?: { headerRowIndex?: number },
@@ -165,21 +185,27 @@ export function parseWorkbookToRows(
     cellText: false,
   })
   const names = wb.SheetNames
-  const preferred =
-    names.find((n) => normalizeSheetTabName(n) === 'leads') ??
-    names.find((n) => normalizeSheetTabName(n) === 'ho so') ??
-    names[0]
-  const sheetName = preferred
-  if (!sheetName) return []
-  const sheet = wb.Sheets[sheetName]
+  if (!names.length) return []
   /** Hàng tiêu đề 0-based; dữ liệu từ hàng tiếp theo (= Excel hàng 2 khi headerRowIndex=0). */
   const headerRowIndex = Math.max(0, Math.floor(opts?.headerRowIndex ?? 0))
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-    defval: '',
-    raw: true,
-    range: headerRowIndex,
-  })
-  return json.map((row) => mapSheetRow(row))
+
+  // Chọn sheet có nhiều dòng map được nhất — tránh sheet «Hồ sơ» trống trong khi data nằm Sheet1.
+  let best: { rows: Partial<ExcelLeadRow>[]; preferred: boolean } | null = null
+  for (const name of names) {
+    const sheet = wb.Sheets[name]
+    if (!sheet) continue
+    const rows = sheetMappedRows(sheet, headerRowIndex)
+    const tab = normalizeSheetTabName(name)
+    const preferred = tab === 'leads' || tab === 'ho so'
+    if (
+      !best ||
+      rows.length > best.rows.length ||
+      (rows.length === best.rows.length && preferred && !best.preferred)
+    ) {
+      best = { rows, preferred }
+    }
+  }
+  return best?.rows ?? []
 }
 
 export type LeadIntakeOwnershipMeta = {

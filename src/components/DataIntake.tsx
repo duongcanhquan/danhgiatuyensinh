@@ -32,7 +32,12 @@ import { evaluateLead, evaluationRecordFromLeadLike } from '../utils/scoring'
 import { evaluateLeadWithClassification, classificationFirestorePatch } from '../utils/leadClassificationScore'
 import { partialLeadFromExcelRow } from '../utils/scoringLeadInput'
 import { countAssignments, pickCounselorByLowestLoad, pickPrimaryAdminUid } from '../utils/routing'
-import { computeLeadUniqueHash, normalizePhoneKey } from '../utils/leadIdentity'
+import {
+  computeLeadUniqueHash,
+  leadDedupeStrength,
+  normalizePhoneKey,
+  shouldQueryExistingByUniqueHash,
+} from '../utils/leadIdentity'
 import { FS_COLLECTIONS, type Lead, type PriorityTag, type VietMyUserProfile } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
@@ -69,6 +74,8 @@ type PreparedRow = {
   hash: string
   existingId?: string
   inFileDuplicate: boolean
+  /** phone | identity | weak — weak không so trùng DB / không gom trùng file theo mã trống */
+  strength: 'phone' | 'identity' | 'weak'
 }
 
 type ImportPreview = {
@@ -231,10 +238,16 @@ export function DataIntake() {
     let assignUnresolvedRaw = 0
     let assignEmptyRouted = 0
     let missingPhone = 0
+    let withName = 0
+    let withPhone = 0
+    let weakRows = 0
     const dbDupPhones: string[] = []
     for (const p of prepared) {
       const phoneKey = normalizePhoneKey(p.row.phone ?? '', p.row.parentPhone)
       if (!phoneKey) missingPhone += 1
+      else withPhone += 1
+      if ((p.row.fullName ?? '').trim()) withName += 1
+      if (p.strength === 'weak') weakRows += 1
       if (p.inFileDuplicate || p.existingId) {
         if (p.existingId && !p.inFileDuplicate && phoneKey && dbDupPhones.length < 5) {
           dbDupPhones.push(phoneKey)
@@ -247,6 +260,7 @@ export function DataIntake() {
       else if (raw) assignUnresolvedRaw += 1
       else assignEmptyRouted += 1
     }
+    const mappingSuspect = total > 0 && withPhone === 0 && withName < Math.max(1, Math.floor(total * 0.2))
     return {
       total,
       acceptedNew,
@@ -257,7 +271,11 @@ export function DataIntake() {
       assignUnresolvedRaw,
       assignEmptyRouted,
       missingPhone,
+      withPhone,
+      withName,
+      weakRows,
       dbDupPhones,
+      mappingSuspect,
     }
   }, [preview, matchStaffForImport])
 
@@ -308,12 +326,24 @@ export function DataIntake() {
 
         setBanner(`Đang tính mã từng dòng (${rows.length.toLocaleString('vi-VN')} dòng)…`)
 
-        const hashRows: { index: number; row: Partial<ExcelLeadRow>; hash: string }[] = []
+        const hashRows: {
+          index: number
+          row: Partial<ExcelLeadRow>
+          hash: string
+          strength: PreparedRow['strength']
+        }[] = []
         for (let i = 0; i < rows.length; i += HASH_COMPUTE_CHUNK) {
           const end = Math.min(i + HASH_COMPUTE_CHUNK, rows.length)
           for (let j = i; j < end; j++) {
-            const row = rows[j]
-            hashRows.push({ index: j, row, hash: computeLeadUniqueHash(row) })
+            const row = rows[j]!
+            const strength = leadDedupeStrength(row)
+            // Salt theo dòng + batch — hàng yếu không còn dùng chung một mã trống.
+            hashRows.push({
+              index: j,
+              row,
+              strength,
+              hash: computeLeadUniqueHash(row, `${uploadBatchId}:${j}`),
+            })
           }
           if (end < rows.length) {
             setBanner(
@@ -324,35 +354,56 @@ export function DataIntake() {
         }
 
         const firstIndexByHash = new Map<string, number>()
-        const prepared: PreparedRow[] = hashRows.map(({ index, row, hash }) => {
-          const first = firstIndexByHash.get(hash)
-          const inFileDuplicate = first !== undefined && first !== index
-          if (first === undefined) firstIndexByHash.set(hash, index)
-          return { index, row, hash, inFileDuplicate }
+        const prepared: PreparedRow[] = hashRows.map(({ index, row, hash, strength }) => {
+          // Chỉ gom trùng trong file khi có SĐT hoặc họ tên đủ rõ — tránh «trùng toàn bộ» vì cột không đọc được.
+          let inFileDuplicate = false
+          if (strength !== 'weak') {
+            const first = firstIndexByHash.get(hash)
+            inFileDuplicate = first !== undefined && first !== index
+            if (first === undefined) firstIndexByHash.set(hash, index)
+          }
+          return { index, row, hash, strength, inFileDuplicate }
         })
 
-        const hashesForQuery = prepared.filter((p) => !p.inFileDuplicate).map((p) => p.hash)
+        const hashesForQuery = prepared
+          .filter((p) => !p.inFileDuplicate && shouldQueryExistingByUniqueHash(p.row))
+          .map((p) => p.hash)
         const uniqQueryCount = new Set(hashesForQuery).size
         const queryParts = Math.max(1, Math.ceil(uniqQueryCount / IN_QUERY_CHUNK))
         const waveTotal = Math.max(1, Math.ceil(queryParts / EXISTING_HASH_QUERY_CONCURRENCY))
-        setBanner(
-          `Đang kiểm tra trùng trên hệ thống (${uniqQueryCount.toLocaleString('vi-VN')} mã, ~${waveTotal} nhóm truy vấn)…`,
-        )
-
-        const existingByHash = await fetchExistingIdsByHash(db, hashesForQuery, effectiveOrgId, (wave, waves) => {
+        if (uniqQueryCount > 0) {
           setBanner(
-            `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
+            `Đang kiểm tra trùng trên hệ thống (${uniqQueryCount.toLocaleString('vi-VN')} mã, ~${waveTotal} nhóm truy vấn)…`,
           )
-        })
+        }
+
+        const existingByHash =
+          uniqQueryCount > 0
+            ? await fetchExistingIdsByHash(db, hashesForQuery, effectiveOrgId, (wave, waves) => {
+                setBanner(
+                  `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
+                )
+              })
+            : new Map<string, string>()
         for (const p of prepared) {
-          if (!p.inFileDuplicate) {
+          if (!p.inFileDuplicate && shouldQueryExistingByUniqueHash(p.row)) {
             const id = existingByHash.get(p.hash)
             if (id) p.existingId = id
           }
         }
 
+        const withPhone = prepared.filter(
+          (p) => normalizePhoneKey(p.row.phone ?? '', p.row.parentPhone).length >= 9,
+        ).length
+        const withName = prepared.filter((p) => (p.row.fullName ?? '').trim().length >= 2).length
         setPreview({ fileName: file.name, prepared, uploadBatchId, uploadedBy, uploaderName })
-        setBanner(null)
+        if (withPhone === 0 && withName < Math.max(1, Math.floor(prepared.length * 0.2))) {
+          setBanner(
+            `Đã đọc ${prepared.length} dòng nhưng hầu như không thấy SĐT / họ tên — kiểm tra đúng mẫu Excel (hàng 1 đúng tên cột) và sheet có dữ liệu. Hệ thống sẽ không báo trùng giả vì mã trống.`,
+          )
+        } else {
+          setBanner(null)
+        }
       } catch (e) {
         console.error(e)
         setBanner('Lỗi khi đọc file hoặc truy vấn Firestore. Kiểm tra quyền đọc collection `leads`.')
@@ -777,10 +828,24 @@ export function DataIntake() {
                     ) : null}
                   </p>
                 ) : null}
-                {previewStats.missingPhone > 0 ? (
+                <p className="mt-1 text-xs text-slate-600">
+                  Đã đọc được: <strong>{previewStats.withName}</strong> dòng có họ tên ·{' '}
+                  <strong>{previewStats.withPhone}</strong> dòng có SĐT
+                  {previewStats.weakRows > 0 ? (
+                    <> · {previewStats.weakRows} dòng thiếu cả hai (không dùng để báo trùng DB)</>
+                  ) : null}
+                  .
+                </p>
+                {previewStats.mappingSuspect ? (
+                  <p className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs leading-relaxed text-amber-950">
+                    Cột Excel có thể <strong>không khớp mẫu</strong> (sai tên hàng 1 hoặc sai sheet). Hãy «Tải mẫu đang
+                    chọn», copy dữ liệu vào đúng cột, rồi tải lại — tránh báo trùng oan.
+                  </p>
+                ) : null}
+                {previewStats.missingPhone > 0 && !previewStats.mappingSuspect ? (
                   <p className="mt-1 text-xs text-amber-800">
-                    {previewStats.missingPhone} dòng thiếu SĐT — dễ bị gom trùng theo họ tên. Kiểm tra cột «Điện thoại»
-                    / «ĐT Người liên hệ» đúng tên hàng 1.
+                    {previewStats.missingPhone} dòng thiếu SĐT — trùng theo họ tên nếu trùng tên. Kiểm tra cột «Điện
+                    thoại» / «ĐT Người liên hệ».
                   </p>
                 ) : null}
                 {previewStats.acceptedNew > 0 ? (

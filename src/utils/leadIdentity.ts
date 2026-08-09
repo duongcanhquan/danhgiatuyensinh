@@ -51,10 +51,23 @@ function sha256HexSync(input: string): string {
     .join('')
 }
 
+/** Độ tin cậy fingerprint chống trùng — `weak` không được dùng để từ chối cả lô nhập. */
+export type LeadDedupeStrength = 'phone' | 'identity' | 'weak'
+
+export function leadDedupeStrength(row: Partial<ExcelLeadRow>): LeadDedupeStrength {
+  const phoneKey = normalizePhoneKey(row.phone ?? '', row.parentPhone)
+  if (phoneKey.length >= 9) return 'phone'
+  const n = normIdentity(row.fullName ?? '')
+  const cid = normIdentity(row.customerId ?? '')
+  if (n.length >= 2 || cid.length >= 2) return 'identity'
+  return 'weak'
+}
+
 /**
  * Dedupe fingerprint: primary phone (student → parent); else normalized name + customer id + education.
+ * Hàng yếu (không SĐT / không tên) → hash riêng theo `rowSalt` để không dính «trùng toàn bộ» một mã trống.
  */
-export function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): string {
+export function computeLeadUniqueHash(row: Partial<ExcelLeadRow>, rowSalt?: string | number): string {
   const phoneKey = normalizePhoneKey(row.phone ?? '', row.parentPhone)
   let basis: string
   if (phoneKey.length >= 9) {
@@ -66,8 +79,16 @@ export function computeLeadUniqueHash(row: Partial<ExcelLeadRow>): string {
     const grade = normIdentity(row.gradeClass ?? '')
     const dob = normIdentity(row.dateOfBirth ?? '')
     basis = `identity:${n}|kh:${cid}|edu:${edu}|lop:${grade}|dob:${dob}`
+    if (leadDedupeStrength(row) === 'weak') {
+      basis = `${basis}|salt:${rowSalt ?? '0'}`
+    }
   }
   return sha256HexSync(basis)
+}
+
+/** Chỉ các hash đủ mạnh mới đem đi so Firestore — tránh khớp mã trống trên hồ sơ cũ. */
+export function shouldQueryExistingByUniqueHash(row: Partial<ExcelLeadRow>): boolean {
+  return leadDedupeStrength(row) !== 'weak'
 }
 
 /** Map admission funnel stage to counselor Kanban when `status` is absent on legacy docs. */
