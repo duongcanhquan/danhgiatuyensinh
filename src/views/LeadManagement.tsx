@@ -49,7 +49,6 @@ import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
-import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { canCreateLead, canWriteLead, leadAssignedUid } from '../auth/leadAccess'
@@ -324,7 +323,7 @@ export function LeadManagement() {
     catalogs: scoringCatalogDefs,
   } = useMasterData()
   const { profile, can, canRunLlmAnalysis } = useAuth()
-  const { currentOrgLabel, effectiveOrgId, isPlatformSuperAdmin, setActiveOrgId } = useOrg()
+  const { effectiveOrgId } = useOrg()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { users: directoryUsers, fieldStaff: fieldStaffUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
@@ -3536,34 +3535,12 @@ export function LeadManagement() {
                     {programFilter === '__UNSET__' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
                         Bộ lọc «Chưa gắn chương trình» tìm hồ sơ không có nhãn chương trình. Nếu trước đây đã gán
-                        chương trình hoặc đã xóa lô, danh sách sẽ trống — đây không phải lỗi quyền đọc Firestore.
+                        chương trình hoặc đã xóa lô, danh sách sẽ trống.
                       </p>
                     ) : programFilter !== 'ALL' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
                         Không thấy hồ sơ thuộc chương trình đã chọn trong phạm vi quét hiện tại. Thử bỏ lọc chương
                         trình hoặc kiểm tra tên chương trình trên cột «Chương trình».
-                      </p>
-                    ) : isPlatformSuperAdmin ? (
-                      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
-                        Đang xem trường <span className="font-semibold text-slate-800">{currentOrgLabel}</span>
-                        {effectiveOrgId !== DEFAULT_ORG_ID ? (
-                          <>
-                            . Dữ liệu cũ nằm ở Việt Mỹ —{' '}
-                            <button
-                              type="button"
-                              className="font-semibold text-teal-700 underline underline-offset-2 hover:text-teal-900"
-                              onClick={() => setActiveOrgId(DEFAULT_ORG_ID)}
-                            >
-                              chuyển về Cao đẳng Việt Mỹ
-                            </button>
-                            .
-                          </>
-                        ) : (
-                          <>
-                            . Nếu vẫn trống khi không lọc: đăng xuất/đăng nhập lại, và kiểm tra Firestore Rules
-                            (super_admin được đọc toàn hệ thống).
-                          </>
-                        )}
                       </p>
                     ) : null}
                   </td>

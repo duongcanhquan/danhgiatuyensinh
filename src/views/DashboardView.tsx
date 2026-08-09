@@ -291,15 +291,9 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
       <>
       {error ? (
         <div className="relative rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm">
-          {/permission|insufficient/i.test(error) ? (
-            <>
-              Không đọc được dữ liệu Tổng kết (thiếu quyền Firestore). Hãy{' '}
-              <strong>đăng xuất rồi đăng nhập lại</strong> để làm mới quyền trên token. Nếu vẫn lỗi, báo quản trị
-              deploy lại Firestore Rules.
-            </>
-          ) : (
-            error
-          )}
+          {/permission|insufficient/i.test(error)
+            ? 'Không tải được dữ liệu tổng quan. Thử tải lại trang hoặc đăng nhập lại.'
+            : error}
         </div>
       ) : null}
       {totalLeadCountError && !error ? (

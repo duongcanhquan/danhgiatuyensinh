@@ -51,7 +51,7 @@ service cloud.firestore {
         ? tokenOrg()
         : (
           callerHasUserDoc()
-            && 'orgId' in callerUser()
+            && callerUser().keys().hasAll(['orgId'])
             && callerUser().orgId is string
             && callerUser().orgId.size() > 0
               ? callerUser().orgId
@@ -166,27 +166,27 @@ service cloud.firestore {
 
     // ----- Users -----
     match /users/{uid} {
-      // Giống leads: VietMy legacy thiếu orgId vẫn đọc được khi token.orgId == vietmy.
+      // Giống leads: VietMy legacy thiếu orgId vẫn đọc được khi org hiệu lực == vietmy.
       allow read: if isPlatform()
         || (signedIn() && request.auth.uid == uid)
-        || (hasTokenOrg() && schoolOrgActive() && matchesOrgData(resource.data));
+        || (hasResolvedOrg() && schoolOrgActive() && matchesOrgData(resource.data));
 
       allow create: if isPlatform()
-        || (hasTokenOrg()
+        || (hasResolvedOrg()
           && schoolOrgActive()
-          && request.resource.data.orgId == tokenOrg());
+          && request.resource.data.orgId == resolvedOrgId());
 
       allow update: if isPlatform()
         || (signedIn()
           && request.auth.uid == uid
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['role', 'orgId', 'isActive', 'extraPermissions', 'deniedPermissions']))
-        || (hasTokenOrg()
+        || (hasResolvedOrg()
           && schoolOrgActive()
           && matchesOrgData(resource.data)
           && (
-            (dataHasOrg(request.resource.data) && request.resource.data.orgId == tokenOrg())
-            || (!dataHasOrg(request.resource.data) && tokenOrg() == 'vietmy')
+            (dataHasOrg(request.resource.data) && request.resource.data.orgId == resolvedOrgId())
+            || (!dataHasOrg(request.resource.data) && resolvedOrgId() == 'vietmy')
           ));
 
       allow delete: if isPlatform();
