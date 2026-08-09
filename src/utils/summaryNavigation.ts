@@ -18,13 +18,14 @@ export const SUMMARY_TAB_ORDER: SummaryTabId[] = [
   'van-hanh',
 ]
 
+/** Nhãn tab ngắn — dễ chọn trên điện thoại (vuốt ngang). */
 export const SUMMARY_TAB_LABELS: Record<SummaryTabId, string> = {
   'tong-quan': 'Tổng quan',
-  'nhom-cua-toi': 'Nhóm của tôi',
-  'kpi-nhan-su': 'Báo cáo đánh giá',
-  'bang-diem': 'Bảng điểm tháng',
-  'lich-goi': 'Lịch sử gọi',
-  'van-hanh': 'Vận hành ngày',
+  'nhom-cua-toi': 'Nhóm',
+  'kpi-nhan-su': 'Đánh giá',
+  'bang-diem': 'Bảng điểm',
+  'lich-goi': 'Lịch gọi',
+  'van-hanh': 'Vận hành',
 }
 
 export function canAccessSummaryTab(tab: SummaryTabId, can: (p: Permission) => boolean): boolean {

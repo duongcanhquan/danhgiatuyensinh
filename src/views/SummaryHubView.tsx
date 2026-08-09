@@ -47,10 +47,10 @@ export function SummaryHubView() {
       <CrmAdminShortcuts />
       <IntegrationsStatusStrip />
 
-      <BentoCell variant="hero" colSpan={4} className="!p-4 sm:!p-5">
+      <BentoCell variant="hero" colSpan={4} className="!p-3 sm:!p-5">
         <AppPageHeader
           title="Tổng kết"
-          meta="Nhóm · KPI · bảng điểm · lịch gọi"
+          meta={<span className="hidden sm:inline">Nhóm · KPI · bảng điểm · lịch gọi</span>}
           className="[&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
         >
           <TabStrip
@@ -59,11 +59,12 @@ export function SummaryHubView() {
             onChange={setTab}
             ariaLabel="Phần trong Tổng kết"
             panelId={SUMMARY_PANEL_ID}
+            className="-mx-0.5"
           />
         </AppPageHeader>
       </BentoCell>
 
-      <BentoCell colSpan={4} className="min-h-0 flex-1 !p-3 sm:!p-4">
+      <BentoCell colSpan={4} className="min-h-0 flex-1 !p-2.5 sm:!p-4">
         <div
           id={SUMMARY_PANEL_ID}
           className="min-h-0 min-w-0 flex-1"
