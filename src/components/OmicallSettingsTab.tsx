@@ -554,8 +554,8 @@ export function OmicallSettingsTab() {
           <div>
             <h3 className="text-base font-bold text-slate-900">Trạng thái & thử gọi</h3>
             <p className="text-xs text-slate-500">
-              Kết nối SIP cần domain + số nội bộ + mật khẩu. App chỉ tải tổng đài khi bạn bấm «Thử kết nối lại»
-              hoặc gọi từ hồ sơ — tránh làm lệch giao diện lúc mở trang.
+              Kết nối SIP cần domain + số nội bộ + mật khẩu. Sau lần kết nối/gọi đầu, app nhớ phiên trong tab và tự
+              nối lại khi mất kết nối tạm hoặc bạn quay lại trang.
             </p>
           </div>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(connectionStatus)}`}>
@@ -594,8 +594,8 @@ export function OmicallSettingsTab() {
         )}
         {connectionStatus === 'error' ? (
           <p className="mt-2 text-xs text-slate-500">
-            App đã dừng tự kết nối lại. Sửa domain / số / mật khẩu trên OMICall (hoặc «Đồng bộ số theo email tôi»),
-            rồi bấm «Thử kết nối lại».
+            Kết nối thất bại nhiều lần. Sửa domain / số / mật khẩu trên OMICall (hoặc «Đồng bộ số theo email tôi»),
+            rồi bấm «Thử kết nối lại» — hoặc chỉ cần quay lại tab để app thử lại.
           </p>
         ) : null}
         {configLoading ? <p className="mt-2 text-xs text-slate-500">Đang đọc cấu hình…</p> : null}

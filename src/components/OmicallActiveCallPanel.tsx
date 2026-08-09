@@ -52,6 +52,13 @@ export function OmicallActiveCallPanel() {
     if (showQuickNotes) setExpanded(true)
   }, [showQuickNotes, call?.phase])
 
+  /** Sau khi cúp máy: kéo panel về vị trí an toàn + bỏ trạng thái kéo (tránh đơ nút trên mobile). */
+  useEffect(() => {
+    if (call?.phase !== 'wrapup') return
+    setDragging(false)
+    setPosition({ left: 16, bottom: DEFAULT_BOTTOM_OFFSET })
+  }, [call?.uid, call?.phase])
+
   useEffect(() => {
     if (!call) return
     const onPointerMove = (e: PointerEvent) => {
@@ -67,12 +74,16 @@ export function OmicallActiveCallPanel() {
       const nextBottom = Math.max(navReserve, Math.min(nextBottomRaw, maxBottom))
       setPosition({ left: nextLeft, bottom: nextBottom })
     }
-    const onPointerUp = () => setDragging(false)
+    const endDrag = () => setDragging(false)
     window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointerup', endDrag)
+    window.addEventListener('pointercancel', endDrag)
+    window.addEventListener('blur', endDrag)
     return () => {
       window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointerup', endDrag)
+      window.removeEventListener('pointercancel', endDrag)
+      window.removeEventListener('blur', endDrag)
     }
   }, [call, dragging])
 
@@ -95,6 +106,11 @@ export function OmicallActiveCallPanel() {
     dragOffsetRef.current = {
       x: e.clientX - rect.left,
       y: rect.bottom - e.clientY,
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* một số trình duyệt mobile không hỗ trợ */
     }
     setDragging(true)
   }
@@ -246,11 +262,16 @@ export function OmicallActiveCallPanel() {
                 ? 'Đóng sau khi đã lưu ghi chú (hoặc bỏ qua)'
                 : 'Đóng panel — tiếp tục làm việc trên CRM ngay'
             }
-            onClick={onDismiss}
-            className="flex w-full cursor-pointer touch-manipulation items-center justify-center gap-2 border-t border-white/10 bg-slate-700 py-2.5 text-xs font-bold text-white hover:bg-slate-600"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDragging(false)
+              onDismiss()
+            }}
+            className="relative z-30 flex min-h-12 w-full cursor-pointer touch-manipulation items-center justify-center gap-2 border-t border-white/10 bg-slate-700 py-3 text-sm font-bold text-white hover:bg-slate-600 active:bg-slate-500"
           >
             <X className="h-4 w-4 shrink-0 pointer-events-none" aria-hidden />
-            {call.phase === 'wrapup' ? 'Đóng sau khi đã lưu ghi chú (log cuộc gọi đã tự lưu)' : `Huỷ trên CRM ${isDeskCall ? '(đóng cửa sổ)' : ''}`}
+            {call.phase === 'wrapup' ? 'Đóng cửa sổ gọi' : `Huỷ trên CRM ${isDeskCall ? '(đóng cửa sổ)' : ''}`}
           </button>
         </div>
       </div>
