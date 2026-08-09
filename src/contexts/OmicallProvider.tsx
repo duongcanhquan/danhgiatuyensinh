@@ -645,11 +645,22 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         setSipReady(false)
         setConnectionStatus('registering')
         setConnectionLabel('Đang đăng ký số nội bộ…')
-        const events = ['ended', 'register', 'connecting', 'ringing', 'accepted', 'incall'] as const
+        // Docs v3: on_calling / on_ringing; giữ 'incall' cho bản SDK cũ nếu còn emit.
+        const events = [
+          'ended',
+          'register',
+          'connecting',
+          'ringing',
+          'accepted',
+          'on_calling',
+          'on_ringing',
+          'incall',
+        ] as const
         for (const ev of events) {
           if (ev === 'ended') sdk.off(ev, endedHandler)
           else if (ev === 'register') sdk.off(ev, registerHandler)
-          else if (ev === 'incall') sdk.off(ev, incallHandler)
+          else if (ev === 'incall' || ev === 'on_calling' || ev === 'on_ringing')
+            sdk.off(ev, incallHandler)
           else sdk.off(ev, callTraceHandler)
         }
         sdk.on('ended', endedHandler)
@@ -657,6 +668,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         sdk.on('connecting', callTraceHandler)
         sdk.on('ringing', callTraceHandler)
         sdk.on('accepted', callTraceHandler)
+        sdk.on('on_calling', incallHandler)
+        sdk.on('on_ringing', incallHandler)
         sdk.on('incall', incallHandler)
         const reg = await sdk.register({
           sipRealm: sipCreds.sipRealm,
@@ -1029,8 +1042,9 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       const userDataStr = JSON.stringify(userData)
 
       await ensureMicrophoneForCall()
+      // Docs: MakeCallOptions.sipNumber = { number: string } (không truyền chuỗi thuần).
       const callOptions: Record<string, unknown> = { userData: userDataStr }
-      if (outbound) callOptions.sipNumber = outbound
+      if (outbound) callOptions.sipNumber = { number: outbound }
       sdk.makeCall(normalized, callOptions)
       setLastCallHint(
         outbound

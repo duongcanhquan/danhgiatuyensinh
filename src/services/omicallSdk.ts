@@ -316,7 +316,10 @@ export function loadOmicallSdk(version: string): Promise<OmicallSdkGlobal> {
 
   loadPromise = new Promise((resolve, reject) => {
     const src = `https://cdn.omicrm.com/sdk/web/${encodeURIComponent(v)}/core.min.js`
-    const prev = document.querySelector<HTMLScriptElement>('script[data-omicall-sdk]')
+    // Docs: attribute `omi-call-sdk`; giữ thêm data-* để tìm script đã inject.
+    const prev = document.querySelector<HTMLScriptElement>(
+      'script[omi-call-sdk], script[data-omicall-sdk]',
+    )
     if (prev) {
       prev.addEventListener('load', () => {
         const sdk = getOmicallSdk()
@@ -332,6 +335,7 @@ export function loadOmicallSdk(version: string): Promise<OmicallSdkGlobal> {
     el.type = 'text/javascript'
     el.src = src
     el.async = true
+    el.setAttribute('omi-call-sdk', '')
     el.dataset.omicallSdk = '1'
     el.onload = () => {
       const sdk = getOmicallSdk()
