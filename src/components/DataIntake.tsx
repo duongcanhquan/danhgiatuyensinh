@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Download, FileSpreadsheet, Upload } from 'lucide-react'
 import {
   collection,
@@ -206,7 +206,14 @@ export function DataIntake() {
     typeof localStorage !== 'undefined' ? loadRecentIntakePrograms() : [],
   )
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const statusRef = useRef<HTMLDivElement>(null)
   const selectedTemplate = useMemo(() => getLeadIntakeTemplate(templateId), [templateId])
+
+  /** Banner / preview từng nằm dưới cột danh sách — kéo lên view khi có phản hồi. */
+  useEffect(() => {
+    if (!banner && !preview) return
+    statusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [banner, preview])
 
   const masterBuckets = useMemo(
     () => ({
@@ -402,7 +409,9 @@ export function DataIntake() {
             `Đã đọc ${prepared.length} dòng nhưng hầu như không thấy SĐT / họ tên — kiểm tra đúng mẫu Excel (hàng 1 đúng tên cột) và sheet có dữ liệu. Hệ thống sẽ không báo trùng giả vì mã trống.`,
           )
         } else {
-          setBanner(null)
+          setBanner(
+            `Đã nhận «${file.name}» — ${prepared.length.toLocaleString('vi-VN')} dòng. Xem bảng xác nhận bên dưới rồi bấm «Xác nhận nhập».`,
+          )
         }
       } catch (e) {
         console.error(e)
@@ -577,9 +586,20 @@ export function DataIntake() {
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setDragOver(false)
+    if (!db || busy || !canIntake) {
+      if (!canIntake) setBanner('Bạn không có quyền nhập liệu (cần vai trò Quản trị).')
+      else if (!db) setBanner('Chưa kết nối Firebase — không thể tải lên.')
+      else if (busy) setBanner('Đang xử lý file trước — đợi xong rồi thử lại.')
+      return
+    }
     const f = e.dataTransfer.files?.[0]
-    if (f) void runParseAndPreview(f)
+    if (!f) {
+      setBanner('Không nhận được file — hãy thả file .xlsx vào khung hoặc bấm «Tải lên».')
+      return
+    }
+    void runParseAndPreview(f)
   }
 
   const onDownloadTemplate = () => {
@@ -596,13 +616,30 @@ export function DataIntake() {
   }
 
   const onPickFile = () => {
-    if (!db || busy || !canIntake) return
-    fileInputRef.current?.click()
+    if (!canIntake) {
+      setBanner('Bạn không có quyền nhập liệu (cần vai trò Quản trị).')
+      return
+    }
+    if (!db) {
+      setBanner('Chưa kết nối Firebase — không thể tải lên.')
+      return
+    }
+    if (busy) {
+      setBanner('Đang xử lý file trước — đợi xong rồi thử lại.')
+      return
+    }
+    const input = fileInputRef.current
+    if (!input) {
+      setBanner('Không mở được hộp chọn file — tải lại trang rồi thử.')
+      return
+    }
+    input.click()
   }
 
   const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (f) void runParseAndPreview(f)
+    else setBanner('Chưa chọn được file — thử lại hoặc kéo thả .xlsx vào khung.')
     e.target.value = ''
   }
 
@@ -628,6 +665,146 @@ export function DataIntake() {
             Cấu hình Firebase trong .env trước khi nhập.
           </div>
         ) : null}
+
+        <div ref={statusRef} className="space-y-3">
+          {banner ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-xl border border-emerald-300/80 bg-emerald-50 px-3 py-2.5 text-left text-sm font-medium text-emerald-950 shadow-sm"
+            >
+              {banner}
+            </div>
+          ) : null}
+          {busy && !preview ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-950 shadow-sm">
+              Đang xử lý file… không đóng tab.
+            </div>
+          ) : null}
+
+          {preview && previewStats ? (
+          <div className="app-surface-elevated space-y-4 border border-emerald-200/80 p-5 text-left shadow-md md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Đã nhận file — xác nhận nhập</p>
+                <h2 className="mt-0.5 truncate text-lg font-semibold tracking-tight text-slate-900 md:text-xl">
+                  {preview.fileName}
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng —{' '}
+                  <span className="font-medium text-emerald-700">{previewStats.acceptedNew} nhập mới</span>
+                  {previewStats.rejectedTotal > 0 ? (
+                    <>
+                      {' '}
+                      · <span className="font-medium text-rose-800">{previewStats.rejectedTotal} từ chối</span> (
+                      {previewStats.rejectedInFile} trùng file, {previewStats.rejectedOnDb} đã có DB)
+                    </>
+                  ) : null}
+                </p>
+                {previewStats.rejectedInFile > 0 ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Trùng trong file: cùng số điện thoại (hoặc cùng họ tên khi thiếu SĐT) — chỉ giữ dòng đầu.
+                  </p>
+                ) : null}
+                {previewStats.rejectedOnDb > 0 ? (
+                  <p className="mt-1 text-xs leading-relaxed text-rose-800">
+                    Trùng trên hệ thống theo <strong>số điện thoại</strong> (sinh viên hoặc người liên hệ) đã có hồ sơ
+                    trước đó — không phải trùng tên file.
+                    {previewStats.dbDupPhones.length > 0 ? (
+                      <>
+                        {' '}
+                        Ví dụ SĐT đã có: {previewStats.dbDupPhones.join(', ')}
+                        {previewStats.rejectedOnDb > previewStats.dbDupPhones.length ? '…' : ''}
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-xs text-slate-600">
+                  Đã đọc được: <strong>{previewStats.withName}</strong> dòng có họ tên ·{' '}
+                  <strong>{previewStats.withPhone}</strong> dòng có SĐT
+                  {previewStats.weakRows > 0 ? (
+                    <> · {previewStats.weakRows} dòng thiếu cả hai (không dùng để báo trùng DB)</>
+                  ) : null}
+                  .
+                </p>
+                {previewStats.mappingSuspect ? (
+                  <p className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs leading-relaxed text-amber-950">
+                    Cột Excel có thể <strong>không khớp mẫu</strong> (sai tên hàng 1 hoặc sai sheet). Hãy «Tải mẫu đang
+                    chọn», copy dữ liệu vào đúng cột, rồi tải lại — tránh báo trùng oan.
+                  </p>
+                ) : null}
+                {previewStats.missingPhone > 0 && !previewStats.mappingSuspect ? (
+                  <p className="mt-1 text-xs text-amber-800">
+                    {previewStats.missingPhone} dòng thiếu SĐT — trùng theo họ tên nếu trùng tên. Kiểm tra cột «Điện
+                    thoại» / «ĐT Người liên hệ».
+                  </p>
+                ) : null}
+                {previewStats.acceptedNew > 0 ? (
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                    <span className="font-semibold text-slate-800">Phân công:</span> {previewStats.assignMatched} khớp
+                    cột «Người phụ trách»; {previewStats.assignUnresolvedRaw} không khớp → Admin (hoặc theo tải);{' '}
+                    {previewStats.assignEmptyRouted} để trống → chia tải TVV.
+                  </p>
+                ) : null}
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm text-amber-950">
+                  <span className="font-semibold">Đợt sẽ gắn:</span>{' '}
+                  {normalizeIntakeProgramLabel(intakeProgram) || (
+                    <span className="text-rose-700">chưa nhập — điền ô «Chương trình / đợt» bên dưới trước khi xác nhận</span>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={cancelPreview}
+                className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-center">
+                <p className="text-lg font-bold text-emerald-800">{previewStats.acceptedNew}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mới</p>
+              </div>
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2.5 text-center">
+                <p className="text-lg font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Trùng DB</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-center">
+                <p className="text-lg font-bold text-slate-800">{previewStats.rejectedInFile}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Trùng file</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
+              Chỉ ghi dòng mới, không ghi đè. Mỗi hồ sơ mới mang tên đợt ở dưới — sau này lọc trên màn Hồ sơ.
+              «Người phụ trách»: khớp → gán đúng; không khớp → Admin — điều chuyển sau tại «Hồ sơ».
+            </div>
+
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                disabled={
+                  busy || previewStats.acceptedNew === 0 || !normalizeIntakeProgramLabel(intakeProgram)
+                }
+                onClick={() => void commitImport()}
+                title={
+                  previewStats.acceptedNew === 0
+                    ? 'Không có dòng mới để nhập'
+                    : !normalizeIntakeProgramLabel(intakeProgram)
+                      ? 'Nhập tên chương trình / đợt trước'
+                      : undefined
+                }
+                className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
+              >
+                <Upload className="h-4 w-4 shrink-0" aria-hidden />
+                Xác nhận nhập ({previewStats.acceptedNew})
+              </button>
+            </div>
+          </div>
+          ) : null}
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-12 lg:items-start lg:gap-5">
           {/* Trái — chọn mẫu + tải lên */}
@@ -699,9 +876,9 @@ export function DataIntake() {
               ref={fileInputRef}
               type="file"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="sr-only"
+              className="fixed left-0 top-0 h-px w-px opacity-0"
+              tabIndex={-1}
               disabled={!db || busy || !canIntake}
-              aria-hidden
               onChange={onFileInputChange}
             />
 
@@ -723,34 +900,49 @@ export function DataIntake() {
                 className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-40"
               >
                 <Upload className="h-4 w-4 shrink-0" aria-hidden />
-                Tải lên file .xlsx
+                {busy ? 'Đang xử lý…' : 'Tải lên file .xlsx'}
               </button>
             </div>
 
             <div
+              role="button"
+              tabIndex={canIntake && !busy ? 0 : -1}
+              onClick={() => {
+                if (!busy) onPickFile()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  if (!busy) onPickFile()
+                }
+              }}
               onDragOver={(e) => {
                 e.preventDefault()
-                setDragOver(true)
+                e.stopPropagation()
+                if (canIntake && !busy) setDragOver(true)
               }}
-              onDragLeave={() => setDragOver(false)}
+              onDragLeave={(e) => {
+                e.preventDefault()
+                setDragOver(false)
+              }}
               onDrop={onDrop}
               className={[
-                'mt-4 flex min-h-[140px] cursor-default flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
+                'mt-4 flex min-h-[140px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
+                canIntake && !busy ? 'cursor-pointer' : 'cursor-not-allowed',
                 dragOver
                   ? 'border-emerald-400 bg-emerald-50/90'
                   : 'border-slate-200 bg-slate-50/50 hover:border-amber-300/80 hover:bg-amber-50/40',
-                !canIntake ? 'pointer-events-none opacity-50' : '',
+                !canIntake ? 'opacity-50' : '',
               ].join(' ')}
             >
               <FileSpreadsheet className="mb-2 h-8 w-8 text-amber-600" strokeWidth={1.25} aria-hidden />
-              <p className="text-sm font-medium text-slate-800">Hoặc kéo thả file vào đây</p>
+              <p className="text-sm font-medium text-slate-800">
+                {busy ? 'Đang xử lý file…' : 'Bấm hoặc kéo thả file .xlsx vào đây'}
+              </p>
               <p className="mt-1 text-xs text-slate-500">
                 Đang dùng: <strong>{selectedTemplate.label}</strong>. Hàng 1 tiêu đề, dữ liệu từ hàng 2. Trùng →
                 không nhập.
               </p>
-              {busy && !preview ? (
-                <p className="mt-2 text-xs font-medium text-emerald-700">Đang xử lý…</p>
-              ) : null}
             </div>
           </div>
 
@@ -790,135 +982,6 @@ export function DataIntake() {
             </p>
           </aside>
         </div>
-
-        {preview && previewStats ? (
-          <div className="app-surface-elevated space-y-4 p-5 text-left md:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Xác nhận nhập</p>
-                <h2 className="mt-0.5 truncate text-lg font-semibold tracking-tight text-slate-900 md:text-xl">
-                  {preview.fileName}
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng —{' '}
-                  <span className="font-medium text-emerald-700">{previewStats.acceptedNew} nhập mới</span>
-                  {previewStats.rejectedTotal > 0 ? (
-                    <>
-                      {' '}
-                      · <span className="font-medium text-rose-800">{previewStats.rejectedTotal} từ chối</span> (
-                      {previewStats.rejectedInFile} trùng file, {previewStats.rejectedOnDb} đã có DB)
-                    </>
-                  ) : null}
-                </p>
-                {previewStats.rejectedInFile > 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Trùng trong file: cùng số điện thoại (hoặc cùng họ tên khi thiếu SĐT) — chỉ giữ dòng đầu.
-                  </p>
-                ) : null}
-                {previewStats.rejectedOnDb > 0 ? (
-                  <p className="mt-1 text-xs leading-relaxed text-rose-800">
-                    Trùng trên hệ thống theo <strong>số điện thoại</strong> (sinh viên hoặc người liên hệ) đã có hồ sơ
-                    trước đó — không phải trùng tên file.
-                    {previewStats.dbDupPhones.length > 0 ? (
-                      <>
-                        {' '}
-                        Ví dụ SĐT đã có: {previewStats.dbDupPhones.join(', ')}
-                        {previewStats.rejectedOnDb > previewStats.dbDupPhones.length ? '…' : ''}
-                      </>
-                    ) : null}
-                  </p>
-                ) : null}
-                <p className="mt-1 text-xs text-slate-600">
-                  Đã đọc được: <strong>{previewStats.withName}</strong> dòng có họ tên ·{' '}
-                  <strong>{previewStats.withPhone}</strong> dòng có SĐT
-                  {previewStats.weakRows > 0 ? (
-                    <> · {previewStats.weakRows} dòng thiếu cả hai (không dùng để báo trùng DB)</>
-                  ) : null}
-                  .
-                </p>
-                {previewStats.mappingSuspect ? (
-                  <p className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs leading-relaxed text-amber-950">
-                    Cột Excel có thể <strong>không khớp mẫu</strong> (sai tên hàng 1 hoặc sai sheet). Hãy «Tải mẫu đang
-                    chọn», copy dữ liệu vào đúng cột, rồi tải lại — tránh báo trùng oan.
-                  </p>
-                ) : null}
-                {previewStats.missingPhone > 0 && !previewStats.mappingSuspect ? (
-                  <p className="mt-1 text-xs text-amber-800">
-                    {previewStats.missingPhone} dòng thiếu SĐT — trùng theo họ tên nếu trùng tên. Kiểm tra cột «Điện
-                    thoại» / «ĐT Người liên hệ».
-                  </p>
-                ) : null}
-                {previewStats.acceptedNew > 0 ? (
-                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                    <span className="font-semibold text-slate-800">Phân công:</span> {previewStats.assignMatched} khớp
-                    cột «Người phụ trách»; {previewStats.assignUnresolvedRaw} không khớp → Admin (hoặc theo tải);{' '}
-                    {previewStats.assignEmptyRouted} để trống → chia tải TVV.
-                  </p>
-                ) : null}
-                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm text-amber-950">
-                  <span className="font-semibold">Đợt sẽ gắn:</span>{' '}
-                  {normalizeIntakeProgramLabel(intakeProgram) || (
-                    <span className="text-rose-700">chưa nhập — điền ô «Chương trình / đợt» phía trên</span>
-                  )}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={cancelPreview}
-                className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2.5 text-center">
-                <p className="text-lg font-bold text-emerald-800">{previewStats.acceptedNew}</p>
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mới</p>
-              </div>
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2.5 text-center">
-                <p className="text-lg font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
-                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Trùng DB</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-center">
-                <p className="text-lg font-bold text-slate-800">{previewStats.rejectedInFile}</p>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Trùng file</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
-              Chỉ ghi dòng mới, không ghi đè. Mỗi hồ sơ mới mang tên đợt ở trên — sau này lọc trên màn Hồ sơ.
-              «Người phụ trách»: khớp → gán đúng; không khớp → Admin — điều chuyển sau tại «Hồ sơ».
-            </div>
-
-            <div className="flex justify-center pt-1">
-              <button
-                type="button"
-                disabled={
-                  busy || previewStats.acceptedNew === 0 || !normalizeIntakeProgramLabel(intakeProgram)
-                }
-                onClick={() => void commitImport()}
-                title={
-                  previewStats.acceptedNew === 0
-                    ? 'Không có dòng mới để nhập'
-                    : !normalizeIntakeProgramLabel(intakeProgram)
-                      ? 'Nhập tên chương trình / đợt trước'
-                      : undefined
-                }
-                className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
-              >
-                <Upload className="h-4 w-4 shrink-0" aria-hidden />
-                Xác nhận nhập ({previewStats.acceptedNew})
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {banner ? (
-          <div className="rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2.5 text-left text-sm text-slate-800 shadow-sm">
-            {banner}
-          </div>
-        ) : null}
       </div>
     </div>
   )
