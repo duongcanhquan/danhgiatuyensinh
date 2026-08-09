@@ -23,12 +23,14 @@ export function coerceLeadCounselorStatus(raw: string): LeadCounselorStatus {
   return 'NEW'
 }
 
-/** Digits-only key; prefers student phone, then parent. Vietnam +84 → 0… */
+/** Digits-only key; prefers student phone, then parent. Vietnam +84 → 0…; 9 số thiếu 0 đầu → thêm 0. */
 export function normalizePhoneKey(phone: string, parentPhone?: string): string {
   const raw = (phone ?? '').trim() || (parentPhone ?? '').trim()
-  const digits = raw.replace(/\D/g, '')
+  let digits = raw.replace(/\D/g, '')
   if (!digits) return ''
-  if (digits.startsWith('84') && digits.length >= 10) return `0${digits.slice(2)}`
+  if (digits.startsWith('84') && digits.length >= 10) digits = `0${digits.slice(2)}`
+  // Excel hay lưu 912… (mất số 0) — thống nhất với hồ sơ dạng 0912…
+  if (digits.length === 9 && /^[35789]/.test(digits)) digits = `0${digits}`
   return digits
 }
 

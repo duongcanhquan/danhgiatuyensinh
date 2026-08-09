@@ -309,29 +309,12 @@ export function LeadManagement() {
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
   /**
-   * Chương trình:
-   * - `__UNSET__`: Firestore không query field thiếu → fullScope + lọc client.
-   * - TVV (không read:global): tránh thiếu composite index RBAC+intakeProgram → fullScope + lọc client.
-   * - Kết hợp với lọc equality khác: tránh thiếu index chéo → fullScope + lọc chương trình client.
+   * Chương trình / đợt: luôn fullScope + lọc client.
+   * Tránh lỗi «The query requires an index» khi composite intakeProgram+orgId+updatedAt
+   * chưa kịp build trên Firestore (warmlist).
    */
   const programFilterActive = programFilter !== 'ALL'
-  const programUnsetNeedsScope = programFilter === '__UNSET__'
-  const programRbacNeedsScope =
-    programFilterActive && programFilter !== '__UNSET__' && !can('leads:read:global')
-  const programComboNeedsScope =
-    programFilterActive &&
-    programFilter !== '__UNSET__' &&
-    (sourceFilter !== 'ALL' ||
-      regionFilter !== 'ALL' ||
-      majorFilter !== 'ALL' ||
-      statusFilter !== 'ALL' ||
-      crmStatusFilter !== 'ALL' ||
-      schoolFilter !== 'ALL' ||
-      (!tagClientEval && tagFilter !== 'ALL') ||
-      aiShortlistOnly ||
-      scoreMinInput.trim() !== '' ||
-      scoreMaxInput.trim() !== '')
-  const programNeedsScope = programUnsetNeedsScope || programRbacNeedsScope || programComboNeedsScope
+  const programNeedsScope = programFilterActive
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()

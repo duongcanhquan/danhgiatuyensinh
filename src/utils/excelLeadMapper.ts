@@ -47,7 +47,11 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'ngay sinh': 'dateOfBirth',
   'dien thoai': 'phone',
   'sdt': 'phone',
+  'sdt sv': 'phone',
+  'sdt sinh vien': 'phone',
   'so dien thoai': 'phone',
+  'so dt': 'phone',
+  'dien thoai sinh vien': 'phone',
   email: 'studentEmail',
   'e-mail': 'studentEmail',
   'email sinh vien': 'studentEmail',
@@ -125,12 +129,24 @@ function resolveFieldKey(header: string): keyof ExcelLeadRow | null {
   return HEADER_ALIASES[key] ?? null
 }
 
+/** Chuỗi ô Excel — tránh SĐT thành scientific notation khi `raw: true`. */
+export function excelCellToPlainString(val: unknown): string {
+  if (val === undefined || val === null) return ''
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    if (Number.isInteger(val) || Math.abs(val - Math.round(val)) < 1e-6) {
+      return String(Math.round(val))
+    }
+    return String(val)
+  }
+  return String(val).trim()
+}
+
 export function mapSheetRow(raw: Record<string, unknown>): Partial<ExcelLeadRow> {
   const out: Partial<ExcelLeadRow> = {}
   for (const [header, val] of Object.entries(raw)) {
     const field = resolveFieldKey(header)
     if (!field) continue
-    out[field] = val === undefined || val === null ? '' : String(val).trim()
+    out[field] = excelCellToPlainString(val)
   }
   return out
 }

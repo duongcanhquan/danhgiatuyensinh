@@ -7,6 +7,12 @@ describe('computeLeadUniqueHash', () => {
     expect(h).toBe('6467758576179174e4a05b038abda3b94c93a8f52b6092a34710dbd81120963d')
   })
 
+  it('treats Excel-style 9-digit mobile same as leading-zero form', () => {
+    expect(computeLeadUniqueHash({ phone: '912345678' })).toBe(
+      computeLeadUniqueHash({ phone: '0912345678' }),
+    )
+  })
+
   it('is deterministic for identity fallback', () => {
     const row = { fullName: 'Nguyễn Văn A', customerId: 'KH01', educationLevel: 'ĐH', gradeClass: '12' }
     expect(computeLeadUniqueHash(row)).toBe(computeLeadUniqueHash(row))

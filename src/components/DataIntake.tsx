@@ -32,7 +32,7 @@ import { evaluateLead, evaluationRecordFromLeadLike } from '../utils/scoring'
 import { evaluateLeadWithClassification, classificationFirestorePatch } from '../utils/leadClassificationScore'
 import { partialLeadFromExcelRow } from '../utils/scoringLeadInput'
 import { countAssignments, pickCounselorByLowestLoad, pickPrimaryAdminUid } from '../utils/routing'
-import { computeLeadUniqueHash } from '../utils/leadIdentity'
+import { computeLeadUniqueHash, normalizePhoneKey } from '../utils/leadIdentity'
 import { FS_COLLECTIONS, type Lead, type PriorityTag, type VietMyUserProfile } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
@@ -230,8 +230,17 @@ export function DataIntake() {
     let assignMatched = 0
     let assignUnresolvedRaw = 0
     let assignEmptyRouted = 0
+    let missingPhone = 0
+    const dbDupPhones: string[] = []
     for (const p of prepared) {
-      if (p.inFileDuplicate || p.existingId) continue
+      const phoneKey = normalizePhoneKey(p.row.phone ?? '', p.row.parentPhone)
+      if (!phoneKey) missingPhone += 1
+      if (p.inFileDuplicate || p.existingId) {
+        if (p.existingId && !p.inFileDuplicate && phoneKey && dbDupPhones.length < 5) {
+          dbDupPhones.push(phoneKey)
+        }
+        continue
+      }
       const raw = (p.row.assignedToRaw ?? '').trim()
       const from = raw ? resolveAssignedCounselorUid(raw, matchStaffForImport) : null
       if (from) assignMatched += 1
@@ -247,6 +256,8 @@ export function DataIntake() {
       assignMatched,
       assignUnresolvedRaw,
       assignEmptyRouted,
+      missingPhone,
+      dbDupPhones,
     }
   }, [preview, matchStaffForImport])
 
@@ -749,7 +760,28 @@ export function DataIntake() {
                   ) : null}
                 </p>
                 {previewStats.rejectedInFile > 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">Trùng file: giữ bản đầu tiên cùng fingerprint.</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Trùng trong file: cùng số điện thoại (hoặc cùng họ tên khi thiếu SĐT) — chỉ giữ dòng đầu.
+                  </p>
+                ) : null}
+                {previewStats.rejectedOnDb > 0 ? (
+                  <p className="mt-1 text-xs leading-relaxed text-rose-800">
+                    Trùng trên hệ thống theo <strong>số điện thoại</strong> (sinh viên hoặc người liên hệ) đã có hồ sơ
+                    trước đó — không phải trùng tên file.
+                    {previewStats.dbDupPhones.length > 0 ? (
+                      <>
+                        {' '}
+                        Ví dụ SĐT đã có: {previewStats.dbDupPhones.join(', ')}
+                        {previewStats.rejectedOnDb > previewStats.dbDupPhones.length ? '…' : ''}
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+                {previewStats.missingPhone > 0 ? (
+                  <p className="mt-1 text-xs text-amber-800">
+                    {previewStats.missingPhone} dòng thiếu SĐT — dễ bị gom trùng theo họ tên. Kiểm tra cột «Điện thoại»
+                    / «ĐT Người liên hệ» đúng tên hàng 1.
+                  </p>
                 ) : null}
                 {previewStats.acceptedNew > 0 ? (
                   <p className="mt-2 text-xs leading-relaxed text-slate-600">
