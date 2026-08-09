@@ -243,7 +243,7 @@ export function Layout() {
         </aside>
 
         <div className="flex min-h-[100dvh] min-w-0 flex-1 flex-col lg:min-h-0">
-          <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white/92 px-3 py-2 backdrop-blur-md sm:px-4 lg:px-6">
+          <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white px-3 py-2 sm:px-4 lg:px-6">
             <button
               type="button"
               className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 lg:hidden"

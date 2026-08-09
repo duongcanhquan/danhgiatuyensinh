@@ -4,6 +4,7 @@ import { deleteDoc, doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestor
 import type { CallEvalDimension } from '../types'
 import { FS_COLLECTIONS, SCORING_AUX_CALL_SESSION_DOC_ID } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { useAuth } from '../hooks/useAuth'
 import {
   CALL_EVAL_CONFIG_VERSION,
   getDefaultCallEvaluationConfig,
@@ -35,12 +36,17 @@ function fallbackCtx(): Ctx {
 }
 
 export function CallSessionConfigProvider({ children }: { children: ReactNode }) {
+  const { status: authStatus } = useAuth()
   const [dimensions, setDimensions] = useState<CallEvalDimension[]>(() => getDefaultCallEvaluationConfig())
   const [configFromRemote, setConfigFromRemote] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      setLoading(authStatus === 'unknown' || authStatus === 'authenticating')
+      return
+    }
     if (!isFirebaseConfigured()) {
       setDimensions(getDefaultCallEvaluationConfig())
       setConfigFromRemote(false)
@@ -78,7 +84,7 @@ export function CallSessionConfigProvider({ children }: { children: ReactNode })
         ),
       { timeoutMs: 2_000 },
     )
-  }, [])
+  }, [authStatus])
 
   const saveDimensions = useCallback(async (next: CallEvalDimension[]) => {
     if (!isFirebaseConfigured()) return

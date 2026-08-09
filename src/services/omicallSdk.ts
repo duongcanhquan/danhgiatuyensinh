@@ -419,8 +419,23 @@ export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
 }
 
 let omicallStyleObserver: MutationObserver | null = null
+let styleWatchDoc: Document | null = null
 let sanitizeBurstTimers: ReturnType<typeof setTimeout>[] = []
 let sanitizeScheduled = false
+let lastSanitizeBurstAt = 0
+
+export function clearOmicallStyleSanitizeBurst(): void {
+  for (const t of sanitizeBurstTimers) clearTimeout(t)
+  sanitizeBurstTimers = []
+}
+
+/** Tắt observer + burst — gọi khi logout / SIP tắt để hết thuế DOM. */
+export function stopWatchOmicallStyleInjection(): void {
+  clearOmicallStyleSanitizeBurst()
+  omicallStyleObserver?.disconnect()
+  omicallStyleObserver = null
+  styleWatchDoc = null
+}
 
 function queueSanitizeOmicallStyles(doc: Document): void {
   if (sanitizeScheduled) return
@@ -431,13 +446,18 @@ function queueSanitizeOmicallStyles(doc: Document): void {
   })
 }
 
-/** Quét lại nhiều lần — theme OMICall thường gắn lúc init / sau register SIP. */
-export function scheduleOmicallStyleSanitizeBurst(doc?: Document | null): void {
+/** Quét lại vài lần — theme OMICall gắn lúc init / sau register SIP. */
+export function scheduleOmicallStyleSanitizeBurst(doc?: Document | null, opts?: { force?: boolean }): void {
   const target = doc ?? (typeof document !== 'undefined' ? document : null)
   if (!target) return
-  for (const t of sanitizeBurstTimers) clearTimeout(t)
-  sanitizeBurstTimers = []
-  const delays = [0, 50, 150, 400, 800, 1600, 3200, 5000]
+  const now = Date.now()
+  if (!opts?.force && now - lastSanitizeBurstAt < 8_000) {
+    sanitizeOmicallInjectedStyles(target)
+    return
+  }
+  lastSanitizeBurstAt = now
+  clearOmicallStyleSanitizeBurst()
+  const delays = [0, 200, 800, 2000]
   for (const ms of delays) {
     sanitizeBurstTimers.push(
       setTimeout(() => {
@@ -452,9 +472,15 @@ function isVmOmicallManagedStyle(el: Element): boolean {
   return id === OMICALL_LAYOUT_SHIELD_STYLE_ID || id === OMICALL_TOAST_SUPPRESS_STYLE_ID
 }
 
-/** Gọi sớm (kể cả trước khi tải SDK) — bắt style inject vào head/body. */
+/**
+ * Chỉ theo dõi `<head>` (không subtree toàn document) — tránh thuế mỗi lần React patch DOM.
+ * Gọi khi đang vũ trang SIP; nhớ `stopWatchOmicallStyleInjection` khi tắt.
+ */
 export function watchOmicallStyleInjection(doc?: Document | null): void {
-  if (!doc?.documentElement || omicallStyleObserver || typeof MutationObserver === 'undefined') return
+  if (!doc?.head || typeof MutationObserver === 'undefined') return
+  if (omicallStyleObserver && styleWatchDoc === doc) return
+  stopWatchOmicallStyleInjection()
+  styleWatchDoc = doc
   try {
     omicallStyleObserver = new MutationObserver((mutations) => {
       let sawForeignStyle = false
@@ -466,24 +492,15 @@ export function watchOmicallStyleInjection(doc?: Document | null): void {
             if (isVmOmicallManagedStyle(el)) continue
             rewriteOmicallStyleEl(el)
             sawForeignStyle = true
-          } else if (typeof el.querySelectorAll === 'function') {
-            for (const st of Array.from(el.querySelectorAll('style'))) {
-              if (isVmOmicallManagedStyle(st)) continue
-              rewriteOmicallStyleEl(st)
-              sawForeignStyle = true
-            }
           }
         }
       }
-      // Không observe characterData toàn document (React text node → treo UI / kẹt «đang đăng nhập»).
       if (sawForeignStyle) queueSanitizeOmicallStyles(doc)
     })
-    omicallStyleObserver.observe(doc.documentElement, {
-      childList: true,
-      subtree: true,
-    })
+    omicallStyleObserver.observe(doc.head, { childList: true })
   } catch {
     omicallStyleObserver = null
+    styleWatchDoc = null
   }
 }
 

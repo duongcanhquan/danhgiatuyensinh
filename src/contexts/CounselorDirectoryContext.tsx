@@ -18,6 +18,7 @@ import { useOrg } from './OrgProvider'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 
 function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile | null {
   try {
@@ -141,31 +142,33 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       ? query(collection(firestore, FS_COLLECTIONS.users))
       : query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
 
-    const unsub = onSnapshot(
-      qy,
-      (snap) => {
-        const next: VietMyUserProfile[] = []
-        snap.forEach((d) => {
-          const raw = d.data() as Record<string, unknown>
-          if (!omitOrgFilter || userDocBelongsToOrg(raw, scopeOrgId)) {
-            const row = mapUser(d.id, raw)
-            if (row) next.push(row)
-          }
-        })
-        startTransition(() => {
-          setUsers(next)
+    const unsubIdle = scheduleIdleAttach(() =>
+      onSnapshot(
+        qy,
+        (snap) => {
+          const next: VietMyUserProfile[] = []
+          snap.forEach((d) => {
+            const raw = d.data() as Record<string, unknown>
+            if (!omitOrgFilter || userDocBelongsToOrg(raw, scopeOrgId)) {
+              const row = mapUser(d.id, raw)
+              if (row) next.push(row)
+            }
+          })
+          startTransition(() => {
+            setUsers(next)
+            setLoading(false)
+            setError(null)
+          })
+        },
+        (e) => {
+          console.error(e)
+          setUsers([])
           setLoading(false)
-          setError(null)
-        })
-      },
-      (e) => {
-        console.error(e)
-        setUsers([])
-        setLoading(false)
-        setError(e instanceof Error ? e.message : 'Không đọc được danh bạ nhân sự.')
-      },
+          setError(e instanceof Error ? e.message : 'Không đọc được danh bạ nhân sự.')
+        },
+      ),
     )
-    return () => unsub()
+    return () => unsubIdle()
   }, [configured, scopeOrgId, isPlatform])
 
   const value = useMemo(

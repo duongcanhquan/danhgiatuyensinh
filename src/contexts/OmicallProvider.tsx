@@ -40,6 +40,7 @@ import {
   sanitizeOmicallInjectedStyles,
   scheduleDismissOmicallVendorCallUi,
   scheduleOmicallStyleSanitizeBurst,
+  stopWatchOmicallStyleInjection,
   suppressOmicallVendorToasts,
   watchOmicallStyleInjection,
   type OmicallCallData,
@@ -242,12 +243,21 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    // Chặn CSS @layer base của OMICall ngay từ đầu (trước khi SDK tải).
+    // Chỉ theo dõi CSS OMICall khi đã vũ trang SIP — tránh thuế DOM từ màn login.
+    if (authStatus !== 'authenticated' || !sipSessionArmed) {
+      stopWatchOmicallStyleInjection()
+      return
+    }
     watchOmicallStyleInjection(document)
     sanitizeOmicallInjectedStyles(document)
-  }, [])
+    return () => stopWatchOmicallStyleInjection()
+  }, [authStatus, sipSessionArmed])
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      setConfigLoading(authStatus === 'unknown' || authStatus === 'authenticating')
+      return
+    }
     if (!isFirebaseConfigured()) {
       setConfig(getDefaultOmicallConfig())
       setConfigFromRemote(false)
@@ -284,9 +294,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       },
     )
     return () => unsubOrg()
-  }, [orgKey])
+  }, [orgKey, authStatus])
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') return
     if (!needLegacyOmicall) return
     if (!isFirebaseConfigured()) return
     const db = getFirestoreDb()
@@ -308,11 +319,21 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       },
     )
     return () => unsubLegacy()
-  }, [needLegacyOmicall, orgKey])
+  }, [needLegacyOmicall, orgKey, authStatus])
 
   const sipCreds = useMemo(
     () => (config.enabled ? resolveOmicallSipCredentials(config, profile) : null),
-    [config, profile],
+    // Chỉ SIP fields — tránh mọi snapshot profile làm OmicallProvider render lại.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional narrow deps
+    [
+      config.enabled,
+      config.defaultSipUser,
+      config.defaultSipPassword,
+      config.sipRealm,
+      config.apiKey,
+      profile?.omicallSipUser,
+      profile?.omicallSipPassword,
+    ],
   )
 
   useEffect(() => {
@@ -455,6 +476,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
 
     loggedCallUidsRef.current.add(snap.callUid)
+    if (loggedCallUidsRef.current.size > 200) {
+      const oldest = loggedCallUidsRef.current.values().next().value
+      if (oldest) loggedCallUidsRef.current.delete(oldest)
+    }
     const db = getFirestoreDb()
     if (!db) {
       loggedCallUidsRef.current.delete(snap.callUid)
