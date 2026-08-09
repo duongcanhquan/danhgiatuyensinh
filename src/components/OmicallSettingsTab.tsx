@@ -14,6 +14,7 @@ import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
 import { probeOmicallInternalPhones } from '../services/omicallCallCenterProbe'
 import { registerOmicallWebhookOnServer } from '../services/omicallRegisterWebhook'
 import { syncOmicallMyExtension } from '../services/omicallSyncMyExtension'
+import { applyOmicallDefaultSipToMe } from '../services/omicallApplyDefaultSipToMe'
 import { runOmicallAdminBootstrap } from '../services/omicallAutoBootstrap'
 import { getFirebaseApp } from '../services/firebase'
 import { firebaseCallableErrorMessage } from '../utils/firebaseCallableError'
@@ -96,6 +97,19 @@ export function OmicallSettingsTab() {
     return { ...cfg, webhookSecret: randomWebhookSecret() }
   }, [])
 
+  const applyDefaultsToMyProfile = useCallback(
+    async (cfg: OmicallIntegrationConfig): Promise<string | null> => {
+      const sipUser = cfg.defaultSipUser?.trim() ?? ''
+      const sipPassword = cfg.defaultSipPassword?.trim() ?? ''
+      const uid = profile?.id?.trim() ?? ''
+      if (!uid || !sipUser || !sipPassword) return null
+      await applyOmicallDefaultSipToMe({ uid, sipUser, sipPassword })
+      await reloadProfile().catch(() => {})
+      return sipUser
+    },
+    [profile?.id, reloadProfile],
+  )
+
   const onSave = async (next?: OmicallIntegrationConfig) => {
     if (!canEdit) return
     const base = ensureWebhookSecret(next ?? draft)
@@ -111,22 +125,36 @@ export function OmicallSettingsTab() {
     try {
       await saveConfig(payload)
       setDraft(payload)
+      // Ghi mặc định vào hồ sơ đang đăng nhập — nếu không, số cũ trên hồ sơ (vd. 112) vẫn thắng.
+      const appliedSip = await applyDefaultsToMyProfile(payload)
       if (canEdit && payload.enabled && payload.apiKey?.trim() && payload.webhookSecret?.trim()) {
         void runOmicallAdminBootstrap({
           config: payload,
           projectId: getFirebaseApp()?.options.projectId ?? '',
           force: true,
-        }).then((b) => {
+        }).then(async (b) => {
+          // Đồng bộ TVV theo email có thể ghi lại số OMICall (112) lên hồ sơ — ghi đè lại mặc định.
+          if (appliedSip) {
+            await applyDefaultsToMyProfile(payload).catch(() => {})
+          }
           const parts = [b.webhook, b.phones, ...b.errors].filter(Boolean)
+          if (appliedSip) {
+            parts.unshift(`Đã gắn số mặc định ${appliedSip} vào hồ sơ bạn.`)
+          }
           if (parts.length) setMsg(parts.join(' '))
-          if (b.webhook || b.phones) reconnect()
+          reconnect()
         })
       }
-      const sipGap = describeMissingOmicallSipParts(payload, profile)
+      const sipGap = describeMissingOmicallSipParts(payload, {
+        omicallSipUser: appliedSip || profile?.omicallSipUser,
+        omicallSipPassword: appliedSip ? payload.defaultSipPassword : profile?.omicallSipPassword,
+      })
       setMsg(
-        sipGap
-          ? `Đã lưu. Để gọi được: ${sipGap} — hoặc bấm «Đồng bộ số theo email tôi».`
-          : 'Đã lưu — đang thử kết nối tổng đài.',
+        appliedSip
+          ? `Đã lưu và gắn số ${appliedSip} vào hồ sơ bạn — đang thử kết nối tổng đài.`
+          : sipGap
+            ? `Đã lưu. Để gọi được: ${sipGap} — điền số mặc định + mật khẩu rồi lưu lại, hoặc «Đồng bộ số theo email tôi».`
+            : 'Đã lưu — đang thử kết nối tổng đài.',
       )
       reconnect()
     } catch (e) {
@@ -136,13 +164,36 @@ export function OmicallSettingsTab() {
     }
   }
 
+  const runApplyDefaultsToMe = async () => {
+    setMySipBusy(true)
+    setMsg(null)
+    try {
+      const sip = await applyDefaultsToMyProfile(draft)
+      if (!sip) {
+        setMsg('Cần điền số nội bộ mặc định + mật khẩu SIP trước.')
+        return
+      }
+      setMsg(`Đã ghi số ${sip} vào hồ sơ bạn — đang thử kết nối.`)
+      reconnect()
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Không ghi được số vào hồ sơ.')
+    } finally {
+      setMySipBusy(false)
+    }
+  }
+
   const runSyncMySip = async () => {
     setMySipBusy(true)
     setMsg(null)
     try {
       const r = await syncOmicallMyExtension()
       await reloadProfile().catch(() => {})
-      setMsg(r.message)
+      const def = draft.defaultSipUser?.trim()
+      const note =
+        def && r.sipUser && def !== r.sipUser
+          ? ` OMICall gắn số ${r.sipUser} theo email — khác mặc định ${def}. Bấm «Dùng số mặc định cho tôi» nếu muốn gọi bằng ${def}.`
+          : ''
+      setMsg(`${r.message}${note}`)
       reconnect()
     } catch (e) {
       setMsg(
@@ -188,12 +239,14 @@ export function OmicallSettingsTab() {
         projectId: getFirebaseApp()?.options.projectId ?? '',
         force: true,
       })
+      const appliedSip = await applyDefaultsToMyProfile(toSave)
       setMsg(
         [
           `Cài đặt nhanh xong.`,
           domainHint ? `Domain tổng đài: ${domainHint}.` : '',
           bootstrap.webhook ? bootstrap.webhook : '',
           bootstrap.phones ?? '',
+          appliedSip ? `Đã gắn số ${appliedSip} vào hồ sơ bạn.` : '',
           bootstrap.errors.length ? `Lưu ý: ${bootstrap.errors.join(' · ')}` : '',
           'Hệ thống sẽ tự duy trì kết nối khi đăng nhập.',
         ]
@@ -242,6 +295,11 @@ export function OmicallSettingsTab() {
   const resolvedSip = useMemo(() => resolveOmicallSipCredentials(draft, profile), [draft, profile])
   const sipReady = Boolean(resolvedSip)
   const sipMissingHint = describeMissingOmicallSipParts(draft, profile)
+  const defaultSip = draft.defaultSipUser?.trim() ?? ''
+  const profileSip = profile?.omicallSipUser?.trim() ?? ''
+  const profileOverridesDefault = Boolean(
+    defaultSip && profileSip && defaultSip !== profileSip && draft.defaultSipPassword?.trim(),
+  )
 
   const setupSteps = [
     { done: draft.enabled && Boolean(draft.apiKey?.trim()), label: 'API key đã nhập' },
@@ -338,12 +396,12 @@ export function OmicallSettingsTab() {
             </p>
             <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] leading-snug text-amber-900/90">
               <li>
-                <strong>Hồ sơ riêng</strong> (Nhân sự → từng người, hoặc «Đồng bộ số theo email tôi»): mỗi TVV / admin
-                một số + mật khẩu. Nên dùng khi gọi thật.
+                <strong>Hồ sơ riêng</strong>: số đang dùng để kết nối (ưu tiên). Đồng bộ theo email OMICall có thể ghi
+                số này.
               </li>
               <li>
-                <strong>Mặc định dưới đây</strong>: chỉ khi tài khoản <em>chưa</em> gắn số trên hồ sơ — thường admin /
-                superadmin thử gọi. Không nên nhiều người dùng chung một số mặc định.
+                <strong>Mặc định dưới đây</strong>: khi bấm «Chỉ lưu» / «Cài đặt nhanh», app <em>ghi vào hồ sơ bạn</em>{' '}
+                để admin / superadmin gọi bằng số này (không bị kẹt số cũ như 112).
               </li>
             </ul>
             <p className="mt-1 text-[11px] leading-snug text-amber-900/90">
@@ -351,12 +409,12 @@ export function OmicallSettingsTab() {
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Số nội bộ mặc định (dự phòng)</span>
+                <span className="mb-1 block font-medium text-slate-700">Số nội bộ mặc định</span>
                 <input
                   className={INPUT}
                   value={draft.defaultSipUser ?? ''}
                   onChange={(e) => patch({ defaultSipUser: e.target.value })}
-                  placeholder="vd. 100 — chỉ khi hồ sơ trống"
+                  placeholder="vd. 113"
                   autoComplete="off"
                 />
               </label>
@@ -372,18 +430,19 @@ export function OmicallSettingsTab() {
                 />
               </label>
             </div>
-            {profile?.omicallSipUser?.trim() ? (
+            {profileOverridesDefault ? (
+              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-950">
+                Hồ sơ bạn đang gắn số <strong>{profileSip}</strong> — khác mặc định <strong>{defaultSip}</strong>. Kết
+                nối vẫn dùng {profileSip}. Bấm «Dùng số mặc định cho tôi» hoặc «Chỉ lưu» để ghi {defaultSip} vào hồ sơ.
+              </div>
+            ) : profileSip ? (
               <p className="mt-2 text-[11px] text-slate-600">
-                Tài khoản đang đăng nhập đang dùng <strong>hồ sơ riêng</strong>: số{' '}
-                <strong>{profile.omicallSipUser}</strong>
-                {profile.omicallSipPassword?.trim()
-                  ? ' (đã có mật khẩu). Đổi số ở Nhân sự — sửa mặc định ở trên sẽ không đổi số này.'
-                  : ' — chưa có mật khẩu trên hồ sơ (có thể lấy mật khẩu mặc định nếu có).'}
+                Hồ sơ đang đăng nhập: số <strong>{profileSip}</strong>
+                {profile?.omicallSipPassword?.trim() ? ' (đã có mật khẩu).' : ' — chưa có mật khẩu trên hồ sơ.'}
               </p>
             ) : (
               <p className="mt-2 text-[11px] text-amber-900">
-                Tài khoản này chưa gắn số trên hồ sơ — sẽ dùng <strong>mặc định</strong> ở trên (nếu đã điền), hoặc bấm
-                «Đồng bộ số theo email tôi».
+                Chưa gắn số trên hồ sơ — điền mặc định rồi «Chỉ lưu» (hoặc «Dùng số mặc định cho tôi»).
               </p>
             )}
           </div>
@@ -408,6 +467,19 @@ export function OmicallSettingsTab() {
             >
               <Save className="h-4 w-4" aria-hidden />
               Chỉ lưu
+            </button>
+            <button
+              type="button"
+              disabled={
+                mySipBusy ||
+                busy ||
+                !draft.defaultSipUser?.trim() ||
+                !draft.defaultSipPassword?.trim()
+              }
+              onClick={() => void runApplyDefaultsToMe()}
+              className="inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-950 hover:bg-sky-100 disabled:opacity-50"
+            >
+              {mySipBusy ? 'Đang ghi…' : 'Dùng số mặc định cho tôi'}
             </button>
             <button
               type="button"
