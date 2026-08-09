@@ -627,6 +627,12 @@ export function StaffManagementView({
         <div className="app-surface-elevated p-4 sm:p-5">
           <h2 className="app-section-heading">Danh sách nhân sự</h2>
           {loading ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p> : null}
+          {!loading && !directoryError && sortedUsers.length === 0 ? (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              Chưa thấy nhân sự trong trường đang chọn. Siêu quản trị: kiểm tra bộ chọn trường (VietMy). Tài khoản cũ
+              thiếu mã trường sẽ hiện lại sau khi app cập nhật — hoặc chạy gắn orgId Phase 0.
+            </p>
+          ) : null}
           <ul className="mt-3 max-h-[min(75vh,56rem)] min-h-[28rem] space-y-2 overflow-y-auto text-sm">
             {sortedUsers.map((u) => {
               const isSelf = selfUid !== null && u.id === selfUid
