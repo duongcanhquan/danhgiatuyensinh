@@ -290,7 +290,7 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
-const LEAD_TABLE_COL_COUNT = 11
+const LEAD_TABLE_COL_COUNT = 12
 
 /** Ghi chú bổ sung (các trường Excel / hồ sơ ngoài cột mô tả chính). */
 function leadSupplementaryNotesText(lead: Lead): string {
@@ -3404,96 +3404,103 @@ export function LeadManagement() {
               : ''
           }`}
         >
-          <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
+          <table className="w-full min-w-[980px] border-collapse text-left text-[13px] leading-snug xl:min-w-0">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/95 backdrop-blur-xl">
-              <tr className="text-xs font-medium uppercase tracking-wide text-slate-600 sm:text-sm">
-                <th className="sticky left-0 z-[3] w-11 bg-white/95 px-1 py-3 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]">
+              <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                <th className="sticky left-0 z-[3] w-9 bg-white/95 px-0.5 py-2 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]">
                   {canBulkWrite ? (
-                    <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                    <label className="flex h-9 w-9 cursor-pointer items-center justify-center">
                       <input
                         type="checkbox"
                         checked={allVisibleSelected}
                         onChange={toggleSelectAllVisible}
                         disabled={!pagedRows.length}
-                        className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                        className="h-3.5 w-3.5 rounded border-slate-300 bg-white accent-amber-500"
                         title="Chọn tất cả hồ sơ trên trang này"
                       />
                     </label>
                   ) : null}
                 </th>
-                <th className="sticky left-11 z-[3] min-w-[9.5rem] bg-white/95 px-3 py-3 font-medium shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] sm:px-4">
+                <th className="sticky left-9 z-[3] w-[12%] min-w-[7.5rem] bg-white/95 px-2 py-2 font-semibold shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)]">
                   <button
                     type="button"
                     onClick={() => toggleSort('fullName')}
-                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
+                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
                   >
                     Họ tên
                     {sortKey === 'fullName' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="max-w-[6.5rem] px-2 py-3 text-sm font-medium normal-case">Mã KH</th>
-                <th className="px-4 py-3 font-medium">
+                <th className="w-[7%] max-w-[5.5rem] px-1.5 py-2 font-semibold normal-case tracking-normal">
+                  Mã KH
+                </th>
+                <th
+                  className="w-[11%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Chương trình / đợt gắn khi nhập hoặc gán hàng loạt"
+                >
+                  Chương trình
+                </th>
+                <th className="w-[9%] max-w-[7.5rem] px-1.5 py-2 font-semibold">
                   <button
                     type="button"
                     onClick={() => toggleSort('educationLevel')}
-                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
+                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
                   >
-                    Hệ đào tạo
+                    Hệ ĐT
                     {sortKey === 'educationLevel' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
                   </button>
                 </th>
-                <th className="px-4 py-3 font-medium">
+                <th className="w-[7%] max-w-[5.5rem] px-1.5 py-2 font-semibold">
                   <button
                     type="button"
                     onClick={() => toggleSort('province')}
-                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
+                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
                   >
-                    Tỉnh / TP
+                    Tỉnh
                     {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
                 <th
-                  className="max-w-[11rem] px-2 py-3 text-sm font-medium normal-case"
+                  className="w-[12%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
                   title="Mô tả, ghi chú chính và nguyện vọng trên hồ sơ"
                 >
-                  Ghi chú/ Nguyện vọng
+                  Ghi chú
                 </th>
                 <th
-                  className="max-w-[11rem] px-2 py-3 text-sm font-medium normal-case"
-                  title="Ghi chú 1, ghi chú 2, nguyện vọng, sở thích… (khi có nhiều trường ghi chú)"
+                  className="w-[10%] max-w-[8rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Ghi chú 1, ghi chú 2, nguyện vọng, sở thích…"
                 >
                   Ghi chú thêm
                 </th>
-                <th className="px-4 py-3 font-medium">
+                <th className="w-[5%] px-1.5 py-2 font-semibold">
                   <button
                     type="button"
                     onClick={() => toggleSort('score')}
-                    className="flex flex-col items-start gap-0.5 text-left transition hover:text-amber-700"
+                    className="flex flex-col items-start gap-0 text-left normal-case tracking-normal transition hover:text-amber-700"
                   >
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-0.5">
                       Điểm
                       {sortKey === 'score' ? (
                         <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                       ) : null}
                     </span>
                     {profileScoringActive ? (
-                      <span className="text-xs font-normal normal-case text-[var(--color-primary)]">
-                        {profileScoringLive ? 'theo profile' : 'profile (chưa có quy tắc)'}
+                      <span className="text-[10px] font-normal text-[var(--color-primary)]">
+                        {profileScoringLive ? 'profile' : 'chưa quy tắc'}
                       </span>
                     ) : null}
                   </button>
                 </th>
-                <th className="w-16 min-w-[3.75rem] px-1 py-3 text-center text-xs font-medium normal-case">
-                  <div className="flex flex-col items-center gap-0.5">
+                <th className="w-[5.5%] min-w-[3.25rem] px-0.5 py-2 text-center font-semibold normal-case tracking-normal">
+                  <div className="flex flex-col items-center gap-0">
                     <button
                       type="button"
                       onClick={() => toggleSort('mlWin')}
-                      className="inline-flex flex-col items-center gap-0.5 text-[var(--color-primary)] transition hover:text-[var(--color-primary)]"
+                      className="inline-flex flex-col items-center text-[11px] leading-tight text-[var(--color-primary)] transition hover:text-[var(--color-primary)]"
                     >
-                      <span className="leading-tight">Điểm</span>
-                      <span className="leading-tight">thông tin</span>
+                      <span>Điểm TT</span>
                       {sortKey === 'mlWin' ? (
                         <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                       ) : null}
@@ -3501,11 +3508,11 @@ export function LeadManagement() {
                     <InfoScoreHelpPopover hint={ML_WIN_COLUMN_HINT} />
                   </div>
                 </th>
-                <th className="px-4 py-3 font-medium">
+                <th className="w-[6%] px-1.5 py-2 font-semibold">
                   <button
                     type="button"
                     onClick={() => toggleSort('priorityTag')}
-                    className="flex items-center gap-1 text-left transition hover:text-amber-700"
+                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
                   >
                     Nhãn
                     {sortKey === 'priorityTag' ? (
@@ -3513,7 +3520,9 @@ export function LeadManagement() {
                     ) : null}
                   </button>
                 </th>
-                <th className="min-w-[6rem] max-w-[9rem] px-2 py-3 text-sm font-medium normal-case">TVV</th>
+                <th className="w-[8%] max-w-[7rem] px-1.5 py-2 font-semibold normal-case tracking-normal">
+                  TVV
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -3579,26 +3588,26 @@ export function LeadManagement() {
                   className="group cursor-pointer border-b border-slate-100 transition-all duration-300 hover:bg-amber-50/50"
                 >
                   <td
-                    className="sticky left-0 z-[2] bg-white px-1 py-2 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)] group-hover:bg-amber-50/90"
+                    className="sticky left-0 z-[2] bg-white px-0.5 py-1.5 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)] group-hover:bg-amber-50/90"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {canBulkWrite ? (
-                      <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                      <label className="flex h-9 w-9 cursor-pointer items-center justify-center">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(l.id)}
                           onChange={() => toggleSelectId(l.id)}
-                          className="h-4 w-4 rounded border-slate-300 bg-white accent-amber-500"
+                          className="h-3.5 w-3.5 rounded border-slate-300 bg-white accent-amber-500"
                           aria-label={`Chọn ${l.fullName}`}
                         />
                       </label>
                     ) : null}
                   </td>
-                  <td className="sticky left-11 z-[2] min-w-[9.5rem] bg-white px-3 py-3 font-medium text-slate-900 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] group-hover:bg-amber-50/90 sm:px-4">
-                    <span className="inline-flex max-w-full items-center gap-1.5">
+                  <td className="sticky left-9 z-[2] bg-white px-2 py-1.5 font-medium text-slate-900 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)] group-hover:bg-amber-50/90">
+                    <span className="inline-flex max-w-full items-center gap-1">
                       {l.isAiShortlisted ? (
                         <Zap
-                          className="h-4 w-4 shrink-0 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.95)]"
+                          className="h-3.5 w-3.5 shrink-0 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.95)]"
                           strokeWidth={2.5}
                           fill="currentColor"
                           aria-label="Đã được AI đánh dấu ưu tiên"
@@ -3609,7 +3618,7 @@ export function LeadManagement() {
                       </span>
                     </span>
                     <p
-                      className={`mt-0.5 text-xs font-medium leading-snug md:line-clamp-1 md:text-[11px] ${
+                      className={`mt-0.5 text-[11px] font-medium leading-snug ${
                         callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
                           ? 'line-clamp-2'
                           : 'line-clamp-1'
@@ -3620,41 +3629,59 @@ export function LeadManagement() {
                     </p>
                     {callAiLine ? (
                       <p
-                        className="mt-0.5 line-clamp-2 text-xs font-medium leading-snug text-[var(--color-primary)] md:text-[11px]"
+                        className="mt-0.5 line-clamp-1 text-[11px] font-medium leading-snug text-[var(--color-primary)]"
                         title={callAiLine}
                       >
-                        Đánh giá gọi: {callAiLine}
+                        {callAiLine}
                       </p>
                     ) : null}
                   </td>
-                  <td className="max-w-[6.5rem] truncate px-2 py-3 text-slate-600" title={l.customerId || undefined}>
+                  <td className="truncate px-1.5 py-1.5 text-slate-600" title={l.customerId || undefined}>
                     {l.customerId || '—'}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{l.educationLevel || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{l.province || '—'}</td>
                   <td
-                    className="max-w-[11rem] truncate px-2 py-3 leading-snug text-slate-600"
+                    className="truncate px-1.5 py-1.5 text-slate-700"
+                    title={(l.intakeProgram ?? '').trim() || undefined}
+                  >
+                    {(l.intakeProgram ?? '').trim() ? (
+                      <span className="rounded bg-teal-50 px-1 py-0.5 text-[12px] font-medium text-teal-900">
+                        {formatDescPreview(l.intakeProgram ?? '', 28)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="truncate px-1.5 py-1.5 text-slate-600" title={l.educationLevel || undefined}>
+                    {l.educationLevel || '—'}
+                  </td>
+                  <td className="truncate px-1.5 py-1.5 text-slate-600" title={l.province || undefined}>
+                    {l.province || '—'}
+                  </td>
+                  <td
+                    className="truncate px-1.5 py-1.5 text-slate-600"
                     title={descForTable.trim() ? descForTable : undefined}
                   >
-                    {formatDescPreview(l.description)}
+                    {formatDescPreview(l.description, 40)}
                   </td>
                   <td
-                    className="max-w-[11rem] truncate px-2 py-3 leading-snug text-slate-600"
+                    className="truncate px-1.5 py-1.5 text-slate-600"
                     title={extraNotesFull.trim() ? extraNotesFull : undefined}
                   >
-                    {extraNotesFull.trim() ? formatDescPreview(extraNotesFull, 56) : '—'}
+                    {extraNotesFull.trim() ? formatDescPreview(extraNotesFull, 36) : '—'}
                   </td>
-                  <td className="px-4 py-3 font-medium text-[var(--color-primary)] transition-colors duration-300">{displayScore}</td>
-                  <td className="cursor-help px-1 py-2 text-center" title={buildMlWinHoverText(ml)}>
+                  <td className="px-1.5 py-1.5 font-medium tabular-nums text-[var(--color-primary)]">
+                    {displayScore}
+                  </td>
+                  <td className="cursor-help px-0.5 py-1 text-center" title={buildMlWinHoverText(ml)}>
                     <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
                   </td>
-                  <td className="px-4 py-3 transition-all duration-300">
+                  <td className="px-1.5 py-1.5">
                     <motion.span layout key={`${l.id}-${displayTag}`}>
                       <TagBadge tag={displayTag} />
                     </motion.span>
                   </td>
                   <td
-                    className="max-w-[9rem] truncate px-2 py-3 text-slate-600"
+                    className="truncate px-1.5 py-1.5 text-slate-600"
                     title={formatAssignedCounselorLabel(l, counselorDisplayNameById)}
                   >
                     {formatAssignedCounselorLabel(l, counselorDisplayNameById)}
