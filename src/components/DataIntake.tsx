@@ -545,145 +545,188 @@ export function DataIntake() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg px-4 py-8 md:py-12">
-      <div className="mx-auto w-full space-y-5 text-center">
-        <header>
+    <div className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-4 md:py-8 lg:px-6">
+      <div className="w-full space-y-5">
+        <header className="text-left">
           <h1 className="text-xl font-semibold tracking-tight text-slate-900">Nhập liệu</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Mỗi lần tải file gắn một tên chương trình / đợt để sau lọc riêng khỏi dữ liệu cũ.
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            Chọn mẫu Excel → xem cột bên phải → đặt tên đợt → tải file. Mỗi lần nhập gắn một chương trình / đợt để
+            sau lọc riêng trên màn Hồ sơ.
           </p>
         </header>
 
         {!canIntake ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-sm text-amber-950 shadow-sm">
-            Cần quyền <code className="rounded bg-amber-100 px-1 text-xs text-amber-900">data:intake</code> (thường là
-            Admin).
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 shadow-sm">
+            Cần quyền nhập liệu (thường là Admin). Liên hệ quản lý nếu không thấy nút tải lên.
           </div>
         ) : null}
 
         {!configured || !db ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-sm text-amber-950 shadow-sm">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 shadow-sm">
             Cấu hình Firebase trong .env trước khi nhập.
           </div>
         ) : null}
 
-        <div className="app-surface-elevated rounded-2xl p-5 md:p-6">
-          <fieldset className="mb-4 text-left">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Chọn mẫu Excel
-            </legend>
-            <div className="mt-2 space-y-2">
-              {LEAD_INTAKE_TEMPLATES.map((tpl) => {
-                const active = templateId === tpl.id
-                return (
-                  <label
-                    key={tpl.id}
-                    className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
-                      active
-                        ? 'border-amber-400 bg-amber-50/90 ring-1 ring-amber-300/70'
-                        : 'border-slate-200 bg-white hover:border-amber-300/80'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="intake-template"
-                      className="mt-1 accent-amber-600"
-                      checked={active}
-                      disabled={busy}
-                      onChange={() => {
-                        setTemplateId(tpl.id)
-                        setPreview(null)
-                        setBanner(null)
-                      }}
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-900">{tpl.label}</span>
-                      <span className="mt-0.5 block text-xs leading-snug text-slate-600">{tpl.description}</span>
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-          </fieldset>
+        <div className="grid gap-4 lg:grid-cols-12 lg:items-start lg:gap-5">
+          {/* Trái — chọn mẫu + tải lên */}
+          <div className="app-surface-elevated rounded-2xl p-4 sm:p-5 lg:col-span-5 lg:p-6">
+            <fieldset className="mb-4 text-left">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Chọn mẫu Excel
+              </legend>
+              <div className="mt-2 space-y-2">
+                {LEAD_INTAKE_TEMPLATES.map((tpl) => {
+                  const active = templateId === tpl.id
+                  return (
+                    <label
+                      key={tpl.id}
+                      className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                        active
+                          ? 'border-amber-400 bg-amber-50/90 ring-1 ring-amber-300/70'
+                          : 'border-slate-200 bg-white hover:border-amber-300/80'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="intake-template"
+                        className="mt-1 accent-amber-600"
+                        checked={active}
+                        disabled={busy}
+                        onChange={() => {
+                          setTemplateId(tpl.id)
+                          setPreview(null)
+                          setBanner(null)
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-slate-900">{tpl.label}</span>
+                        <span className="mt-0.5 block text-xs leading-snug text-slate-600">
+                          {tpl.description}
+                        </span>
+                        <span className="mt-1 block text-[11px] font-medium text-slate-500">
+                          {tpl.columns.length} cột · sheet «{tpl.sheetName}»
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
 
-          <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-            Chương trình / đợt nhập <span className="text-rose-600">*</span>
+            <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Chương trình / đợt nhập <span className="text-rose-600">*</span>
+              <input
+                list="intake-program-suggestions"
+                value={intakeProgram}
+                onChange={(e) => setIntakeProgram(e.target.value)}
+                disabled={busy || !canIntake}
+                placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
+                className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
+              />
+              <datalist id="intake-program-suggestions">
+                {recentPrograms.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+              <span className="mt-1.5 block text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-500">
+                Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này.
+              </span>
+            </label>
+
             <input
-              list="intake-program-suggestions"
-              value={intakeProgram}
-              onChange={(e) => setIntakeProgram(e.target.value)}
-              disabled={busy || !canIntake}
-              placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
-              className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
-            />
-            <datalist id="intake-program-suggestions">
-              {recentPrograms.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
-            <span className="mt-1.5 block text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-500">
-              Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này — trên màn Hồ sơ sẽ lọc theo đợt này.
-              Hồ sơ cũ chưa có tên đợt: chọn nhiều → «Gán chương trình».
-            </span>
-          </label>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="sr-only"
-            disabled={!db || busy || !canIntake}
-            aria-hidden
-            onChange={onFileInputChange}
-          />
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center sm:gap-3">
-            <button
-              type="button"
-              onClick={onDownloadTemplate}
-              disabled={!canIntake}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400 bg-gradient-to-r from-amber-50 to-stone-50 px-4 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:border-amber-500 hover:shadow disabled:opacity-40"
-            >
-              <Download className="h-4 w-4 shrink-0" aria-hidden />
-              Tải mẫu đang chọn
-            </button>
-            <button
-              type="button"
-              onClick={onPickFile}
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="sr-only"
               disabled={!db || busy || !canIntake}
-              aria-label="Chọn file Excel .xlsx để tải lên"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-40"
+              aria-hidden
+              onChange={onFileInputChange}
+            />
+
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                onClick={onDownloadTemplate}
+                disabled={!canIntake}
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-amber-400 bg-gradient-to-r from-amber-50 to-stone-50 px-4 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:border-amber-500 hover:shadow disabled:opacity-40"
+              >
+                <Download className="h-4 w-4 shrink-0" aria-hidden />
+                Tải mẫu đang chọn
+              </button>
+              <button
+                type="button"
+                onClick={onPickFile}
+                disabled={!db || busy || !canIntake}
+                aria-label="Chọn file Excel .xlsx để tải lên"
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-40"
+              >
+                <Upload className="h-4 w-4 shrink-0" aria-hidden />
+                Tải lên file .xlsx
+              </button>
+            </div>
+
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(true)
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={[
+                'mt-4 flex min-h-[140px] cursor-default flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
+                dragOver
+                  ? 'border-emerald-400 bg-emerald-50/90'
+                  : 'border-slate-200 bg-slate-50/50 hover:border-amber-300/80 hover:bg-amber-50/40',
+                !canIntake ? 'pointer-events-none opacity-50' : '',
+              ].join(' ')}
             >
-              <Upload className="h-4 w-4 shrink-0" aria-hidden />
-              Tải lên file .xlsx
-            </button>
+              <FileSpreadsheet className="mb-2 h-8 w-8 text-amber-600" strokeWidth={1.25} aria-hidden />
+              <p className="text-sm font-medium text-slate-800">Hoặc kéo thả file vào đây</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Đang dùng: <strong>{selectedTemplate.label}</strong>. Hàng 1 tiêu đề, dữ liệu từ hàng 2. Trùng →
+                không nhập.
+              </p>
+              {busy && !preview ? (
+                <p className="mt-2 text-xs font-medium text-emerald-700">Đang xử lý…</p>
+              ) : null}
+            </div>
           </div>
 
-          <div
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragOver(true)
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            className={[
-              'mt-4 flex min-h-[120px] cursor-default flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
-              dragOver
-                ? 'border-emerald-400 bg-emerald-50/90'
-                : 'border-slate-200 bg-slate-50/50 hover:border-amber-300/80 hover:bg-amber-50/40',
-              !canIntake ? 'pointer-events-none opacity-50' : '',
-            ].join(' ')}
-          >
-            <FileSpreadsheet className="mb-2 h-8 w-8 text-amber-600" strokeWidth={1.25} aria-hidden />
-            <p className="text-sm font-medium text-slate-800">Hoặc kéo thả file vào đây</p>
-            <p className="mt-1 max-w-sm text-xs text-slate-500">
-              Đang dùng: <strong>{selectedTemplate.label}</strong>. Sheet «{selectedTemplate.sheetName}» — hàng 1
-              tiêu đề, dữ liệu từ hàng 2. Trùng → không nhập. Hồ sơ mới sẽ mang tên đợt ở ô phía trên.
+          {/* Phải — danh sách cột mẫu đang chọn */}
+          <aside className="app-surface-elevated flex min-h-0 flex-col rounded-2xl p-4 sm:p-5 lg:col-span-7 lg:sticky lg:top-3 lg:max-h-[min(80vh,52rem)] lg:p-6">
+            <div className="shrink-0 border-b border-slate-100 pb-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Cột Excel của mẫu đang chọn
+              </p>
+              <h2 className="mt-0.5 text-base font-semibold tracking-tight text-slate-900">
+                {selectedTemplate.label}
+              </h2>
+              <p className="mt-1 text-xs leading-snug text-slate-600">
+                Giữ đúng tên cột hàng 1 như danh sách dưới (thứ tự cột trên file có thể khác). Sheet «
+                {selectedTemplate.sheetName}» · {selectedTemplate.columns.length} trường.
+              </p>
+            </div>
+            <ol className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 text-left sm:columns-2 sm:gap-x-3 lg:columns-1 xl:columns-2">
+              {selectedTemplate.columns.map((col, idx) => (
+                <li
+                  key={`${selectedTemplate.id}-${col.key}`}
+                  className="mb-1.5 break-inside-avoid"
+                >
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold tabular-nums text-amber-800 ring-1 ring-amber-200/80">
+                      {idx + 1}
+                    </span>
+                    <span className="min-w-0 text-sm font-semibold leading-snug text-slate-900">
+                      {col.header}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-3 shrink-0 text-[11px] leading-snug text-slate-500">
+              Bấm «Tải mẫu đang chọn» để lấy file trống đúng các cột này, điền rồi tải lên bên trái.
             </p>
-            {busy && !preview ? (
-              <p className="mt-2 text-xs font-medium text-emerald-700">Đang xử lý…</p>
-            ) : null}
-          </div>
+          </aside>
         </div>
 
         {preview && previewStats ? (
