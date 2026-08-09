@@ -68,7 +68,7 @@ export function SearchableFilterSelect({
         title={title}
         className={
           compact
-            ? 'flex min-w-0 flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500'
+            ? 'flex min-w-0 flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500'
             : 'flex flex-col text-xs font-medium text-slate-600'
         }
       >
@@ -79,7 +79,7 @@ export function SearchableFilterSelect({
           onClick={() => setOpen((o) => !o)}
           className={
             compact
-              ? 'flex h-8 w-full cursor-pointer items-center justify-between gap-1 rounded-md border border-slate-200/95 bg-white px-2 text-left text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
+              ? 'flex min-h-10 w-full cursor-pointer items-center justify-between gap-1 rounded-lg border border-slate-200/95 bg-white px-2.5 text-left text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100'
               : 'mt-1 flex min-h-11 min-w-[10rem] cursor-pointer items-center justify-between gap-1 rounded-xl border border-slate-200/95 bg-white px-2 py-2 text-left text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-amber-200'
           }
         >

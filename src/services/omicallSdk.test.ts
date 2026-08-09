@@ -91,6 +91,15 @@ describe('normalizeOmicallInjectedCss', () => {
     expect(out).toMatch(/@layer\s+omicall/i)
   })
 
+  it('strips :root font-size while keeping --omi variables', () => {
+    const out = normalizeOmicallInjectedCss(
+      '@layer base{:root{font-size:62.5%;--omi-primary:#4d60e8;line-height:1.2}}',
+    )
+    expect(out).not.toMatch(/font-size\s*:\s*62\.5%/i)
+    expect(out).not.toMatch(/line-height\s*:\s*1\.2/i)
+    expect(out).toContain('--omi-primary:#4d60e8')
+  })
+
   it('strips global button/input resets from vendor theme', () => {
     const out = normalizeOmicallInjectedCss(
       '@layer base{button{font-family:OMIRoboto;font-size:13px}input{font-size:13px}:root{--omi-x:1}}',
@@ -133,7 +142,7 @@ describe('ensureOmicallLayoutShield', () => {
   it('restores VietMy font and canvas on body shield', () => {
     expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/Plus Jakarta Sans/)
     expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/--vm-canvas/)
-    expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/font-size:100%!important/)
+    expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/html,:root\{font-size:100%!important/)
   })
 })
 

@@ -189,13 +189,13 @@ const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
 
 const TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
 
-/** Nhãn + ô lọc gọn trên toolbar Hồ sơ (cùng chiều cao). */
+/** Nhãn + ô lọc trên toolbar Hồ sơ — kích thước chạm được (không siết h-8). */
 const LEAD_FILTER_LABEL =
-  'flex min-w-0 flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500'
+  'flex min-w-0 flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500'
 const LEAD_FILTER_CONTROL =
-  'h-8 w-full rounded-md border border-slate-200/95 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
+  'min-h-10 w-full rounded-lg border border-slate-200/95 bg-white px-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100'
 const LEAD_BTN =
-  'inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-semibold shadow-sm transition disabled:cursor-not-allowed'
+  'inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed'
 
 /** Bộ lọc đang chọn (nháp) vs đã áp dụng — chỉ chạy khi bấm «Áp dụng lọc». */
 type LeadUiFilters = {
@@ -2712,37 +2712,37 @@ export function LeadManagement() {
   }, [leads, selectedIds, evalMapForExport, activeScoringProfile])
 
   return (
-    <div className="bento-board">
-      <BentoCell variant="hero" className="!p-3 sm:!p-4">
+    <div className="bento-board gap-4">
+      <BentoCell variant="hero" className="!p-4 sm:!p-5">
         <AppPageHeader
           title="Hồ sơ"
           meta={
-            <span className="text-teal-100/85">
-              Tìm · lọc · gọi · cập nhật — danh sách xếp Gọi lại → Chưa gọi → Đã xử lý
+            <span className="text-teal-100/90">
+              Tìm · lọc · gọi · cập nhật — xếp Gọi lại → Chưa gọi → Đã xử lý
             </span>
           }
-          className="!mb-0 [&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+          className="!mb-0 [&_h1]:text-2xl [&_h1]:text-white sm:[&_h1]:text-3xl [&_.text-slate-500]:text-teal-100/85"
         />
       </BentoCell>
 
       {!configured || !db ? (
         <div className="flex justify-end">
-          <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-xs text-amber-900">
+          <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-sm text-amber-900">
             Firebase chưa cấu hình.
           </span>
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-base text-rose-900 shadow-sm backdrop-blur-xl">
+        <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-base text-rose-900 shadow-sm backdrop-blur-xl">
           {error}
         </div>
       ) : null}
 
-      <BentoCell className="space-y-2 !p-2.5 sm:!p-3">
+      <BentoCell className="space-y-4 !p-4 sm:!p-5">
         {/* Tổng kết nhẹ — luôn hiện */}
         <div
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-xs text-slate-600"
+          className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200/70 bg-slate-50/90 px-3 py-2.5 text-sm text-slate-600"
           role="status"
           aria-live="polite"
         >
@@ -2851,8 +2851,8 @@ export function LeadManagement() {
         </div>
 
         {/* Tìm kiếm + thao tác chính */}
-        <div className="flex flex-wrap items-end gap-2">
-          <label className={`${LEAD_FILTER_LABEL} min-w-[12rem] flex-1`}>
+        <div className="flex flex-wrap items-end gap-2.5">
+          <label className={`${LEAD_FILTER_LABEL} min-w-[14rem] flex-1`}>
             <span>Tìm kiếm</span>
             <input
               value={searchParams.get(LWF.Q) ?? ''}
@@ -2862,7 +2862,7 @@ export function LeadManagement() {
               className={LEAD_FILTER_CONTROL}
             />
           </label>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             {canCreateManualLead && configured && db ? (
               <button
                 type="button"
@@ -2870,7 +2870,7 @@ export function LeadManagement() {
                 className={`${LEAD_BTN} border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700`}
                 title="Tạo hồ sơ ứng viên mới"
               >
-                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
                 Tạo mới
               </button>
             ) : null}
@@ -2988,9 +2988,9 @@ export function LeadManagement() {
         </div>
 
         {/* Tổng kết hàng chờ của tôi + lọc nhanh */}
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-t border-slate-200/60 pt-2">
+        <div className="flex flex-col gap-3 border-t border-slate-200/60 pt-3">
           {myCallWorkSummary.total > 0 ? (
-            <BentoGrid className="w-full sm:!grid-cols-2 lg:!grid-cols-4" tight>
+            <BentoGrid className="w-full sm:!grid-cols-2 lg:!grid-cols-4">
               <button
                 type="button"
                 onClick={() => applyCallQueueQuick('callback', { pinMine: true })}
@@ -3039,9 +3039,10 @@ export function LeadManagement() {
               />
             </BentoGrid>
           ) : null}
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
           <div className="min-w-0">
-            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hàng chờ gọi</p>
-            <div className="flex flex-wrap gap-1" role="tablist" aria-label="Hàng chờ gọi">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Hàng chờ gọi</p>
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Hàng chờ gọi">
               {(
                 [
                   { id: 'all' as const, label: 'Tất cả' },
@@ -3058,7 +3059,7 @@ export function LeadManagement() {
                     role="tab"
                     aria-selected={active}
                     onClick={() => applyCallQueueQuick(tab.id)}
-                    className={`inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-semibold transition ${
+                    className={`inline-flex min-h-10 cursor-pointer items-center rounded-lg px-3 text-sm font-semibold transition ${
                       active
                         ? 'bg-amber-500 text-white shadow-sm'
                         : 'border border-slate-200/95 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/60'
@@ -3069,14 +3070,14 @@ export function LeadManagement() {
                 )
               })}
             </div>
-            <p className="mt-1 max-w-xl text-[10px] leading-snug text-slate-500">
-              Xếp: Gọi lại → Chưa gọi → Đã xử lý. Ô tổng kết đếm hồ sơ gán cho bạn trên danh sách đang tải
-              {listNeedsFullScope ? '' : ' (một trang)'}
-              {' — '}bấm ô để mở đủ hàng chờ của bạn.
+            <p className="mt-1.5 max-w-lg text-xs leading-snug text-slate-500">
+              {myCallWorkSummary.total > 0
+                ? 'Bấm ô tổng kết phía trên để mở hàng chờ của bạn.'
+                : 'Chưa có hồ sơ gán cho bạn trong danh sách đang tải.'}
             </p>
           </div>
           <label
-            className={`${LEAD_FILTER_LABEL} w-[9.5rem] shrink-0`}
+            className={`${LEAD_FILTER_LABEL} w-[11rem] shrink-0`}
             title="Lọc theo note kết quả sau gọi"
           >
             <span>Note sau gọi</span>
@@ -3099,14 +3100,14 @@ export function LeadManagement() {
             </select>
           </label>
           <div className="min-w-0 flex-1">
-            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Nhãn</p>
-            <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc nhanh nhãn">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Nhãn</p>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc nhanh nhãn">
               <button
                 type="button"
                 disabled={!scoringProfiles.length}
                 onClick={() => applyTagQuick('ALL')}
                 className={[
-                  'inline-flex h-8 cursor-pointer items-center rounded-md border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed',
+                  'inline-flex min-h-10 cursor-pointer items-center rounded-lg border px-3 text-sm font-semibold transition disabled:cursor-not-allowed',
                   draftFilters.tag === 'ALL'
                     ? 'border-slate-700 bg-slate-800 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
@@ -3124,7 +3125,7 @@ export function LeadManagement() {
                     disabled={!scoringProfiles.length}
                     onClick={() => applyTagQuick(tg)}
                     className={[
-                      'inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed',
+                      'inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold transition disabled:cursor-not-allowed',
                       on
                         ? tg === 'HOT'
                           ? 'border-rose-500 bg-rose-600 text-white'
@@ -3143,11 +3144,12 @@ export function LeadManagement() {
               })}
             </div>
           </div>
+          </div>
         </div>
 
         {/* Bộ lọc chi tiết */}
-        <details className="group rounded-md border border-slate-200/80 bg-white/60 open:bg-white/90">
-          <summary className="flex h-8 cursor-pointer list-none items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-lg border border-slate-200/80 bg-white/60 open:bg-white/90">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
             <ChevronDown
               className="h-3.5 w-3.5 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
               strokeWidth={2}
@@ -3169,7 +3171,7 @@ export function LeadManagement() {
               </span>
             ) : null}
           </summary>
-          <div className="space-y-2 border-t border-slate-200/60 px-2 pb-2 pt-2">
+          <div className="space-y-3 border-t border-slate-200/60 px-3 pb-3 pt-3">
             <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               <FilterSelect
                 compact
@@ -3356,7 +3358,7 @@ export function LeadManagement() {
 
         {/* Bộ chấm điểm — thu gọn */}
         <details className="group rounded-md border border-slate-200/80 bg-white/50 open:bg-white/85">
-          <summary className="flex h-8 cursor-pointer list-none items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
             <ChevronDown
               className="h-3.5 w-3.5 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
               strokeWidth={2}
@@ -3377,7 +3379,7 @@ export function LeadManagement() {
                   (!scoringProfiles.length ? 'Chưa có profile' : '—')}
             </span>
           </summary>
-          <div className="space-y-2 border-t border-slate-200/60 px-2 pb-2 pt-2">
+          <div className="space-y-3 border-t border-slate-200/60 px-3 pb-3 pt-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <label className={`${LEAD_FILTER_LABEL} min-w-0 flex-1`}>
                 <span>Profile</span>

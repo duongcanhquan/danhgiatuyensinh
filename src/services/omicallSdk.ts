@@ -311,7 +311,7 @@ export function unwrapOmicallBaseLayerCss(css: string): string {
 }
 
 /**
- * Gỡ rule global trong CSS OMICall — font/size trên html, body, universal selector, form controls
+ * Gỡ rule global trong CSS OMICall — font/size trên html, body, :root, universal selector, form controls
  * làm app chữ sít / lệch khoảng / font lạ trên Chrome sau SIP connected.
  */
 export function stripOmicallGlobalTypographyResets(css: string): string {
@@ -330,6 +330,22 @@ export function stripOmicallGlobalTypographyResets(css: string): string {
   }
   stripBlocks('html|body|#root')
   stripBlocks('button|input|select|textarea|label|a|p|h[1-6]|ul|ol|li|table|td|th')
+  // :root — giữ biến --omi-*, bỏ font-size / typography (hay hạ rem toàn app).
+  out = out.replace(/(?:^|})\s*:root\s*\{([^{}]*)\}/gi, (full, body: string) => {
+    const kept = String(body)
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((decl) => {
+        if (decl.startsWith('--')) return true
+        return !/^(?:font(?:-size|-family|-weight|-style|-stretch)?|line-height|letter-spacing|color|background(?:-color)?)\s*:/i.test(
+          decl,
+        )
+      })
+    const prefix = full.startsWith('}') ? '}' : ''
+    if (!kept.length) return prefix
+    return `${prefix}:root{${kept.join(';')}}`
+  })
   // * { … } — chỉ gỡ typography/màu nền, giữ box-sizing.
   out = out.replace(/(?:^|})\s*\*\s*\{([^{}]*)\}/gi, (full, body: string) => {
     const kept = String(body)
@@ -366,7 +382,9 @@ function styleLooksLikeOmicallTheme(css: string): boolean {
     t.includes('omi-toastify') ||
     t.includes('omi-call') ||
     t.includes('.omi-') ||
-    t.includes('omicall')
+    t.includes('omicall') ||
+    // Theme không gắn brand nhưng hạ rem root — vẫn phải gỡ.
+    /(?:html|:root)\s*\{[^}]*font-size\s*:/i.test(css)
   )
 }
 
@@ -388,10 +406,12 @@ export const OMICALL_LAYOUT_SHIELD_STYLE_ID = 'vm-omicall-layout-shield'
  * Chỉ khóa html/body/#root (+ form trong #root), không đụng class utility.
  */
 export const OMICALL_LAYOUT_SHIELD_CSS = [
-  'html{font-size:100%!important;line-height:1.5!important}',
+  /* rem Tailwind phụ thuộc html/:root — khóa 100% để SDK không hạ 62.5%/14px. */
+  'html,:root{font-size:100%!important;line-height:1.5!important}',
   "body{margin:0!important;font-family:var(--font-sans),'Plus Jakarta Sans',ui-sans-serif,system-ui,sans-serif!important;font-size:1rem!important;line-height:1.6!important;letter-spacing:0.01em!important;color:var(--vm-text,#020617)!important;background-color:var(--vm-canvas,#e8eef5)!important;background-image:radial-gradient(ellipse 100% 70% at 0% 0%,rgba(13,148,136,0.09),transparent 55%),radial-gradient(ellipse 80% 50% at 100% 0%,rgba(2,132,199,0.07),transparent 50%)!important;background-attachment:scroll!important;-webkit-font-smoothing:antialiased}",
-  '#root{font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;color:inherit!important;min-height:100vh}',
-  '#root button,#root input,#root select,#root textarea,#root label{font-family:inherit}',
+  '#root{font-family:inherit!important;font-size:1rem!important;line-height:inherit!important;color:inherit!important;min-height:100vh}',
+  /* Form controls kế thừa chữ app — tránh SDK ép 12–13px toàn cục. */
+  '#root button,#root input,#root select,#root textarea,#root label{font-family:inherit!important;font-size:inherit}',
 ].join('')
 
 export function ensureOmicallLayoutShield(doc?: Document | null): void {
@@ -416,6 +436,21 @@ export function ensureOmicallLayoutShield(doc?: Document | null): void {
 
 let sanitizeReentrancy = 0
 
+function neutralizeOmicallStylesheetLink(el: HTMLElement): void {
+  const rel = (el.getAttribute('rel') || '').toLowerCase()
+  const href = (el.getAttribute('href') || '').toLowerCase()
+  if (!rel.includes('stylesheet')) return
+  if (!(href.includes('omi') || href.includes('omicall'))) return
+  if (el.getAttribute('data-vm-omicall-disabled') === '1') return
+  try {
+    ;(el as HTMLLinkElement).disabled = true
+  } catch {
+    /* ignore */
+  }
+  el.setAttribute('data-vm-omicall-disabled', '1')
+  el.setAttribute('media', 'not all')
+}
+
 /** Sửa các thẻ <style> OMICall đã (hoặc sắp) chèn vào document. */
 export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
   if (!doc?.querySelectorAll) return
@@ -427,6 +462,10 @@ export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
       const id = (el as HTMLElement).id
       if (id === OMICALL_LAYOUT_SHIELD_STYLE_ID || id === OMICALL_TOAST_SUPPRESS_STYLE_ID) continue
       rewriteOmicallStyleEl(el)
+    }
+    const links = doc.querySelectorAll('link[rel]')
+    for (const el of Array.from(links)) {
+      neutralizeOmicallStylesheetLink(el as HTMLElement)
     }
     ensureOmicallLayoutShield(doc)
   } finally {
@@ -474,7 +513,7 @@ export function scheduleOmicallStyleSanitizeBurst(doc?: Document | null, opts?: 
   }
   lastSanitizeBurstAt = now
   clearOmicallStyleSanitizeBurst()
-  const delays = [0, 100, 400, 1200, 2800]
+  const delays = [0, 100, 400, 1200, 2800, 5000, 9000]
   for (const ms of delays) {
     sanitizeBurstTimers.push(
       setTimeout(() => {
@@ -490,8 +529,8 @@ function isVmOmicallManagedStyle(el: Element): boolean {
 }
 
 /**
- * Chỉ theo dõi `<head>` (không subtree toàn document) — tránh thuế mỗi lần React patch DOM.
- * Gọi khi đang vũ trang SIP; nhớ `stopWatchOmicallStyleInjection` khi tắt.
+ * Chỉ theo dõi `<head>` / `<body>` — bắt cả lúc SDK gắn `<style>` rồi mới ghi textContent
+ * (characterData + subtree). Gọi khi đang vũ trang SIP; nhớ `stopWatchOmicallStyleInjection` khi tắt.
  */
 export function watchOmicallStyleInjection(doc?: Document | null): void {
   if (!doc?.head || typeof MutationObserver === 'undefined') return
@@ -502,6 +541,14 @@ export function watchOmicallStyleInjection(doc?: Document | null): void {
     omicallStyleObserver = new MutationObserver((mutations) => {
       let sawForeignStyle = false
       for (const m of mutations) {
+        if (m.type === 'characterData') {
+          const parent = (m.target as CharacterData).parentElement
+          if (parent?.tagName === 'STYLE' && !isVmOmicallManagedStyle(parent)) {
+            rewriteOmicallStyleEl(parent)
+            sawForeignStyle = true
+          }
+          continue
+        }
         for (const node of Array.from(m.addedNodes)) {
           if (node.nodeType !== 1) continue
           const el = node as HTMLElement
@@ -510,19 +557,27 @@ export function watchOmicallStyleInjection(doc?: Document | null): void {
             rewriteOmicallStyleEl(el)
             sawForeignStyle = true
           } else if (el.tagName === 'LINK') {
-            const rel = (el.getAttribute('rel') || '').toLowerCase()
+            neutralizeOmicallStylesheetLink(el)
             const href = (el.getAttribute('href') || '').toLowerCase()
-            if (rel.includes('stylesheet') && (href.includes('omi') || href.includes('omicall'))) {
-              sawForeignStyle = true
-            }
+            if (href.includes('omi') || href.includes('omicall')) sawForeignStyle = true
           }
         }
       }
       if (sawForeignStyle) queueSanitizeOmicallStyles(doc)
     })
-    // head + body (chỉ con trực tiếp) — SDK đôi khi gắn <style> vào body.
-    omicallStyleObserver.observe(doc.head, { childList: true })
-    if (doc.body) omicallStyleObserver.observe(doc.body, { childList: true })
+    // childList + subtree + characterData: SDK hay append style rỗng rồi mới đổ CSS.
+    omicallStyleObserver.observe(doc.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+    if (doc.body) {
+      omicallStyleObserver.observe(doc.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      })
+    }
   } catch {
     omicallStyleObserver = null
     styleWatchDoc = null
