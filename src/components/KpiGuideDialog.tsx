@@ -64,7 +64,7 @@ export function KpiGuideDialog({ variant, reportTab, compact, className }: KpiGu
             role="dialog"
             aria-modal="true"
             aria-labelledby="kpi-guide-title"
-            className="relative z-10 mt-auto w-full max-h-[min(88dvh,640px)] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200/90 bg-white px-4 pb-5 pt-4 shadow-2xl transition duration-200 sm:mt-0 sm:max-w-lg sm:rounded-2xl md:max-w-xl"
+            className="relative z-10 mt-auto w-full max-h-[min(90dvh,820px)] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200/90 bg-white px-4 pb-5 pt-4 shadow-2xl transition duration-200 sm:mt-0 sm:max-w-lg sm:rounded-2xl md:max-w-2xl lg:max-w-3xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
               <div className="min-w-0">

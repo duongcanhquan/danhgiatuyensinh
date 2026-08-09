@@ -1,5 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  startTransition,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
 import { normalizeUserRole } from '../auth/roleUtils'
 import type { VietMyUserProfile } from '../types'
@@ -144,9 +152,11 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
             if (row) next.push(row)
           }
         })
-        setUsers(next)
-        setLoading(false)
-        setError(null)
+        startTransition(() => {
+          setUsers(next)
+          setLoading(false)
+          setError(null)
+        })
       },
       (e) => {
         console.error(e)

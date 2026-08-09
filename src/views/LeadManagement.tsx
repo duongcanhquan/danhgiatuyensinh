@@ -4039,7 +4039,7 @@ export function LeadManagement() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="ai-shortlist-guide-title"
-                className="relative z-10 max-h-[min(88dvh,720px)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-amber-200/80 bg-white p-5 shadow-[0_24px_64px_rgba(15,23,42,0.28)] sm:max-w-xl sm:p-7"
+                className="relative z-10 max-h-[min(90dvh,900px)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-amber-200/80 bg-white p-5 shadow-[0_24px_64px_rgba(15,23,42,0.28)] sm:max-w-2xl sm:p-7 lg:max-w-4xl"
               >
                 <div className="flex items-start justify-between gap-3 border-b border-amber-100 pb-4">
                   <div className="min-w-0">
@@ -4396,9 +4396,9 @@ function ScoringProfileInspectModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="inspect-profile-title"
-        className="app-modal fixed left-1/2 top-1/2 z-[60] max-h-[min(82vh,680px)] w-[min(94vw,560px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl shadow-xl"
+        className="app-modal fixed left-1/2 top-1/2 z-[60] max-h-[min(90dvh,860px)] w-[min(96vw,48rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl shadow-xl lg:w-[min(92vw,56rem)]"
       >
-        <div className="scroll-touch max-h-[min(82vh,680px)] overflow-y-auto overscroll-contain p-6">
+        <div className="scroll-touch max-h-[min(90dvh,860px)] overflow-y-auto overscroll-contain p-6">
           <div className="flex items-start justify-between gap-3 border-b border-slate-200/90 pb-4">
             <div>
               <p id="inspect-profile-title" className="text-xl font-bold text-slate-900">
@@ -6322,12 +6322,12 @@ function LeadDetailPanel({
 
                             <dialog
                               ref={signalsHelpRef}
-                              className="w-[min(100vw-2rem,26rem)] max-h-[min(85vh,32rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
+                              className="w-[min(100vw-2rem,40rem)] max-h-[min(88dvh,40rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
                               onClick={(e) => {
                                 if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
                               }}
                             >
-                              <div className="flex max-h-[min(85vh,32rem)] flex-col">
+                              <div className="flex max-h-[min(88dvh,40rem)] flex-col">
                                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
                                   <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
                                   <button
@@ -6601,7 +6601,7 @@ function LeadDetailPanel({
             aria-modal="true"
             aria-labelledby="lead-llm-dialog-title"
             className={[
-              'fixed left-1/2 top-1/2 z-[120] flex h-[50dvh] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:w-[50vw] sm:max-w-none',
+              'fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,880px)] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:w-[min(96vw,56rem)] lg:w-[min(92vw,72rem)]',
               aiRunning ? 'ring-2 ring-amber-400/50 ring-inset' : '',
             ].join(' ')}
           >
@@ -6801,7 +6801,7 @@ function LeadDetailPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-llm-access-title"
-            className="fixed left-1/2 top-1/2 z-[120] w-[94vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-violet-200 bg-white p-4 shadow-2xl sm:p-5"
+            className="fixed left-1/2 top-1/2 z-[120] w-[94vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-violet-200 bg-white p-4 shadow-2xl sm:max-w-2xl sm:p-5"
           >
             <div className="mb-3 flex items-start justify-between gap-2">
               <h2 id="lead-llm-access-title" className="text-base font-semibold text-slate-900">

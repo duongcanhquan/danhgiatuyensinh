@@ -50,7 +50,7 @@ export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopov
         <div
           role="dialog"
           aria-label="Điểm thông tin"
-          className="absolute right-0 top-full z-[60] mt-1 w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-violet-200 bg-white p-2.5 text-left text-xs leading-snug text-slate-800 shadow-lg"
+          className="absolute right-0 top-full z-[60] mt-1 w-[min(24rem,calc(100vw-2rem))] rounded-lg border border-violet-200 bg-white p-2.5 text-left text-xs leading-snug text-slate-800 shadow-lg md:w-[min(28rem,calc(100vw-2rem))]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 flex items-start justify-between gap-2">
@@ -66,7 +66,7 @@ export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopov
           </div>
           <p className="text-slate-700">{hint}</p>
           {detail ? (
-            <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded border border-slate-100 bg-slate-50/90 p-2 text-[11px] text-slate-700">
+            <pre className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded border border-slate-100 bg-slate-50/90 p-2 text-[11px] text-slate-700 md:max-h-72">
               {detail}
             </pre>
           ) : null}

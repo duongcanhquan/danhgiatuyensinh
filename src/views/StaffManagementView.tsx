@@ -1,8 +1,16 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { doc, Timestamp, writeBatch } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
-import { USER_ROLE_LABELS, type Permission, type UserRole, type VietMyUserProfile } from '../types'
+import {
+  FS_COLLECTIONS,
+  USER_ROLE_LABELS,
+  type Permission,
+  type UserRole,
+  type VietMyUserProfile,
+} from '../types'
+import { getFirestoreDb } from '../services/firebase'
 import {
   canOwnFieldStaffTeam,
   isAdminLikeRole,
@@ -301,7 +309,12 @@ export function StaffManagementView({
               omicallOutboundNumber: editOmicallOutbound,
             }
           : {}),
-        ...(!isSelf ? { role: editRole, isActive: editActive } : {}),
+        ...(!isSelf
+          ? {
+              role: editRole,
+              ...(editActive !== (editing.isActive !== false) ? { isActive: editActive } : {}),
+            }
+          : {}),
         ...(canOwnFieldStaffTeam(editRole) || canOwnFieldStaffTeam(editing.role)
           ? {
               managedCounselorIds: canOwnFieldStaffTeam(editRole) ? editTeamIds : [],
@@ -318,11 +331,18 @@ export function StaffManagementView({
           editTeamLeadId || null,
           users,
         )
-        for (const patch of patches) {
-          await updateStaffProfile({
-            userId: patch.userId,
-            managedCounselorIds: patch.managedCounselorIds,
-          })
+        if (patches.length) {
+          const db = getFirestoreDb()
+          if (!db) throw new Error('Firestore chưa cấu hình.')
+          const batch = writeBatch(db)
+          const now = Timestamp.now()
+          for (const patch of patches) {
+            batch.update(doc(db, FS_COLLECTIONS.users, patch.userId), {
+              managedCounselorIds: patch.managedCounselorIds,
+              updatedAt: now,
+            })
+          }
+          await batch.commit()
         }
       }
       const pwd = editNewPassword.trim()
@@ -755,7 +775,7 @@ export function StaffManagementView({
           onClick={() => setEditing(null)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+            className="max-h-[min(92dvh,880px)] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:max-w-xl md:max-w-2xl md:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="staff-edit-title" className="text-base font-semibold text-slate-900">

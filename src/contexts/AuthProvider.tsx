@@ -543,10 +543,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('Không tự vô hiệu hóa chính tài khoản đang đăng nhập.')
         }
       }
+      const prevActive = data.isActive !== false
       const patch: Record<string, unknown> = { updatedAt: Timestamp.now() }
       if (input.displayName !== undefined) patch.displayName = input.displayName.trim()
       if (input.role !== undefined) patch.role = normalizeUserRole(input.role)
-      if (input.isActive !== undefined) patch.isActive = input.isActive
+      const activeChanged = input.isActive !== undefined && input.isActive !== prevActive
+      if (activeChanged) patch.isActive = input.isActive
       if (input.orgId !== undefined) {
         if (profile?.role !== 'super_admin') {
           throw new Error('Chỉ Siêu quản trị mới đổi trường gắn với nhân sự.')
@@ -589,7 +591,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         patch.omicallOutboundNumber = v || null
       }
       await updateDoc(ref, patch)
-      if (input.isActive !== undefined) {
+      // Chỉ gọi CF khi thật sự đổi khóa/mở đăng nhập — tránh chờ cold start ~10–30s mỗi lần «Lưu».
+      if (activeChanged && input.isActive !== undefined) {
         const acctOnly = canAcctStaff && !canAll && !canTeam
         try {
           await adminStaffAccountAction(

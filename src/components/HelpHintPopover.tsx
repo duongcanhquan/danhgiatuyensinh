@@ -55,7 +55,7 @@ export function HelpHintPopover({
           role="dialog"
           aria-label={title}
           className={[
-            'absolute top-full z-[80] mt-1.5 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-sky-200 bg-white p-3 text-left text-xs leading-relaxed text-slate-800 shadow-lg',
+            'absolute top-full z-[80] mt-1.5 w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-sky-200 bg-white p-3 text-left text-xs leading-relaxed text-slate-800 shadow-lg md:w-[min(32rem,calc(100vw-2rem))] md:text-sm',
             align === 'left' ? 'left-0' : 'right-0',
           ].join(' ')}
           onClick={(e) => e.stopPropagation()}

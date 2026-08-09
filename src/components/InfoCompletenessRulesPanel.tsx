@@ -334,7 +334,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="info-score-help-title"
-                className="max-h-[min(88dvh,640px)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-violet-200/90 bg-white p-5 shadow-2xl sm:max-w-xl sm:p-6"
+                className="max-h-[min(90dvh,820px)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-violet-200/90 bg-white p-5 shadow-2xl sm:max-w-2xl sm:p-6 lg:max-w-3xl"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
