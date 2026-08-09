@@ -43,6 +43,19 @@ describe('unwrapOmicallBaseLayerCss', () => {
     )
   })
 
+  it('strips @layer base with nested braces and newlines', () => {
+    const raw = `@layer base{
+                @font-face{
+                    font-family: 'OMIRoboto';
+                    font-weight: 400;
+                }
+            :root{--omi-font-size:15px}}`
+    const out = unwrapOmicallBaseLayerCss(raw)
+    expect(out).not.toMatch(/@layer\s+base/i)
+    expect(out).toContain('OMIRoboto')
+    expect(out).toContain('--omi-font-size:15px')
+  })
+
   it('leaves unrelated CSS unchanged', () => {
     expect(unwrapOmicallBaseLayerCss('.x{color:red}')).toBe('.x{color:red}')
   })

@@ -33,7 +33,9 @@ import {
   hangUpOmicallCall,
   loadOmicallSdk,
   normalizeOmicallSdkPayload,
+  sanitizeOmicallInjectedStyles,
   suppressOmicallVendorToasts,
+  watchOmicallStyleInjection,
   type OmicallCallData,
   type OmicallRegisterData,
   type OmicallSdkGlobal,
@@ -123,6 +125,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const [activeCall, setActiveCall] = useState<OmicallActiveCall | null>(null)
   const [sipReady, setSipReady] = useState(false)
   const [bootToken, setBootToken] = useState(0)
+  /** Chỉ tải SDK khi user chủ động kết nối/gọi — tránh CSS OMICall phá layout lúc mở app. */
+  const [sipSessionArmed, setSipSessionArmed] = useState(false)
   const [availableHotlines, setAvailableHotlines] = useState<string[]>([])
   const [resolvedOutbound, setResolvedOutbound] = useState<string | undefined>()
   const sdkRef = useRef<OmicallSdkGlobal | null>(null)
@@ -167,6 +171,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = null
     }
+  }, [])
+
+  useEffect(() => {
+    // Chặn CSS @layer base của OMICall ngay từ đầu (trước khi SDK tải).
+    watchOmicallStyleInjection(document)
+    sanitizeOmicallInjectedStyles(document)
   }, [])
 
   useEffect(() => {
@@ -511,11 +521,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       clearReconnectTimer()
       if (!sessionActiveRef.current) return
 
-      // fullReload chỉ khi user bấm «Thử kết nối lại» — không dùng khi fail tự động
+      // fullReload chỉ khi user bấm «Thử kết nối lại» / gọi — không dùng khi fail tự động
       // (tránh vòng lặp vô hạn boot lại SDK).
       if (fullReload) {
         reconnectAttemptRef.current = 0
         setLastError(null)
+        setSipSessionArmed(true)
         setBootToken((t) => t + 1)
         return
       }
@@ -640,6 +651,17 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // Chưa «vũ trang» phiên SIP — không tải SDK (giữ layout CRM ổn định).
+    if (!sipSessionArmed) {
+      sessionActiveRef.current = false
+      clearReconnectTimer()
+      setSipReady(false)
+      setConnectionStatus('ready')
+      setConnectionLabel('Chưa kết nối tổng đài — bấm «Thử kết nối lại» hoặc gọi từ hồ sơ')
+      setLastError(null)
+      return
+    }
+
     let cancelled = false
     sessionActiveRef.current = true
     reconnectAttemptRef.current = 0
@@ -657,9 +679,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionLabel('Đang tải OMICall…')
       setLastError(null)
       try {
+        watchOmicallStyleInjection(document)
         const sdk = await loadOmicallSdk(config.sdkVersion)
         if (cancelled) return
         sdkRef.current = sdk
+        suppressOmicallVendorToasts()
         const ok = await sdk.init({
           lng: 'vi',
           ui: {
@@ -670,8 +694,9 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           searchRecentCall: false,
           searchRemoteContact: async () => null,
         })
-        // SDK có thể gắn lại OMIToastify khi init — chặn toast đỏ nền trên Hồ sơ / mobile.
+        // SDK gắn theme CSS + OMIToastify khi init — chặn toast và gỡ @layer base.
         suppressOmicallVendorToasts()
+        sanitizeOmicallInjectedStyles(document)
         if (cancelled) return
         if (!ok) {
           setConnectionStatus('error')
@@ -767,6 +792,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     sipCreds?.sipUser,
     sipCreds?.sipPassword,
     bootToken,
+    sipSessionArmed,
     clearReconnectTimer,
   ])
 
@@ -1029,7 +1055,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         continue
       }
       if (st === 'ready') {
-        scheduleAutoReconnectRef.current()
+        // ready = chưa tải SDK — cần fullReload để vũ trang phiên SIP.
+        scheduleAutoReconnectRef.current(true)
       }
       await new Promise((r) => setTimeout(r, 450))
     }
@@ -1042,7 +1069,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         return makeLeadCallClick2Call(input)
       }
       if (!sipReadyRef.current || !sdkRef.current) {
-        scheduleAutoReconnectRef.current()
+        scheduleAutoReconnectRef.current(true)
         const ready = await waitForSipReady()
         if (!ready) {
           if (canClick2Call) return makeLeadCallClick2Call(input)
@@ -1157,6 +1184,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
 
   const reconnect = useCallback(() => {
     reconnectAttemptRef.current = 0
+    setSipSessionArmed(true)
     scheduleAutoReconnect(true)
   }, [scheduleAutoReconnect])
 

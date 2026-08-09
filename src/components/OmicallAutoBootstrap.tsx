@@ -31,8 +31,8 @@ export function OmicallAutoBootstrap() {
         hasCompleteSipCreds,
       })
       if (counselorMsg) {
+        // Chỉ tải lại hồ sơ — không reconnect SIP (tránh tải OMICall SDK phá layout lúc đăng nhập).
         await reloadProfile().catch(() => {})
-        omicall.reconnect()
       }
 
       if (can('config:omicall')) {
@@ -46,7 +46,6 @@ export function OmicallAutoBootstrap() {
         // Có số nhưng thiếu mật khẩu (hoặc chưa có số) — tải lại hồ sơ sau đồng bộ admin.
         if (admin.phones && !hasCompleteSipCreds) {
           await reloadProfile().catch(() => {})
-          omicall.reconnect()
         }
       }
     })()

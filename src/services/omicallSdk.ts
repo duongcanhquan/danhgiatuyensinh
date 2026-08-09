@@ -273,18 +273,51 @@ function createSilentOmiToastify() {
 /**
  * OMICall core.min.js chèn `@layer base { … :root{--omi-*} }` — xung đột Tailwind v4
  * (preflight/theme cũng ở `@layer base`) và làm layout app «hỏng» sau khi SDK init.
- * Bóc lớp `@layer base` để chỉ còn font-face + biến --omi-*.
+ * Bóc mọi khối `@layer base {…}` (khớp ngoặc), giữ font-face + biến --omi-*.
  */
 export function unwrapOmicallBaseLayerCss(css: string): string {
-  const trimmed = String(css ?? '').trim()
-  if (!trimmed) return trimmed
-  const m = trimmed.match(/^@layer\s+base\s*\{([\s\S]*)\}\s*$/i)
-  return m ? m[1].trim() : trimmed
+  let out = String(css ?? '')
+  if (!out) return out
+  // Lặp vì SDK có thể chèn nhiều khối / khoảng trắng lẫn @font-face.
+  for (let guard = 0; guard < 8; guard++) {
+    const match = /@layer\s+base\s*\{/i.exec(out)
+    if (!match || match.index === undefined) break
+    const start = match.index
+    const open = out.indexOf('{', start)
+    if (open < 0) break
+    let depth = 0
+    let end = -1
+    for (let i = open; i < out.length; i++) {
+      const ch = out[i]
+      if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          end = i
+          break
+        }
+      }
+    }
+    if (end < 0) break
+    out = `${out.slice(0, start)}${out.slice(open + 1, end)}${out.slice(end + 1)}`
+  }
+  return out.trim()
 }
 
 function styleLooksLikeOmicallTheme(css: string): boolean {
   const t = css.toLowerCase()
-  return t.includes('@layer base') && (t.includes('--omi-') || t.includes('omiroboto'))
+  return (
+    (t.includes('@layer base') || t.includes('--omi-') || t.includes('omiroboto')) &&
+    (t.includes('--omi-') || t.includes('omiroboto') || t.includes('@layer base'))
+  )
+}
+
+function rewriteOmicallStyleEl(el: { textContent: string | null }): void {
+  const css = el.textContent ?? ''
+  if (!styleLooksLikeOmicallTheme(css)) return
+  if (!/@layer\s+base/i.test(css)) return
+  const next = unwrapOmicallBaseLayerCss(css)
+  if (next !== css) el.textContent = next
 }
 
 /** Sửa các thẻ <style> OMICall đã (hoặc sắp) chèn vào document. */
@@ -292,17 +325,15 @@ export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
   if (!doc?.querySelectorAll) return
   const styles = doc.querySelectorAll('style')
   for (const el of Array.from(styles)) {
-    const css = el.textContent ?? ''
-    if (!styleLooksLikeOmicallTheme(css)) continue
-    const next = unwrapOmicallBaseLayerCss(css)
-    if (next !== css) el.textContent = next
+    rewriteOmicallStyleEl(el)
   }
 }
 
 let omicallStyleObserver: MutationObserver | null = null
 
-function watchOmicallStyleInjection(doc: Document): void {
-  if (omicallStyleObserver || typeof MutationObserver === 'undefined' || !doc.head) return
+/** Gọi sớm (kể cả trước khi tải SDK) — bắt style inject vào head/body. */
+export function watchOmicallStyleInjection(doc?: Document | null): void {
+  if (!doc?.documentElement || omicallStyleObserver || typeof MutationObserver === 'undefined') return
   try {
     omicallStyleObserver = new MutationObserver((mutations) => {
       for (const m of mutations) {
@@ -310,16 +341,18 @@ function watchOmicallStyleInjection(doc: Document): void {
           if (node.nodeType !== 1) continue
           const el = node as HTMLElement
           if (el.tagName === 'STYLE') {
-            const css = el.textContent ?? ''
-            if (styleLooksLikeOmicallTheme(css)) {
-              const next = unwrapOmicallBaseLayerCss(css)
-              if (next !== css) el.textContent = next
+            rewriteOmicallStyleEl(el)
+          } else if (typeof el.querySelectorAll === 'function') {
+            for (const st of Array.from(el.querySelectorAll('style'))) {
+              rewriteOmicallStyleEl(st)
             }
           }
         }
       }
+      // SDK đôi khi ghi textContent sau khi gắn node.
+      sanitizeOmicallInjectedStyles(doc)
     })
-    omicallStyleObserver.observe(doc.head, { childList: true })
+    omicallStyleObserver.observe(doc.documentElement, { childList: true, subtree: true })
   } catch {
     omicallStyleObserver = null
   }
@@ -341,8 +374,20 @@ export function suppressOmicallVendorToasts(host?: OmicallToastSuppressHost): vo
     doc.head.appendChild(style)
   }
 
-  sanitizeOmicallInjectedStyles(doc)
   watchOmicallStyleInjection(doc)
+  sanitizeOmicallInjectedStyles(doc)
+  // init() inject theme async — quét lại sau vài frame.
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      sanitizeOmicallInjectedStyles(doc)
+      requestAnimationFrame(() => sanitizeOmicallInjectedStyles(doc))
+    })
+  }
+  if (typeof setTimeout === 'function') {
+    setTimeout(() => sanitizeOmicallInjectedStyles(doc), 0)
+    setTimeout(() => sanitizeOmicallInjectedStyles(doc), 250)
+    setTimeout(() => sanitizeOmicallInjectedStyles(doc), 1000)
+  }
 
   const silent = createSilentOmiToastify()
   win.OMIToastify = silent
