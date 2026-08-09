@@ -73,21 +73,41 @@ describe('normalizeOmicallInjectedCss', () => {
     expect(out).not.toMatch(/@layer\s+base/i)
     expect(out).toContain('--omi-font-size:15px')
   })
+
+  it('strips html/body font resets that crush rem layout', () => {
+    const out = normalizeOmicallInjectedCss(
+      '@layer base{html{font-size:62.5%}body{font-size:14px;line-height:1.2}:root{--omi-primary:#4d60e8}}',
+    )
+    expect(out).not.toMatch(/html\s*\{/i)
+    expect(out).not.toMatch(/body\s*\{/i)
+    expect(out).toContain('--omi-primary')
+    expect(out).toMatch(/@layer\s+omicall/i)
+  })
 })
 
 describe('sanitizeOmicallInjectedStyles', () => {
   it('rewrites OMICall theme style tags into @layer omicall', () => {
     const style = {
+      id: '',
       textContent:
         '@layer base{@font-face{font-family:OMIRoboto}:root{--omi-font-size:15px}}',
     }
+    const headKids: { id: string; textContent: string }[] = []
     const doc = {
+      head: {
+        appendChild: (el: { id: string; textContent: string }) => {
+          headKids.push(el)
+        },
+      },
+      getElementById: (id: string) => headKids.find((x) => x.id === id) ?? null,
+      createElement: (tag: string) => ({ id: '', tagName: tag.toUpperCase(), textContent: '' }),
       querySelectorAll: (sel: string) => (sel === 'style' ? [style] : []),
     }
     sanitizeOmicallInjectedStyles(doc as unknown as Document)
     expect(style.textContent).toMatch(/@layer\s+omicall/i)
     expect(style.textContent).not.toMatch(/@layer\s+base/i)
     expect(style.textContent).toContain('--omi-font-size')
+    expect(headKids.some((x) => x.id === 'vm-omicall-layout-shield')).toBe(true)
   })
 })
 

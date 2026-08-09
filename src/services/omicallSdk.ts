@@ -310,25 +310,88 @@ export function unwrapOmicallBaseLayerCss(css: string): string {
   return unwrapCssLayer(css, 'base')
 }
 
+/**
+ * Gỡ rule global (html/body/#root) trong CSS OMICall — chúng hay hạ font-size/line-height
+ * làm cả app «chữ sít / layout vỡ» trên Chrome khi SDK đăng ký SIP xong.
+ */
+export function stripOmicallGlobalTypographyResets(css: string): string {
+  let out = String(css ?? '')
+  if (!out) return out
+  // Lặp vì /g không match lại `body` ngay sau khi vừa bỏ `html{…}`.
+  for (let i = 0; i < 12; i++) {
+    const next = out.replace(
+      /(^|})\s*(?:html|body|#root)(?:\s*,\s*(?:html|body|#root))*\s*\{[^{}]*\}/gi,
+      '$1',
+    )
+    if (next === out) break
+    out = next
+  }
+  // * { font-size | line-height | letter-spacing … } — chỉ gỡ phần typography, giữ box-sizing.
+  out = out.replace(/(?:^|})\s*\*\s*\{([^{}]*)\}/gi, (full, body: string) => {
+    const kept = String(body)
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((decl) => !/^(?:font(?:-size|-family|-weight|-style)?|line-height|letter-spacing|color)\s*:/i.test(decl))
+    const prefix = full.startsWith('}') ? '}' : ''
+    if (!kept.length) return prefix
+    return `${prefix}*{${kept.join(';')}}`
+  })
+  return out
+}
+
 export function normalizeOmicallInjectedCss(css: string): string {
   let inner = unwrapCssLayer(String(css ?? ''), 'base')
   inner = unwrapCssLayer(inner, 'omicall')
+  inner = stripOmicallGlobalTypographyResets(inner)
   if (!inner.trim()) return inner
   return `@layer omicall{${inner}}`
 }
 
 function styleLooksLikeOmicallTheme(css: string): boolean {
   const t = css.toLowerCase()
-  return t.includes('--omi-') || t.includes('omiroboto') || t.includes('@layer base')
+  return (
+    t.includes('--omi-') ||
+    t.includes('omiroboto') ||
+    t.includes('@layer base') ||
+    t.includes('omi-toastify') ||
+    t.includes('omi-call') ||
+    t.includes('omicall')
+  )
 }
 
 function rewriteOmicallStyleEl(el: { textContent: string | null }): void {
   const css = el.textContent ?? ''
   if (!styleLooksLikeOmicallTheme(css)) return
-  // Đã nằm đúng layer omicall và không còn @layer base.
-  if (/@layer\s+omicall\s*\{/i.test(css) && !/@layer\s+base/i.test(css)) return
   const next = normalizeOmicallInjectedCss(css)
   if (next !== css) el.textContent = next
+}
+
+export const OMICALL_LAYOUT_SHIELD_STYLE_ID = 'vm-omicall-layout-shield'
+
+/**
+ * Chèn cuối <head> — thắng CSS OMICall inject muộn (unlayered) khi đăng ký SIP.
+ * Không dùng !important trên toàn bộ utility; chỉ khóa rem root + body shell.
+ */
+export const OMICALL_LAYOUT_SHIELD_CSS = [
+  'html{font-size:100%!important}',
+  'body{font-size:1rem;line-height:1.6;letter-spacing:0.01em}',
+  '#root{font-size:inherit;line-height:inherit}',
+].join('')
+
+export function ensureOmicallLayoutShield(doc?: Document | null): void {
+  if (!doc?.head) return
+  let el = doc.getElementById(OMICALL_LAYOUT_SHIELD_STYLE_ID) as HTMLStyleElement | null
+  if (!el) {
+    el = doc.createElement('style')
+    el.id = OMICALL_LAYOUT_SHIELD_STYLE_ID
+    el.textContent = OMICALL_LAYOUT_SHIELD_CSS
+    doc.head.appendChild(el)
+  } else {
+    el.textContent = OMICALL_LAYOUT_SHIELD_CSS
+    // Đưa xuống cuối head để thắng style OMICall vừa inject.
+    doc.head.appendChild(el)
+  }
 }
 
 /** Sửa các thẻ <style> OMICall đã (hoặc sắp) chèn vào document. */
@@ -336,34 +399,65 @@ export function sanitizeOmicallInjectedStyles(doc?: Document | null): void {
   if (!doc?.querySelectorAll) return
   const styles = doc.querySelectorAll('style')
   for (const el of Array.from(styles)) {
+    if ((el as HTMLElement).id === OMICALL_LAYOUT_SHIELD_STYLE_ID) continue
+    if ((el as HTMLElement).id === OMICALL_TOAST_SUPPRESS_STYLE_ID) continue
     rewriteOmicallStyleEl(el)
   }
+  ensureOmicallLayoutShield(doc)
 }
 
 let omicallStyleObserver: MutationObserver | null = null
+let sanitizeBurstTimers: ReturnType<typeof setTimeout>[] = []
+
+/** Quét lại nhiều lần — theme OMICall thường gắn lúc init / sau register SIP. */
+export function scheduleOmicallStyleSanitizeBurst(doc?: Document | null): void {
+  const target = doc ?? (typeof document !== 'undefined' ? document : null)
+  if (!target) return
+  for (const t of sanitizeBurstTimers) clearTimeout(t)
+  sanitizeBurstTimers = []
+  const delays = [0, 50, 150, 400, 800, 1600, 3200, 5000]
+  for (const ms of delays) {
+    sanitizeBurstTimers.push(
+      setTimeout(() => {
+        sanitizeOmicallInjectedStyles(target)
+      }, ms),
+    )
+  }
+}
 
 /** Gọi sớm (kể cả trước khi tải SDK) — bắt style inject vào head/body. */
 export function watchOmicallStyleInjection(doc?: Document | null): void {
   if (!doc?.documentElement || omicallStyleObserver || typeof MutationObserver === 'undefined') return
   try {
     omicallStyleObserver = new MutationObserver((mutations) => {
+      let touched = false
       for (const m of mutations) {
+        if (m.type === 'characterData') {
+          touched = true
+          continue
+        }
         for (const node of Array.from(m.addedNodes)) {
           if (node.nodeType !== 1) continue
           const el = node as HTMLElement
           if (el.tagName === 'STYLE') {
             rewriteOmicallStyleEl(el)
+            touched = true
           } else if (typeof el.querySelectorAll === 'function') {
             for (const st of Array.from(el.querySelectorAll('style'))) {
               rewriteOmicallStyleEl(st)
+              touched = true
             }
           }
         }
       }
-      // SDK đôi khi ghi textContent sau khi gắn node.
-      sanitizeOmicallInjectedStyles(doc)
+      // SDK đôi khi ghi textContent sau khi gắn node (không luôn có childList).
+      if (touched || mutations.length) sanitizeOmicallInjectedStyles(doc)
     })
-    omicallStyleObserver.observe(doc.documentElement, { childList: true, subtree: true })
+    omicallStyleObserver.observe(doc.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
   } catch {
     omicallStyleObserver = null
   }
@@ -387,18 +481,7 @@ export function suppressOmicallVendorToasts(host?: OmicallToastSuppressHost): vo
 
   watchOmicallStyleInjection(doc)
   sanitizeOmicallInjectedStyles(doc)
-  // init() inject theme async — quét lại sau vài frame.
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => {
-      sanitizeOmicallInjectedStyles(doc)
-      requestAnimationFrame(() => sanitizeOmicallInjectedStyles(doc))
-    })
-  }
-  if (typeof setTimeout === 'function') {
-    setTimeout(() => sanitizeOmicallInjectedStyles(doc), 0)
-    setTimeout(() => sanitizeOmicallInjectedStyles(doc), 250)
-    setTimeout(() => sanitizeOmicallInjectedStyles(doc), 1000)
-  }
+  scheduleOmicallStyleSanitizeBurst(doc)
 
   const silent = createSilentOmiToastify()
   win.OMIToastify = silent
