@@ -994,6 +994,8 @@ export async function collectMatchingLeadIdsInScope(
   return { ids, scanTruncated, matchTruncated, scanned }
 }
 
+const EMPTY_HOD_LABELS: string[] = []
+
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile, can } = useAuth()
   const canReadGlobal = Boolean(profile && (can('leads:read:global') || profile.role === 'super_admin'))
@@ -1020,11 +1022,21 @@ export function useLeads(opts?: UseLeadsOptions) {
 
   const hoDQueryLabels = useMemo(() => {
     const ids = profile?.managedMajorIds ?? []
-    if (!ids.length) return [] as string[]
+    if (!ids.length) return EMPTY_HOD_LABELS
     const idSet = new Set(ids)
     const majors = byKind.majors ?? []
     return majors.filter((m) => idSet.has(m.id)).map((m) => m.label.trim()).filter(Boolean)
   }, [profile?.managedMajorIds, byKind.majors])
+
+  const hoDLabelsRef = useRef(hoDQueryLabels)
+  hoDLabelsRef.current = hoDQueryLabels
+  const profileRef = useRef(profile)
+  profileRef.current = profile
+
+  /** Chỉ đổi khi quyền đọc list thực sự đổi — tránh refetch vì snapshot users/{uid} đổi identity. */
+  const profileListKey = profile
+    ? `${profile.id}|${profile.role}|${(profile.managedMajorIds ?? []).join(',')}|${(profile.managedCounselorIds ?? []).join(',')}`
+    : ''
 
   const hoDKey = hoDQueryLabels.join('\u0001')
   const serverFiltersKey = useMemo(() => JSON.stringify(serverFilters ?? {}), [serverFilters])
@@ -1036,7 +1048,9 @@ export function useLeads(opts?: UseLeadsOptions) {
       .join('|')
   }, [directoryLabels])
   const filterKey = useMemo(() => {
-    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${directoryLabelsKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}`
+    // directoryLabels chỉ ảnh hưởng tìm kiếm — không refetch list khi directory vừa tải xong.
+    const dirKey = searchText ? directoryLabelsKey : ''
+    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${dirKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}|p:${profileListKey}`
     if (dataMode === 'fullScope') {
       return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}|om:${fullScopeOrderMode}|scan:${maxFullScopeScanDocs}|mk:${fullScopeMatchKey}`
     }
@@ -1055,6 +1069,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeMatchKey,
     canReadGlobal,
     effectiveOrgId,
+    profileListKey,
   ])
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -1077,6 +1092,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   /** Tăng khi gọi `refetchLeads` — ép chạy lại tải danh sách cùng bộ lọc (sau bulk, v.v.). */
   const [manualRefreshKey, setManualRefreshKey] = useState(0)
   const pendingManualRefetchRef = useRef(false)
+  const fetchGenRef = useRef(0)
 
   const refetchLeads = useCallback(() => {
     pendingManualRefetchRef.current = true
@@ -1190,6 +1206,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     let cancelled = false
+    const gen = ++fetchGenRef.current
     const fkChanged = lastDataFilterKey.current !== filterKey
     const manualRefetch = pendingManualRefetchRef.current
     if (manualRefetch) pendingManualRefetchRef.current = false
@@ -1562,25 +1579,36 @@ export function useLeads(opts?: UseLeadsOptions) {
       else setLoadingPage(true)
       setError(null)
       try {
+        const applyEmptyList = () => {
+          setLeads([])
+          setTotalPages(1)
+          setSearchHitTotal(null)
+          setScopeFetchTruncated(false)
+          setScopeTagCounts(null)
+          if (includeScopeSourceOptions) setScopeSourceOptions([])
+          if (includeScopeProgramOptions) setScopeProgramOptions([])
+        }
+
         if (dataMode === 'batch') {
           await runAggregations()
           if (cancelled) return
           await loadBatch()
-          if (cancelled) return
-          setLoading(false)
-          setLoadingPage(false)
           return
         }
 
         if (dataMode === 'fullScope') {
           if (fkChanged || totalRef.current == null || manualRefetch) {
-            await fetchTotalOnly()
+            const total = await fetchTotalOnly()
             if (cancelled) return
+            if (total === 0) {
+              applyEmptyList()
+              return
+            }
+          } else if (totalRef.current === 0) {
+            applyEmptyList()
+            return
           }
           await loadFullScope()
-          if (cancelled) return
-          setLoading(false)
-          setLoadingPage(false)
           return
         }
 
@@ -1597,8 +1625,6 @@ export function useLeads(opts?: UseLeadsOptions) {
             if (manualRefetch && includeScopeSourceOptions) void fetchSourceCatalog()
             if (manualRefetch && includeScopeProgramOptions) void fetchProgramCatalog()
           }
-          setLoading(false)
-          setLoadingPage(false)
           return
         }
 
@@ -1608,6 +1634,10 @@ export function useLeads(opts?: UseLeadsOptions) {
           await Promise.all([fetchTotalOnly(), loadFirestorePage(tentativePage, null)])
           if (cancelled) return
           total = totalRef.current
+          if (total === 0) {
+            applyEmptyList()
+            return
+          }
           const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
           setTotalPages(tp)
           const safePage = Math.min(Math.max(1, tentativePage), tp)
@@ -1619,6 +1649,10 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (includeScopeSourceOptions) void fetchSourceCatalog()
           if (includeScopeProgramOptions) void fetchProgramCatalog()
         } else {
+          if (total === 0) {
+            applyEmptyList()
+            return
+          }
           const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
           setTotalPages(tp)
           const safePage = Math.min(Math.max(1, pageToLoad), tp)
@@ -1626,8 +1660,6 @@ export function useLeads(opts?: UseLeadsOptions) {
           await loadFirestorePage(safePage, total)
           if (manualRefetch && includeScopeProgramOptions) void fetchProgramCatalog()
         }
-        setLoading(false)
-        setLoadingPage(false)
       } catch (e) {
         console.error(e)
         if (!cancelled) {
@@ -1635,8 +1667,12 @@ export function useLeads(opts?: UseLeadsOptions) {
           setLeads([])
           setScopeFetchTruncated(false)
         }
-        setLoading(false)
-        setLoadingPage(false)
+      } finally {
+        // Chỉ tắt spinner nếu đây vẫn là lần tải mới nhất (tránh kẹt khi effect bị hủy giữa chừng).
+        if (gen === fetchGenRef.current) {
+          setLoading(false)
+          setLoadingPage(false)
+        }
       }
     })()
 
@@ -1645,7 +1681,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
   }, [
     configured,
-    profile,
+    profileListKey,
     hoDKey,
     serverFiltersKey,
     searchText,
@@ -1658,7 +1694,6 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeMatchKey,
     filterKey,
     directoryLabelsKey,
-    hoDQueryLabels,
     pagedFirestoreDep,
     includeScopeTagCounts,
     includeScopeSourceOptions,
