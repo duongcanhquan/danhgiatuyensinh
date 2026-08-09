@@ -45,6 +45,12 @@ export function readLeadSemanticFieldsFromFirestore(data: Record<string, unknown
     'xepLoai',
     'ranking',
   ])
+  const graduationScore = pickFirstFirestoreString(data, [
+    'graduationScore',
+    'diemTotNghiep',
+    'diemTN',
+    'totNghiep',
+  ])
   const schoolType = pickFirstFirestoreString(data, [
     'schoolType',
     'loaiHinhTruong',
@@ -70,6 +76,7 @@ export function readLeadSemanticFieldsFromFirestore(data: Record<string, unknown
     highSchool,
     majorInterest,
     academicPerformance,
+    graduationScore,
     schoolType,
     source1Raw,
     source2Raw,

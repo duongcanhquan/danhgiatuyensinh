@@ -47,7 +47,7 @@ describe('mapSheetRow compact v2 aliases', () => {
     expect(row.phone).toBe('0912345678')
     expect(row.studentEmail).toBe('b@example.com')
     expect(row.address).toBe('Q.1')
-    expect(row.academicPerformance).toBe('8.5')
+    expect(row.graduationScore).toBe('8.5')
   })
 
   it('standard template still has 20 headers', () => {

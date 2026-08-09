@@ -36,7 +36,7 @@ export const COMPACT_V2_INTAKE_COLUMNS: ReadonlyArray<LeadIntakeTemplateColumn> 
   { key: 'phone', header: 'điện thoại' },
   { key: 'studentEmail', header: 'email' },
   { key: 'address', header: 'địa chỉ' },
-  { key: 'academicPerformance', header: 'điểm tốt nghiệp' },
+  { key: 'graduationScore', header: 'điểm tốt nghiệp' },
 ]
 
 export const LEAD_INTAKE_TEMPLATES: readonly LeadIntakeTemplateDef[] = [
@@ -108,9 +108,10 @@ export function downloadLeadIntakeTemplate(id: LeadIntakeTemplateId): void {
     instructions.splice(
       3,
       0,
-      ['2b. «điểm tốt nghiệp» lưu vào học lực / xếp loại trên hồ sơ.'],
+      ['2b. «điểm tốt nghiệp» lưu vào mục hồ sơ học tập (điểm tốt nghiệp).'],
       ['2c. «Giới Tính» và «email» lưu trên hồ sơ (gender, studentEmail).'],
-      ['2d. Không ghi TVV trên file → hệ thống gán Admin chờ điều phối (không tự chia tải).'],
+      ['2d. «địa chỉ» lưu vào địa chỉ thường trú. «điện thoại» = điện thoại sinh viên.'],
+      ['2e. Không ghi TVV trên file → hệ thống gán Admin chờ điều phối (không tự chia tải).'],
     )
   }
   const ws2 = XLSX.utils.aoa_to_sheet(instructions)

@@ -154,7 +154,28 @@ describe('parseWorkbookToRows compact v2', () => {
     expect(rows[0]?.phone).toBe('0909998877')
     expect(rows[0]?.studentEmail).toBe('s@x.com')
     expect(rows[0]?.address).toBe('Cầu Giấy')
-    expect(rows[0]?.academicPerformance).toBe('8.2')
+    expect(rows[0]?.graduationScore).toBe('8.2')
+  })
+
+  it('fills phone/email/address/score when first 4 headers matched but last 4 did not', () => {
+    const buf = workbookBuf({
+      'Hồ sơ': [
+        // 4 cột đầu khớp alias → trước đây bỏ hybrid; cột 5–8 tên lệch phải vẫn vào.
+        ['Họ tên', 'Giới Tính', 'ngày sinh', 'Trường học', 'ColPhone', 'ColMail', 'ColAddr', 'ColGPA'],
+        ['Đủ Bốn', 'Nam', '10/10/2007', 'THPT Four', '0912333444', 'four@x.com', 'Ba Đình', '9.1'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.fullName).toBe('Đủ Bốn')
+    expect(rows[0]?.highSchool).toBe('THPT Four')
+    expect(rows[0]?.phone).toBe('0912333444')
+    expect(rows[0]?.studentEmail).toBe('four@x.com')
+    expect(rows[0]?.address).toBe('Ba Đình')
+    expect(rows[0]?.graduationScore).toBe('9.1')
   })
 
   it('maps by Mẫu 2 column order when only Họ tên header is filled (empty other headers)', () => {
@@ -174,7 +195,7 @@ describe('parseWorkbookToRows compact v2', () => {
     expect(rows[0]?.phone).toBe('0912000111')
     expect(rows[0]?.studentEmail).toBe('e@x.com')
     expect(rows[0]?.highSchool).toBe('THPT EmptyHdr')
-    expect(rows[0]?.academicPerformance).toBe('7')
+    expect(rows[0]?.graduationScore).toBe('7')
   })
 
   it('keeps STT column from stealing Họ tên when real headers are present', () => {

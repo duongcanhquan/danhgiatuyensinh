@@ -34,6 +34,8 @@ export type ExcelLeadRow = {
   studentEmail?: string
   /** Mẫu 2+ : giới tính (chuỗi tự do) */
   gender?: string
+  /** Mẫu 2+ : điểm tốt nghiệp (số / chuỗi tự do — tách khỏi học lực Yếu–Giỏi) */
+  graduationScore?: string
 }
 
 /** Map tiêu đề cột Excel (sau chuẩn hoá) → khóa parser. Giữ alias cũ để file mẫu cũ vẫn đọc được. */
@@ -76,10 +78,12 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'gioi tinh': 'gender',
   sex: 'gender',
   gt: 'gender',
-  'diem tot nghiep': 'academicPerformance',
-  'diem tn': 'academicPerformance',
-  'diem thi tot nghiep': 'academicPerformance',
-  'tot nghiep': 'academicPerformance',
+  'diem tot nghiep': 'graduationScore',
+  'diem tn': 'graduationScore',
+  'diem thi tot nghiep': 'graduationScore',
+  'tot nghiep': 'graduationScore',
+  'graduation score': 'graduationScore',
+  gpa: 'graduationScore',
   'hoc luc xep loai': 'academicPerformance',
   'dia chi': 'address',
   'dia chi thuong tru': 'address',
@@ -323,15 +327,11 @@ function sheetMappedRows(
     rows.length > 0
       ? rows.reduce((s, r) => s + countFilledExcelFields(r), 0) / rows.length
       : 0
-  // Chỉ còn ~1–2 field (thường chỉ họ tên) trong khi mẫu có nhiều cột → cần map lại theo vị trí/mẫu.
+  // Thiếu bất kỳ cột mẫu nào (vd. đủ tên/ngày/giới/trường nhưng thiếu SĐT/email/địa chỉ/điểm) → bù theo vị trí.
   const sparse =
     rows.length === 0 ||
-    (expectedFieldCount >= 4 && avgFilled < Math.max(3, Math.ceil(expectedFieldCount * 0.45)))
+    (expectedFieldCount >= 4 && avgFilled < expectedFieldCount)
 
-  if (!sparse && rows.length > 0) return rows
-
-  // Trước đây: nếu < 4 ô tiêu đề có chữ thì bỏ hybrid → file chỉ còn «Họ tên» trên hàng 1
-  // (cột còn lại trống / xóa tiêu đề) thì chỉ ghi tên. Khi đã chọn mẫu (fallback) vẫn map theo vị trí.
   const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     defval: '',
@@ -340,7 +340,6 @@ function sheetMappedRows(
   })
   if (aoa.length < 2) return rows
 
-  // Ước lượng số cột dữ liệu thực tế trên sheet (kể cả tiêu đề trống).
   const maxValueCols = aoa.slice(1).reduce((m, line) => {
     const vals = Array.isArray(line) ? line : []
     let last = -1
@@ -349,14 +348,17 @@ function sheetMappedRows(
     }
     return Math.max(m, last + 1)
   }, 0)
-  if (maxValueCols < 2 && rows.length > 0) return rows
+  if (maxValueCols < 2 && rows.length > 0 && !sparse) return rows
+
+  // Có mẫu đang chọn: luôn thử map theo vị trí rồi merge — tránh «đủ 4 cột đầu → bỏ 4 cột cuối».
+  const useTemplateOrder =
+    aliasHits === 0 || nonEmptyHeaders.length < Math.min(4, fallbackOrderedHeaders.length) || sparse
 
   const hybridRows = aoa
     .slice(1)
     .map((line) => {
       const vals = Array.isArray(line) ? line : []
-      // Ít tiêu đề khớp / tiêu đề trống: ưu tiên thứ tự cột của mẫu đang chọn.
-      if (aliasHits === 0 || nonEmptyHeaders.length < Math.min(4, fallbackOrderedHeaders.length)) {
+      if (useTemplateOrder) {
         return mapRowByHeaderOrder(vals, [...fallbackOrderedHeaders])
       }
       return mapRowHybridColumns(vals, headers, fallbackOrderedHeaders)
@@ -367,13 +369,14 @@ function sheetMappedRows(
 
   if (!rows.length) return hybridRows
 
+  // Luôn merge: giữ field đã khớp alias, điền chỗ trống từ vị trí/mẫu.
   if (hybridRows.length === rows.length) {
     return rows.map((r, i) => mergeExcelRowPreferFilled(r, hybridRows[i] ?? {}))
   }
 
   const hybridAvg =
     hybridRows.reduce((s, r) => s + countFilledExcelFields(r), 0) / hybridRows.length
-  return hybridAvg > avgFilled ? hybridRows : rows
+  return hybridAvg > avgFilled ? hybridRows : rows.map((r, i) => mergeExcelRowPreferFilled(r, hybridRows[i] ?? {}))
 }
 
 export type ParseWorkbookDiag = {
@@ -581,6 +584,9 @@ export function buildLeadFirestorePayload(
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
     ...(row.studentEmail?.trim() ? { studentEmail: row.studentEmail.trim() } : {}),
     ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
+    ...(row.graduationScore?.trim()
+      ? { graduationScore: row.graduationScore.trim() }
+      : {}),
     ...(row.aspirations?.trim() ? { aspirations: row.aspirations.trim() } : {}),
     ...(row.hobbies?.trim() ? { hobbies: row.hobbies.trim() } : {}),
     ...(row.fieldTripNotes?.trim() ? { fieldTripNotes: row.fieldTripNotes.trim() } : {}),

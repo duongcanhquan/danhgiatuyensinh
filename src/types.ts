@@ -322,6 +322,8 @@ export interface Lead {
   majorInterest?: string
   /** Học lực / xếp loại (ưu tiên cho khối chấm điểm `academicLevel`) */
   academicPerformance?: string
+  /** Điểm tốt nghiệp (số/chuỗi từ Excel Mẫu 2 — tách khỏi học lực Yếu–Giỏi) */
+  graduationScore?: string
   /** Loại hình THPT — nhãn hoặc mã (vd. Công lập, Liên kết, PUBLIC) */
   schoolType?: string
   /** Dự định hình thức đào tạo (Đại học / Cao đẳng / …) */
@@ -1853,6 +1855,7 @@ export const INFO_SCORE_FIELD_IDS = [
   'source',
   'majorInterest',
   'academicPerformance',
+  'graduationScore',
   'highSchool',
   'aspirations',
   'financialStatus',

@@ -784,12 +784,26 @@ export function LeadProfileCoreForm({
               onChange={(e) => patch('academicPerformance', e.target.value)}
             >
               <option value="">— Chọn học lực —</option>
+              {draft.academicPerformance &&
+              !(FIXED_ACADEMIC_PERFORMANCE_OPTIONS as readonly string[]).includes(draft.academicPerformance) ? (
+                <option value={draft.academicPerformance}>{draft.academicPerformance}</option>
+              ) : null}
               {FIXED_ACADEMIC_PERFORMANCE_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt}
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Điểm tốt nghiệp">
+            <input
+              className={INPUT_CLS}
+              inputMode="decimal"
+              placeholder="Vd. 8.5"
+              value={draft.graduationScore}
+              disabled={disabled}
+              onChange={(e) => patch('graduationScore', e.target.value)}
+            />
           </Field>
         </div>
       </FormSection>

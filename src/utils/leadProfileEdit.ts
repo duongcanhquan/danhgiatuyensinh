@@ -21,6 +21,7 @@ export type LeadCoreDraft = {
   educationLevel: string
   majorInterest: string
   academicPerformance: string
+  graduationScore: string
   studyIntention: string
   schoolType: string
   financialStatus: string
@@ -66,6 +67,7 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
     educationLevel: '',
     majorInterest: '',
     academicPerformance: '',
+    graduationScore: '',
     studyIntention: '',
     schoolType: '',
     financialStatus: '',
@@ -115,6 +117,7 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     })(),
     majorInterest: lead.majorInterest ?? '',
     academicPerformance: lead.academicPerformance ?? '',
+    graduationScore: lead.graduationScore ?? '',
     schoolType: lead.schoolType ?? '',
     financialStatus: lead.financialStatus ?? '',
     hanoiArea: lead.hanoiArea ?? '',
@@ -194,6 +197,7 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
   opt('gender', 'gender')
   opt('majorInterest', 'majorInterest')
   opt('academicPerformance', 'academicPerformance')
+  opt('graduationScore', 'graduationScore')
   opt('ethnicity', 'ethnicity')
   opt('permanentAddress', 'permanentAddress')
   opt('currentResidence', 'currentResidence')
@@ -264,6 +268,7 @@ export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
     nationalIdNotAvailable: draft.nationalIdNotAvailable || undefined,
     majorInterest: norm(draft.majorInterest) || undefined,
     academicPerformance: norm(draft.academicPerformance) || undefined,
+    graduationScore: norm(draft.graduationScore) || undefined,
     ...(() => {
       const fmt = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
       return {

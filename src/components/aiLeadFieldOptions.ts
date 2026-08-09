@@ -41,5 +41,6 @@ export const AI_LEAD_FIELD_OPTIONS: { id: string; label: string; extra?: boolean
   { id: 'source1', label: 'Nguồn 1 (source1 — ưu tiên trên form CRM)' },
   { id: 'source2', label: 'Nguồn 2 (source2)' },
   { id: 'academicPerformance', label: 'Học lực (academicPerformance)' },
+  { id: 'graduationScore', label: 'Điểm tốt nghiệp (graduationScore)' },
   { id: 'counselorNote', label: 'Ghi chú TV (tổng hợp)', extra: true },
 ]

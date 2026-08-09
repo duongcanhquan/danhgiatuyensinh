@@ -43,6 +43,7 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
     educationLevel: studyFormat,
     majorInterest: norm(draft.majorInterest),
     academicPerformance: norm(draft.academicPerformance),
+    graduationScore: norm(draft.graduationScore),
     studyIntention: studyFormat,
     schoolType: norm(draft.schoolType),
     financialStatus: norm(draft.financialStatus),

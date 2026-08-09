@@ -195,6 +195,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
     const province = semantic.province
     const majorInterest = semantic.majorInterest
     const academicPerformance = semantic.academicPerformance
+    const graduationScore = semantic.graduationScore
     const studyIntention = semantic.studyIntention
     const financialStatus = semantic.financialStatus || undefined
     const hanoiArea = semantic.hanoiArea || undefined
@@ -282,6 +283,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       educationLevel,
       majorInterest: majorInterest || undefined,
       academicPerformance: academicPerformance || undefined,
+      ...(graduationScore ? { graduationScore } : {}),
       studyIntention: studyIntention || undefined,
       financialStatus,
       hanoiArea,
