@@ -131,6 +131,8 @@ type LeadMatch = {
   leadId?: string
   counselorUid?: string
   teamLeadUid?: string
+  /** Từ lead — gắn vào omicallCalls để admin trường đọc được theo Rules. */
+  orgId?: string
 }
 
 const PAYMENT_KEYS = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4'] as const
@@ -293,29 +295,38 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
 async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCall): Promise<LeadMatch> {
   const teamLeadMap = await loadTeamLeadMap(fs, COLLECTIONS.users)
   const counselorCache = new Map<string, string | null>()
-  const counselorUid = await resolveCounselorUidForOmicall(fs, COLLECTIONS.users, call, counselorCache)
+  const sipOrUserDataUid = await resolveCounselorUidForOmicall(fs, COLLECTIONS.users, call, counselorCache)
 
   let leadId: string | undefined = call.userDataLeadId
-  if (!leadId) {
-    const pendingId = call.callUuid || call.transactionId
-    if (pendingId) {
-      const pendingSnap = await fs.collection(COLLECTIONS.omicallPendingCalls).doc(pendingId).get()
-      if (pendingSnap.exists) {
-        const p = pendingSnap.data() ?? {}
+  let pendingCounselorUid: string | undefined
+  const pendingId = call.callUuid || call.transactionId
+  if (pendingId) {
+    const pendingSnap = await fs.collection(COLLECTIONS.omicallPendingCalls).doc(pendingId).get()
+    if (pendingSnap.exists) {
+      const p = pendingSnap.data() ?? {}
+      if (!leadId) {
         const pendingLeadId = str(p.leadId)
         if (pendingLeadId) leadId = pendingLeadId
       }
+      const pendingUid = str(p.counselorUid)
+      if (pendingUid) pendingCounselorUid = pendingUid
     }
   }
+
+  // Người thực sự gọi: userData / SIP → pending click2call (admin/superadmin) — không lấy assignedTo làm người gọi.
+  const counselorUid = sipOrUserDataUid || pendingCounselorUid || undefined
+
   if (leadId) {
     const leadSnap = await fs.collection(COLLECTIONS.leads).doc(leadId).get()
     if (leadSnap.exists) {
       const assignedTo = str(leadSnap.data()?.assignedTo || leadSnap.data()?.assignedCounselorId)
+      // Chỉ khi không xác định được người gọi mới fallback TVV phụ trách (KPI / lịch sử).
       const uid = counselorUid || assignedTo || undefined
       return {
         leadId,
         counselorUid: uid,
         teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
+        orgId: str(leadSnap.data()?.orgId) || undefined,
       }
     }
   }
@@ -335,6 +346,7 @@ async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCal
             leadId,
             counselorUid: uid,
             teamLeadUid: uid ? teamLeadMap.get(uid) : undefined,
+            orgId: str(doc.data().orgId) || undefined,
           }
         }
       }
@@ -416,6 +428,7 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     leadId: match.leadId ?? str(existingData?.leadId) ?? null,
     counselorUid: match.counselorUid ?? str(existingData?.counselorUid) ?? null,
     teamLeadUid: match.teamLeadUid ?? str(existingData?.teamLeadUid) ?? null,
+    orgId: match.orgId ?? (str(existingData?.orgId) || null),
     disposition: mergedForStore.disposition ?? null,
     agentId: mergedForStore.agentId ?? null,
     agentName: mergedForStore.agentName ?? null,
@@ -438,11 +451,24 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
     const effectiveLeadId = match.leadId ?? (str(existingData?.leadId) || undefined)
     if (effectiveLeadId) {
       const callOutcome = mergedForStore.outcome === 'CONNECTED' ? 'CONNECTED' : 'NO_ANSWER'
-      if (!existingData?.interactionId) {
-        const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
+      const interactionMediaPatch = {
+        recordingUrl: mergedForStore.recordingFileUrl ?? null,
+        recordSeconds: mergedForStore.recordSeconds || null,
+        billSeconds: mergedForStore.billSeconds || null,
+        answerSeconds: mergedForStore.answerSeconds || null,
+        durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || null,
+        hotline: mergedForStore.hotline ?? null,
+        sipUser: mergedForStore.sipUser ?? null,
+      }
+      const interactionsCol = db.collection(COLLECTIONS.leads).doc(effectiveLeadId).collection(COLLECTIONS.interactions)
+      const existingIxId = str(existingData?.interactionId)
+      if (existingIxId) {
+        await interactionsCol.doc(existingIxId).set(interactionMediaPatch, { merge: true })
+      } else {
         const dupSnap = await interactionsCol.where('providerCallId', '==', mergedForStore.transactionId).limit(1).get()
         if (!dupSnap.empty) {
-          await callRef.set({ interactionId: dupSnap.docs[0].id }, { merge: true })
+          await dupSnap.docs[0]!.ref.set(interactionMediaPatch, { merge: true })
+          await callRef.set({ interactionId: dupSnap.docs[0]!.id }, { merge: true })
         } else {
           const interactionRef = await interactionsCol.add({
             leadId: effectiveLeadId,
@@ -451,16 +477,10 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
             authorRole: 'counselor',
             counselorNote: interactionNote(mergedForStore),
             callOutcome,
-            durationSeconds: mergedForStore.billSeconds || mergedForStore.answerSeconds || undefined,
             provider: 'OMICALL',
             providerCallId: mergedForStore.transactionId,
             providerUuid: mergedForStore.callUuid ?? null,
-            recordingUrl: mergedForStore.recordingFileUrl ?? null,
-            recordSeconds: mergedForStore.recordSeconds || null,
-            billSeconds: mergedForStore.billSeconds || null,
-            answerSeconds: mergedForStore.answerSeconds || null,
-            hotline: mergedForStore.hotline ?? null,
-            sipUser: mergedForStore.sipUser ?? null,
+            ...interactionMediaPatch,
             syncedFrom: source,
             timestamp: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
           })

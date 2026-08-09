@@ -290,9 +290,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('unauthenticated')
           return
         }
-        // Vào app ngay — claims refresh chạy nền (tránh chặn UI 1–3s mỗi lần đăng nhập).
+        // Claims phải có trên ID token trước khi vào app — nếu không Rules (isPlatform / orgId)
+        // trả «Missing or insufficient permissions» ngay trên Tổng kết / Hồ sơ.
+        await ensureAuthClaimsFresh(user, p)
         setStatus('authenticated')
-        void ensureAuthClaimsFresh(user, p)
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
         setProfile(null)

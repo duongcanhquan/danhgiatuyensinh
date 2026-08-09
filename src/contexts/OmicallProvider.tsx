@@ -891,7 +891,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           }
         })
       },
-      () => {},
+      (err) => {
+        console.warn('[omicall] không lắng nghe được omicallCalls (quyền / mạng):', err.message)
+        setLastCallHint(
+          'Không đọc được trạng thái cuộc gọi từ tổng đài — kiểm tra quyền hoặc đăng xuất/đăng nhập lại.',
+        )
+      },
     )
     return () => unsub()
   }, [activeCall?.uid, activeCall?.source, clearActiveCallUi, touchCallClock])
@@ -996,7 +1001,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setLastCallHint(null)
       const outbound =
         resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
-      pendingCallMetaRef.current = { leadId: input.leadId, target: input.target, phone: normalized }
+      pendingCallMetaRef.current = {
+        leadId: input.leadId,
+        target: input.target,
+        phone: normalized,
+        counselorUid: profile?.id,
+      }
       pendingCallDisplayRef.current = {
         leadId: input.leadId,
         leadName: input.leadName,

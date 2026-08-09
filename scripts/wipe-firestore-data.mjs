@@ -3,33 +3,34 @@
  *
  * ⚠️ NGUY HIỂM — mặc định KHÔNG xóa `users` / `organizations`.
  *
+ * Tốc độ: dùng `recursiveDelete(collection)` + BulkWriter (song song),
+ * KHÔNG xóa từng doc tuần tự (cách cũ rất chậm với hàng chục nghìn hồ sơ).
+ *
  * Chuẩn bị:
  *   GOOGLE_APPLICATION_CREDENTIALS=./secrets/serviceAccount.json
- *   (tuỳ chọn) VITE_FIREBASE_FIRESTORE_DATABASE_ID trong .env → thường `warmlist`
+ *   FIRESTORE_DATABASE_ID=warmlist
  *
  * Chế độ (WIPE_MODE):
- *   leads    — chỉ collection `leads` (+ subcollection tương tác / AI dưới từng hồ sơ)
- *   ops      — hồ sơ + OMICall, KPI, audit, sự kiện, báo cáo tài chính (mặc định)
- *   catalog  — ops + nguồn/học bổng/playbook/script/knowledge/scoring/masterData/ai_tasks
- *   all_data — catalog + orgSettings + platformAuditLogs (vẫn giữ users + organizations)
+ *   leads    — chỉ collection `leads` (+ subcollection dưới từng hồ sơ)
+ *   ops      — hồ sơ + OMICall, KPI, audit… (mặc định)
+ *   catalog  — ops + nguồn/học bổng/scoring…
+ *   all_data — catalog + orgSettings (vẫn giữ users + organizations)
  *
- * Chỉ đếm (không xóa):
- *   GOOGLE_APPLICATION_CREDENTIALS=./secrets/serviceAccount.json WIPE_DRY_RUN=1 node scripts/wipe-firestore-data.mjs
+ * Dry-run:
+ *   WIPE_DRY_RUN=1 WIPE_MODE=leads node scripts/wipe-firestore-data.mjs
  *
- * Xóa thật (bắt buộc xác nhận):
- *   GOOGLE_APPLICATION_CREDENTIALS=./secrets/serviceAccount.json ^
- *     WIPE_CONFIRM=XOA_HET_DU_LIEU WIPE_MODE=ops node scripts/wipe-firestore-data.mjs
+ * Xóa thật:
+ *   WIPE_CONFIRM=XOA_HET_DU_LIEU WIPE_MODE=leads node scripts/wipe-firestore-data.mjs
  *
- * Chỉ một trường (orgId):
- *   ... WIPE_ORG_ID=vietmy ...
- *
- * Xóa cả users (không khuyến nghị):
- *   ... WIPE_INCLUDE_USERS=1 ...
+ * Chỉ một trường:
+ *   WIPE_ORG_ID=vietmy ...
  */
 import { FieldPath } from 'firebase-admin/firestore'
 import { initFirestoreAdmin, readDotenvValue } from './lib/firestoreAdminFromEnv.mjs'
 
-const PAGE = 400
+const PAGE = 450
+/** Số lead xóa song song khi lọc theo orgId (recursiveDelete từng doc). */
+const ORG_CONCURRENCY = Math.min(40, Math.max(8, Number(process.env.WIPE_CONCURRENCY) || 24))
 
 const MODE_OPS = [
   'leads',
@@ -75,6 +76,21 @@ function resolveCollections(mode) {
   throw new Error(`WIPE_MODE không hợp lệ: ${mode} (dùng leads | ops | catalog | all_data)`)
 }
 
+function createFastBulkWriter(db) {
+  const writer = db.bulkWriter({
+    throttling: {
+      initialOpsPerSecond: 500,
+      maxOpsPerSecond: 1000,
+    },
+  })
+  writer.onWriteError((err) => {
+    if (err.failedAttempts < 8) return true
+    console.warn('[wipe] write lỗi sau retry:', err.documentRef?.path, err.message)
+    return false
+  })
+  return writer
+}
+
 async function countCollection(db, name, orgId) {
   let q = db.collection(name)
   if (orgId) q = q.where('orgId', '==', orgId)
@@ -82,29 +98,54 @@ async function countCollection(db, name, orgId) {
     const agg = await q.count().get()
     return agg.data().count
   } catch {
-    // Một số collection (kpiDaily parent) hoặc thiếu index orgId — đếm bằng scan.
     return null
   }
 }
 
-async function deleteQueryInPages(db, colRef, { orgId, dryRun, label }) {
+/**
+ * Xóa cả collection (+ mọi subcollection) một phát — nhanh nhất khi không lọc orgId.
+ */
+async function wipeWholeCollection(db, colRef, { dryRun, label }) {
+  if (dryRun) {
+    const n = await countCollection(db, colRef.id, undefined)
+    return { scanned: n ?? 0, deleted: n ?? 0 }
+  }
+  console.log(`[${label}] recursiveDelete cả collection (BulkWriter)…`)
+  const t0 = Date.now()
+  let ops = 0
+  const writer = createFastBulkWriter(db)
+  writer.onWriteResult(() => {
+    ops += 1
+    if (ops % 200 === 0) {
+      process.stdout.write(`\r[${label}] ~${ops.toLocaleString('vi-VN')} thao tác xóa…`)
+    }
+  })
+  await db.recursiveDelete(colRef, writer)
+  process.stdout.write('\n')
+  console.log(`[${label}] xong trong ${((Date.now() - t0) / 1000).toFixed(1)}s (~${ops.toLocaleString('vi-VN')} ops)`)
+  return { scanned: ops, deleted: ops }
+}
+
+/**
+ * Lọc orgId: vẫn phải chọn doc rồi recursiveDelete — chạy song song theo lô.
+ */
+async function wipeCollectionByOrg(db, colRef, { orgId, dryRun, label }) {
   let deleted = 0
   let scanned = 0
   let last = null
-  /** true = đã fallback scan toàn collection + lọc orgId trên client */
   let clientOrgFilter = false
 
   for (;;) {
     let snap
     try {
-      let q = orgId && !clientOrgFilter
+      let q = !clientOrgFilter
         ? colRef.where('orgId', '==', orgId).orderBy(FieldPath.documentId()).limit(PAGE)
         : colRef.orderBy(FieldPath.documentId()).limit(PAGE)
       if (last) q = q.startAfter(last)
       snap = await q.get()
     } catch (e) {
-      if (orgId && !clientOrgFilter) {
-        console.warn(`[${label}] query orgId+id lỗi → quét rộng + lọc client:`, e.message || e)
+      if (!clientOrgFilter) {
+        console.warn(`[${label}] query orgId lỗi → quét rộng:`, e.message || e)
         clientOrgFilter = true
         last = null
         continue
@@ -113,12 +154,9 @@ async function deleteQueryInPages(db, colRef, { orgId, dryRun, label }) {
     }
 
     if (snap.empty) break
-
-    const docs =
-      orgId && clientOrgFilter
-        ? snap.docs.filter((d) => String(d.get('orgId') || '') === orgId)
-        : snap.docs
-
+    const docs = clientOrgFilter
+      ? snap.docs.filter((d) => String(d.get('orgId') || '') === orgId)
+      : snap.docs
     scanned += snap.docs.length
     last = snap.docs[snap.docs.length - 1]
 
@@ -130,13 +168,11 @@ async function deleteQueryInPages(db, colRef, { orgId, dryRun, label }) {
     if (dryRun) {
       deleted += docs.length
     } else {
-      // recursiveDelete: interactions / aiInsightTasks / kpi children…
-      for (const d of docs) {
-        await db.recursiveDelete(d.ref)
-        deleted += 1
-        if (deleted % 50 === 0) {
-          process.stdout.write(`\r[${label}] đã xóa ${deleted}…`)
-        }
+      for (let i = 0; i < docs.length; i += ORG_CONCURRENCY) {
+        const chunk = docs.slice(i, i + ORG_CONCURRENCY)
+        await Promise.all(chunk.map((d) => db.recursiveDelete(d.ref)))
+        deleted += chunk.length
+        process.stdout.write(`\r[${label}] đã xóa ${deleted.toLocaleString('vi-VN')}…`)
       }
     }
 
@@ -147,10 +183,15 @@ async function deleteQueryInPages(db, colRef, { orgId, dryRun, label }) {
   return { scanned, deleted }
 }
 
+async function deleteQueryInPages(db, colRef, { orgId, dryRun, label }) {
+  if (!orgId) return wipeWholeCollection(db, colRef, { dryRun, label })
+  return wipeCollectionByOrg(db, colRef, { orgId, dryRun, label })
+}
+
 async function wipeCollectionGroupOrphans(db, groupId, { dryRun, label }) {
-  // Dọn interactions / aiInsightTasks còn sót (collection group).
   let deleted = 0
   let last = null
+  const writer = dryRun ? null : createFastBulkWriter(db)
   for (;;) {
     let q = db.collectionGroup(groupId).orderBy(FieldPath.documentId()).limit(PAGE)
     if (last) q = q.startAfter(last)
@@ -158,7 +199,6 @@ async function wipeCollectionGroupOrphans(db, groupId, { dryRun, label }) {
     try {
       snap = await q.get()
     } catch {
-      // thiếu index __name__ trên group — bỏ qua
       console.warn(`[${label}] bỏ qua collectionGroup ${groupId} (có thể cần index).`)
       return deleted
     }
@@ -167,13 +207,17 @@ async function wipeCollectionGroupOrphans(db, groupId, { dryRun, label }) {
     if (dryRun) {
       deleted += snap.size
     } else {
-      const batch = db.batch()
-      for (const d of snap.docs) batch.delete(d.ref)
-      await batch.commit()
-      deleted += snap.size
+      for (const d of snap.docs) {
+        writer.delete(d.ref)
+        deleted += 1
+      }
+      await writer.flush()
+      process.stdout.write(`\r[group/${groupId}] dọn ${deleted.toLocaleString('vi-VN')}…`)
     }
     if (snap.size < PAGE) break
   }
+  if (!dryRun && writer) await writer.close()
+  if (!dryRun && deleted) process.stdout.write('\n')
   return deleted
 }
 
@@ -193,21 +237,23 @@ async function main() {
     readDotenvValue('VITE_FIREBASE_PROJECT_ID') ||
     '(xem service account)'
 
-  console.log('=== WIPE FIRESTORE ===')
+  console.log('=== WIPE FIRESTORE (nhanh) ===')
   console.log('project/db :', projectHint, '/', firestoreDbId)
   console.log('mode       :', mode)
-  console.log('orgId      :', orgId || '(tất cả org)')
+  console.log('orgId      :', orgId || '(tất cả org → xóa cả collection)')
   console.log('collections:', collections.join(', '))
   console.log('dry_run    :', dryRun ? 'YES — chỉ đếm/ước lượng' : 'NO — XÓA THẬT')
   console.log('include_users:', includeUsers ? 'YES' : 'no')
+  if (!orgId) {
+    console.log('chiến lược : recursiveDelete(collection) + BulkWriter 500–1000 ops/s')
+  } else {
+    console.log(`chiến lược : recursiveDelete song song ×${ORG_CONCURRENCY} (lọc orgId)`)
+  }
 
   if (!dryRun && confirm !== 'XOA_HET_DU_LIEU') {
     console.error(`
 Chặn an toàn: để xóa thật hãy đặt:
   WIPE_CONFIRM=XOA_HET_DU_LIEU
-
-Gợi ý chạy thử trước:
-  WIPE_DRY_RUN=1 node scripts/wipe-firestore-data.mjs
 `)
     process.exit(2)
   }
@@ -218,8 +264,8 @@ Gợi ý chạy thử trước:
     console.log(`  ${name}: ${n == null ? '?' : n.toLocaleString('vi-VN')}`)
   }
 
-  console.log(dryRun ? '\n— Dry-run scan/xóa giả —' : '\n— Đang xóa —')
-  const summary = []
+  console.log(dryRun ? '\n— Dry-run —' : '\n— Đang xóa —')
+  const tAll = Date.now()
 
   for (const name of collections) {
     const col = db.collection(name)
@@ -228,13 +274,11 @@ Gợi ý chạy thử trước:
       dryRun,
       label: name,
     })
-    summary.push({ name, scanned, deleted })
     console.log(
-      `  ${name}: ${dryRun ? 'sẽ xóa ~' : 'đã xóa'} ${deleted.toLocaleString('vi-VN')} (scan ${scanned.toLocaleString('vi-VN')})`,
+      `  ${name}: ${dryRun ? 'sẽ xóa ~' : 'đã xóa'} ${deleted.toLocaleString('vi-VN')} (scan/ops ${scanned.toLocaleString('vi-VN')})`,
     )
   }
 
-  // Dọn subcollection sót dưới leads (nếu xóa lead bằng recursiveDelete thường đã sạch)
   if (collections.includes('leads') && !orgId) {
     for (const g of ['interactions', 'aiInsightTasks']) {
       const n = await wipeCollectionGroupOrphans(db, g, { dryRun, label: g })
@@ -242,11 +286,11 @@ Gợi ý chạy thử trước:
     }
   }
 
-  console.log('\n=== XONG ===')
+  console.log(`\n=== XONG (${((Date.now() - tAll) / 1000).toFixed(1)}s) ===`)
   if (dryRun) {
     console.log('Đây chỉ là dry-run. Chạy lại với WIPE_CONFIRM=XOA_HET_DU_LIEU để xóa thật.')
   } else {
-    console.log('Đã xóa xong các collection đã chọn. users/organizations giữ nguyên (trừ khi bật WIPE_INCLUDE_USERS).')
+    console.log('Đã xóa. users/organizations giữ nguyên (trừ khi WIPE_INCLUDE_USERS=1).')
   }
 }
 

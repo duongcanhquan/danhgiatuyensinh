@@ -120,6 +120,24 @@ export async function saveCallSessionInteraction(
   const leadData = leadSnap.data() as Record<string, unknown>
   const lead = mapLeadFromSnap(leadSnap.id, leadData)
 
+  // Bù thời lượng / ghi âm từ omicallCalls khi panel wrap-up chưa kịp nhận webhook (click2call admin).
+  let durationSeconds = input.durationSeconds
+  let recordingUrl: string | undefined
+  if (input.callUid && !input.callUid.startsWith('c2c-') && !input.callUid.startsWith('pending-')) {
+    try {
+      const callSnap = await getDoc(doc(db, FS_COLLECTIONS.omicallCalls, input.callUid))
+      if (callSnap.exists()) {
+        const cd = callSnap.data() as Record<string, unknown>
+        const bill = Number(cd.billSeconds ?? cd.answerSeconds ?? 0)
+        if ((!durationSeconds || durationSeconds <= 0) && bill > 0) durationSeconds = bill
+        const rec = String(cd.recordingFileUrl ?? '').trim()
+        if (rec) recordingUrl = rec
+      }
+    } catch {
+      /* quyền đọc omicallCalls có thể thiếu — vẫn lưu đánh giá */
+    }
+  }
+
   const picks = input.evaluationPicks
   const legacyTags = picksToLegacyTags(picks)
   const counselorNote = composeEvaluationCounselorNote(picks, input.freeNote)
@@ -144,7 +162,7 @@ export async function saveCallSessionInteraction(
       counselorNote,
       evaluationPicks: picks,
       callMeta: {
-        durationSec: input.durationSeconds,
+        durationSec: durationSeconds,
         outcome: input.callOutcome,
         direction: input.direction,
         phone: input.phone,
@@ -176,7 +194,8 @@ export async function saveCallSessionInteraction(
           callDispositionLabel: dispositionDef.label,
         }
       : {}),
-    ...(input.durationSeconds !== undefined ? { durationSeconds: input.durationSeconds } : {}),
+    ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+    ...(recordingUrl ? { recordingUrl } : {}),
     ...(input.callUid ? { provider: 'OMICALL', providerCallId: input.callUid, syncedFrom: 'sdk' } : {}),
     ...(callAiAssessment ? { callAiAssessment } : {}),
   }

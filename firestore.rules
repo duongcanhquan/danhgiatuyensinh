@@ -15,10 +15,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Super_admin = nền tảng. Không bắt buộc claim `platform` (token cũ có thể thiếu
-    // sau khi gỡ orgId — nếu bắt buộc platform thì mất quyền đọc toàn bộ leads).
+    // Super_admin = nền tảng. Nhận cả claim role lẫn cờ platform (token cũ).
     function isPlatform() {
-      return signedIn() && request.auth.token.role == 'super_admin';
+      return signedIn() && (
+        request.auth.token.role == 'super_admin'
+        || request.auth.token.platform == true
+      );
     }
 
     function tokenOrg() {
@@ -165,18 +167,16 @@ service cloud.firestore {
       match /interactions/{id} {
         allow read, write: if signedIn() && (
           isPlatform()
-          || (hasTokenOrg()
-            && schoolOrgActive()
-            && get(/databases/$(database)/documents/leads/$(leadId)).data.orgId == tokenOrg())
+          || (schoolOrgActive()
+            && matchesOrgData(get(/databases/$(database)/documents/leads/$(leadId)).data))
         );
       }
 
       match /aiInsightTasks/{id} {
         allow read, write: if signedIn() && (
           isPlatform()
-          || (hasTokenOrg()
-            && schoolOrgActive()
-            && get(/databases/$(database)/documents/leads/$(leadId)).data.orgId == tokenOrg())
+          || (schoolOrgActive()
+            && matchesOrgData(get(/databases/$(database)/documents/leads/$(leadId)).data))
         );
       }
     }
@@ -261,8 +261,10 @@ service cloud.firestore {
       allow update: if orgScopedWrite();
       allow delete: if deleteInOwnOrg();
     }
+    // Lịch sử gọi — Admin SDK ghi; client đọc khi trường đang active (giống kpiDaily).
+    // Không bắt matchesOrgData trên list query (doc cũ thiếu orgId → permission-denied trên Tổng kết).
     match /omicallCalls/{id} {
-      allow read: if orgScopedRead();
+      allow read: if signedIn() && schoolOrgActive();
       allow create: if orgScopedCreate();
       allow update: if orgScopedWrite();
       allow delete: if deleteInOwnOrg();
