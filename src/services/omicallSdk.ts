@@ -497,6 +497,7 @@ export function scheduleDismissOmicallVendorCallUi(opts?: {
 let loadPromise: Promise<OmicallSdkGlobal> | null = null
 
 export function getOmicallSdk(): OmicallSdkGlobal | null {
+  if (typeof window === 'undefined') return null
   return window.OMICallSDK ?? null
 }
 
