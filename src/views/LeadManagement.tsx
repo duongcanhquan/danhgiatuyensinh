@@ -114,7 +114,9 @@ import {
 import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDeleteLeads'
 import {
   collectLeadIdsByIntakeProgram,
+  confirmTokenForProgramPurge,
   PURGE_PROGRAM_HARD_CAP,
+  typedConfirmMatchesProgram,
 } from '../utils/purgeLeadsByIntakeProgram'
 import {
   loadRecentIntakePrograms,
@@ -188,6 +190,62 @@ const LEAD_FILTER_CONTROL =
   'h-8 w-full rounded-md border border-slate-200/95 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
 const LEAD_BTN =
   'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold shadow-sm transition'
+
+/** Bộ lọc đang chọn (nháp) vs đã áp dụng — chỉ chạy khi bấm «Áp dụng lọc». */
+type LeadUiFilters = {
+  tag: string
+  callQueue: CallWorkBucketFilter
+  disposition: CallDispositionFilter
+  region: string
+  major: string
+  status: string
+  crm: string
+  source: string
+  program: string
+  school: string
+  assignee: string
+  scoreMin: string
+  scoreMax: string
+  aiShortlistOnly: boolean
+}
+
+function emptyLeadUiFilters(): LeadUiFilters {
+  return {
+    tag: 'ALL',
+    callQueue: 'all',
+    disposition: 'all',
+    region: 'ALL',
+    major: 'ALL',
+    status: 'ALL',
+    crm: 'ALL',
+    source: 'ALL',
+    program: 'ALL',
+    school: 'ALL',
+    assignee: '',
+    scoreMin: '',
+    scoreMax: '',
+    aiShortlistOnly: false,
+  }
+}
+
+function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
+  return (
+    a.tag === b.tag &&
+    a.callQueue === b.callQueue &&
+    a.disposition === b.disposition &&
+    a.region === b.region &&
+    a.major === b.major &&
+    a.status === b.status &&
+    a.crm === b.crm &&
+    a.source === b.source &&
+    a.program === b.program &&
+    a.school === b.school &&
+    a.assignee === b.assignee &&
+    a.scoreMin === b.scoreMin &&
+    a.scoreMax === b.scoreMax &&
+    a.aiShortlistOnly === b.aiShortlistOnly
+  )
+}
 
 const EVALUATION_TAGS = [
   'Tích cực',
@@ -309,6 +367,50 @@ export function LeadManagement() {
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
   const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
+
+  /** Lựa chọn trên UI — chưa chạy cho đến khi «Áp dụng lọc». */
+  const [draftFilters, setDraftFilters] = useState<LeadUiFilters>(() => emptyLeadUiFilters())
+
+  const appliedFiltersSnapshot = useMemo(
+    (): LeadUiFilters => ({
+      tag: tagFilter,
+      callQueue: callWorkBucketFilter,
+      disposition: dispositionFilter,
+      region: regionFilter,
+      major: majorFilter,
+      status: statusFilter,
+      crm: crmStatusFilter,
+      source: sourceFilter,
+      program: programFilter,
+      school: schoolFilter,
+      assignee: assigneeFilter,
+      scoreMin: scoreMinInput,
+      scoreMax: scoreMaxInput,
+      aiShortlistOnly,
+    }),
+    [
+      tagFilter,
+      callWorkBucketFilter,
+      dispositionFilter,
+      regionFilter,
+      majorFilter,
+      statusFilter,
+      crmStatusFilter,
+      sourceFilter,
+      programFilter,
+      schoolFilter,
+      assigneeFilter,
+      scoreMinInput,
+      scoreMaxInput,
+      aiShortlistOnly,
+    ],
+  )
+
+  const filtersPendingApply = !leadUiFiltersEqual(draftFilters, appliedFiltersSnapshot)
+
+  const patchDraftFilters = useCallback((patch: Partial<LeadUiFilters>) => {
+    setDraftFilters((prev) => ({ ...prev, ...patch }))
+  }, [])
 
   /**
    * Chỉ quét fullScope khi lọc nhãn theo profile chấm điểm đang bật.
@@ -962,36 +1064,101 @@ export function LeadManagement() {
 
   useEffect(() => {
     const sp = searchParams
-    if (sp.has(LWF.TAG)) setTagFilter(parseTagFromUrl(sp.get(LWF.TAG)))
-    if (sp.has(LWF.REGION)) setRegionFilter(sp.get(LWF.REGION)!.trim() || 'ALL')
-    if (sp.has(LWF.SCHOOL)) setSchoolFilter(sp.get(LWF.SCHOOL)!.trim() || 'ALL')
-    if (sp.has(LWF.MAJOR)) setMajorFilter(sp.get(LWF.MAJOR)!.trim() || 'ALL')
-    if (sp.has(LWF.PIPE)) setStatusFilter(parsePipelineFromUrl(sp.get(LWF.PIPE)))
-    if (sp.has(LWF.CRM)) setCrmStatusFilter(parseCrmFromUrl(sp.get(LWF.CRM)))
-    if (sp.has(LWF.SOURCE)) setSourceFilter(sp.get(LWF.SOURCE)!.trim() || 'ALL')
-    setProgramFilter((sp.get(LWF.PROG) ?? '').trim() || 'ALL')
-    if (sp.has(LWF.ASSIGN)) setAssigneeFilter(sp.get(LWF.ASSIGN)!.trim())
-    // Luôn đồng bộ từ URL — thiếu param = Tất cả (tránh sticky khi Back).
-    setCallWorkBucketFilter(parseCallWorkBucketFromUrl(sp.get(LWF.CQ)))
-    const d = parseDispositionFromUrl(sp.get(LWF.DISP))
-    setDispositionFilter(d && isCallDispositionId(d) ? d : 'all')
+    const next: LeadUiFilters = {
+      ...emptyLeadUiFilters(),
+      tag: sp.has(LWF.TAG) ? parseTagFromUrl(sp.get(LWF.TAG)) : 'ALL',
+      region: sp.has(LWF.REGION) ? sp.get(LWF.REGION)!.trim() || 'ALL' : 'ALL',
+      school: sp.has(LWF.SCHOOL) ? sp.get(LWF.SCHOOL)!.trim() || 'ALL' : 'ALL',
+      major: sp.has(LWF.MAJOR) ? sp.get(LWF.MAJOR)!.trim() || 'ALL' : 'ALL',
+      status: sp.has(LWF.PIPE) ? parsePipelineFromUrl(sp.get(LWF.PIPE)) : 'ALL',
+      crm: sp.has(LWF.CRM) ? parseCrmFromUrl(sp.get(LWF.CRM)) : 'ALL',
+      source: sp.has(LWF.SOURCE) ? sp.get(LWF.SOURCE)!.trim() || 'ALL' : 'ALL',
+      program: (sp.get(LWF.PROG) ?? '').trim() || 'ALL',
+      assignee: sp.has(LWF.ASSIGN) ? sp.get(LWF.ASSIGN)!.trim() : '',
+      callQueue: parseCallWorkBucketFromUrl(sp.get(LWF.CQ)),
+      disposition: (() => {
+        const d = parseDispositionFromUrl(sp.get(LWF.DISP))
+        return d && isCallDispositionId(d) ? d : 'all'
+      })(),
+      // Điểm / AI shortlist không nằm trên URL — giữ giá trị đang áp dụng.
+      scoreMin: scoreMinInput,
+      scoreMax: scoreMaxInput,
+      aiShortlistOnly,
+    }
+    setTagFilter(next.tag)
+    setRegionFilter(next.region)
+    setSchoolFilter(next.school)
+    setMajorFilter(next.major)
+    setStatusFilter(next.status)
+    setCrmStatusFilter(next.crm)
+    setSourceFilter(next.source)
+    setProgramFilter(next.program)
+    setAssigneeFilter(next.assignee)
+    setCallWorkBucketFilter(next.callQueue)
+    setDispositionFilter(next.disposition)
+    setDraftFilters((prev) => ({
+      ...next,
+      scoreMin: prev.scoreMin,
+      scoreMax: prev.scoreMax,
+      aiShortlistOnly: prev.aiShortlistOnly,
+    }))
+    // Chỉ hydrate từ URL — không đưa score/AI vào deps để tránh ghi đè nháp khi gõ điểm.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filterHydrateSig
   }, [filterHydrateSig, searchParams])
 
+  const applyDraftFilters = useCallback(() => {
+    const d = draftFilters
+    setTagFilter(d.tag)
+    setCallWorkBucketFilter(d.callQueue)
+    setDispositionFilter(d.disposition)
+    setRegionFilter(d.region)
+    setMajorFilter(d.major)
+    setStatusFilter(d.status)
+    setCrmStatusFilter(d.crm)
+    setSourceFilter(d.source)
+    setProgramFilter(d.program)
+    setSchoolFilter(d.school)
+    setAssigneeFilter(d.assignee)
+    setScoreMinInput(d.scoreMin)
+    setScoreMaxInput(d.scoreMax)
+    setAiShortlistOnly(d.aiShortlistOnly)
+    mergeListFilterUrl({
+      [LWF.TAG]: d.tag === 'ALL' ? null : d.tag,
+      [LWF.CQ]: d.callQueue === 'all' ? null : d.callQueue,
+      [LWF.DISP]: d.disposition === 'all' ? null : d.disposition,
+      [LWF.REGION]: d.region === 'ALL' ? null : d.region,
+      [LWF.MAJOR]: d.major === 'ALL' ? null : d.major,
+      [LWF.PIPE]: d.status === 'ALL' ? null : d.status,
+      [LWF.CRM]: d.crm === 'ALL' ? null : d.crm,
+      [LWF.SOURCE]: d.source === 'ALL' ? null : d.source,
+      [LWF.PROG]: d.program === 'ALL' ? null : d.program,
+      [LWF.SCHOOL]: d.school === 'ALL' ? null : d.school,
+      [LWF.ASSIGN]: d.assignee ? d.assignee : null,
+    })
+    setPage(1)
+  }, [draftFilters, mergeListFilterUrl, setPage])
+
+  const discardDraftFilters = useCallback(() => {
+    setDraftFilters(appliedFiltersSnapshot)
+  }, [appliedFiltersSnapshot])
+
   const clearQuickFilters = useCallback(() => {
-    setTagFilter('ALL')
-    setCallWorkBucketFilter('all')
-    setDispositionFilter('all')
-    setRegionFilter('ALL')
-    setMajorFilter('ALL')
-    setStatusFilter('ALL')
-    setCrmStatusFilter('ALL')
-    setSourceFilter('ALL')
-    setProgramFilter('ALL')
-    setSchoolFilter('ALL')
-    setAssigneeFilter('')
-    setScoreMinInput('')
-    setScoreMaxInput('')
-    setAiShortlistOnly(false)
+    const empty = emptyLeadUiFilters()
+    setTagFilter(empty.tag)
+    setCallWorkBucketFilter(empty.callQueue)
+    setDispositionFilter(empty.disposition)
+    setRegionFilter(empty.region)
+    setMajorFilter(empty.major)
+    setStatusFilter(empty.status)
+    setCrmStatusFilter(empty.crm)
+    setSourceFilter(empty.source)
+    setProgramFilter(empty.program)
+    setSchoolFilter(empty.school)
+    setAssigneeFilter(empty.assignee)
+    setScoreMinInput(empty.scoreMin)
+    setScoreMaxInput(empty.scoreMax)
+    setAiShortlistOnly(empty.aiShortlistOnly)
+    setDraftFilters(empty)
     setSearchParams((prev) => stripListFiltersKeepOpenView(prev), { replace: true })
     setPage(1)
   }, [setSearchParams, setPage])
@@ -1170,6 +1337,7 @@ export function LeadManagement() {
         onClear: () => {
           setScoreMinInput('')
           setScoreMaxInput('')
+          patchDraftFilters({ scoreMin: '', scoreMax: '' })
           setPage(1)
         },
       })
@@ -1180,6 +1348,7 @@ export function LeadManagement() {
         label: 'Chỉ hồ sơ AI đã đánh dấu',
         onClear: () => {
           setAiShortlistOnly(false)
+          patchDraftFilters({ aiShortlistOnly: false })
           setPage(1)
         },
       })
@@ -1202,6 +1371,7 @@ export function LeadManagement() {
     scoreMaxInput,
     aiShortlistOnly,
     mergeListFilterUrl,
+    patchDraftFilters,
     counselorDisplayNameById,
     reassignPickList,
     setSearchParams,
@@ -1931,10 +2101,17 @@ export function LeadManagement() {
 
       const prog =
         mode === 'program'
-          ? (programKey ?? (programFilterActive ? programFilter : '')).trim()
+          ? (
+              programKey ??
+              (programFilterActive
+                ? programFilter
+                : draftFilters.program !== 'ALL'
+                  ? draftFilters.program
+                  : '')
+            ).trim()
           : ''
       if (mode === 'program' && !prog) {
-        setRescoreMsg('Chọn hoặc lọc theo chương trình trước khi xóa cả lô.')
+        setRescoreMsg('Chọn chương trình (chip hoặc bộ lọc) rồi bấm xóa cả lô — có thể chưa cần Áp dụng lọc.')
         return
       }
       if (mode === 'filters' && activeFilterChips.length === 0) {
@@ -1983,15 +2160,11 @@ export function LeadManagement() {
                   ),
               },
             )
-            if (collected.usedClientScanFallback && round === 1) {
-              setRescoreMsg(
-                'Index chương trình đang build — tạm quét rộng rồi lọc trên máy. Tiếp tục xóa bình thường…',
-              )
-            }
-
             if (!collected.ids.length) {
               if (round === 1) {
-                setRescoreMsg(`Không có hồ sơ nào thuộc ${scopeLabel}.`)
+                setRescoreMsg(
+                  `Không tìm thấy hồ sơ thuộc ${scopeLabel} (đã quét ${collected.scanned.toLocaleString('vi-VN')} bản ghi). Kiểm tra đúng tên chương trình trên hồ sơ.`,
+                )
               } else {
                 setRescoreMsg(
                   `Đã xóa hết ${totalDeleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
@@ -2005,21 +2178,21 @@ export function LeadManagement() {
               firstConfirmDone = true
               const n = collected.ids.length
               const moreNote = collected.mayHaveMore
-                ? `\n\nĐã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — sẽ xóa lô này rồi tự quét tiếp đến hết.`
+                ? `\n\nĐã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} / vòng — sẽ xóa rồi tự quét tiếp đến hết.`
                 : ''
               if (
                 !window.confirm(
-                  `XÓA VĨNH VIỄN ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}?${moreNote}\n\nKhông hoàn tác được.`,
+                  `XÓA VĨNH VIỄN ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}?${moreNote}\n\nĐã quét ${collected.scanned.toLocaleString('vi-VN')} bản ghi. Không hoàn tác được.`,
                 )
               ) {
                 setRescoreMsg(null)
                 return
               }
-              const confirmToken = prog === '__UNSET__' ? 'CHUA GAN' : prog
+              const confirmToken = confirmTokenForProgramPurge(prog)
               const typed = window.prompt(
-                `Nhập «${confirmToken}» để xác nhận xóa cả lô ${scopeLabel}:`,
+                `Nhập «${confirmToken}» để xác nhận xóa cả lô (không phân biệt hoa thường):`,
               )
-              if ((typed ?? '').trim() !== confirmToken) {
+              if (!typedConfirmMatchesProgram(typed ?? '', prog)) {
                 setRescoreMsg('Đã hủy xóa — xác nhận không khớp.')
                 return
               }
@@ -2230,6 +2403,7 @@ export function LeadManagement() {
       selectScopeBusy,
       programFilterActive,
       programFilter,
+      draftFilters.program,
       activeFilterChips.length,
       hoDQueryLabels,
       can,
@@ -2553,7 +2727,7 @@ export function LeadManagement() {
                       key={name}
                       className={[
                         'inline-flex h-6 max-w-[14rem] items-stretch overflow-hidden rounded border',
-                        programFilter === name
+                        draftFilters.program === name || programFilter === name
                           ? 'border-amber-400 bg-amber-100 text-amber-950'
                           : 'border-slate-200/90 bg-white text-slate-700',
                       ].join(' ')}
@@ -2561,11 +2735,7 @@ export function LeadManagement() {
                       <button
                         type="button"
                         title={`Lọc chương trình «${name}»`}
-                        onClick={() => {
-                          setProgramFilter(name)
-                          setPage(1)
-                          mergeListFilterUrl({ [LWF.PROG]: name })
-                        }}
+                        onClick={() => patchDraftFilters({ program: name })}
                         className="inline-flex min-w-0 max-w-[11rem] items-center gap-1 truncate px-1.5 text-[11px] font-medium transition hover:bg-amber-50/80"
                       >
                         <span className="truncate">{name}</span>
@@ -2589,7 +2759,7 @@ export function LeadManagement() {
                     <span
                       className={[
                         'inline-flex h-6 items-stretch overflow-hidden rounded border',
-                        programFilter === '__UNSET__'
+                        draftFilters.program === '__UNSET__' || programFilter === '__UNSET__'
                           ? 'border-slate-500 bg-slate-700 text-white'
                           : 'border-dashed border-slate-300 bg-white text-slate-600',
                       ].join(' ')}
@@ -2597,11 +2767,7 @@ export function LeadManagement() {
                       <button
                         type="button"
                         title="Lọc hồ sơ chưa gắn chương trình"
-                        onClick={() => {
-                          setProgramFilter('__UNSET__')
-                          setPage(1)
-                          mergeListFilterUrl({ [LWF.PROG]: '__UNSET__' })
-                        }}
+                        onClick={() => patchDraftFilters({ program: '__UNSET__' })}
                         className="inline-flex items-center gap-1 px-1.5 text-[11px] font-medium"
                       >
                         Chưa gắn <span className="tabular-nums">{programSummary.unset}</span>
@@ -2652,14 +2818,11 @@ export function LeadManagement() {
             ) : null}
             <button
               type="button"
-              title="Chỉ hiện hồ sơ AI đã đánh dấu ưu tiên."
-              onClick={() => {
-                setAiShortlistOnly((v) => !v)
-                setPage(1)
-              }}
+              title="Chọn lọc AI Shortlist — nhớ bấm «Áp dụng lọc»."
+              onClick={() => patchDraftFilters({ aiShortlistOnly: !draftFilters.aiShortlistOnly })}
               className={[
                 LEAD_BTN,
-                aiShortlistOnly
+                draftFilters.aiShortlistOnly
                   ? 'border-amber-400 bg-amber-400 text-amber-950'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
               ].join(' ')}
@@ -2694,22 +2857,52 @@ export function LeadManagement() {
             ) : null}
             <button
               type="button"
+              onClick={applyDraftFilters}
+              disabled={!filtersPendingApply}
+              className={[
+                LEAD_BTN,
+                filtersPendingApply
+                  ? 'border-amber-500 bg-amber-500 text-amber-950 hover:bg-amber-600'
+                  : 'border-slate-200 bg-slate-100 text-slate-400',
+              ].join(' ')}
+              title="Chạy bộ lọc đã chọn trên danh sách hồ sơ"
+            >
+              Áp dụng lọc
+            </button>
+            {filtersPendingApply ? (
+              <button
+                type="button"
+                onClick={discardDraftFilters}
+                className={`${LEAD_BTN} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}
+                title="Hoàn tác lựa chọn về bộ lọc đang chạy"
+              >
+                Hủy chọn
+              </button>
+            ) : null}
+            <button
+              type="button"
               onClick={clearQuickFilters}
-              disabled={activeFilterChips.length === 0}
+              disabled={activeFilterChips.length === 0 && !filtersPendingApply}
               className={`${LEAD_BTN} border-slate-300 bg-white text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-900 disabled:opacity-40`}
             >
               Xóa lọc
             </button>
-            {canDeleteLeads && programFilterActive ? (
+            {canDeleteLeads &&
+            (programFilterActive || draftFilters.program !== 'ALL') ? (
               <button
                 type="button"
                 disabled={bulkBusy || selectScopeBusy || loading}
-                onClick={() => void deleteEntireBatch('program', programFilter)}
+                onClick={() =>
+                  void deleteEntireBatch(
+                    'program',
+                    programFilterActive ? programFilter : draftFilters.program,
+                  )
+                }
                 className={`${LEAD_BTN} border-rose-400 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40`}
                 title={
-                  programFilter === '__UNSET__'
-                    ? 'Xóa hết hồ sơ chưa gắn chương trình (quét đến hết, không giới hạn 1500)'
-                    : `Xóa hết hồ sơ chương trình «${programFilter}» (quét đến hết, không giới hạn 1500)`
+                  (programFilterActive ? programFilter : draftFilters.program) === '__UNSET__'
+                    ? 'Xóa hết hồ sơ chưa gắn chương trình'
+                    : `Xóa hết hồ sơ chương trình «${programFilterActive ? programFilter : draftFilters.program}»`
                 }
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -2744,18 +2937,14 @@ export function LeadManagement() {
                   { id: 'called' as const, label: 'Đã gọi' },
                 ] as const
               ).map((tab) => {
-                const active = callWorkBucketFilter === tab.id
+                const active = draftFilters.callQueue === tab.id
                 return (
                   <button
                     key={tab.id}
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    onClick={() => {
-                      setCallWorkBucketFilter(tab.id)
-                      setPage(1)
-                      mergeListFilterUrl({ [LWF.CQ]: tab.id === 'all' ? null : tab.id })
-                    }}
+                    onClick={() => patchDraftFilters({ callQueue: tab.id })}
                     className={`inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold transition ${
                       active
                         ? 'bg-amber-500 text-white shadow-sm'
@@ -2774,14 +2963,12 @@ export function LeadManagement() {
           >
             <span>Note sau gọi</span>
             <select
-              value={dispositionFilter === 'all' ? 'all' : dispositionFilter}
+              value={draftFilters.disposition === 'all' ? 'all' : draftFilters.disposition}
               onChange={(e) => {
                 const v = e.target.value
                 const next: CallDispositionFilter =
                   v === 'all' || !isCallDispositionId(v) ? 'all' : v
-                setDispositionFilter(next)
-                setPage(1)
-                mergeListFilterUrl({ [LWF.DISP]: next === 'all' ? null : next })
+                patchDraftFilters({ disposition: next })
               }}
               className={`${LEAD_FILTER_CONTROL} normal-case tracking-normal`}
             >
@@ -2799,14 +2986,10 @@ export function LeadManagement() {
               <button
                 type="button"
                 disabled={!scoringProfiles.length}
-                onClick={() => {
-                  setTagFilter('ALL')
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.TAG]: null })
-                }}
+                onClick={() => patchDraftFilters({ tag: 'ALL' })}
                 className={[
                   'inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold transition',
-                  tagFilter === 'ALL'
+                  draftFilters.tag === 'ALL'
                     ? 'border-slate-700 bg-slate-800 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
                 ].join(' ')}
@@ -2814,18 +2997,14 @@ export function LeadManagement() {
                 Tất cả
               </button>
               {TAG_OPTIONS.map((tg) => {
-                const on = tagFilter === tg
+                const on = draftFilters.tag === tg
                 const cnt = tagChipCounts?.[tg]
                 return (
                   <button
                     key={tg}
                     type="button"
                     disabled={!scoringProfiles.length}
-                    onClick={() => {
-                      setTagFilter(tg)
-                      setPage(1)
-                      mergeListFilterUrl({ [LWF.TAG]: tg })
-                    }}
+                    onClick={() => patchDraftFilters({ tag: tg })}
                     className={[
                       'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold transition',
                       on
@@ -2857,15 +3036,20 @@ export function LeadManagement() {
               aria-hidden
             />
             <span>Bộ lọc</span>
+            {filtersPendingApply ? (
+              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold normal-case tracking-normal text-sky-900">
+                chờ áp dụng
+              </span>
+            ) : null}
             {activeFilterChips.length > 0 ? (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold normal-case tracking-normal text-amber-900">
                 {activeFilterChips.length}
               </span>
-            ) : (
+            ) : !filtersPendingApply ? (
               <span className="font-normal normal-case tracking-normal text-slate-400">
-                nhãn, vùng, chương trình…
+                chọn xong → Áp dụng lọc
               </span>
-            )}
+            ) : null}
           </summary>
           <div className="space-y-2 border-t border-slate-200/60 px-2 pb-2 pt-2">
             <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
@@ -2873,12 +3057,8 @@ export function LeadManagement() {
                 compact
                 label="Nhãn"
                 title="Nhãn HOT / WARM / COLD theo bộ chấm điểm."
-                value={tagFilter}
-                onChange={(v) => {
-                  setTagFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.TAG]: v === 'ALL' ? null : v })
-                }}
+                value={draftFilters.tag}
+                onChange={(v) => patchDraftFilters({ tag: v })}
                 options={[
                   { v: 'ALL', t: 'Tất cả' },
                   ...TAG_OPTIONS.map((t) => ({ v: t, t })),
@@ -2888,24 +3068,16 @@ export function LeadManagement() {
                 compact
                 label="Vùng"
                 title="Tỉnh / thành trên hồ sơ."
-                value={regionFilter}
-                onChange={(v) => {
-                  setRegionFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.REGION]: v === 'ALL' ? null : v })
-                }}
+                value={draftFilters.region}
+                onChange={(v) => patchDraftFilters({ region: v })}
                 options={regions.map((p) => ({ v: p, t: p }))}
               />
               <FilterSelect
                 compact
                 label="Hệ ĐT"
                 title="Ngành / hệ đào tạo ghi trên hồ sơ."
-                value={majorFilter}
-                onChange={(v) => {
-                  setMajorFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.MAJOR]: v === 'ALL' ? null : v })
-                }}
+                value={draftFilters.major}
+                onChange={(v) => patchDraftFilters({ major: v })}
                 options={[
                   { v: 'ALL', t: 'Tất cả' },
                   ...majors.map((p) => ({ v: p, t: p })),
@@ -2915,12 +3087,8 @@ export function LeadManagement() {
                 compact
                 label="Funnel"
                 title="Giai đoạn tuyển sinh trên hồ sơ."
-                value={statusFilter}
-                onChange={(v) => {
-                  setStatusFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.PIPE]: v === 'ALL' ? null : v })
-                }}
+                value={draftFilters.status}
+                onChange={(v) => patchDraftFilters({ status: v })}
                 options={[
                   { v: 'ALL', t: 'Tất cả' },
                   ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
@@ -2933,12 +3101,8 @@ export function LeadManagement() {
                 compact
                 label="Tư vấn"
                 title="Tiến độ làm việc với tư vấn viên."
-                value={crmStatusFilter}
-                onChange={(v) => {
-                  setCrmStatusFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.CRM]: v === 'ALL' ? null : v })
-                }}
+                value={draftFilters.crm}
+                onChange={(v) => patchDraftFilters({ crm: v })}
                 options={[
                   { v: 'ALL', t: 'Tất cả' },
                   ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
@@ -2948,31 +3112,23 @@ export function LeadManagement() {
                 compact
                 label="Nguồn"
                 title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
-                value={sourceFilter}
+                value={draftFilters.source}
                 onFocus={() => {
                   if (!sourceCatalogRequested) setSourceCatalogRequested(true)
                   else void fetchScopeSourceOptions()
                 }}
-                onChange={(v) => {
-                  setSourceFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.SOURCE]: v === 'ALL' ? null : v })
-                }}
+                onChange={(v) => patchDraftFilters({ source: v })}
                 options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
               />
               <FilterSelect
                 compact
                 label="Chương trình"
                 title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
-                value={programFilter}
+                value={draftFilters.program}
                 onFocus={() => {
                   void fetchScopeProgramOptions()
                 }}
-                onChange={(v) => {
-                  setProgramFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.PROG]: v === 'ALL' ? null : v })
-                }}
+                onChange={(v) => patchDraftFilters({ program: v })}
                 options={[
                   { v: 'ALL', t: 'Tất cả' },
                   { v: '__UNSET__', t: 'Chưa gắn chương trình' },
@@ -2983,12 +3139,8 @@ export function LeadManagement() {
                 compact
                 label="Trường THPT"
                 title="Trường THPT của thí sinh."
-                value={schoolFilter}
-                onChange={(v) => {
-                  setSchoolFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.SCHOOL]: v === 'ALL' ? null : v })
-                }}
+                value={draftFilters.school}
+                onChange={(v) => patchDraftFilters({ school: v })}
                 options={schoolOptions.map((sc) => ({
                   v: sc,
                   t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
@@ -2998,12 +3150,8 @@ export function LeadManagement() {
                 compact
                 label="Nhân viên"
                 title="Lọc theo người phụ trách."
-                value={assigneeFilter}
-                onChange={(v) => {
-                  setAssigneeFilter(v)
-                  setPage(1)
-                  mergeListFilterUrl({ [LWF.ASSIGN]: v ? v : null })
-                }}
+                value={draftFilters.assignee}
+                onChange={(v) => patchDraftFilters({ assignee: v })}
                 options={[
                   { v: '', t: 'Tất cả nhân viên' },
                   { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
@@ -3019,8 +3167,8 @@ export function LeadManagement() {
                   type="number"
                   inputMode="numeric"
                   placeholder="—"
-                  value={scoreMinInput}
-                  onChange={(e) => setScoreMinInput(e.target.value)}
+                  value={draftFilters.scoreMin}
+                  onChange={(e) => patchDraftFilters({ scoreMin: e.target.value })}
                   className={`${LEAD_FILTER_CONTROL} tabular-nums`}
                 />
               </label>
@@ -3030,11 +3178,40 @@ export function LeadManagement() {
                   type="number"
                   inputMode="numeric"
                   placeholder="—"
-                  value={scoreMaxInput}
-                  onChange={(e) => setScoreMaxInput(e.target.value)}
+                  value={draftFilters.scoreMax}
+                  onChange={(e) => patchDraftFilters({ scoreMax: e.target.value })}
                   className={`${LEAD_FILTER_CONTROL} tabular-nums`}
                 />
               </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/50 pt-2">
+              <button
+                type="button"
+                onClick={applyDraftFilters}
+                disabled={!filtersPendingApply}
+                className={[
+                  LEAD_BTN,
+                  filtersPendingApply
+                    ? 'border-amber-500 bg-amber-500 text-amber-950 hover:bg-amber-600'
+                    : 'border-slate-200 bg-slate-100 text-slate-400',
+                ].join(' ')}
+              >
+                Áp dụng lọc
+              </button>
+              {filtersPendingApply ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={discardDraftFilters}
+                    className={`${LEAD_BTN} border-slate-200 bg-white text-slate-600`}
+                  >
+                    Hủy chọn
+                  </button>
+                  <span className="text-[11px] text-amber-800">Đã chọn — bấm Áp dụng để chạy lọc.</span>
+                </>
+              ) : (
+                <span className="text-[11px] text-slate-500">Chọn điều kiện rồi bấm Áp dụng lọc.</span>
+              )}
             </div>
             {activeFilterChips.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5">

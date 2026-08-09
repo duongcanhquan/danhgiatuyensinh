@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   and,
   collection,
+  documentId,
   getCountFromServer,
   getDocs,
   limit,
@@ -894,6 +895,7 @@ export async function fetchLeadsInScopeForRescore(
 
 /**
  * Quét phạm vi theo con trỏ, chỉ giữ id khớp `match` — dùng xóa cả lô (không kẹt cap UI 1500).
+ * `orderByDocId`: duyệt theo id (không bỏ lỡ lô cũ như orderBy updatedAt).
  */
 export async function collectMatchingLeadIdsInScope(
   firestore: Firestore,
@@ -907,13 +909,17 @@ export async function collectMatchingLeadIdsInScope(
     chunkSize?: number
     orgId?: string
     canReadGlobal?: boolean
+    /** `docId` = quét hết collection theo id (khuyến nghị khi xóa theo chương trình). */
+    orderMode?: 'updatedAt' | 'docId'
     onProgress?: (scanned: number, matched: number) => void
   },
 ): Promise<{ ids: string[]; scanTruncated: boolean; matchTruncated: boolean; scanned: number }> {
   const maxMatchIds = Math.min(100_000, Math.max(1, opts?.maxMatchIds ?? 100_000))
-  const maxScanDocs = Math.min(200_000, Math.max(maxMatchIds, opts?.maxScanDocs ?? 100_000))
+  // Trần quét cao — xóa cả lô cần duyệt sâu, không cắt ở 200k.
+  const maxScanDocs = Math.min(1_000_000, Math.max(maxMatchIds, opts?.maxScanDocs ?? 100_000))
   const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
   const canReadGlobal = Boolean(opts?.canReadGlobal)
+  const byDocId = opts?.orderMode === 'docId'
   let lastSnap: QueryDocumentSnapshot<DocumentData> | null = null
   const ids: string[] = []
   let scanned = 0
@@ -928,10 +934,16 @@ export async function collectMatchingLeadIdsInScope(
       filters,
       opts?.orgId,
       canReadGlobal,
-      (base) =>
-        lastSnap === null
+      (base) => {
+        if (byDocId) {
+          return lastSnap === null
+            ? query(base, orderBy(documentId()), limit(chunkSize))
+            : query(base, orderBy(documentId()), startAfter(lastSnap), limit(chunkSize))
+        }
+        return lastSnap === null
           ? query(base, orderBy('updatedAt', 'desc'), limit(chunkSize))
-          : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize)),
+          : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(chunkSize))
+      },
     )
     if (!snap.docs.length) break
     const mapped: Lead[] = []

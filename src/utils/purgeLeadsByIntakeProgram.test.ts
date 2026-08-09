@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isFirestoreIndexError, leadMatchesPurgeProgram } from './purgeLeadsByIntakeProgram'
+import {
+  confirmTokenForProgramPurge,
+  isFirestoreIndexError,
+  leadMatchesPurgeProgram,
+  typedConfirmMatchesProgram,
+} from './purgeLeadsByIntakeProgram'
 import type { Lead } from '../types'
 import { Timestamp } from 'firebase/firestore'
 
@@ -39,10 +44,20 @@ describe('isFirestoreIndexError', () => {
   it('nhận diện lỗi thiếu composite index', () => {
     expect(
       isFirestoreIndexError(
-        new Error('The query requires an index. You can create it here: https://console.firebase.google.com/...'),
+        new Error(
+          'The query requires an index. You can create it here: https://console.firebase.google.com/...',
+        ),
       ),
     ).toBe(true)
     expect(isFirestoreIndexError({ code: 'failed-precondition', message: 'x' })).toBe(true)
     expect(isFirestoreIndexError(new Error('permission-denied'))).toBe(false)
+  })
+})
+
+describe('typedConfirmMatchesProgram', () => {
+  it('cho phép xác nhận không phân biệt hoa thường', () => {
+    expect(typedConfirmMatchesProgram('dot loi 1', 'Dot Loi 1')).toBe(true)
+    expect(confirmTokenForProgramPurge('__UNSET__')).toBe('CHUA GAN')
+    expect(typedConfirmMatchesProgram('chua gan', '__UNSET__')).toBe(true)
   })
 })
