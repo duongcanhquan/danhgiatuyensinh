@@ -44,20 +44,39 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'ten sinh vien': 'fullName',
   'ho ten': 'fullName',
   'ho va ten': 'fullName',
+  'ho ten hoc sinh': 'fullName',
+  'ho ten sv': 'fullName',
+  'ten hoc sinh': 'fullName',
+  ten: 'fullName',
+  'full name': 'fullName',
+  'student name': 'fullName',
   'ngay sinh': 'dateOfBirth',
+  birthday: 'dateOfBirth',
+  'ngay thang nam sinh': 'dateOfBirth',
+  'ngay/thang/nam sinh': 'dateOfBirth',
+  'nam sinh': 'dateOfBirth',
+  dob: 'dateOfBirth',
   'dien thoai': 'phone',
-  'sdt': 'phone',
+  sdt: 'phone',
   'sdt sv': 'phone',
   'sdt sinh vien': 'phone',
   'so dien thoai': 'phone',
   'so dt': 'phone',
   'dien thoai sinh vien': 'phone',
+  tel: 'phone',
+  phone: 'phone',
+  mobile: 'phone',
   email: 'studentEmail',
   'e-mail': 'studentEmail',
   'email sinh vien': 'studentEmail',
+  'mail': 'studentEmail',
   'gioi tinh': 'gender',
+  sex: 'gender',
   'diem tot nghiep': 'academicPerformance',
   'diem tn': 'academicPerformance',
+  'diem thi tot nghiep': 'academicPerformance',
+  'tot nghiep': 'academicPerformance',
+  'hoc luc xep loai': 'academicPerformance',
   'dien thoai nguoi lien he chinh': 'parentPhone',
   'dt nguoi lien he': 'parentPhone',
   'dien thoai nguoi lien he': 'parentPhone',
@@ -82,6 +101,7 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'quan/huyen': 'hanoiArea',
   'quan/ huyen': 'hanoiArea',
   'quan / huyen': 'hanoiArea',
+  'quan huyen': 'hanoiArea',
   'nguoi phu trach': 'assignedToRaw',
   'tu van vien': 'assignedToRaw',
   'tinh trang': 'statusRaw',
@@ -101,6 +121,10 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'ghi chu di truong': 'fieldTripNotes',
   'ghi chu khao sat / thuc te': 'fieldTripNotes',
   'truong hoc': 'highSchool',
+  truong: 'highSchool',
+  'truong thpt': 'highSchool',
+  'ten truong': 'highSchool',
+  'thpt': 'highSchool',
   lop: 'gradeClass',
   'lop hien dang hoc': 'gradeClass',
   'tinh thanh pho': 'province',
@@ -112,6 +136,7 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
 
 function normalizeHeader(h: string): string {
   return h
+    .replace(/^\uFEFF/, '')
     .trim()
     .toLowerCase()
     .replace(/đ/g, 'd')
@@ -120,6 +145,7 @@ function normalizeHeader(h: string): string {
     // Excel hay thêm *, :, (ghi chú) sau tên cột
     .replace(/\([^)]*\)/g, ' ')
     .replace(/[*：:]+/g, ' ')
+    .replace(/[_/\\|]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -159,53 +185,206 @@ export function mapSheetRow(raw: Record<string, unknown>): Partial<ExcelLeadRow>
   return out
 }
 
+function isInstructionSheet(tabNormalized: string): boolean {
+  return (
+    tabNormalized === 'huong dan' ||
+    tabNormalized === 'guide' ||
+    tabNormalized === 'readme' ||
+    tabNormalized === 'instruction' ||
+    tabNormalized === 'instructions' ||
+    tabNormalized.startsWith('huong dan')
+  )
+}
+
+/** Đọc hàng tiêu đề thô (aoa) — dùng khi alias tên cột không khớp. */
+function sheetHeaderCells(sheet: XLSX.WorkSheet, headerRowIndex: number): string[] {
+  const aoa = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+    range: headerRowIndex,
+  })
+  const headerLine = aoa[0]
+  if (!Array.isArray(headerLine)) return []
+  return headerLine.map((c) => excelCellToPlainString(c))
+}
+
+function mapRowByHeaderOrder(
+  values: unknown[],
+  orderedHeaders: string[],
+): Partial<ExcelLeadRow> {
+  const out: Partial<ExcelLeadRow> = {}
+  const n = Math.min(values.length, orderedHeaders.length)
+  for (let i = 0; i < n; i++) {
+    const field = resolveFieldKey(orderedHeaders[i] ?? '')
+    if (!field) continue
+    const v = excelCellToPlainString(values[i])
+    if (v) out[field] = v
+  }
+  return out
+}
+
 function sheetMappedRows(
   sheet: XLSX.WorkSheet,
   headerRowIndex: number,
+  fallbackOrderedHeaders?: readonly string[],
 ): Partial<ExcelLeadRow>[] {
   const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: '',
     raw: true,
     range: headerRowIndex,
   })
-  return json.map((row) => mapSheetRow(row)).filter((row) => !isMappedRowEmpty(row))
+  let rows = json.map((row) => mapSheetRow(row)).filter((row) => !isMappedRowEmpty(row))
+  if (rows.length > 0) return rows
+
+  // Chỉ fallback theo thứ tự cột khi hàng tiêu đề gần như không khớp alias
+  // (tránh coi dòng chữ «Báo cáo…» là tiêu đề rồi nuốt cả cột header thành dữ liệu).
+  if (fallbackOrderedHeaders?.length) {
+    const headers = sheetHeaderCells(sheet, headerRowIndex)
+    const nonEmptyHeaders = headers.filter((h) => h.trim())
+    const aliasHits = nonEmptyHeaders.filter((h) => resolveFieldKey(h)).length
+    const minCols = Math.min(4, fallbackOrderedHeaders.length)
+    if (aliasHits === 0 && nonEmptyHeaders.length >= minCols) {
+      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: '',
+        raw: true,
+        range: headerRowIndex,
+      })
+      if (aoa.length >= 2) {
+        rows = aoa
+          .slice(1)
+          .map((line) => {
+            const vals = Array.isArray(line) ? line : []
+            return mapRowByHeaderOrder(vals, [...fallbackOrderedHeaders])
+          })
+          .filter((row) => Boolean((row.fullName ?? '').trim() || (row.phone ?? '').trim()))
+      }
+    }
+  }
+  return rows
+}
+
+export type ParseWorkbookDiag = {
+  sheetNames: string[]
+  triedHeaderRows: number[]
+  pickedSheet?: string
+  pickedHeaderRow?: number
+  sampleHeaders?: string[]
+  mappedRowCount: number
+}
+
+function parseWorkbookOnce(
+  wb: XLSX.WorkBook,
+  opts?: {
+    headerRowIndex?: number
+    fallbackOrderedHeaders?: readonly string[]
+  },
+): {
+  rows: Partial<ExcelLeadRow>[]
+  diag: ParseWorkbookDiag
+} {
+  const names = wb.SheetNames
+  if (!names.length) {
+    return {
+      rows: [],
+      diag: { sheetNames: [], triedHeaderRows: [], mappedRowCount: 0 },
+    }
+  }
+
+  const preferredHeader = Math.max(0, Math.floor(opts?.headerRowIndex ?? 0))
+  const headerCandidates = [...new Set([preferredHeader, 0, 1, 2])].sort((a, b) => a - b)
+  const fallbackHeaders = opts?.fallbackOrderedHeaders
+
+  let best: {
+    rows: Partial<ExcelLeadRow>[]
+    preferred: boolean
+    sheetName: string
+    headerRow: number
+    sampleHeaders: string[]
+  } | null = null
+
+  for (const headerRowIndex of headerCandidates) {
+    for (const name of names) {
+      const sheet = wb.Sheets[name]
+      if (!sheet) continue
+      const tab = normalizeSheetTabName(name)
+      if (isInstructionSheet(tab)) continue
+      const rows = sheetMappedRows(sheet, headerRowIndex, fallbackHeaders)
+      const preferred = tab === 'leads' || tab === 'ho so' || tab === 'du lieu' || tab === 'data'
+      const sampleHeaders = sheetHeaderCells(sheet, headerRowIndex).filter(Boolean).slice(0, 12)
+      if (
+        !best ||
+        rows.length > best.rows.length ||
+        (rows.length === best.rows.length && rows.length > 0 && preferred && !best.preferred)
+      ) {
+        best = { rows, preferred, sheetName: name, headerRow: headerRowIndex, sampleHeaders }
+      }
+    }
+    if (best && best.rows.length > 0 && headerRowIndex === preferredHeader) break
+  }
+
+  if (!best || best.rows.length === 0) {
+    const firstDataSheet =
+      names.find((n) => !isInstructionSheet(normalizeSheetTabName(n))) ?? names[0]!
+    const sheet = wb.Sheets[firstDataSheet]
+    const sampleHeaders = sheet
+      ? sheetHeaderCells(sheet, preferredHeader).filter(Boolean).slice(0, 12)
+      : []
+    return {
+      rows: [],
+      diag: {
+        sheetNames: names,
+        triedHeaderRows: headerCandidates.map((i) => i + 1),
+        pickedSheet: firstDataSheet,
+        pickedHeaderRow: preferredHeader + 1,
+        sampleHeaders,
+        mappedRowCount: 0,
+      },
+    }
+  }
+
+  return {
+    rows: best.rows,
+    diag: {
+      sheetNames: names,
+      triedHeaderRows: headerCandidates.map((i) => i + 1),
+      pickedSheet: best.sheetName,
+      pickedHeaderRow: best.headerRow + 1,
+      sampleHeaders: best.sampleHeaders,
+      mappedRowCount: best.rows.length,
+    },
+  }
 }
 
 export function parseWorkbookToRows(
   file: ArrayBuffer,
-  opts?: { headerRowIndex?: number },
+  opts?: {
+    headerRowIndex?: number
+    /** Tiêu đề cột theo mẫu (vd. Mẫu 2) — dùng khi tên cột trên file lệch alias. */
+    fallbackOrderedHeaders?: readonly string[]
+    /** Nhận chẩn đoán để hiện lỗi rõ hơn trên UI. */
+    onDiag?: (d: ParseWorkbookDiag) => void
+  },
 ): Partial<ExcelLeadRow>[] {
-  const wb = XLSX.read(file, {
-    type: 'array',
+  const bytes = file instanceof Uint8Array ? file : new Uint8Array(file)
+  const readOpts = {
+    type: 'array' as const,
     cellStyles: false,
     cellDates: false,
-    dense: true,
     cellHTML: false,
     cellNF: false,
     cellText: false,
-  })
-  const names = wb.SheetNames
-  if (!names.length) return []
-  /** Hàng tiêu đề 0-based; dữ liệu từ hàng tiếp theo (= Excel hàng 2 khi headerRowIndex=0). */
-  const headerRowIndex = Math.max(0, Math.floor(opts?.headerRowIndex ?? 0))
-
-  // Chọn sheet có nhiều dòng map được nhất — tránh sheet «Hồ sơ» trống trong khi data nằm Sheet1.
-  let best: { rows: Partial<ExcelLeadRow>[]; preferred: boolean } | null = null
-  for (const name of names) {
-    const sheet = wb.Sheets[name]
-    if (!sheet) continue
-    const rows = sheetMappedRows(sheet, headerRowIndex)
-    const tab = normalizeSheetTabName(name)
-    const preferred = tab === 'leads' || tab === 'ho so'
-    if (
-      !best ||
-      rows.length > best.rows.length ||
-      (rows.length === best.rows.length && preferred && !best.preferred)
-    ) {
-      best = { rows, preferred }
-    }
   }
-  return best?.rows ?? []
+  // dense:true nhanh hơn nhưng một số file Excel (Google Sheets / export lạ) map ra 0 dòng.
+  const denseWb = XLSX.read(bytes, { ...readOpts, dense: true })
+  let parsed = parseWorkbookOnce(denseWb, opts)
+  if (parsed.rows.length === 0) {
+    const sparseWb = XLSX.read(bytes, { ...readOpts, dense: false })
+    parsed = parseWorkbookOnce(sparseWb, opts)
+  }
+  opts?.onDiag?.(parsed.diag)
+  return parsed.rows
 }
 
 export type LeadIntakeOwnershipMeta = {

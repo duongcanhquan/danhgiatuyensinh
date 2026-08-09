@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { mapSheetRow, normalizeStaffMatchKey, resolveAssignedCounselorUid, STANDARD_LEAD_INTAKE_HEADERS } from './excelLeadMapper'
+import * as XLSX from 'xlsx'
+import {
+  mapSheetRow,
+  normalizeStaffMatchKey,
+  parseWorkbookToRows,
+  resolveAssignedCounselorUid,
+  STANDARD_LEAD_INTAKE_HEADERS,
+} from './excelLeadMapper'
+import { COMPACT_V2_INTAKE_COLUMNS } from './leadIntakeTemplates'
 
 const team = [
   { id: 'u1', email: 'a@x.com', displayName: 'Nguyễn Văn A' },
@@ -74,6 +82,71 @@ describe('mapSheetRow', () => {
 
   it('maps họ tên alias', () => {
     expect(mapSheetRow({ 'Họ tên': 'A' }).fullName).toBe('A')
+  })
+})
+
+describe('parseWorkbookToRows compact v2', () => {
+  function workbookBuf(sheets: Record<string, (string | number)[][]>): ArrayBuffer {
+    const wb = XLSX.utils.book_new()
+    for (const [name, aoa] of Object.entries(sheets)) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name)
+    }
+    const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer | Uint8Array | number[]
+    if (out instanceof ArrayBuffer) return out
+    if (out instanceof Uint8Array) {
+      return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength)
+    }
+    return Uint8Array.from(out).buffer
+  }
+
+  it('reads Mẫu 2 headers and skips Hướng dẫn sheet', () => {
+    const buf = workbookBuf({
+      'Hướng dẫn': [['VietMy — hướng dẫn'], ['Không phải dữ liệu']],
+      'Hồ sơ': [
+        ['Họ tên', 'Giới Tính', 'ngày sinh', 'Trường học', 'điện thoại', 'email', 'địa chỉ', 'điểm tốt nghiệp'],
+        ['Nguyễn A', 'Nam', '01/01/2008', 'THPT 1', '0912345678', 'a@x.com', 'HN', '8'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.fullName).toBe('Nguyễn A')
+    expect(rows[0]?.phone).toBe('0912345678')
+  })
+
+  it('falls back to column order when header labels differ but layout matches Mẫu 2', () => {
+    const buf = workbookBuf({
+      Sheet1: [
+        ['Full name', 'Sex', 'Birthday', 'School', 'Mobile', 'Mail', 'Addr', 'GPA'],
+        ['Trần B', 'Nữ', '02/02/2007', 'THPT Y', '0900111222', 'b@y.com', 'Q1', '7.5'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.fullName).toBe('Trần B')
+    expect(rows[0]?.phone).toBe('0900111222')
+    expect(rows[0]?.studentEmail).toBe('b@y.com')
+  })
+
+  it('finds header on row 2 when row 1 is a title banner', () => {
+    const buf = workbookBuf({
+      'Hồ sơ': [
+        ['Danh sách tuyển sinh tháng 3'],
+        ['Họ tên', 'Giới Tính', 'ngày sinh', 'Trường học', 'điện thoại', 'email', 'địa chỉ', 'điểm tốt nghiệp'],
+        ['Lê C', 'Nam', '03/03/2006', 'THPT Z', '0987654321', 'c@z.com', 'SG', '9'],
+      ],
+    })
+    const rows = parseWorkbookToRows(buf, {
+      headerRowIndex: 0,
+      fallbackOrderedHeaders: COMPACT_V2_INTAKE_COLUMNS.map((c) => c.header),
+    })
+    expect(rows.length).toBeGreaterThanOrEqual(1)
+    expect(rows.some((r) => r.fullName === 'Lê C' && r.phone === '0987654321')).toBe(true)
   })
 })
 

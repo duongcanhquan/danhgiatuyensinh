@@ -16,6 +16,7 @@ import {
   parseWorkbookToRows,
   resolveAssignedCounselorUid,
   type ExcelLeadRow,
+  type ParseWorkbookDiag,
 } from '../utils/excelLeadMapper'
 import {
   downloadLeadIntakeTemplate,
@@ -311,10 +312,23 @@ export function DataIntake() {
         const buf = await file.arrayBuffer()
         await yieldToMain()
         const tpl = getLeadIntakeTemplate(templateId)
-        const rows = parseWorkbookToRows(buf, { headerRowIndex: tpl.headerRowIndex })
+        let parseDiag: ParseWorkbookDiag | null = null
+        const rows = parseWorkbookToRows(buf, {
+          headerRowIndex: tpl.headerRowIndex,
+          fallbackOrderedHeaders: tpl.columns.map((c) => c.header),
+          onDiag: (d) => {
+            parseDiag = d
+          },
+        })
         if (!rows.length) {
+          const sheets = parseDiag?.sheetNames?.length
+            ? `Sheet trong file: ${parseDiag.sheetNames.join(', ')}.`
+            : ''
+          const hdrs = parseDiag?.sampleHeaders?.length
+            ? ` Tiêu đề đọc được (hàng ${parseDiag.pickedHeaderRow ?? 1}): ${parseDiag.sampleHeaders.join(' | ')}.`
+            : ' Không đọc được hàng tiêu đề.'
           setBanner(
-            `Không tìm thấy dữ liệu (${tpl.label}). Kiểm tra sheet «Hồ sơ» / «Leads» — hàng 1 tiêu đề, dữ liệu từ hàng 2.`,
+            `Không tìm thấy dữ liệu (${tpl.label}). ${sheets}${hdrs} Cần sheet dữ liệu (không dùng «Hướng dẫn»), hàng tiêu đề khớp mẫu (Họ tên, điện thoại…), dữ liệu từ hàng dưới. Tải lại file mẫu trong app rồi copy dữ liệu vào sheet «${tpl.sheetName}».`,
           )
           setBusy(false)
           return
