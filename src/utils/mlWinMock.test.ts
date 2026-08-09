@@ -99,6 +99,7 @@ describe('computeMockMlWinProbability', () => {
         address: 'P1',
         assignedTo: 'uid-tvv-1',
         otherAttentionNotes: 'OK',
+        graduationScore: '8.5',
       }),
     )
     expect(m.mvpBreakdown?.rawScore).toBe(maxRaw)

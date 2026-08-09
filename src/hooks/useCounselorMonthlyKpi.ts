@@ -4,7 +4,12 @@ import type { CounselorMonthlyKpi } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
+import { useCounselorDirectory } from './useCounselorDirectory'
 import { numKpi } from '../utils/kpiMap'
+import { enrichTeamLeadUidOnRows, counselorInTeamLeadScope } from '../utils/kpiTeamLeadEnrich'
+import { mergeMonthlyKpiWithPeriodSummaries } from '../utils/kpiMonthlyMerge'
+import { useCounselorKpiDateRange } from './useCounselorKpiDateRange'
+import { kpiDayKeyFromDate } from '../utils/kpiFromOmicallCalls'
 
 function mapMonthly(id: string, data: Record<string, unknown>): CounselorMonthlyKpi {
   return {
@@ -31,66 +36,116 @@ function mapMonthly(id: string, data: Record<string, unknown>): CounselorMonthly
     toDeposit: numKpi(data.toDeposit),
     toEnrolled: numKpi(data.toEnrolled),
     notesAdded: numKpi(data.notesAdded),
+    leadCham: numKpi(data.leadCham),
+    lpxtCount: numKpi(data.lpxtCount),
     updatedAt: data.updatedAt as CounselorMonthlyKpi['updatedAt'],
   }
 }
-
-import { kpiDayKeyFromDate } from '../utils/kpiFromOmicallCalls'
 
 export function currentMonthKey(d = new Date()): string {
   return kpiDayKeyFromDate(d).slice(0, 7)
 }
 
-export function useCounselorMonthlyKpi(month: string) {
+function monthDateBounds(month: string): { from: string; to: string } {
+  const [y, m] = month.split('-').map(Number)
+  if (!y || !m) {
+    const today = kpiDayKeyFromDate(new Date())
+    return { from: today, to: today }
+  }
+  const last = new Date(y, m, 0).getDate()
+  const from = `${month}-01`
+  const monthEnd = `${month}-${String(last).padStart(2, '0')}`
+  const today = kpiDayKeyFromDate(new Date())
+  const to = today.startsWith(month) && today < monthEnd ? today : monthEnd
+  return { from, to }
+}
+
+export function useCounselorMonthlyKpi(month: string, options?: { mergeLiveCalls?: boolean }) {
+  const mergeLiveCalls = options?.mergeLiveCalls !== false
   const { firebaseUser, profile, can } = useAuth()
-  const [rows, setRows] = useState<CounselorMonthlyKpi[]>([])
-  const [loading, setLoading] = useState(true)
+  const { users: directory } = useCounselorDirectory()
+  const [officialRows, setOfficialRows] = useState<CounselorMonthlyKpi[]>([])
+  const [loadingOfficial, setLoadingOfficial] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const canGlobal = can('analytics:advanced') || can('leads:read:global')
-  const canTeam = can('leads:read:team_scope')
+  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
+  const { from, to } = useMemo(
+    () => (mergeLiveCalls ? monthDateBounds(month) : { from: '', to: '' }),
+    [month, mergeLiveCalls],
+  )
+  const {
+    summaries: periodSummaries,
+    loading: periodLoading,
+    error: periodError,
+  } = useCounselorKpiDateRange(from, to)
 
   useEffect(() => {
     const db = getFirestoreDb()
     if (!db || !isFirebaseConfigured() || !firebaseUser || !month) {
-      setRows([])
-      setLoading(false)
+      setOfficialRows([])
+      setLoadingOfficial(false)
       return
     }
     let cancelled = false
-    setLoading(true)
+    setLoadingOfficial(true)
+    setError(null)
     ;(async () => {
       try {
         if (!canGlobal && !canTeam) {
           const snap = await getDoc(
             doc(db, FS_COLLECTIONS.kpiMonthly, month, 'counselors', firebaseUser.uid),
           )
-          setRows(snap.exists() ? [mapMonthly(snap.id, snap.data() as Record<string, unknown>)] : [])
+          const next = snap.exists()
+            ? [mapMonthly(snap.id, snap.data() as Record<string, unknown>)]
+            : []
+          if (!cancelled) setOfficialRows(next)
           return
         }
         const snap = await getDocs(collection(db, FS_COLLECTIONS.kpiMonthly, month, 'counselors'))
         const next: CounselorMonthlyKpi[] = []
         snap.forEach((d) => {
-          const row = mapMonthly(d.id, d.data() as Record<string, unknown>)
-          if (!canGlobal && canTeam && row.teamLeadUid !== profile?.id) return
-          next.push(row)
+          next.push(mapMonthly(d.id, d.data() as Record<string, unknown>))
         })
-        if (!cancelled) setRows(next.sort((a, b) => (a.rankInScope ?? 99) - (b.rankInScope ?? 99)))
+        if (!cancelled) setOfficialRows(next)
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Không đọc KPI tháng.')
+        if (!cancelled) {
+          const raw = e instanceof Error ? e.message : ''
+          const denied =
+            /permission|insufficient/i.test(raw) ||
+            (typeof e === 'object' &&
+              e !== null &&
+              'code' in e &&
+              String((e as { code?: string }).code) === 'permission-denied')
+          setError(
+            denied
+              ? 'Chưa mở quyền đọc KPI tháng trên hệ thống. Báo quản trị deploy lại Firestore rules (kpiMonthly).'
+              : raw || 'Không đọc KPI tháng.',
+          )
+        }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoadingOfficial(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [canGlobal, canTeam, firebaseUser, month, profile?.id])
+  }, [canGlobal, canTeam, firebaseUser, month])
 
-  const ranked = useMemo(
-    () => [...rows].sort((a, b) => (a.rankInScope ?? 999) - (b.rankInScope ?? 999)),
-    [rows],
-  )
+  const rows = useMemo(() => {
+    const merged = mergeMonthlyKpiWithPeriodSummaries(month, officialRows, periodSummaries)
+    const enriched = enrichTeamLeadUidOnRows(merged, directory)
+    const scoped = enriched.filter((row) => {
+      if (canGlobal) return true
+      if (!canTeam || !profile) return row.counselorUid === firebaseUser?.uid
+      return counselorInTeamLeadScope(row.counselorUid, profile, directory, row.teamLeadUid)
+    })
+    return scoped.sort((a, b) => (a.rankInScope ?? 999) - (b.rankInScope ?? 999))
+  }, [month, officialRows, periodSummaries, directory, canGlobal, canTeam, profile, firebaseUser?.uid])
 
-  return { rows: ranked, loading, error }
+  return {
+    rows,
+    loading: loadingOfficial || periodLoading,
+    error: error || periodError,
+  }
 }

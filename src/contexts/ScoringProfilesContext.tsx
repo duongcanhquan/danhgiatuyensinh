@@ -68,7 +68,7 @@ export function ScoringProfilesProvider({ children }: { children: ReactNode }) {
 export function useScoringProfilesState(): ScoringProfilesState {
   const ctx = useContext(ScoringProfilesContext)
   if (!ctx) {
-    throw new Error('useScoringProfiles cần ScoringProfilesProvider.')
+    return { profiles: [], loading: false, error: null, configured: false }
   }
   return ctx
 }

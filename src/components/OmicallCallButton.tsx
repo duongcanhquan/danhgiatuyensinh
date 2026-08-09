@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Phone } from 'lucide-react'
+import { Headphones, Phone } from 'lucide-react'
 import type { OmicallCallTarget } from '../types'
 import { useOmicallOptional } from '../contexts/OmicallProvider'
 import { normalizePhoneForDial } from '../utils/omicallConfig'
@@ -11,6 +11,11 @@ type Props = {
   target: OmicallCallTarget
   disabled?: boolean
   className?: string
+  /**
+   * `beside` — nút tròn to cạnh ô SĐT (mặc định).
+   * `stack` — xếp dưới ô (fallback hẹp).
+   */
+  placement?: 'beside' | 'stack'
 }
 
 function nativeDialHref(raw: string): string | null {
@@ -19,10 +24,22 @@ function nativeDialHref(raw: string): string | null {
   return `tel:${localNumber}`
 }
 
-const BTN_BASE =
-  'inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition whitespace-nowrap'
+/** Nút gọi chính — to, dễ bấm (tối thiểu ~44px). */
+const PRIMARY_BTN =
+  'inline-flex h-11 min-h-11 min-w-[5.5rem] shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-bold shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[6.25rem]'
 
-export function OmicallCallButton({ leadId, leadName, phone, target, disabled, className }: Props) {
+const SECONDARY_BTN =
+  'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50'
+
+export function OmicallCallButton({
+  leadId,
+  leadName,
+  phone,
+  target,
+  disabled,
+  className,
+  placement = 'beside',
+}: Props) {
   const omicall = useOmicallOptional()
   const [busy, setBusy] = useState<'sdk' | 'c2c' | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -47,17 +64,25 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
   const callInput = { leadId, leadName, phone, target }
 
   const titleSdk = omicall?.canCall
-    ? 'Gọi qua micro trình duyệt — cho phép micro nếu được hỏi'
+    ? 'Gọi qua micro trình duyệt'
     : sipConnecting
-      ? 'Đang kết nối tổng đài — bấm gọi sẽ chờ «Sẵn sàng gọi» rồi quay số'
+      ? 'Đang kết nối tổng đài — bấm sẽ chờ rồi gọi'
       : omicallEnabled && dialable
-        ? omicall?.connectionLabel || 'Chờ tổng đài sẵn sàng gọi (micro)'
+        ? omicall?.connectionLabel || 'Chờ tổng đài sẵn sàng'
         : 'Chưa gọi được qua micro'
 
-  const titleDesk =
-    'Gọi máy bàn / app — số nội bộ đổ chuông trước, nhấc máy rồi nối ra khách (API click-to-call)'
+  const titleDesk = 'Gọi máy bàn / app nội bộ'
 
-  const primaryLabel = busy === 'sdk' || busy === 'c2c' ? 'Đang gọi…' : useDeskMode ? 'Gọi tổng đài' : canSdk ? 'Gọi (micro)' : canClick2 ? 'Gọi tổng đài' : useTelFallback ? 'Gọi điện' : dialable ? 'Chờ tổng đài' : 'Chưa gọi được'
+  const primaryLabel =
+    busy === 'sdk' || busy === 'c2c'
+      ? 'Đang gọi…'
+      : useDeskMode
+        ? 'Gọi'
+        : canSdk || canClick2 || useTelFallback
+          ? 'Gọi'
+          : dialable
+            ? 'Chờ…'
+            : '—'
 
   const runSdk = async () => {
     if (!omicall || !canSdk) return
@@ -92,75 +117,85 @@ export function OmicallCallButton({ leadId, leadName, phone, target, disabled, c
 
   if (!showButton) return null
 
-  const primaryClass =
-    className ??
-    [
-      BTN_BASE,
-      canUse
-        ? 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100'
-        : useTelFallback
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-          : dialable && omicallEnabled
-            ? 'border-amber-200 bg-amber-50 text-amber-900 cursor-not-allowed'
-            : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed',
-    ]
-      .filter(Boolean)
-      .join(' ')
+  const primaryReady = canUse || useTelFallback
+  const primaryClass = [
+    PRIMARY_BTN,
+    primaryReady
+      ? 'border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700'
+      : dialable && omicallEnabled
+        ? 'border border-amber-300 bg-amber-50 text-amber-900'
+        : 'border border-slate-200 bg-slate-100 text-slate-400',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
-  const deskClass = `${BTN_BASE} border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100 disabled:opacity-60`
+  const deskClass = `${SECONDARY_BTN} border-violet-300 bg-violet-50 text-violet-900 hover:bg-violet-100`
 
   const helperText =
     err ||
-    omicall?.lastCallHint ||
     (!canUse && omicallEnabled && dialable && !canClick2 ? omicall?.connectionLabel : '') ||
-    (!canUse && !omicallEnabled && dialable ? 'OMICall chưa bật — vẫn gọi được qua «Gọi điện».' : '') ||
-    (showDeskButton ? 'Micro: nút trái · Máy bàn/app: nút phải.' : '')
+    (!canUse && !omicallEnabled && dialable ? 'Chưa bật tổng đài — dùng gọi điện thoại.' : '')
 
   const primaryTitle = useDeskMode || (!canSdk && canClick2) ? titleDesk : titleSdk
 
+  const primaryInner = (
+    <>
+      <Phone className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+      <span>{primaryLabel}</span>
+    </>
+  )
+
+  const primaryControl =
+    canUse || (dialable && omicallEnabled && canClick2 && !useDeskMode) ? (
+      <button
+        type="button"
+        title={primaryTitle}
+        disabled={Boolean(busy) || (!canUse && !canClick2)}
+        onClick={onPrimaryClick}
+        className={primaryClass}
+        aria-label={`Gọi ${primaryTitle}`}
+      >
+        {primaryInner}
+      </button>
+    ) : useTelFallback ? (
+      <a href={nativeHref!} title="Gọi bằng điện thoại" className={primaryClass} aria-label="Gọi điện">
+        {primaryInner}
+      </a>
+    ) : (
+      <button type="button" title={primaryTitle} disabled className={primaryClass} aria-label={primaryTitle}>
+        {primaryInner}
+      </button>
+    )
+
+  const deskControl = showDeskButton ? (
+    <button
+      type="button"
+      title={titleDesk}
+      disabled={Boolean(busy)}
+      onClick={() => void runClick2()}
+      className={deskClass}
+      aria-label={titleDesk}
+    >
+      <Headphones className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+      <span className="sr-only">{busy === 'c2c' ? 'Đang gọi máy bàn' : 'Gọi máy bàn'}</span>
+    </button>
+  ) : null
+
+  const rowClass =
+    placement === 'beside'
+      ? 'inline-flex shrink-0 items-center gap-1.5'
+      : 'flex w-full flex-wrap items-center gap-1.5'
+
   return (
-    <span className="flex w-full shrink-0 flex-col items-stretch sm:inline-flex sm:w-auto sm:max-w-none">
-      <span className="flex flex-wrap items-center gap-2">
-        {canUse || (dialable && omicallEnabled && canClick2 && !useDeskMode) ? (
-          <button
-            type="button"
-            title={primaryTitle}
-            disabled={Boolean(busy) || (!canUse && !canClick2)}
-            onClick={onPrimaryClick}
-            className={primaryClass}
-            aria-label={primaryTitle}
-          >
-            <Phone className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{primaryLabel}</span>
-          </button>
-        ) : useTelFallback ? (
-          <a href={nativeHref!} title="Gọi bằng ứng dụng điện thoại" className={primaryClass} aria-label="Gọi điện">
-            <Phone className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{primaryLabel}</span>
-          </a>
-        ) : (
-          <button type="button" title={primaryTitle} disabled className={primaryClass} aria-label={primaryTitle}>
-            <Phone className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{primaryLabel}</span>
-          </button>
-        )}
-        {showDeskButton ? (
-          <button
-            type="button"
-            title={titleDesk}
-            disabled={Boolean(busy)}
-            onClick={() => void runClick2()}
-            className={deskClass}
-            aria-label={titleDesk}
-          >
-            <Phone className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{busy === 'c2c' ? 'Đang gọi…' : 'Máy bàn'}</span>
-          </button>
-        ) : null}
+    <span className="flex min-w-0 flex-col items-stretch">
+      <span className={rowClass}>
+        {primaryControl}
+        {deskControl}
       </span>
       {helperText ? (
         <span
-          className={`mt-1 max-w-full text-[11px] leading-snug sm:max-w-md ${err ? 'text-red-700' : 'text-slate-600'}`}
+          className={`mt-0.5 max-w-[14rem] text-[10px] leading-snug ${err ? 'text-red-700' : 'text-slate-500'}`}
         >
           {helperText}
         </span>

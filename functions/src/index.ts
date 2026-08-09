@@ -549,19 +549,31 @@ async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'we
           .toString()
           .trim()
           .slice(0, 120) || 'OMICall'
-      await db
-        .collection(COLLECTIONS.leads)
-        .doc(effectiveLeadId)
-        .set(
-          {
-            lastCallAt: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
-            lastCalledByLabel: callerLabel,
-            lastCallOutcome: callOutcome,
-            lastTouchedAt: now,
-            updatedAt: now,
-          },
-          { merge: true },
-        )
+      const leadRef = db.collection(COLLECTIONS.leads).doc(effectiveLeadId)
+      const leadSnap = await leadRef.get()
+      const leadData = (leadSnap.exists ? leadSnap.data() : {}) as Record<string, unknown>
+      const existingDisp = str(leadData.lastCallDispositionId)
+      // Soft KNM có thể ghi đè; note panel (college_hot, …) giữ nguyên.
+      const preserveUserNote = Boolean(existingDisp && existingDisp !== 'knm')
+      const leadCallPatch: Record<string, unknown> = {
+        lastCallAt: mergedForStore.endedAt ?? mergedForStore.startedAt ?? now,
+        lastCalledByLabel: callerLabel,
+        lastCallOutcome: callOutcome,
+        lastTouchedAt: now,
+        updatedAt: now,
+      }
+      if (!preserveUserNote) {
+        if (callOutcome === 'CONNECTED') {
+          leadCallPatch.callWorkBucket = 'called'
+          leadCallPatch.lastCallDispositionId = null
+          leadCallPatch.lastCallDispositionLabel = null
+        } else {
+          leadCallPatch.callWorkBucket = 'callback'
+          leadCallPatch.lastCallDispositionId = 'knm'
+          leadCallPatch.lastCallDispositionLabel = 'KNM'
+        }
+      }
+      await leadRef.set(leadCallPatch, { merge: true })
     }
 
   const shouldApplyKpi =

@@ -38,6 +38,8 @@ import {
   uniqueCatalogIdFromLabel,
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
+import { AppPageHeader } from '../components/AppPageHeader'
+import { BentoCell } from '../components/bento'
 import { InfoCompletenessRulesPanel } from '../components/InfoCompletenessRulesPanel'
 import { LeadClassificationRulesPanel } from '../components/LeadClassificationRulesPanel'
 import { KpiSettingsPanel } from '../components/KpiSettingsPanel'
@@ -719,10 +721,23 @@ export function SettingsView() {
   }
 
   return (
-    <div className={`min-w-0 max-w-full space-y-2 ${settingsCopy}`}>
-      <h1 className="sr-only">Cài đặt hệ thống</h1>
+    <div className={`bento-board min-w-0 max-w-full ${settingsCopy}`}>
+      <BentoCell variant="hero" className="!p-3 sm:!p-4">
+        <AppPageHeader
+          title="Cài đặt"
+          meta={
+            <span className="text-teal-100/85">
+              {isPlatformSuperAdmin
+                ? `Đang cấu hình · ${currentOrgLabel}`
+                : 'Dữ liệu · chấm điểm · nhân sự · kết nối'}
+            </span>
+          }
+          className="!mb-0 [&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+        />
+      </BentoCell>
+
       {isPlatformSuperAdmin ? (
-        <div className="rounded-xl border border-teal-200/80 bg-teal-50/90 px-3 py-2.5 text-sm text-teal-950">
+        <BentoCell variant="muted" className="!p-3 text-sm text-teal-950">
           <p className="font-semibold">
             Đang cấu hình: <span className="text-teal-900">{currentOrgLabel}</span>
             <span className="ml-1 font-mono text-xs font-normal text-teal-800/80">({effectiveOrgId})</span>
@@ -734,7 +749,7 @@ export function SettingsView() {
             </Link>
             .
           </p>
-        </div>
+        </BentoCell>
       ) : null}
       {activeMainTab === 'connect' ? <IntegrationsStatusStrip /> : null}
       {!configured || !db ? (
@@ -755,7 +770,7 @@ export function SettingsView() {
       ) : null}
 
       {db && settingsAccess ? (
-        <div className="min-w-0 max-w-full space-y-2 rounded-xl border border-slate-200/90 bg-white p-1.5 shadow-sm sm:p-2">
+        <BentoCell className="min-w-0 max-w-full space-y-2 !p-1.5 sm:!p-2">
           <nav
             className="app-tab-segmented scroll-touch flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto overscroll-x-contain"
             role="tablist"
@@ -805,7 +820,7 @@ export function SettingsView() {
                     aria-selected={selected}
                     onClick={() => setSubTab(sub)}
                     className={[
-                      'flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
+                      'flex shrink-0 cursor-pointer items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
                       settingsCopy,
                       selected
                         ? 'border-[var(--color-primary)]/35 bg-[var(--color-primary-soft)] text-slate-900 shadow-sm'
@@ -821,7 +836,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setMasterWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
               >
                 <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
                 Toàn màn
@@ -831,7 +846,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
               >
                 <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
                 Toàn màn
@@ -841,7 +856,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setKnowledgeWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
               >
                 <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
                 Toàn màn
@@ -851,7 +866,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setLlmWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
               >
                 <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
                 Toàn màn
@@ -860,7 +875,7 @@ export function SettingsView() {
             <button
               type="button"
               id="settings-guide-trigger"
-              className="ml-auto inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200/90 bg-white p-1.5 text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+              className="ml-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200/90 bg-white p-1.5 text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
               aria-label="Mô tả tab Cài đặt"
               aria-expanded={guideOpen}
               aria-controls="settings-guide-dialog"
@@ -869,16 +884,16 @@ export function SettingsView() {
               <CircleHelp className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
             </button>
           </div>
-        </div>
+        </BentoCell>
       ) : null}
 
       {activeSubTab === 'intake' && canIntake ? (
-        <div role="tabpanel" aria-labelledby="tab-intake" className="space-y-3">
+        <BentoCell role="tabpanel" aria-labelledby="tab-intake" className="space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-intake" className="sr-only">
             Nhập liệu
           </h2>
           <DataIntake />
-        </div>
+        </BentoCell>
       ) : null}
 
       {db && activeSubTab === 'master' ? (
@@ -888,7 +903,7 @@ export function SettingsView() {
           className={
             masterWorkspaceOpen
               ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : ''
+              : 'bento-cell !p-3 sm:!p-4'
           }
         >
           {masterWorkspaceOpen ? (
@@ -896,7 +911,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setMasterWorkspaceOpen(false)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               >
                 <X className="h-4 w-4 shrink-0" aria-hidden />
                 Đóng (Esc)
@@ -1064,7 +1079,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'lead_profile' ? (
-        <div role="tabpanel" aria-label="Hồ sơ & danh mục" className="min-w-0 max-w-full">
+        <div role="tabpanel" aria-label="Hồ sơ & danh mục" className="bento-cell min-w-0 max-w-full !p-3 sm:!p-4">
           <LeadProfileSettingsTab db={db} canEdit={canMaster} />
         </div>
       ) : null}
@@ -1073,7 +1088,7 @@ export function SettingsView() {
         <section
           role="tabpanel"
           aria-label="Quy tắc mẫu"
-          className="rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-md md:p-4"
+          className="bento-cell !p-3 sm:!p-4"
         >
           {!canScoringRules ? (
             <p className={`mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 ${settingsCopy}`}>
@@ -1091,25 +1106,25 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'scoring' ? (
-        <div role="tabpanel" aria-label="Điểm thông tin" className="min-w-0 max-w-full">
+        <div role="tabpanel" aria-label="Điểm thông tin" className="bento-cell min-w-0 max-w-full !p-3 sm:!p-4">
           <InfoCompletenessRulesPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 
       {db && activeSubTab === 'classification' ? (
-        <div role="tabpanel" aria-label="Phân loại nhãn" className="min-w-0 max-w-full">
+        <div role="tabpanel" aria-label="Phân loại nhãn" className="bento-cell min-w-0 max-w-full !p-3 sm:!p-4">
           <LeadClassificationRulesPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 
       {db && activeSubTab === 'kpi' ? (
-        <div role="tabpanel" aria-label="KPI Sale" className="min-w-0 max-w-full">
+        <div role="tabpanel" aria-label="KPI Sale" className="bento-cell min-w-0 max-w-full !p-3 sm:!p-4">
           <KpiSettingsPanel canEdit={canScoringRules} />
         </div>
       ) : null}
 
       {db && activeSubTab === 'scoring_profiles' ? (
-        <div role="tabpanel" aria-label="Cài đặt Profile" className="min-w-0 max-w-full space-y-4">
+        <div role="tabpanel" aria-label="Cài đặt Profile" className="bento-cell min-w-0 max-w-full space-y-4 !p-3 sm:!p-4">
           <ProfileManagerTab db={db} />
           {db ? (
             <section className="border-t border-slate-200 pt-4">
@@ -1133,7 +1148,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={runDemo}
-                className={`min-h-11 rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-emerald-700 ${settingsCopy}`}
+                className={`min-h-11 cursor-pointer rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-emerald-700 ${settingsCopy}`}
               >
                 Chạy thử chấm điểm
               </button>
@@ -1150,7 +1165,7 @@ export function SettingsView() {
           className={
             consultingWorkspaceOpen
               ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : 'flex flex-col gap-3'
+              : 'bento-cell flex flex-col gap-3 !p-3 sm:!p-4'
           }
         >
           {consultingWorkspaceOpen ? (
@@ -1158,7 +1173,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(false)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               >
                 <X className="h-4 w-4 shrink-0" aria-hidden />
                 Đóng (Esc)
@@ -1183,7 +1198,7 @@ export function SettingsView() {
                 aria-selected={consultingSubView === 'playbooks'}
                 onClick={() => setConsultingSubView('playbooks')}
                 className={[
-                  'rounded-lg px-3 py-2 text-sm font-semibold transition',
+                  'cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold transition',
                   consultingSubView === 'playbooks'
                     ? 'bg-sky-700 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-sky-50',
@@ -1197,7 +1212,7 @@ export function SettingsView() {
                 aria-selected={consultingSubView === 'script_hub'}
                 onClick={() => setConsultingSubView('script_hub')}
                 className={[
-                  'rounded-lg px-3 py-2 text-sm font-semibold transition',
+                  'cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold transition',
                   consultingSubView === 'script_hub'
                     ? 'bg-slate-800 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-slate-100',
@@ -1230,7 +1245,7 @@ export function SettingsView() {
           className={
             knowledgeWorkspaceOpen
               ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : ''
+              : 'bento-cell !p-3 sm:!p-4'
           }
         >
           {knowledgeWorkspaceOpen ? (
@@ -1238,7 +1253,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setKnowledgeWorkspaceOpen(false)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               >
                 <X className="h-4 w-4 shrink-0" aria-hidden />
                 Đóng (Esc)
@@ -1264,7 +1279,7 @@ export function SettingsView() {
           className={
             llmWorkspaceOpen
               ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : ''
+              : 'bento-cell !p-3 sm:!p-4'
           }
         >
           {llmWorkspaceOpen ? (
@@ -1272,7 +1287,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setLlmWorkspaceOpen(false)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
               >
                 <X className="h-4 w-4 shrink-0" aria-hidden />
                 Đóng (Esc)
@@ -1292,7 +1307,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'hub' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-hub" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-hub" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-hub" className="sr-only">
             Hub kết nối
           </h2>
@@ -1301,7 +1316,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'comms' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-comms" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-comms" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-comms" className="sr-only">
             Email và tin nhắn tự động
           </h2>
@@ -1310,7 +1325,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'omicall' && canOmicall ? (
-        <div role="tabpanel" aria-labelledby="tab-omicall" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-omicall" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-omicall" className="sr-only">
             Gọi điện OMICall
           </h2>
@@ -1319,7 +1334,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'webhooks' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-webhooks" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-webhooks" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-webhooks" className="sr-only">
             Webhook n8n
           </h2>
@@ -1328,7 +1343,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'invite_docs' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-invite-docs" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-invite-docs" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-invite-docs" className="sr-only">
             Giấy mời và mẫu
           </h2>
@@ -1337,7 +1352,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'receipts' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-receipts" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-receipts" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-receipts" className="sr-only">
             Chứng từ và lưu trữ
           </h2>
@@ -1346,7 +1361,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'public_registration' && canMaster ? (
-        <div role="tabpanel" aria-labelledby="tab-public-registration" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-public-registration" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-public-registration" className="sr-only">
             Cổng đăng ký sinh viên
           </h2>
@@ -1355,7 +1370,7 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'staff' && (canStaff || canStaffTeam) ? (
-        <div role="tabpanel" aria-labelledby="tab-staff" className="space-y-3">
+        <div role="tabpanel" aria-labelledby="tab-staff" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <h2 id="tab-staff" className="sr-only">
             Quản lý nhân sự
           </h2>
@@ -1364,7 +1379,7 @@ export function SettingsView() {
       ) : null}
 
       {activeSubTab === 'permissions' && canPermMatrix ? (
-        <div role="tabpanel" aria-label="Phân Quyền" className="space-y-3">
+        <div role="tabpanel" aria-label="Phân Quyền" className="bento-cell space-y-3 !p-3 sm:!p-4">
           <PermissionMatrixPanel />
         </div>
       ) : null}

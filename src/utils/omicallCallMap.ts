@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore'
 import type { OmicallCallOutcome, OmicallCallRecord } from '../types'
+import { resolveCallIsValid } from './kpiCallValidity'
 
 export function numCall(v: unknown): number {
   const n = Number(v ?? 0)
@@ -51,7 +52,8 @@ export function mapOmicallCallDoc(id: string, data: Record<string, unknown>): Om
     syncedAt: data.syncedAt as Timestamp | undefined,
     interactionId: data.interactionId ? String(data.interactionId) : undefined,
     kpiAppliedAt: data.kpiAppliedAt as Timestamp | undefined,
-    isValidCall: data.isValidCall === true,
+    isValidCall:
+      data.isValidCall === true ? true : data.isValidCall === false ? false : undefined,
     invalidReason: data.invalidReason ? String(data.invalidReason) : undefined,
     aiAnalysisId: data.aiAnalysisId ? String(data.aiAnalysisId) : undefined,
     aiAnalysisSyncedAt: data.aiAnalysisSyncedAt as Timestamp | undefined,
@@ -82,7 +84,7 @@ export type OmicallCallStats = {
 export function aggregateOmicallCalls(calls: OmicallCallRecord[]): OmicallCallStats {
   const total = calls.length
   const connected = calls.filter((c) => c.outcome === 'CONNECTED').length
-  const validCalls = calls.filter((c) => c.isValidCall).length
+  const validCalls = calls.filter((c) => resolveCallIsValid(c)).length
   const outbound = calls.filter((c) => c.direction === 'outbound').length
   const inbound = calls.filter((c) => c.direction === 'inbound').length
   const talkSeconds = calls.reduce((s, c) => s + (c.billSeconds || c.answerSeconds || 0), 0)

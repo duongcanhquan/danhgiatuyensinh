@@ -7,17 +7,39 @@ function str(v: unknown): string {
 const COUNSELOR_LOADS_COLLECTION = 'stats'
 const COUNSELOR_LOADS_DOC = 'counselorLoads'
 
-/** Map counselorUid → teamLeadUid — chỉ đọc users role team_lead (không quét cả collection). */
+/**
+ * Map counselorUid → teamLeadUid.
+ * Nguồn: role team_lead (+ legacy) và admin có managedCounselorIds — khớp roster client.
+ */
 export async function loadTeamLeadMap(fs: Firestore, usersCollection: string): Promise<Map<string, string>> {
-  const snap = await fs.collection(usersCollection).where('role', '==', 'team_lead').get()
   const out = new Map<string, string>()
-  for (const doc of snap.docs) {
-    const managed = Array.isArray(doc.data().managedCounselorIds)
-      ? doc.data().managedCounselorIds.map((x: unknown) => str(x)).filter(Boolean)
-      : []
-    for (const uid of managed) out.set(uid, doc.id)
-    out.set(doc.id, doc.id)
+
+  const ingest = (docs: Array<{ id: string; data: () => Record<string, unknown> }>) => {
+    for (const doc of docs) {
+      const data = doc.data()
+      const role = str(data.role)
+      const managed = Array.isArray(data.managedCounselorIds)
+        ? data.managedCounselorIds.map((x: unknown) => str(x)).filter(Boolean)
+        : []
+      for (const uid of managed) {
+        if (!out.has(uid) || role === 'team_lead') out.set(uid, doc.id)
+      }
+      if (role === 'team_lead' || role === 'head_of_profession' || role === 'head_of_department' || managed.length) {
+        out.set(doc.id, doc.id)
+      }
+    }
   }
+
+  const [teamLeads, legacyHoP, legacyHoD, admins] = await Promise.all([
+    fs.collection(usersCollection).where('role', '==', 'team_lead').get(),
+    fs.collection(usersCollection).where('role', '==', 'head_of_profession').get(),
+    fs.collection(usersCollection).where('role', '==', 'head_of_department').get(),
+    fs.collection(usersCollection).where('role', '==', 'admin').get(),
+  ])
+  ingest(teamLeads.docs)
+  ingest(legacyHoP.docs)
+  ingest(legacyHoD.docs)
+  ingest(admins.docs)
   return out
 }
 

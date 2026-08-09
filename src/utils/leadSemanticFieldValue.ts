@@ -77,6 +77,8 @@ export function evaluationRecordFieldValue(rec: Record<string, unknown>, field: 
       return String(rec.schoolType ?? '')
     case 'schoolTypeKey':
       return String(rec.schoolTypeKey ?? '')
+    case 'graduationScore':
+      return String(rec.graduationScore ?? '').trim()
     case 'majorTrainingAlignment':
       return String(rec.majorTrainingAlignment ?? '')
     case 'financialStatus':

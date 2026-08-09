@@ -412,9 +412,9 @@ function PhoneFieldWithCall({
 }) {
   return (
     <Field label={label}>
-      <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 items-start gap-2">
         <input
-          className={`${INPUT_CLS} w-full min-w-0`}
+          className={`${INPUT_CLS} min-w-0 flex-1`}
           inputMode="tel"
           value={value}
           disabled={disabled}
@@ -427,7 +427,7 @@ function PhoneFieldWithCall({
             phone={value}
             target={target}
             disabled={disabled}
-            className="self-start"
+            placement="beside"
           />
         ) : null}
       </div>

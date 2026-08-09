@@ -73,17 +73,38 @@ export type CallWorkLeadFields = {
   lastCallDispositionId?: string | null
 }
 
-/** Bucket hiệu lực: field lưu sẵn → disposition → suy từ lần gọi gần nhất → chưa gọi. */
+/** Bucket hiệu lực — ưu tiên note panel thật, rồi tín hiệu cuộc gọi gần nhất (tránh bucket cũ lệch thực tế). */
 export function resolveCallWorkBucket(lead: CallWorkLeadFields): CallWorkBucket {
-  if (lead.callWorkBucket === 'uncalled' || lead.callWorkBucket === 'callback' || lead.callWorkBucket === 'called') {
+  const fromDisp = getCallDisposition(lead.lastCallDispositionId ?? undefined)
+  const at = effectiveLastCallAt(lead)
+
+  // Note sau gọi đã chọn (không phải soft KNM) → theo catalog.
+  if (fromDisp && fromDisp.id !== 'knm') {
+    return fromDisp.bucket
+  }
+
+  // Đã bắt máy: luôn «Đã xử lý» — kể cả khi còn soft KNM / bucket callback cũ.
+  if (at && lead.lastCallOutcome === 'CONNECTED') {
+    return 'called'
+  }
+
+  // Không bắt máy / cần theo dõi lại — không tin bucket `called` cũ lệch outcome.
+  if (at && (lead.lastCallOutcome === 'NO_ANSWER' || lead.lastCallOutcome === 'FOLLOW_UP')) {
+    return 'callback'
+  }
+
+  if (fromDisp?.id === 'knm') return 'callback'
+
+  if (lead.callWorkBucket === 'callback' || lead.callWorkBucket === 'called') {
     return lead.callWorkBucket
   }
-  const fromDisp = getCallDisposition(lead.lastCallDispositionId ?? undefined)
-  if (fromDisp) return fromDisp.bucket
-  const at = effectiveLastCallAt(lead)
-  if (!at) return 'uncalled'
-  if (lead.lastCallOutcome === 'NO_ANSWER' || lead.lastCallOutcome === 'FOLLOW_UP') return 'callback'
-  return 'called'
+
+  // Stale `uncalled` hoặc thiếu bucket nhưng đã có dấu vết gọi.
+  if (at) {
+    return 'called'
+  }
+
+  return 'uncalled'
 }
 
 function defaultOutcomeForDisposition(
@@ -243,6 +264,38 @@ export function leadMatchesDisposition(
   return lead.lastCallDispositionId === filter
 }
 
+/** Ưu tiên hàng chờ: Gọi lại → Chưa gọi → Đã gọi (số nhỏ = lên trước). */
+export function callWorkQueueRank(bucket: CallWorkBucket): number {
+  if (bucket === 'callback') return 0
+  if (bucket === 'uncalled') return 1
+  return 2
+}
+
+export type CallWorkQueueSummary = {
+  total: number
+  uncalled: number
+  callback: number
+  called: number
+  /** Còn việc: chưa gọi + cần gọi lại */
+  remaining: number
+}
+
+export function summarizeCallWorkQueue(
+  leads: readonly CallWorkLeadFields[],
+): CallWorkQueueSummary {
+  let uncalled = 0
+  let callback = 0
+  let called = 0
+  for (const lead of leads) {
+    const b = resolveCallWorkBucket(lead)
+    if (b === 'uncalled') uncalled += 1
+    else if (b === 'callback') callback += 1
+    else called += 1
+  }
+  const total = uncalled + callback + called
+  return { total, uncalled, callback, called, remaining: uncalled + callback }
+}
+
 /** Sắp xếp Chưa gọi: ổn định theo updatedAt/createdAt tăng dần (trên → dưới). */
 export function compareUncalledQueueOrder(
   a: Pick<Lead, 'updatedAt' | 'createdAt' | 'id'>,
@@ -251,5 +304,30 @@ export function compareUncalledQueueOrder(
   const aMs = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0
   const bMs = b.updatedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0
   if (aMs !== bMs) return aMs - bMs
+  return a.id.localeCompare(b.id)
+}
+
+type CallWorkSortLead = CallWorkLeadFields & Pick<Lead, 'updatedAt' | 'createdAt' | 'id'>
+
+/**
+ * Thứ tự làm việc mặc định trên danh sách hồ sơ:
+ * Gọi lại (cũ hơn trước) → Chưa gọi (cũ hơn trước) → Đã gọi (mới gọi hơn xuống dưới).
+ */
+export function compareCallWorkQueueOrder(a: CallWorkSortLead, b: CallWorkSortLead): number {
+  const ra = callWorkQueueRank(resolveCallWorkBucket(a))
+  const rb = callWorkQueueRank(resolveCallWorkBucket(b))
+  if (ra !== rb) return ra - rb
+
+  if (ra === 1) return compareUncalledQueueOrder(a, b)
+
+  const aCall = effectiveLastCallAt(a)?.toMillis?.() ?? 0
+  const bCall = effectiveLastCallAt(b)?.toMillis?.() ?? 0
+  if (ra === 0) {
+    // Gọi lại: ưu tiên lâu chưa xử lý lại
+    if (aCall !== bCall) return aCall - bCall
+  } else {
+    // Đã gọi: mới hơn xuống dưới (cũ hơn lên trước trong nhóm)
+    if (aCall !== bCall) return aCall - bCall
+  }
   return a.id.localeCompare(b.id)
 }

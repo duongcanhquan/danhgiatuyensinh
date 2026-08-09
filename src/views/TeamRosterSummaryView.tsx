@@ -16,6 +16,7 @@ import {
   resolveTeamRosterMembers,
   teamLeadOptionsForFilter,
 } from '../utils/teamRosterMembers'
+import { counselorIdsInManagerScope } from '../utils/teamScope'
 import {
   buildTeamRosterSummary,
   sumTeamRosterRows,
@@ -23,6 +24,7 @@ import {
   type TeamRosterLeadInput,
   type TeamRosterSummaryRow,
 } from '../utils/teamRosterSummary'
+import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 
 function monthStartKey(dateKey: string): string {
   return `${dateKey.slice(0, 7)}-01`
@@ -43,67 +45,51 @@ function pctLabel(rate: number, total: number): string {
   return `${Math.round(rate * 100)}%`
 }
 
-function MetricTile({
-  label,
-  value,
-  hint,
-  tone = 'text-slate-900',
-}: {
-  label: string
-  value: string
-  hint?: string
-  tone?: string
-}) {
-  return (
-    <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2 ring-1 ring-slate-200/70">
-      <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-0.5 text-lg font-bold tabular-nums leading-tight ${tone}`}>{value}</p>
-      {hint ? <p className="mt-0.5 truncate text-[10px] text-slate-400">{hint}</p> : null}
-    </div>
-  )
-}
-
 function RosterPersonCard({ row }: { row: TeamRosterSummaryRow }) {
   return (
-    <article className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm">
+    <BentoCell className="!p-3">
       <h3 className="truncate text-base font-bold text-slate-900">{row.displayName}</h3>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <MetricTile label="Tổng lead" value={fmtKpiNum(row.totalLeads)} />
-        <MetricTile label="Đã gọi" value={fmtKpiNum(row.calledLeads)} />
-        <MetricTile
+        <BentoStat label="Tổng lead" value={fmtKpiNum(row.totalLeads)} className="!min-h-0 !p-2.5" />
+        <BentoStat label="Đã gọi" value={fmtKpiNum(row.calledLeads)} className="!min-h-0 !p-2.5" />
+        <BentoStat
           label="Thành công"
           value={fmtKpiNum(row.successLeads)}
           hint="Note HOT"
-          tone="text-emerald-800"
+          tone="accent"
+          className="!min-h-0 !p-2.5"
         />
-        <MetricTile
+        <BentoStat
           label="Không thành công"
           value={fmtKpiNum(row.unsuccessfulLeads)}
           hint="Note khác HOT"
-          tone="text-rose-800"
+          className="!min-h-0 !p-2.5"
         />
       </div>
       <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         Tỷ lệ gọi (hồ sơ có gọi / đang giữ)
       </p>
       <div className="mt-1.5 grid grid-cols-3 gap-2">
-        <MetricTile
+        <BentoStat
           label="Ngày"
           value={pctLabel(row.callRateDay, row.totalLeads)}
           hint={`${fmtKpiNum(row.calledInDay)}/${fmtKpiNum(row.totalLeads)}`}
+          className="!min-h-0 !p-2"
         />
-        <MetricTile
+        <BentoStat
           label="Tuần"
           value={pctLabel(row.callRateWeek, row.totalLeads)}
           hint={`${fmtKpiNum(row.calledInWeek)}/${fmtKpiNum(row.totalLeads)}`}
+          className="!min-h-0 !p-2"
         />
-        <MetricTile
+        <BentoStat
           label="Tháng"
           value={pctLabel(row.callRateMonth, row.totalLeads)}
           hint={`${fmtKpiNum(row.calledInMonth)}/${fmtKpiNum(row.totalLeads)}`}
+          className="!min-h-0 !p-2"
         />
       </div>
-    </article>
+    </BentoCell>
   )
 }
 
@@ -115,20 +101,16 @@ function RosterTotalsBar({
   memberCount: number
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <MetricTile label="Nhân sự" value={fmtKpiNum(memberCount)} />
-      <MetricTile label="Tổng lead" value={fmtKpiNum(totals.totalLeads)} />
-      <MetricTile
-        label="Thành công"
-        value={fmtKpiNum(totals.successLeads)}
-        tone="text-emerald-800"
-      />
-      <MetricTile
+    <BentoGrid className="sm:!grid-cols-2 lg:!grid-cols-4">
+      <BentoStat label="Nhân sự" value={fmtKpiNum(memberCount)} tone="ink" />
+      <BentoStat label="Tổng lead" value={fmtKpiNum(totals.totalLeads)} />
+      <BentoStat label="Thành công" value={fmtKpiNum(totals.successLeads)} tone="accent" />
+      <BentoStat
         label="% gọi hôm nay"
         value={pctLabel(totals.callRateDay, totals.totalLeads)}
         hint={`${fmtKpiNum(totals.calledInDay)}/${fmtKpiNum(totals.totalLeads)}`}
       />
-    </div>
+    </BentoGrid>
   )
 }
 
@@ -142,7 +124,7 @@ function RosterDesktopTable({
   loading: boolean
 }) {
   return (
-    <div className="app-surface-elevated overflow-hidden">
+    <div className="overflow-hidden">
       <div className="overflow-x-auto overscroll-x-contain">
         <table className="min-w-[52rem] w-full text-left text-sm">
           <thead className="sticky top-0 z-[1] bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 shadow-sm">
@@ -288,10 +270,14 @@ export function TeamRosterSummaryView() {
       return { mode: 'global' }
     }
     if (profile && (isTeamLeadRole(profile.role) || can('dashboard:team_lead'))) {
-      return { mode: 'team', teamLeadUid: profile.id }
+      return {
+        mode: 'team',
+        teamLeadUid: profile.id,
+        counselorUids: counselorIdsInManagerScope(profile, users),
+      }
     }
     return { mode: 'global' }
-  }, [can, profile])
+  }, [can, profile, users])
 
   const {
     calls,
@@ -312,6 +298,7 @@ export function TeamRosterSummaryView() {
         assigneeUid: leadAssignedUid(lead) ?? null,
         callWorkBucket: lead.callWorkBucket ?? null,
         lastCallDispositionId: lead.lastCallDispositionId ?? null,
+        lastCallOutcome: lead.lastCallOutcome ?? null,
         lastCallAtMs: lead.lastCallAt ? tsMsCall(lead.lastCallAt) || null : null,
       })),
     [leads],
@@ -347,39 +334,41 @@ export function TeamRosterSummaryView() {
   }
 
   return (
-    <div className="space-y-3 sm:space-y-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="app-section-heading flex items-center gap-2">
-            <Users className="h-4 w-4 shrink-0" aria-hidden />
-            Nhóm của tôi
-          </h2>
-          <p className="mt-1 text-sm text-slate-600 md:hidden">
-            Vuốt xem từng người: lead, HOT, tỷ lệ gọi ngày · tuần · tháng.
-          </p>
-          <p className="mt-1 hidden text-sm text-slate-600 md:block">
-            Mỗi người: tổng hồ sơ đang giữ, đã gọi, thành công (HOT) / không thành công, tỷ lệ gọi
-            trong ngày · tuần · tháng.
-          </p>
+    <div className="bento-board">
+      <BentoCell colSpan={4} className="!p-3 sm:!p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
+              <Users className="h-4 w-4 shrink-0 text-teal-700" aria-hidden />
+              Nhóm của tôi
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 md:hidden">
+              Vuốt xem từng người: lead, HOT, tỷ lệ gọi ngày · tuần · tháng.
+            </p>
+            <p className="mt-1 hidden text-sm text-slate-600 md:block">
+              Mỗi người: tổng hồ sơ đang giữ, đã gọi, thành công (HOT) / không thành công, tỷ lệ gọi trong ngày · tuần ·
+              tháng (giờ Việt Nam).
+            </p>
+          </div>
+          {showTeamFilter ? (
+            <label className="block w-full text-sm font-medium text-slate-700 sm:w-auto sm:min-w-[12rem] sm:shrink-0">
+              Lọc theo nhóm
+              <select
+                value={filterTeamLeadUid}
+                onChange={(e) => setFilterTeamLeadUid(e.target.value)}
+                className="mt-1 block min-h-11 w-full min-w-0 cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 sm:text-sm"
+              >
+                <option value="">Tất cả nhân sự</option>
+                {teamLeadOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
-        {showTeamFilter ? (
-          <label className="block w-full text-sm font-medium text-slate-700 sm:w-auto sm:shrink-0">
-            Lọc theo nhóm
-            <select
-              value={filterTeamLeadUid}
-              onChange={(e) => setFilterTeamLeadUid(e.target.value)}
-              className="mt-1 block min-h-11 w-full min-w-0 cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 sm:min-w-[12rem] sm:text-sm"
-            >
-              <option value="">Tất cả nhân sự</option>
-              {teamLeadOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-      </header>
+      </BentoCell>
 
       {leadsError ? (
         <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -402,47 +391,48 @@ export function TeamRosterSummaryView() {
       {/* Mobile: thẻ xếp chồng — tránh kéo ngang bảng */}
       <div className="space-y-3 md:hidden">
         {loading && rows.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-3 py-8 text-center text-sm text-slate-500">
-            Đang tải nhóm…
-          </p>
+          <BentoCell className="px-3 py-8 text-center text-sm text-slate-500">Đang tải nhóm…</BentoCell>
         ) : null}
         {!loading && rows.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-3 py-8 text-center text-sm text-slate-500">
+          <BentoCell className="px-3 py-8 text-center text-sm text-slate-500">
             Chưa có nhân sự trong phạm vi xem. Kiểm tra phân nhóm sale trong Cài đặt.
-          </p>
+          </BentoCell>
         ) : null}
         {rows.map((row) => (
           <RosterPersonCard key={row.counselorUid} row={row} />
         ))}
         {rows.length > 0 ? (
-          <article className="rounded-2xl border border-slate-300 bg-slate-50 p-3">
+          <BentoCell variant="muted" className="!p-3">
             <h3 className="text-sm font-bold text-slate-900">Tổng nhóm</h3>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <MetricTile label="Tổng lead" value={fmtKpiNum(totals.totalLeads)} />
-              <MetricTile label="Đã gọi" value={fmtKpiNum(totals.calledLeads)} />
-              <MetricTile
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <BentoStat label="Tổng lead" value={fmtKpiNum(totals.totalLeads)} className="!min-h-0 !p-2" />
+              <BentoStat label="Đã gọi" value={fmtKpiNum(totals.calledLeads)} className="!min-h-0 !p-2" />
+              <BentoStat
                 label="Thành công"
                 value={fmtKpiNum(totals.successLeads)}
-                tone="text-emerald-800"
+                tone="accent"
+                className="!min-h-0 !p-2"
               />
-              <MetricTile
+              <BentoStat
                 label="Không thành công"
                 value={fmtKpiNum(totals.unsuccessfulLeads)}
-                tone="text-rose-800"
+                className="!min-h-0 !p-2"
               />
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2">
-              <MetricTile label="Ngày" value={pctLabel(totals.callRateDay, totals.totalLeads)} />
-              <MetricTile label="Tuần" value={pctLabel(totals.callRateWeek, totals.totalLeads)} />
-              <MetricTile label="Tháng" value={pctLabel(totals.callRateMonth, totals.totalLeads)} />
+              <BentoStat label="Ngày" value={pctLabel(totals.callRateDay, totals.totalLeads)} className="!min-h-0 !p-2" />
+              <BentoStat label="Tuần" value={pctLabel(totals.callRateWeek, totals.totalLeads)} className="!min-h-0 !p-2" />
+              <BentoStat label="Tháng" value={pctLabel(totals.callRateMonth, totals.totalLeads)} className="!min-h-0 !p-2" />
             </div>
-          </article>
+          </BentoCell>
         ) : null}
       </div>
 
       {/* Desktop: bảng đầy đủ */}
       <div className="hidden md:block">
-        <RosterDesktopTable rows={rows} totals={totals} loading={loading} />
+        <BentoCell className="!overflow-hidden !p-0">
+          <RosterDesktopTable rows={rows} totals={totals} loading={loading} />
+        </BentoCell>
       </div>
 
       <p className="pb-2 text-xs leading-relaxed text-slate-500">

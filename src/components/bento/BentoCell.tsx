@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { bentoCellClass, type BentoCellOptions, type BentoCellVariant } from './bentoVariants'
 
 type Props = {
@@ -8,7 +8,7 @@ type Props = {
   colSpan?: BentoCellOptions['colSpan']
   rowSpan?: BentoCellOptions['rowSpan']
   as?: 'div' | 'section' | 'article'
-}
+} & Omit<HTMLAttributes<HTMLElement>, 'children' | 'className'>
 
 /** One bento tile — high-contrast surface for metrics or modules. */
 export function BentoCell({
@@ -18,12 +18,14 @@ export function BentoCell({
   colSpan,
   rowSpan,
   as: Tag = 'div',
+  ...rest
 }: Props) {
   return (
     <Tag
       data-bento="cell"
       data-bento-variant={variant}
       className={[bentoCellClass(variant, { colSpan, rowSpan }), className].filter(Boolean).join(' ')}
+      {...rest}
     >
       {children}
     </Tag>

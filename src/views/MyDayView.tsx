@@ -7,10 +7,11 @@ import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useOrg } from '../hooks/useOrg'
 import { AppPageHeader } from '../components/AppPageHeader'
-import { BentoGrid, BentoStat } from '../components/bento'
+import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { KpiCallHint } from '../components/KpiCallHint'
 import { KpiMetricsSections } from '../components/KpiMetricsSections'
 import { fmtKpiNum, todayDateKey } from '../utils/kpiDisplay'
+import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 
@@ -97,10 +98,9 @@ export function MyDayView() {
     setSourceNotice(null)
     ;(async () => {
       try {
-        const fromTs = Timestamp.fromDate(new Date(`${reportFrom}T00:00:00`))
-        const toDate = new Date(`${reportTo}T00:00:00`)
-        toDate.setDate(toDate.getDate() + 1)
-        const toTs = Timestamp.fromDate(toDate)
+        const range = vnDayRangeFromKeys(reportFrom, reportTo)
+        const fromTs = Timestamp.fromDate(range.from)
+        const toTs = Timestamp.fromMillis(range.to.getTime() + 1)
         const orgId = effectiveOrgId.trim()
         const col = collection(db, FS_COLLECTIONS.leads)
         let snap
@@ -189,8 +189,14 @@ export function MyDayView() {
   const safeTab = MY_DAY_TABS.some((t) => t.id === activeTab) ? activeTab : 'today'
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <AppPageHeader title="Ngày của tôi" meta={today} />
+    <div className="bento-board mx-auto max-w-4xl">
+      <BentoCell variant="hero" className="!p-3 sm:!p-4">
+        <AppPageHeader
+          title="Ngày của tôi"
+          meta={today}
+          className="[&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+        />
+      </BentoCell>
 
       <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
         <BentoStat label="Hôm nay" value={today.slice(8)} hint={today} tone="ink" />
@@ -207,44 +213,48 @@ export function MyDayView() {
         />
       </BentoGrid>
 
-      <div
-        className="app-tab-segmented scroll-touch flex flex-wrap gap-0.5"
-        role="tablist"
-        aria-label="Phần Ngày của tôi"
-      >
-        {MY_DAY_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={safeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className="app-tab-segmented-btn"
-            data-active={safeTab === tab.id ? 'true' : 'false'}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <BentoCell className="!p-2 sm:!p-3">
+        <div
+          className="app-tab-segmented scroll-touch flex flex-wrap gap-0.5"
+          role="tablist"
+          aria-label="Phần Ngày của tôi"
+        >
+          {MY_DAY_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={safeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="app-tab-segmented-btn"
+              data-active={safeTab === tab.id ? 'true' : 'false'}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </BentoCell>
 
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
       ) : null}
 
       {safeTab === 'today' ? (
-        <section className="space-y-3">
-          <KpiCallHint source={kpiCallSource} className="max-w-2xl" compact />
-          {mine ? <KpiMetricsSections totals={mine} loading={loading} compact /> : null}
-          {kpiCallSource === 'empty' ? (
-            <p className="text-xs text-slate-600">
-              Mẹo: gọi từ nút OMICall trên từng hồ sơ — số cuộc gọi sẽ lên đây và tab Tổng kết.
-            </p>
-          ) : null}
-        </section>
+        <BentoCell className="!p-3 sm:!p-4">
+          <div className="space-y-3">
+            <KpiCallHint source={kpiCallSource} className="max-w-2xl" compact />
+            {mine ? <KpiMetricsSections totals={mine} loading={loading} compact /> : null}
+            {kpiCallSource === 'empty' ? (
+              <p className="text-xs text-slate-600">
+                Mẹo: gọi từ nút OMICall trên từng hồ sơ — số cuộc gọi sẽ lên đây và tab Tổng kết.
+              </p>
+            ) : null}
+          </div>
+        </BentoCell>
       ) : null}
 
       {safeTab === 'period' ? (
-        <section className="app-surface-elevated p-3 text-sm text-slate-700 sm:p-4">
+        <BentoCell className="!p-3 text-sm text-slate-700 sm:!p-4">
           <h2 className="font-semibold text-slate-900">Báo cáo theo kỳ</h2>
           <p className="mt-0.5 text-xs text-slate-600">Cuộc gọi, chuyển đổi, tiền và hành vi CRM trong khoảng ngày đã chọn.</p>
 
@@ -253,7 +263,7 @@ export function MyDayView() {
               <span className="text-xs font-semibold text-slate-600">Từ ngày</span>
               <input
                 type="date"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+                className="mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
                 value={reportFrom}
                 onChange={(e) => setReportFrom(e.target.value)}
               />
@@ -262,7 +272,7 @@ export function MyDayView() {
               <span className="text-xs font-semibold text-slate-600">Đến ngày</span>
               <input
                 type="date"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+                className="mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
                 value={reportTo}
                 min={reportFrom}
                 onChange={(e) => setReportTo(e.target.value)}
@@ -271,7 +281,7 @@ export function MyDayView() {
             <label className="block">
               <span className="text-xs font-semibold text-slate-600">Tư vấn viên</span>
               <select
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+                className="mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
                 value={reportCounselor}
                 onChange={(e) => setReportCounselor(e.target.value as 'all' | string)}
               >
@@ -295,7 +305,7 @@ export function MyDayView() {
             <KpiMetricsSections totals={reportTotals} loading={reportLoading} compact />
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
             <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Theo danh sách tư vấn viên
             </div>
@@ -332,12 +342,12 @@ export function MyDayView() {
               </table>
             </div>
           </div>
-        </section>
+        </BentoCell>
       ) : null}
 
       {safeTab === 'sources' ? (
         <>
-          <section className="app-surface-elevated p-3 text-sm text-slate-700 sm:p-4">
+          <BentoCell className="!p-3 text-sm text-slate-700 sm:!p-4">
             <h2 className="font-semibold text-slate-900">Sinh viên theo nguồn</h2>
             <p className="mt-0.5 text-xs text-slate-600">Dùng cùng khoảng ngày với tab Báo cáo kỳ.</p>
 
@@ -346,7 +356,7 @@ export function MyDayView() {
                 <span className="text-xs font-semibold text-slate-600">Từ ngày</span>
                 <input
                   type="date"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+                  className="mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
                   value={reportFrom}
                   onChange={(e) => setReportFrom(e.target.value)}
                 />
@@ -355,7 +365,7 @@ export function MyDayView() {
                 <span className="text-xs font-semibold text-slate-600">Đến ngày</span>
                 <input
                   type="date"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+                  className="mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
                   value={reportTo}
                   min={reportFrom}
                   onChange={(e) => setReportTo(e.target.value)}
@@ -364,7 +374,7 @@ export function MyDayView() {
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">Tư vấn viên</span>
                 <select
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+                  className="mt-1 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
                   value={reportCounselor}
                   onChange={(e) => setReportCounselor(e.target.value as 'all' | string)}
                 >
@@ -390,7 +400,7 @@ export function MyDayView() {
             ) : null}
 
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              <div className="rounded-xl border border-slate-200">
+              <div className="overflow-hidden rounded-xl border border-slate-200">
                 <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Theo nguồn
                 </div>
@@ -421,7 +431,7 @@ export function MyDayView() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
                 <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                   Theo ngày
                 </div>
@@ -454,9 +464,9 @@ export function MyDayView() {
                 </div>
               </div>
             </div>
-          </section>
+          </BentoCell>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
+          <BentoCell variant="muted" className="!p-4 text-sm text-slate-700">
             <h2 className="font-semibold text-slate-900">Nhắc việc quan trọng</h2>
             <ul className="mt-2 list-inside list-disc space-y-1 leading-relaxed">
               <li>
@@ -468,18 +478,18 @@ export function MyDayView() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 to="/leads"
-                className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900"
+                className="cursor-pointer rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900"
               >
                 Mở danh sách hồ sơ
               </Link>
               <Link
                 to="/?tab=kpi-nhan-su"
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                className="cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
               >
                 Báo cáo đánh giá
               </Link>
             </div>
-          </section>
+          </BentoCell>
         </>
       ) : null}
     </div>

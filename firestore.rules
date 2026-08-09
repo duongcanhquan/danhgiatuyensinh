@@ -315,7 +315,7 @@ service cloud.firestore {
       allow delete: if deleteInOwnOrg();
     }
 
-    // KPI daily / stats — Admin SDK writes; clients read if signed in + org active
+    // KPI daily / monthly / stats — Admin SDK (Functions) ghi; client chỉ đọc khi đã đăng nhập + trường còn hoạt động
     match /kpiDaily/{dateId} {
       allow read: if signedIn() && schoolOrgActive();
       allow write: if false;
@@ -323,6 +323,39 @@ service cloud.firestore {
         allow read: if signedIn() && schoolOrgActive();
         allow write: if false;
       }
+    }
+
+    // KPI tháng (KPI nhân sự / bảng điểm) — thiếu rule → permission-denied trên Tổng kết
+    match /kpiMonthly/{monthId} {
+      allow read: if signedIn() && schoolOrgActive();
+      allow write: if false;
+      match /{document=**} {
+        allow read: if signedIn() && schoolOrgActive();
+        allow write: if false;
+      }
+    }
+
+    // Mục tiêu KPI tháng + ghi đè theo TVV (Cài đặt / chấm điểm) — client ghi trực tiếp
+    match /kpiTargets/{monthId} {
+      allow read, write: if signedIn() && schoolOrgActive();
+      match /{document=**} {
+        allow read, write: if signedIn() && schoolOrgActive();
+      }
+    }
+
+    // Điểm tuân thủ thủ công (trưởng nhóm / admin)
+    match /kpiManualScores/{monthId} {
+      allow read, write: if signedIn() && schoolOrgActive();
+      match /{document=**} {
+        allow read, write: if signedIn() && schoolOrgActive();
+      }
+    }
+
+    // Sự kiện CRM → Functions gom vào kpiDaily (client create; không sửa/xóa từ client)
+    match /leadEvents/{id} {
+      allow read: if signedIn() && schoolOrgActive();
+      allow create: if signedIn() && schoolOrgActive();
+      allow update, delete: if false;
     }
 
     match /stats/{document=**} {

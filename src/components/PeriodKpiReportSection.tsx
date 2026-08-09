@@ -6,18 +6,12 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { KpiCallHint } from './KpiCallHint'
 import { KpiMetricsSections } from './KpiMetricsSections'
-import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
+import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd, defaultVnDateRange } from '../utils/kpiDisplay'
 import { aggregateKpiSummariesByTeam } from '../utils/kpiTeamAggregate'
 import { buildPeriodKpiCsv, downloadTextCsv } from '../utils/kpiCsvExport'
 
 function defaultDateRange(): { from: string; to: string } {
-  const to = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 6)
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-  }
+  return defaultVnDateRange(6)
 }
 
 export function PeriodKpiReportSection() {

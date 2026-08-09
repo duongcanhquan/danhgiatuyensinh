@@ -18,7 +18,8 @@ import { firestoreDatabaseMismatchHint } from '../utils/firestoreDatabaseHint'
 
 export type OmicallCallsScope =
   | { mode: 'counselor'; counselorUid: string }
-  | { mode: 'team'; teamLeadUid: string }
+  /** `counselorUids`: roster nhóm — bù khi doc gọi thiếu teamLeadUid. */
+  | { mode: 'team'; teamLeadUid: string; counselorUids?: string[] }
   | { mode: 'global' }
 
 export type UseOmicallCallsOpts = {
@@ -84,14 +85,24 @@ function filterCallsByScope(
 
   if (scope.mode === 'counselor') {
     const sip = viewerSipUser?.trim()
-    return calls.filter((c) => {
-      if (c.counselorUid === scope.counselorUid) return true
-      if (!c.counselorUid && sip && c.sipUser?.trim() === sip) return true
-      return false
+    const uid = scope.counselorUid
+    return calls.flatMap((c) => {
+      if (c.counselorUid === uid) return [c]
+      // Gọi chỉ có SIP (thiếu counselorUid) → gắn TVV đang xem để KPI đếm được.
+      if (!c.counselorUid && sip && c.sipUser?.trim() === sip) {
+        return [{ ...c, counselorUid: uid }]
+      }
+      return []
     })
   }
 
-  return calls.filter((c) => c.teamLeadUid === scope.teamLeadUid)
+  const roster = new Set((scope.counselorUids ?? []).map(String).filter(Boolean))
+  roster.add(scope.teamLeadUid)
+  return calls.filter((c) => {
+    if (c.teamLeadUid === scope.teamLeadUid) return true
+    if (c.counselorUid && roster.has(c.counselorUid)) return true
+    return false
+  })
 }
 
 function callInDateRange(c: OmicallCallRecord, fromMs: number, toMs: number): boolean {
@@ -314,7 +325,11 @@ export function useOmicallCalls({
           scope.mode === 'global'
             ? ({ mode: 'global' } as const)
             : scope.mode === 'team'
-              ? ({ mode: 'team', teamLeadUid: scope.teamLeadUid } as const)
+              ? ({
+                  mode: 'team',
+                  teamLeadUid: scope.teamLeadUid,
+                  counselorUids: scope.counselorUids,
+                } as const)
               : ({ mode: 'counselor', counselorUid: scope.counselorUid } as const)
 
         // Admin global: ưu tiên CF (một round-trip) trước khi quét chunk trên client.
@@ -351,6 +366,18 @@ export function useOmicallCalls({
           raw = applyOrgFilter(rawPrimary)
           truncatedOut = truncated
           startedAtFallbackOut = startedAtFallback
+
+          // Nhóm: doc thiếu teamLeadUid → query theo teamLeadUid trống; quét rộng rồi lọc roster.
+          if (
+            raw.length === 0 &&
+            scope.mode === 'team' &&
+            (scope.counselorUids?.length ?? 0) > 0
+          ) {
+            const fill = await fetchCallsByDateChunks(db, fromTs, toTs, fetchCap, { kind: 'none' })
+            if (fill.truncated) truncatedOut = true
+            if (fill.startedAtFallback) startedAtFallbackOut = true
+            raw = applyOrgFilter(fill.rows)
+          }
         }
 
         // Doc cũ có thể chỉ có sipUser, chưa gắn counselorUid — bù nhẹ theo SIP (trần thấp).

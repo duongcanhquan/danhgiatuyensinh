@@ -175,6 +175,7 @@ describe('scoring field coverage', () => {
       systemCode: 'VM-001',
       fatherName: 'Ba',
       motherName: 'Mẹ',
+      graduationScore: '8.5',
     })
     const rec = leadToEvaluationRecord(lead)
     for (const opt of AI_LEAD_FIELD_OPTIONS) {

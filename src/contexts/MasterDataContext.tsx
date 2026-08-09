@@ -133,7 +133,13 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
 export function useMasterDataState(): MasterDataState {
   const ctx = useContext(MasterDataContext)
   if (!ctx) {
-    throw new Error('useMasterData cần MasterDataProvider — bọc Layout hoặc SharedFirestoreDataProviders.')
+    return {
+      byKind: {},
+      catalogs: [],
+      loading: false,
+      error: null,
+      configured: false,
+    }
   }
   return ctx
 }

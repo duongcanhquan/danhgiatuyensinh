@@ -6,7 +6,7 @@ service cloud.firestore {
     // users, leads, leadSources, scholarships, scoringProfiles, scoringRuleTemplates, scoringAux,
     // orgSettings/{orgId}/settings/{docId}, organizations, platformAuditLogs,
     // masterData, consultingPlaybooks, scriptSnippets, auditLogs, knowledgeDocuments, ai_tasks, financeReports,
-    // omicallCalls, omicallSyncRuns, kpiDaily,
+    // omicallCalls, omicallSyncRuns, kpiDaily, kpiMonthly, kpiTargets, kpiManualScores, leadEvents,
     // leads/{id}/interactions, leads/{id}/aiInsightTasks
     //
     // --- Phase 0–4 multi-tenant (school = orgId) ---

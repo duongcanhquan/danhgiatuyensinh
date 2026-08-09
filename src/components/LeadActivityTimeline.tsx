@@ -6,6 +6,7 @@ import { useInteractions } from '../hooks/useInteractions'
 import { useAuditLogs } from '../hooks/useAuditLogs'
 import { useLeadOmicallCalls } from '../hooks/useLeadOmicallCalls'
 import { TagBadge } from './TagBadge'
+import { resolveCallIsValid } from '../utils/kpiCallValidity'
 
 const PIPELINE_LABEL: Record<string, string> = {
   NEW: 'Mới',
@@ -100,7 +101,7 @@ export function LeadActivityTimeline({
           if (row.kind === 'call') {
             const c = row.call
             const connected = c.answerSeconds > 0 || c.billSeconds > 0
-            const valid = c.isValidCall === true
+            const valid = resolveCallIsValid(c)
             return (
               <li
                 key={row.id}

@@ -9,6 +9,9 @@ import {
   dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
   isSoftOverwritableDisposition,
+  callWorkQueueRank,
+  compareCallWorkQueueOrder,
+  summarizeCallWorkQueue,
   leadMatchesCallWorkBucket,
   leadMatchesDisposition,
   resolveCallWorkBucket,
@@ -50,10 +53,38 @@ describe('resolveCallWorkBucket', () => {
     expect(resolveCallWorkBucket({})).toBe('uncalled')
   })
 
-  it('prefers explicit callWorkBucket', () => {
-    expect(resolveCallWorkBucket({ callWorkBucket: 'called', lastCallDispositionId: 'knm' })).toBe(
-      'called',
-    )
+  it('uses non-knm disposition over stored bucket', () => {
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'callback',
+        lastCallDispositionId: 'college_hot',
+      }),
+    ).toBe('called')
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'called',
+        lastCallDispositionId: 'callback_later',
+      }),
+    ).toBe('callback')
+  })
+
+  it('CONNECTED upgrades soft knm / stale callback to called', () => {
+    const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'callback',
+        lastCallDispositionId: 'knm',
+        lastCallAt: at,
+        lastCallOutcome: 'CONNECTED',
+      }),
+    ).toBe('called')
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'uncalled',
+        lastCallAt: at,
+        lastCallOutcome: 'CONNECTED',
+      }),
+    ).toBe('called')
   })
 
   it('infers from disposition when bucket missing', () => {
@@ -61,16 +92,46 @@ describe('resolveCallWorkBucket', () => {
     expect(resolveCallWorkBucket({ lastCallDispositionId: 'not_interested' })).toBe('called')
   })
 
+  it('NO_ANSWER / FOLLOW_UP downgrade stale stored called bucket', () => {
+    const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'called',
+        lastCallAt: at,
+        lastCallOutcome: 'NO_ANSWER',
+      }),
+    ).toBe('callback')
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'called',
+        lastCallAt: at,
+        lastCallOutcome: 'FOLLOW_UP',
+      }),
+    ).toBe('callback')
+  })
+
   it('infers from lastCallOutcome when no disposition', () => {
     const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
     expect(resolveCallWorkBucket({ lastCallAt: at, lastCallOutcome: 'NO_ANSWER' })).toBe('callback')
     expect(resolveCallWorkBucket({ lastCallAt: at, lastCallOutcome: 'FOLLOW_UP' })).toBe('callback')
     expect(resolveCallWorkBucket({ lastCallAt: at, lastCallOutcome: 'CONNECTED' })).toBe('called')
+    expect(resolveCallWorkBucket({ lastCallAt: at, lastCallOutcome: 'OTHER' })).toBe('called')
   })
 
   it('treats lastCallAiAt as evidence of prior call when lastCallAt missing', () => {
     const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
     expect(resolveCallWorkBucket({ lastCallAiAt: at, lastCallOutcome: 'CONNECTED' })).toBe('called')
+  })
+
+  it('does not trust stale uncalled when lastCallAt exists', () => {
+    const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
+    expect(
+      resolveCallWorkBucket({
+        callWorkBucket: 'uncalled',
+        lastCallAt: at,
+        lastCallOutcome: 'OTHER',
+      }),
+    ).toBe('called')
   })
 })
 
@@ -197,5 +258,34 @@ describe('lead match helpers', () => {
     expect(leadMatchesDisposition(lead, 'all')).toBe(true)
     expect(leadMatchesDisposition(lead, 'knm')).toBe(true)
     expect(leadMatchesDisposition(lead, 'working')).toBe(false)
+  })
+})
+
+describe('call work queue order + summary', () => {
+  it('ranks callback before uncalled before called', () => {
+    expect(callWorkQueueRank('callback')).toBeLessThan(callWorkQueueRank('uncalled'))
+    expect(callWorkQueueRank('uncalled')).toBeLessThan(callWorkQueueRank('called'))
+  })
+
+  it('sorts mixed list callback → uncalled → called', () => {
+    const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
+    const rows = [
+      { id: 'c', callWorkBucket: 'called' as const, lastCallAt: at, updatedAt: at, createdAt: at },
+      { id: 'u', callWorkBucket: 'uncalled' as const, updatedAt: at, createdAt: at },
+      { id: 'b', callWorkBucket: 'callback' as const, lastCallAt: at, updatedAt: at, createdAt: at },
+    ]
+    const sorted = [...rows].sort(compareCallWorkQueueOrder)
+    expect(sorted.map((r) => r.id)).toEqual(['b', 'u', 'c'])
+  })
+
+  it('summarizes remaining = uncalled + callback', () => {
+    const at = Timestamp.fromDate(new Date('2026-08-06T10:00:00'))
+    const s = summarizeCallWorkQueue([
+      { callWorkBucket: 'uncalled' },
+      { callWorkBucket: 'uncalled' },
+      { callWorkBucket: 'callback', lastCallAt: at },
+      { callWorkBucket: 'called', lastCallAt: at, lastCallOutcome: 'CONNECTED' },
+    ])
+    expect(s).toEqual({ total: 4, uncalled: 2, callback: 1, called: 1, remaining: 3 })
   })
 })

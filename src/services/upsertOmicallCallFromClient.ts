@@ -1,5 +1,17 @@
-import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  setDoc,
+  Timestamp,
+  where,
+  type Firestore,
+} from 'firebase/firestore'
 import { FS_COLLECTIONS, type OmicallCallTarget } from '../types'
+import { evaluateClientValidCall } from '../utils/kpiCallValidity'
 
 export type UpsertOmicallCallClientInput = {
   transactionId: string
@@ -7,12 +19,46 @@ export type UpsertOmicallCallClientInput = {
   leadId: string
   phone: string
   counselorUid: string
+  /** Trưởng nhóm — nếu thiếu sẽ tra roster `managedCounselorIds`. */
+  teamLeadUid?: string
   orgId?: string
   target?: OmicallCallTarget
   direction?: 'outbound' | 'inbound'
   billSeconds?: number
   hotline?: string
   sipUser?: string
+}
+
+async function resolveTeamLeadUidForUpsert(
+  db: Firestore,
+  counselorUid: string,
+  explicit?: string,
+  existing?: string | null,
+): Promise<string | null> {
+  const fromInput = explicit?.trim()
+  if (fromInput) return fromInput
+  const fromDoc = existing?.trim()
+  if (fromDoc) return fromDoc
+  const uid = counselorUid.trim()
+  if (!uid) return null
+  try {
+    const q = query(
+      collection(db, FS_COLLECTIONS.users),
+      where('managedCounselorIds', 'array-contains', uid),
+      limit(4),
+    )
+    const snap = await getDocs(q)
+    if (snap.empty) return null
+    let preferred: string | null = null
+    snap.forEach((d) => {
+      const role = String(d.data()?.role ?? '')
+      if (role === 'team_lead') preferred = d.id
+      else if (!preferred) preferred = d.id
+    })
+    return preferred
+  } catch {
+    return null
+  }
 }
 
 export function isPlaceholderOmicallCallUid(uid: string): boolean {
@@ -36,11 +82,25 @@ export async function upsertOmicallCallFromClient(
   }
 
   const bill = Math.max(0, Math.floor(input.billSeconds ?? 0))
+  const counselorUid = input.counselorUid.trim()
   const outcome = bill > 0 ? 'CONNECTED' : 'NO_ANSWER'
+  const validity = evaluateClientValidCall({
+    billSeconds: bill,
+    leadId,
+    counselorUid,
+    outcome,
+  })
   const now = Timestamp.now()
   const ref = doc(db, FS_COLLECTIONS.omicallCalls, transactionId)
   const existing = await getDoc(ref)
-  const prevCreated = existing.exists() ? existing.data()?.createdAt : undefined
+  const prev = existing.exists() ? (existing.data() as Record<string, unknown>) : undefined
+  const prevCreated = prev?.createdAt
+  const teamLeadUid = await resolveTeamLeadUidForUpsert(
+    db,
+    counselorUid,
+    input.teamLeadUid,
+    prev?.teamLeadUid ? String(prev.teamLeadUid) : null,
+  )
 
   await setDoc(
     ref,
@@ -52,7 +112,8 @@ export async function upsertOmicallCallFromClient(
       phoneNumber: input.phone.trim(),
       displayNumber: input.phone.trim(),
       leadId,
-      counselorUid: input.counselorUid,
+      counselorUid,
+      ...(teamLeadUid ? { teamLeadUid } : {}),
       orgId: input.orgId?.trim() || null,
       hotline: input.hotline?.trim() || null,
       sipUser: input.sipUser?.trim() || null,
@@ -62,8 +123,8 @@ export async function upsertOmicallCallFromClient(
       recordSeconds: 0,
       outcome,
       isFinal: true,
-      isValidCall: bill >= 45 && Boolean(leadId),
-      invalidReason: bill >= 45 ? null : 'under_45s_or_client',
+      isValidCall: validity.isValidCall,
+      invalidReason: validity.isValidCall ? null : validity.invalidReason ?? 'invalid_call',
       syncSource: 'sdk',
       provider: 'OMICALL',
       endedAt: now,
@@ -71,7 +132,7 @@ export async function upsertOmicallCallFromClient(
       updatedAt: now,
       createdAt: prevCreated ?? now,
       userDataLeadId: leadId,
-      userDataCounselorUid: input.counselorUid,
+      userDataCounselorUid: counselorUid,
       userDataTarget: input.target ?? 'student',
     },
     { merge: true },

@@ -818,9 +818,59 @@ a {
 }
 
 .bento-cell--ink .bento-stat__label,
-.bento-cell--hero .bento-stat__label,
-.bento-cell--accent .bento-stat__label {
-  color: rgb(248 250 252 / 0.72);
+.bento-cell--accent .bento-stat__label,
+.bento-cell--hero .bento-stat__label {
+  color: rgb(255 255 255 / 0.72);
+}
+
+.bento-module {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.bento-module__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bento-module__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: inherit;
+  line-height: 1.3;
+}
+
+.bento-module__sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--vm-text-muted);
+}
+
+.bento-cell--ink .bento-module__sub,
+.bento-cell--accent .bento-module__sub,
+.bento-cell--hero .bento-module__sub {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.bento-module__body {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.bento-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bento-gap);
+  width: 100%;
+  min-width: 0;
 }
 
 .bento-stat__value {

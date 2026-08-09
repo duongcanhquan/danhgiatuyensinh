@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const setDoc = vi.fn()
 const getDoc = vi.fn()
+const getDocs = vi.fn()
 const doc = vi.fn((_db: unknown, ...parts: string[]) => ({ path: parts.join('/') }))
+const collection = vi.fn()
+const query = vi.fn((...args: unknown[]) => args)
+const where = vi.fn((...args: unknown[]) => args)
+const limit = vi.fn((n: number) => n)
 
 vi.mock('firebase/firestore', () => {
   class FakeTs {
@@ -15,6 +20,11 @@ vi.mock('firebase/firestore', () => {
     doc: (...a: unknown[]) => doc(...a),
     setDoc: (...a: unknown[]) => setDoc(...a),
     getDoc: (...a: unknown[]) => getDoc(...a),
+    getDocs: (...a: unknown[]) => getDocs(...a),
+    collection: (...a: unknown[]) => collection(...a),
+    query: (...a: unknown[]) => query(...a),
+    where: (...a: unknown[]) => where(...a),
+    limit: (...a: unknown[]) => limit(...a),
   }
 })
 
@@ -24,8 +34,10 @@ describe('upsertOmicallCallFromClient', () => {
   beforeEach(() => {
     setDoc.mockReset()
     getDoc.mockReset()
+    getDocs.mockReset()
     setDoc.mockResolvedValue(undefined)
     getDoc.mockResolvedValue({ exists: () => false, data: () => undefined })
+    getDocs.mockResolvedValue({ empty: true, forEach: () => undefined })
   })
 
   it('writes final omicallCalls doc with endedAt and lead mapping', async () => {
@@ -49,10 +61,42 @@ describe('upsertOmicallCallFromClient', () => {
     expect(payload.billSeconds).toBe(48)
     expect(payload.outcome).toBe('CONNECTED')
     expect(payload.isFinal).toBe(true)
+    expect(payload.isValidCall).toBe(true)
     expect(payload.syncSource).toBe('sdk')
     expect(payload.sipUser).toBe('101')
     expect(payload.hotline).toBe('1900')
     expect(payload.endedAt).toBeTruthy()
+  })
+
+  it('marks HL from 30s threshold', async () => {
+    await upsertOmicallCallFromClient({} as never, {
+      transactionId: 'tx-30',
+      leadId: 'lead-1',
+      phone: '090',
+      counselorUid: 'u1',
+      billSeconds: 30,
+    })
+    const payload = setDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(payload.isValidCall).toBe(true)
+  })
+
+  it('writes teamLeadUid from roster lookup', async () => {
+    getDocs.mockResolvedValue({
+      empty: false,
+      forEach: (fn: (d: { id: string; data: () => Record<string, unknown> }) => void) => {
+        fn({ id: 'tl1', data: () => ({ role: 'team_lead' }) })
+      },
+    })
+    await upsertOmicallCallFromClient({} as never, {
+      transactionId: 'tx-tl',
+      leadId: 'lead-1',
+      phone: '090',
+      counselorUid: 'u1',
+      billSeconds: 40,
+    })
+    const payload = setDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(payload.teamLeadUid).toBe('tl1')
+    expect(payload.isValidCall).toBe(true)
   })
 
   it('skips empty ids', async () => {
@@ -91,5 +135,6 @@ describe('upsertOmicallCallFromClient', () => {
     const payload = setDoc.mock.calls[0]![1] as Record<string, unknown>
     expect(payload.createdAt).toBe(oldCreated)
     expect(payload.outcome).toBe('NO_ANSWER')
+    expect(payload.isValidCall).toBe(false)
   })
 })

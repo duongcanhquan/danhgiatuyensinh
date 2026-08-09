@@ -21,13 +21,9 @@ import { canAccessSettingsPage } from '../auth/permissions'
 import type { Permission } from '../types'
 import { USER_ROLE_LABELS } from '../types'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
-import { InfoScoreRulesProvider } from '../contexts/InfoScoreRulesContext'
-import { LeadClassificationRulesProvider } from '../contexts/LeadClassificationRulesContext'
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
-import { SharedFirestoreDataProviders } from '../contexts/SharedFirestoreDataProviders'
 import { OrgAiIntegrationProvider } from '../contexts/OrgAiIntegrationContext'
-import { OrgProvider } from '../contexts/OrgProvider'
 import { OrgSwitcher } from './OrgSwitcher'
 import { ChangePasswordPanel } from './ChangePasswordPanel'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
@@ -183,10 +179,10 @@ export function Layout() {
             </>
           )}
         </NavLink>
-      </nav>
 
-      <div className="shrink-0 border-t border-white/10 px-3 py-3">
-        <OrgSwitcher className="mb-3" />
+        <div className="my-3 border-t border-white/15" role="separator" aria-hidden />
+
+        <OrgSwitcher className="mb-2" />
         <div className="flex items-center gap-2.5 rounded-xl bg-white/5 px-3 py-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
             <User className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -207,12 +203,11 @@ export function Layout() {
             Đăng xuất
           </button>
         ) : null}
-      </div>
+      </nav>
     </>
   )
 
   return (
-    <OrgProvider>
     <div className="relative min-h-[100dvh] text-slate-800 antialiased">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="absolute -left-[10%] -top-[15%] h-[420px] w-[480px] rounded-full bg-blue-400/6 blur-[100px]" />
@@ -278,19 +273,13 @@ export function Layout() {
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[var(--vm-canvas)]">
             <main className="safe-area-pb-nav flex min-h-0 min-w-0 w-full flex-1 flex-col">
-              <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-2.5 text-sm font-normal leading-relaxed text-[var(--vm-text)] sm:px-4 sm:py-3 md:px-6 md:py-4 lg:px-8">
+              <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-3 text-sm font-normal leading-relaxed text-[var(--vm-text)] sm:px-4 sm:py-4 md:px-6 md:py-5 lg:px-8">
                 <OrgAiIntegrationProvider>
-                  <SharedFirestoreDataProviders>
-                    <InfoScoreRulesProvider>
-                      <LeadClassificationRulesProvider>
-                        <KpiEvaluationRulesProvider>
-                          <KpiV2ConfigProvider>
-                            <Outlet />
-                          </KpiV2ConfigProvider>
-                        </KpiEvaluationRulesProvider>
-                      </LeadClassificationRulesProvider>
-                    </InfoScoreRulesProvider>
-                  </SharedFirestoreDataProviders>
+                  <KpiEvaluationRulesProvider>
+                    <KpiV2ConfigProvider>
+                      <Outlet />
+                    </KpiV2ConfigProvider>
+                  </KpiEvaluationRulesProvider>
                 </OrgAiIntegrationProvider>
               </div>
             </main>
@@ -328,6 +317,5 @@ export function Layout() {
         </button>
       </nav>
     </div>
-    </OrgProvider>
   )
 }

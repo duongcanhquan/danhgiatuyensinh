@@ -6,7 +6,7 @@ import { getFirebaseApp, isFirebaseConfigured } from './firebase'
 
 type FetchOmicallCallsScope =
   | { mode: 'global' }
-  | { mode: 'team'; teamLeadUid?: string }
+  | { mode: 'team'; teamLeadUid?: string; counselorUids?: string[] }
   | { mode: 'counselor'; counselorUid: string }
 
 type FetchOmicallCallsInput = {
@@ -36,6 +36,8 @@ type OmicallCallWire = {
   state?: string
   isFinal?: boolean
   callNote?: string
+  isValidCall?: boolean
+  invalidReason?: string
   createdAtMs?: number
   startedAtMs?: number
   endedAtMs?: number
@@ -61,6 +63,7 @@ function tsFromMs(ms?: number): Timestamp | undefined {
 }
 
 function mapWireToCall(row: OmicallCallWire): OmicallCallRecord {
+  const hasExplicitValid = row.isValidCall === true || row.isValidCall === false
   return {
     id: row.id,
     transactionId: row.transactionId,
@@ -81,6 +84,8 @@ function mapWireToCall(row: OmicallCallWire): OmicallCallRecord {
     state: row.state,
     isFinal: row.isFinal,
     callNote: row.callNote,
+    isValidCall: hasExplicitValid ? row.isValidCall : undefined,
+    invalidReason: row.invalidReason,
     createdAt: tsFromMs(row.createdAtMs),
     startedAt: tsFromMs(row.startedAtMs),
     endedAt: tsFromMs(row.endedAtMs),

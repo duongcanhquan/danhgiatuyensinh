@@ -235,7 +235,8 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
 export function useCounselorDirectoryState(): CounselorDirectoryState {
   const ctx = useContext(CounselorDirectoryContext)
   if (!ctx) {
-    throw new Error('useCounselorDirectory cần CounselorDirectoryProvider.')
+    // Panel OMICall / hook KPI có thể render ngoài Layout — không crash; số liệu nhóm tạm rỗng.
+    return { users: [], counselors: [], fieldStaff: [], loading: false, error: null }
   }
   return ctx
 }

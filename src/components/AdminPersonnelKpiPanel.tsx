@@ -45,7 +45,10 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
   const tierLabels = useMemo(() => getBonusTierLabels(runtime), [runtime])
   const [month, setMonth] = useState(currentMonthKey())
   const [reportTab, setReportTab] = useState<'period' | 'monthly'>(variant === 'monthly-only' ? 'monthly' : 'period')
-  const { rows, loading, error } = useCounselorMonthlyKpi(month)
+  const { rows, loading, error } = useCounselorMonthlyKpi(month, {
+    // Tháng hiện tại luôn bù live; tháng cũ cũng bù nhẹ khi rollup chưa kịp.
+    mergeLiveCalls: true,
+  })
   const { users } = useCounselorDirectory()
   const [expandedUid, setExpandedUid] = useState<string | null>(null)
 
@@ -264,7 +267,8 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
               {!loading && !teamRows.length ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                    Chưa có KPI tháng — kiểm tra đồng bộ OMICall.
+                    Chưa có số liệu nhóm. Kiểm tra phân nhóm sale trong Cài đặt nhân sự, và đồng bộ
+                    OMICall (số liệu tháng cũng được bù từ cuộc gọi / KPI ngày trong tháng).
                   </td>
                 </tr>
               ) : null}

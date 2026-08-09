@@ -26,11 +26,13 @@ type StaffUserLite = {
   role: string
   isActive: boolean
   managedCounselorIds: string[]
+  departmentId?: string
+  professionUnitId?: string
 }
 
 type OmicallClientScope =
   | { mode: 'global' }
-  | { mode: 'team'; teamLeadUid?: string }
+  | { mode: 'team'; teamLeadUid?: string; counselorUids?: string[] }
   | { mode: 'counselor'; counselorUid?: string }
 
 type OmicallCallWire = {
@@ -53,6 +55,8 @@ type OmicallCallWire = {
   state?: string
   isFinal?: boolean
   callNote?: string
+  isValidCall?: boolean
+  invalidReason?: string
   createdAtMs?: number
   startedAtMs?: number
   endedAtMs?: number
@@ -69,6 +73,19 @@ function num(v: unknown): number {
 
 function isAdminLikeRole(role: string): boolean {
   return role === 'admin' || role === 'super_admin'
+}
+
+function isTeamManagerRole(role: string): boolean {
+  return (
+    role === 'team_lead' ||
+    role === 'head_of_profession' ||
+    role === 'head_of_department' ||
+    role === 'admin'
+  )
+}
+
+function isFieldStaffRole(role: string): boolean {
+  return role === 'counselor' || role === 'ctv' || isTeamManagerRole(role)
 }
 
 async function loadStaffUser(db: Firestore, uid: string): Promise<StaffUserLite | null> {
@@ -94,12 +111,42 @@ async function loadStaffUser(db: Firestore, uid: string): Promise<StaffUserLite 
         managedCounselorIds: Array.isArray(d.managedCounselorIds)
           ? d.managedCounselorIds.map((x) => String(x))
           : [],
+        departmentId: str(d.departmentId) || undefined,
+        professionUnitId: str(d.professionUnitId) || undefined,
       }
     } catch (e) {
       console.warn('[fetchOmicallCallsForClient] loadStaffUser', databaseId, e)
     }
   }
   return null
+}
+
+/** Roster nhóm: managedCounselorIds, hoặc fallback cùng khoa/phòng (khớp client). */
+async function expandTeamRoster(db: Firestore, lead: StaffUserLite): Promise<Set<string>> {
+  const teamSet = new Set<string>(lead.managedCounselorIds)
+  if (isTeamManagerRole(lead.role)) teamSet.add(lead.id)
+  if (lead.managedCounselorIds.length > 0) return teamSet
+
+  const field = lead.departmentId
+    ? ('departmentId' as const)
+    : lead.professionUnitId
+      ? ('professionUnitId' as const)
+      : null
+  const value = lead.departmentId || lead.professionUnitId
+  if (!field || !value) return teamSet
+
+  try {
+    const snap = await db.collection(COLLECTIONS.users).where(field, '==', value).limit(80).get()
+    for (const doc of snap.docs) {
+      const d = doc.data() ?? {}
+      if (d.isActive === false) continue
+      if (!isFieldStaffRole(str(d.role))) continue
+      teamSet.add(doc.id)
+    }
+  } catch (e) {
+    console.warn('[fetchOmicallCallsForClient] expandTeamRoster', e)
+  }
+  return teamSet
 }
 
 function tsMs(ts?: Timestamp): number | undefined {
@@ -112,6 +159,7 @@ function tsMs(ts?: Timestamp): number | undefined {
 }
 
 function toCallWireFromOmicallDoc(id: string, data: Record<string, unknown>): OmicallCallWire {
+  const isValidCall = data.isValidCall === true ? true : data.isValidCall === false ? false : undefined
   return {
     id,
     transactionId: str(data.transactionId) || id,
@@ -137,6 +185,8 @@ function toCallWireFromOmicallDoc(id: string, data: Record<string, unknown>): Om
     state: str(data.state) || undefined,
     isFinal: data.isFinal === true,
     callNote: str(data.callNote) || undefined,
+    isValidCall,
+    invalidReason: str(data.invalidReason) || undefined,
     createdAtMs: tsMs(data.createdAt as Timestamp | undefined),
     startedAtMs: tsMs(data.startedAt as Timestamp | undefined),
     endedAtMs: tsMs(data.endedAt as Timestamp | undefined),
@@ -159,6 +209,11 @@ function toCallWireFromInteractionDoc(id: string, data: Record<string, unknown>)
   const callOutcome = str(data.callOutcome).toUpperCase()
   const outcome: CallOutcome =
     callOutcome === 'CONNECTED' ? 'CONNECTED' : callOutcome === 'NO_ANSWER' ? 'NO_ANSWER' : 'OTHER'
+  const leadId = str(data.leadId) || undefined
+  const counselorUid = str(data.authorUid) || undefined
+  const minBill = 30
+  const isValidCall =
+    Boolean(counselorUid) && Boolean(leadId) && billSeconds >= minBill && outcome === 'CONNECTED'
   return {
     id: `int-${id}`,
     transactionId: str(data.providerCallId) || id,
@@ -167,8 +222,8 @@ function toCallWireFromInteractionDoc(id: string, data: Record<string, unknown>)
     displayNumber: str(data.displayNumber) || undefined,
     hotline: str(data.hotline) || undefined,
     sipUser: str(data.sipUser) || undefined,
-    leadId: str(data.leadId) || undefined,
-    counselorUid: str(data.authorUid) || undefined,
+    leadId,
+    counselorUid,
     teamLeadUid: undefined,
     answerSeconds,
     billSeconds,
@@ -179,6 +234,16 @@ function toCallWireFromInteractionDoc(id: string, data: Record<string, unknown>)
     state: 'ended',
     isFinal: true,
     callNote: note || undefined,
+    isValidCall,
+    invalidReason: isValidCall
+      ? undefined
+      : !counselorUid
+        ? 'missing_counselor'
+        : !leadId
+          ? 'missing_lead'
+          : billSeconds < minBill
+            ? 'short_call'
+            : 'not_connected',
     createdAtMs: tsMs(ts),
     startedAtMs: tsMs(ts),
     endedAtMs: tsMs(ts),
@@ -194,7 +259,8 @@ function scopeAllowsWireCall(
   if (isAdminLikeRole(caller.role)) {
     if (requestedScope.mode === 'counselor') return call.counselorUid === requestedScope.counselorUid
     if (requestedScope.mode === 'team' && requestedScope.teamLeadUid) {
-      return call.teamLeadUid === requestedScope.teamLeadUid
+      const uid = call.counselorUid || ''
+      return call.teamLeadUid === requestedScope.teamLeadUid || (uid !== '' && teamSet.has(uid))
     }
     return true
   }
@@ -378,15 +444,51 @@ export const fetchOmicallCallsForClient = onCall(
       const toMs = Math.max(fromMs, Math.round(num(request.data?.toMs)))
       const maxRows = Math.min(Math.max(Math.round(num(request.data?.maxRows) || 500), 50), 4000)
       const rawScope = (request.data?.scope ?? {}) as Record<string, unknown>
+      const clientCounselorUids = Array.isArray(rawScope.counselorUids)
+        ? rawScope.counselorUids.map((x) => str(x)).filter(Boolean).slice(0, 40)
+        : []
       const requestedScope: OmicallClientScope =
         str(rawScope.mode) === 'counselor'
           ? { mode: 'counselor', counselorUid: str(rawScope.counselorUid) || undefined }
           : str(rawScope.mode) === 'team'
-            ? { mode: 'team', teamLeadUid: str(rawScope.teamLeadUid) || undefined }
+            ? {
+                mode: 'team',
+                teamLeadUid: str(rawScope.teamLeadUid) || undefined,
+                counselorUids: clientCounselorUids,
+              }
             : { mode: 'global' }
 
-      const teamSet = new Set<string>(caller.managedCounselorIds)
-      if (caller.role === 'team_lead') teamSet.add(caller.id)
+      let teamSet = new Set<string>(caller.managedCounselorIds)
+      if (isTeamManagerRole(caller.role)) teamSet.add(caller.id)
+
+      // Admin lọc theo một trưởng nhóm: roster của trưởng đó (managed + fallback khoa/phòng).
+      if (
+        isAdminLikeRole(caller.role) &&
+        requestedScope.mode === 'team' &&
+        requestedScope.teamLeadUid &&
+        requestedScope.teamLeadUid !== caller.id
+      ) {
+        const tl = await loadStaffUser(db, requestedScope.teamLeadUid)
+        teamSet = tl ? await expandTeamRoster(db, tl) : new Set()
+      } else if (
+        requestedScope.mode === 'team' &&
+        (!caller.managedCounselorIds.length || teamSet.size <= 1)
+      ) {
+        teamSet = await expandTeamRoster(db, caller)
+      }
+
+      // Client gửi roster khoa/phòng: chỉ nhận UID đã nằm trong teamSet đã authorize.
+      if (requestedScope.mode === 'team' && clientCounselorUids.length > 0) {
+        if (teamSet.size <= 1 && isTeamManagerRole(caller.role)) {
+          for (const id of clientCounselorUids) teamSet.add(id)
+          teamSet.add(caller.id)
+        } else {
+          for (const id of clientCounselorUids) {
+            if (teamSet.has(id)) continue
+            // Đã có roster tường minh — bỏ UID ngoài phạm vi.
+          }
+        }
+      }
 
       const fromTs = Timestamp.fromMillis(fromMs)
       const toTs = Timestamp.fromMillis(toMs)

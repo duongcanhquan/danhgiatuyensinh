@@ -1,4 +1,6 @@
 import { todayDateKey } from './kpiDisplay'
+import { resolveCallWorkBucket, type CallWorkLeadFields } from './callWorkQueue'
+import { Timestamp } from 'firebase/firestore'
 
 export type TeamRosterMemberInput = {
   counselorUid: string
@@ -10,6 +12,7 @@ export type TeamRosterLeadInput = {
   assigneeUid: string | null
   callWorkBucket?: 'uncalled' | 'callback' | 'called' | null
   lastCallDispositionId?: string | null
+  lastCallOutcome?: CallWorkLeadFields['lastCallOutcome']
   lastCallAtMs?: number | null
 }
 
@@ -61,10 +64,18 @@ function rate(n: number, d: number): number {
 }
 
 function isCalledLead(lead: TeamRosterLeadInput): boolean {
-  if (lead.callWorkBucket === 'callback' || lead.callWorkBucket === 'called') return true
-  if (lead.callWorkBucket === 'uncalled') return false
-  if (lead.lastCallDispositionId?.trim()) return true
-  return Boolean(lead.lastCallAtMs)
+  const at =
+    lead.lastCallAtMs != null && lead.lastCallAtMs > 0
+      ? Timestamp.fromMillis(lead.lastCallAtMs)
+      : null
+  return (
+    resolveCallWorkBucket({
+      callWorkBucket: lead.callWorkBucket,
+      lastCallDispositionId: lead.lastCallDispositionId,
+      lastCallOutcome: lead.lastCallOutcome,
+      lastCallAt: at,
+    }) !== 'uncalled'
+  )
 }
 
 function buildLeadCallDateKeys(

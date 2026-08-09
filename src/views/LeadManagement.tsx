@@ -60,6 +60,8 @@ import { leadNeedsAutoScorePersist } from '../hooks/leadNeedsAutoScorePersist'
 import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
+import { AppPageHeader } from '../components/AppPageHeader'
+import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import { LlmAccessHelpPanel } from '../components/LlmAccessHelpPanel'
 import { LeadKnowledgePanel } from '../components/LeadKnowledgePanel'
@@ -95,7 +97,7 @@ import {
 } from '../utils/leadCallSignals'
 import {
   CALL_DISPOSITIONS,
-  compareUncalledQueueOrder,
+  compareCallWorkQueueOrder,
   buildCallWorkLeadPatch,
   dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
@@ -103,6 +105,7 @@ import {
   leadMatchesCallWorkBucket,
   leadMatchesDisposition,
   resolveCallWorkBucket,
+  summarizeCallWorkQueue,
   type CallDispositionFilter,
   type CallDispositionId,
   type CallWorkBucketFilter,
@@ -192,7 +195,7 @@ const LEAD_FILTER_LABEL =
 const LEAD_FILTER_CONTROL =
   'h-8 w-full rounded-md border border-slate-200/95 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-amber-400 focus:ring-1 focus:ring-amber-100'
 const LEAD_BTN =
-  'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold shadow-sm transition'
+  'inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-semibold shadow-sm transition disabled:cursor-not-allowed'
 
 /** Bộ lọc đang chọn (nháp) vs đã áp dụng — chỉ chạy khi bấm «Áp dụng lọc». */
 type LeadUiFilters = {
@@ -946,11 +949,10 @@ export function LeadManagement() {
 
   const sortedFiltered = useMemo(() => {
     const rows = [...filtered]
-    if (callWorkBucketFilter === 'uncalled' && sortKey === 'none') {
-      rows.sort(compareUncalledQueueOrder)
+    if (sortKey === 'none') {
+      rows.sort(compareCallWorkQueueOrder)
       return rows
     }
-    if (sortKey === 'none') return rows
     const dir = sortDir === 'asc' ? 1 : -1
     const scoreOf = (l: Lead) =>
       profileScoringActive
@@ -987,8 +989,16 @@ export function LeadManagement() {
     profileScoringActive,
     scoreByLeadId,
     infoScoreRuntime,
-    callWorkBucketFilter,
   ])
+
+  /** Tổng kết hàng chờ của người đang đăng nhập (hồ sơ gán cho mình trong phạm vi đã tải). */
+  const myCallWorkSummary = useMemo(() => {
+    const uid = profile?.id?.trim()
+    const mine = uid
+      ? leads.filter((l) => effectiveLeadAssigneeUid(l) === uid)
+      : []
+    return summarizeCallWorkQueue(mine)
+  }, [leads, profile?.id])
 
   /**
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
@@ -1183,6 +1193,49 @@ export function LeadManagement() {
     [mergeListFilterUrl, setPage],
   )
 
+  /** Hàng chờ gọi / ô tổng kết: áp dụng ngay. `pinMine` = lọc thêm hồ sơ gán cho mình. */
+  const applyCallQueueQuick = useCallback(
+    (callQueue: CallWorkBucketFilter, opts?: { pinMine?: boolean }) => {
+      const uid = profile?.id?.trim() ?? ''
+      const pinMine = Boolean(opts?.pinMine && uid)
+      setDraftFilters((prev) => ({
+        ...prev,
+        callQueue,
+        ...(pinMine ? { assignee: uid } : {}),
+      }))
+      setCallWorkBucketFilter(callQueue)
+      if (pinMine) setAssigneeFilter(uid)
+      mergeListFilterUrl({
+        [LWF.CQ]: callQueue === 'all' ? null : callQueue,
+        ...(pinMine ? { [LWF.ASSIGN]: uid } : {}),
+      })
+      setPage(1)
+    },
+    [mergeListFilterUrl, setPage, profile?.id],
+  )
+
+  /** Note sau gọi: áp dụng ngay (cùng hàng chờ gọi). */
+  const applyDispositionQuick = useCallback(
+    (disposition: CallDispositionFilter) => {
+      setDraftFilters((prev) => ({ ...prev, disposition }))
+      setDispositionFilter(disposition)
+      mergeListFilterUrl({ [LWF.DISP]: disposition === 'all' ? null : disposition })
+      setPage(1)
+    },
+    [mergeListFilterUrl, setPage],
+  )
+
+  /** Nhãn HOT/WARM/…: áp dụng ngay. */
+  const applyTagQuick = useCallback(
+    (tag: string) => {
+      setDraftFilters((prev) => ({ ...prev, tag }))
+      setTagFilter(tag)
+      mergeListFilterUrl({ [LWF.TAG]: tag === 'ALL' ? null : tag })
+      setPage(1)
+    },
+    [mergeListFilterUrl, setPage],
+  )
+
   const discardDraftFilters = useCallback(() => {
     setDraftFilters(appliedFiltersSnapshot)
   }, [appliedFiltersSnapshot])
@@ -1236,6 +1289,7 @@ export function LeadManagement() {
         label: `Nhãn: ${tagFilter}`,
         onClear: () => {
           setTagFilter('ALL')
+          setDraftFilters((prev) => ({ ...prev, tag: 'ALL' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.TAG]: null })
         },
@@ -1245,13 +1299,14 @@ export function LeadManagement() {
       const callLabels: Record<Exclude<CallWorkBucketFilter, 'all'>, string> = {
         uncalled: 'Chưa gọi',
         callback: 'Gọi lại',
-        called: 'Đã gọi',
+        called: 'Đã xử lý',
       }
       out.push({
         id: 'callQueue',
         label: `Hàng chờ: ${callLabels[callWorkBucketFilter]}`,
         onClear: () => {
           setCallWorkBucketFilter('all')
+          setDraftFilters((prev) => ({ ...prev, callQueue: 'all' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.CQ]: null })
         },
@@ -1264,6 +1319,7 @@ export function LeadManagement() {
         label: `Note: ${disp?.label ?? dispositionFilter}`,
         onClear: () => {
           setDispositionFilter('all')
+          setDraftFilters((prev) => ({ ...prev, disposition: 'all' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.DISP]: null })
         },
@@ -1361,6 +1417,7 @@ export function LeadManagement() {
         label: `TVV: ${al}`,
         onClear: () => {
           setAssigneeFilter('')
+          setDraftFilters((prev) => ({ ...prev, assignee: '' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.ASSIGN]: null })
         },
@@ -2655,7 +2712,19 @@ export function LeadManagement() {
   }, [leads, selectedIds, evalMapForExport, activeScoringProfile])
 
   return (
-    <div className="space-y-3">
+    <div className="bento-board">
+      <BentoCell variant="hero" className="!p-3 sm:!p-4">
+        <AppPageHeader
+          title="Hồ sơ"
+          meta={
+            <span className="text-teal-100/85">
+              Tìm · lọc · gọi · cập nhật — danh sách xếp Gọi lại → Chưa gọi → Đã xử lý
+            </span>
+          }
+          className="!mb-0 [&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+        />
+      </BentoCell>
+
       {!configured || !db ? (
         <div className="flex justify-end">
           <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-xs text-amber-900">
@@ -2670,10 +2739,10 @@ export function LeadManagement() {
         </div>
       ) : null}
 
-      <section className="app-surface-elevated space-y-2 p-2.5 sm:p-3">
+      <BentoCell className="space-y-2 !p-2.5 sm:!p-3">
         {/* Tổng kết nhẹ — luôn hiện */}
         <div
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-xs text-slate-600"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-xs text-slate-600"
           role="status"
           aria-live="polite"
         >
@@ -2807,8 +2876,13 @@ export function LeadManagement() {
             ) : null}
             <button
               type="button"
-              title="Chọn lọc AI Shortlist — nhớ bấm «Áp dụng lọc»."
-              onClick={() => patchDraftFilters({ aiShortlistOnly: !draftFilters.aiShortlistOnly })}
+              title="Bật/tắt lọc AI Shortlist ngay"
+              onClick={() => {
+                const next = !draftFilters.aiShortlistOnly
+                setDraftFilters((prev) => ({ ...prev, aiShortlistOnly: next }))
+                setAiShortlistOnly(next)
+                setPage(1)
+              }}
               className={[
                 LEAD_BTN,
                 draftFilters.aiShortlistOnly
@@ -2913,17 +2987,67 @@ export function LeadManagement() {
           </div>
         </div>
 
-        {/* Hàng chờ gọi + nhãn nhanh */}
+        {/* Tổng kết hàng chờ của tôi + lọc nhanh */}
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-t border-slate-200/60 pt-2">
+          {myCallWorkSummary.total > 0 ? (
+            <BentoGrid className="w-full sm:!grid-cols-2 lg:!grid-cols-4" tight>
+              <button
+                type="button"
+                onClick={() => applyCallQueueQuick('callback', { pinMine: true })}
+                className="bento-stat bento-cell cursor-pointer border-amber-200/90 !bg-amber-50/95 text-left hover:border-amber-400"
+                title="Mở hàng chờ gọi lại của bạn"
+              >
+                <p className="bento-stat__label !text-amber-800">Cần gọi lại</p>
+                <p className="bento-stat__value !text-amber-950">
+                  {myCallWorkSummary.callback.toLocaleString('vi-VN')}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => applyCallQueueQuick('uncalled', { pinMine: true })}
+                className="bento-stat bento-cell cursor-pointer border-sky-200/90 !bg-sky-50/95 text-left hover:border-sky-400"
+                title="Mở hồ sơ chưa gọi của bạn"
+              >
+                <p className="bento-stat__label !text-sky-800">Chưa gọi</p>
+                <p className="bento-stat__value !text-sky-950">
+                  {myCallWorkSummary.uncalled.toLocaleString('vi-VN')}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => applyCallQueueQuick('called', { pinMine: true })}
+                className="bento-stat bento-cell bento-cell--accent cursor-pointer text-left"
+                title="Đã xử lý = không còn trong hàng chờ gọi lại (không phải mọi lần bấm gọi)"
+              >
+                <p className="bento-stat__label">Đã xử lý</p>
+                <p className="bento-stat__value">
+                  {myCallWorkSummary.called.toLocaleString('vi-VN')}
+                </p>
+              </button>
+              <BentoStat
+                label="Còn lại / tổng của tôi"
+                value={
+                  <>
+                    {myCallWorkSummary.remaining.toLocaleString('vi-VN')}
+                    <span className="text-base font-semibold opacity-70">
+                      {' '}
+                      / {myCallWorkSummary.total.toLocaleString('vi-VN')}
+                    </span>
+                  </>
+                }
+                tone="ink"
+              />
+            </BentoGrid>
+          ) : null}
           <div className="min-w-0">
             <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hàng chờ gọi</p>
             <div className="flex flex-wrap gap-1" role="tablist" aria-label="Hàng chờ gọi">
               {(
                 [
                   { id: 'all' as const, label: 'Tất cả' },
-                  { id: 'uncalled' as const, label: 'Chưa gọi' },
                   { id: 'callback' as const, label: 'Gọi lại' },
-                  { id: 'called' as const, label: 'Đã gọi' },
+                  { id: 'uncalled' as const, label: 'Chưa gọi' },
+                  { id: 'called' as const, label: 'Đã xử lý' },
                 ] as const
               ).map((tab) => {
                 const active = draftFilters.callQueue === tab.id
@@ -2933,8 +3057,8 @@ export function LeadManagement() {
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    onClick={() => patchDraftFilters({ callQueue: tab.id })}
-                    className={`inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold transition ${
+                    onClick={() => applyCallQueueQuick(tab.id)}
+                    className={`inline-flex h-8 cursor-pointer items-center rounded-md px-2.5 text-xs font-semibold transition ${
                       active
                         ? 'bg-amber-500 text-white shadow-sm'
                         : 'border border-slate-200/95 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/60'
@@ -2945,6 +3069,11 @@ export function LeadManagement() {
                 )
               })}
             </div>
+            <p className="mt-1 max-w-xl text-[10px] leading-snug text-slate-500">
+              Xếp: Gọi lại → Chưa gọi → Đã xử lý. Ô tổng kết đếm hồ sơ gán cho bạn trên danh sách đang tải
+              {listNeedsFullScope ? '' : ' (một trang)'}
+              {' — '}bấm ô để mở đủ hàng chờ của bạn.
+            </p>
           </div>
           <label
             className={`${LEAD_FILTER_LABEL} w-[9.5rem] shrink-0`}
@@ -2957,9 +3086,9 @@ export function LeadManagement() {
                 const v = e.target.value
                 const next: CallDispositionFilter =
                   v === 'all' || !isCallDispositionId(v) ? 'all' : v
-                patchDraftFilters({ disposition: next })
+                applyDispositionQuick(next)
               }}
-              className={`${LEAD_FILTER_CONTROL} normal-case tracking-normal`}
+              className={`${LEAD_FILTER_CONTROL} cursor-pointer normal-case tracking-normal`}
             >
               <option value="all">Tất cả note</option>
               {CALL_DISPOSITIONS.map((d) => (
@@ -2975,9 +3104,9 @@ export function LeadManagement() {
               <button
                 type="button"
                 disabled={!scoringProfiles.length}
-                onClick={() => patchDraftFilters({ tag: 'ALL' })}
+                onClick={() => applyTagQuick('ALL')}
                 className={[
-                  'inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold transition',
+                  'inline-flex h-8 cursor-pointer items-center rounded-md border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed',
                   draftFilters.tag === 'ALL'
                     ? 'border-slate-700 bg-slate-800 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300',
@@ -2993,9 +3122,9 @@ export function LeadManagement() {
                     key={tg}
                     type="button"
                     disabled={!scoringProfiles.length}
-                    onClick={() => patchDraftFilters({ tag: tg })}
+                    onClick={() => applyTagQuick(tg)}
                     className={[
-                      'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold transition',
+                      'inline-flex h-8 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed',
                       on
                         ? tg === 'HOT'
                           ? 'border-rose-500 bg-rose-600 text-white'
@@ -3323,13 +3452,13 @@ export function LeadManagement() {
             ) : null}
           </div>
         </details>
-      </section>
+      </BentoCell>
 
       {inspectProfileOpen && activeScoringProfile ? (
         <ScoringProfileInspectModal profile={activeScoringProfile} onClose={() => setInspectProfileOpen(false)} />
       ) : null}
 
-      <div className="app-surface-elevated overflow-hidden transition-all duration-300">
+      <BentoCell className="!p-0 transition-all duration-300">
         {aiMinerError ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200/80 bg-rose-50/95 px-3 py-2 text-sm text-rose-900 sm:px-4">
             <span className="min-w-0 flex-1">{aiMinerError}</span>
@@ -3357,7 +3486,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(1)}
-                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 cursor-pointer rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 « Đầu
               </button>
@@ -3365,7 +3494,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage <= 1 || loadingPage}
                 onClick={() => setPage(currentPage - 1)}
-                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 cursor-pointer rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Trước
               </button>
@@ -3373,7 +3502,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(currentPage + 1)}
-                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 cursor-pointer rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Sau
               </button>
@@ -3381,7 +3510,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={currentPage >= displayTotalPages || loadingPage}
                 onClick={() => setPage(displayTotalPages)}
-                className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-40"
+                className="min-h-10 cursor-pointer rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Cuối »
               </button>
@@ -3389,7 +3518,7 @@ export function LeadManagement() {
           </div>
         ) : null}
         <div
-          className={`scroll-touch max-h-[min(calc(100dvh-200px),78vh)] overflow-auto overscroll-contain ${
+          className={`scroll-touch max-h-[min(calc(100dvh-16rem),72vh)] overflow-auto overscroll-contain ${
             canBulkWrite && selectedIds.size > 0
               ? 'pb-[calc(var(--nav-bottom-height,4rem)+9rem)] lg:pb-28'
               : ''
@@ -3667,7 +3796,7 @@ export function LeadManagement() {
             </tbody>
           </table>
         </div>
-      </div>
+      </BentoCell>
 
       {canBulkWrite && selectedIds.size > 0 ? (
         <BulkLeadActionBar
@@ -5972,13 +6101,11 @@ function LeadDetailPanel({
                 </nav>
                 {/* SĐT dùng chung — hiện khi đang ở Thao tác TVV hoặc Hồ sơ ứng viên */}
                 <section
-                  className="shrink-0 rounded-xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 via-white to-white p-2 shadow-sm sm:p-2.5"
+                  className="shrink-0 rounded-xl border border-sky-200/80 bg-sky-50/50 px-2.5 py-2"
                   aria-label="Điện thoại liên hệ"
                 >
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-sky-950">
-                      Điện thoại liên hệ
-                    </p>
+                    <p className="text-xs font-semibold text-sky-950">Gọi nhanh</p>
                     {showCounselorProgressForm && coreDirty ? (
                       <button
                         type="button"
@@ -5986,21 +6113,21 @@ function LeadDetailPanel({
                         onClick={() => void saveCoreProfile()}
                         className="rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {saving ? 'Đang lưu…' : 'Lưu số / hồ sơ'}
+                        {saving ? 'Đang lưu…' : 'Lưu số'}
                       </button>
                     ) : null}
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <label className="block min-w-0 text-xs font-medium text-slate-800">
-                      Điện thoại sinh viên
-                      <div className="mt-0.5 flex min-w-0 flex-col gap-1.5">
+                      Sinh viên
+                      <div className="mt-0.5 flex min-w-0 items-start gap-2">
                         <input
-                          className="vm-input w-full min-w-0"
+                          className="vm-input min-w-0 flex-1"
                           inputMode="tel"
                           value={coreDraft.phone}
                           disabled={!showCounselorProgressForm || saving || financeSaving}
                           onChange={(e) => setCoreDraft({ ...coreDraft, phone: e.target.value })}
-                          placeholder="Số điện thoại sinh viên"
+                          placeholder="SĐT sinh viên"
                         />
                         <OmicallCallButton
                           leadId={lead.id}
@@ -6008,20 +6135,20 @@ function LeadDetailPanel({
                           phone={coreDraft.phone}
                           target="student"
                           disabled={saving || financeSaving}
-                          className="self-start"
+                          placement="beside"
                         />
                       </div>
                     </label>
                     <label className="block min-w-0 text-xs font-medium text-slate-800">
-                      Điện thoại người liên hệ
-                      <div className="mt-0.5 flex min-w-0 flex-col gap-1.5">
+                      Người liên hệ
+                      <div className="mt-0.5 flex min-w-0 items-start gap-2">
                         <input
-                          className="vm-input w-full min-w-0"
+                          className="vm-input min-w-0 flex-1"
                           inputMode="tel"
                           value={coreDraft.parentPhone}
                           disabled={!showCounselorProgressForm || saving || financeSaving}
                           onChange={(e) => setCoreDraft({ ...coreDraft, parentPhone: e.target.value })}
-                          placeholder="Số điện thoại người liên hệ"
+                          placeholder="SĐT người liên hệ"
                         />
                         <OmicallCallButton
                           leadId={lead.id}
@@ -6029,7 +6156,7 @@ function LeadDetailPanel({
                           phone={coreDraft.parentPhone}
                           target="parent"
                           disabled={saving || financeSaving}
-                          className="self-start"
+                          placement="beside"
                         />
                       </div>
                     </label>
@@ -6140,7 +6267,7 @@ function LeadDetailPanel({
                                       ? 'Chưa gọi'
                                       : resolveCallWorkBucket(lead) === 'callback'
                                         ? 'Gọi lại'
-                                        : 'Đã gọi'}
+                                        : 'Đã xử lý'}
                                   </span>
                                   {lead.lastCallDispositionLabel ? (
                                     <>
@@ -6205,7 +6332,7 @@ function LeadDetailPanel({
                                     <p className="text-xs font-medium text-slate-800">
                                       Note sau gọi{' '}
                                       <span className="font-normal text-slate-500">
-                                        (bấm chọn nhanh — đưa hồ sơ vào Gọi lại / Đã gọi)
+                                        (bấm chọn nhanh — đưa hồ sơ vào Gọi lại / Đã xử lý)
                                       </span>
                                     </p>
                                     {dispositionDraft ? (
@@ -6231,7 +6358,7 @@ function LeadDetailPanel({
                                   {(
                                     [
                                       { bucket: 'callback' as const, title: 'Gọi lại' },
-                                      { bucket: 'called' as const, title: 'Đã gọi' },
+                                      { bucket: 'called' as const, title: 'Đã xử lý' },
                                     ] as const
                                   ).map((group) => {
                                     const items = CALL_DISPOSITIONS.filter((d) => d.bucket === group.bucket)

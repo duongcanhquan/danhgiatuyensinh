@@ -39,8 +39,7 @@ function durationText(seconds: number | undefined): string {
 
 export function callOutcomeFromCall(call: OmicallCallData): Interaction['callOutcome'] {
   if (call.state === 'accepted' || (call.callingDuration?.value ?? 0) > 0) return 'CONNECTED'
-  if (call.isHangup) return 'OTHER'
-  if (call.rejectCode) return 'NO_ANSWER'
+  // Hangup / từ chối / không bắt máy → cùng NO_ANSWER như Cloud Function (tránh OTHER → «Đã xử lý»).
   return 'NO_ANSWER'
 }
 
@@ -69,7 +68,7 @@ async function patchLeadLastCall(
     return
   }
 
-  // Soft KNM chỉ khi không bắt máy (đúng design — không gom OTHER).
+  // Soft KNM khi không bắt máy (khớp CF).
   if (outcome === 'NO_ANSWER') {
     await updateDoc(leadRef, {
       ...leadTouchPatch(),
@@ -86,13 +85,20 @@ async function patchLeadLastCall(
     return
   }
 
-  // OTHER / còn lại: tín hiệu gọi, không gán soft KNM.
+  // OTHER / DISQUALIFIED / FOLLOW_UP / …: đã có cuộc gọi → Đã xử lý (chờ note), không kẹt «Chưa gọi».
   await updateDoc(leadRef, {
     ...leadTouchPatch(),
     ...buildLastCallLeadPatch({
       calledByLabel,
       outcome,
     }),
+    callWorkBucket: outcome === 'FOLLOW_UP' ? 'callback' : 'called',
+    ...(outcome === 'FOLLOW_UP'
+      ? {
+          lastCallDispositionId: 'callback_later' as const,
+          lastCallDispositionLabel: 'Gọi lại sau',
+        }
+      : {}),
   })
 }
 

@@ -1,6 +1,7 @@
 import type { CounselorDailyKpi } from '../types'
 import type { OmicallCallRecord } from '../types'
 import { emptyKpiSummary, type CounselorKpiSummary } from './kpiMap'
+import { resolveCallIsValid } from './kpiCallValidity'
 import { tsMsCall } from './omicallCallMap'
 
 /** Ngày KPI theo giờ Việt Nam (khớp kpiDaily trên Functions). */
@@ -26,19 +27,7 @@ export function daysInMonthKey(monthKey: string): number {
   return new Date(y, m, 0).getDate()
 }
 
-/** HL trên client — khớp logic server (≥ minBillSeconds + có lead + TVV). */
-export function evaluateClientValidCall(params: {
-  billSeconds: number
-  leadId?: string
-  counselorUid?: string
-  minBillSeconds?: number
-}): { isValidCall: boolean; invalidReason?: string } {
-  const min = params.minBillSeconds ?? 45
-  if (!params.counselorUid?.trim()) return { isValidCall: false, invalidReason: 'missing_counselor' }
-  if (!params.leadId?.trim()) return { isValidCall: false, invalidReason: 'missing_lead' }
-  if (params.billSeconds < min) return { isValidCall: false, invalidReason: 'short_call' }
-  return { isValidCall: true }
-}
+export { evaluateClientValidCall, resolveCallIsValid } from './kpiCallValidity'
 
 function dayKeyForCall(c: OmicallCallRecord): string {
   const ms = tsMsCall(c.endedAt ?? c.startedAt ?? c.createdAt)
@@ -49,6 +38,7 @@ function dayKeyForCall(c: OmicallCallRecord): string {
 export function foldOmicallCallsToKpiSummaries(
   calls: OmicallCallRecord[],
   dates: string[],
+  minBillSeconds = 30,
 ): CounselorKpiSummary[] {
   const dateSet = new Set(dates)
   const m = new Map<string, CounselorKpiSummary>()
@@ -71,7 +61,7 @@ export function foldOmicallCallsToKpiSummaries(
     else s.missedCalls += 1
     const talk = c.billSeconds || c.answerSeconds || 0
     s.talkSeconds += talk
-    if (c.isValidCall) {
+    if (resolveCallIsValid(c, minBillSeconds)) {
       s.validCalls += 1
       s.validTalkSeconds += talk
       if (c.leadId) {
@@ -214,7 +204,7 @@ export function dailyRowsFromOmicallCalls(
     else row.missedCalls += 1
     const talk = c.billSeconds || c.answerSeconds || 0
     row.talkSeconds += talk
-    if (c.isValidCall) {
+    if (resolveCallIsValid(c)) {
       row.validCalls = (row.validCalls ?? 0) + 1
       row.validTalkSeconds = (row.validTalkSeconds ?? 0) + talk
       if (c.leadId) {

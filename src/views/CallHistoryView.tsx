@@ -9,31 +9,19 @@ import { useLeadCallOutcomes } from '../hooks/useLeadCallOutcomes'
 import { useOmicallCalls, type OmicallCallsScope } from '../hooks/useOmicallCalls'
 import { KpiCallHint } from '../components/KpiCallHint'
 import { aggregateOmicallCalls, formatCallDuration } from '../utils/omicallCallMap'
-import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd } from '../utils/kpiDisplay'
+import { resolveCallIsValid } from '../utils/kpiCallValidity'
+import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd, defaultVnDateRange } from '../utils/kpiDisplay'
+import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
+import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
 import type { LeadCallOutcomeSnapshot } from '../utils/leadFinanceHelpers'
+import { BentoGrid, BentoStat } from '../components/bento'
 import type { OmicallCallRecord } from '../types'
 
 type ViewMode = 'self' | 'team' | 'global'
 
 function defaultDateRange(): { from: string; to: string } {
-  const to = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 7)
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-  }
-}
-
-function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <div className="app-surface-elevated p-3 sm:p-4">
-      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-      {hint ? <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p> : null}
-    </div>
-  )
+  return defaultVnDateRange(7)
 }
 
 function OutcomeBadge({ snap }: { snap?: LeadCallOutcomeSnapshot }) {
@@ -97,7 +85,7 @@ function CallRow({
         {formatCallDuration(call.billSeconds || call.answerSeconds)}
       </td>
       <td className="px-3 py-2 text-center">
-        {call.isValidCall ? (
+        {resolveCallIsValid(call) ? (
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">HL</span>
         ) : call.outcome === 'CONNECTED' ? (
           <span className="text-[10px] text-slate-500">BT</span>
@@ -159,13 +147,21 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
   const scope = useMemo((): OmicallCallsScope => {
     if (counselorFilter) return { mode: 'counselor', counselorUid: counselorFilter }
     if (viewMode === 'global' && canGlobal) return { mode: 'global' }
-    if (viewMode === 'team' && canTeam && profile?.id) return { mode: 'team', teamLeadUid: profile.id }
+    if (viewMode === 'team' && canTeam && profile?.id) {
+      return {
+        mode: 'team',
+        teamLeadUid: profile.id,
+        counselorUids: counselorIdsInManagerScope(profile, users),
+      }
+    }
     const uid = profile?.id || firebaseUser?.uid || ''
     return { mode: 'counselor', counselorUid: uid }
-  }, [viewMode, canGlobal, canTeam, profile?.id, counselorFilter, firebaseUser?.uid])
+  }, [viewMode, canGlobal, canTeam, profile, counselorFilter, firebaseUser?.uid, users])
 
-  const fromDate = useMemo(() => new Date(`${range.from}T00:00:00`), [range.from])
-  const toDate = useMemo(() => new Date(`${range.to}T23:59:59`), [range.to])
+  const { from: fromDate, to: toDate } = useMemo(
+    () => vnDayRangeFromKeys(range.from, range.to),
+    [range.from, range.to],
+  )
   const maxRows = viewMode === 'global' && !counselorFilter ? 800 : 500
 
   const { calls, loading, error, notice } = useOmicallCalls({
@@ -266,7 +262,7 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
   if (!allowed) return <Navigate to="/" replace />
 
   return (
-    <div className="space-y-5">
+    <div className="bento-board">
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm font-medium text-slate-700">
           Từ ngày
@@ -361,23 +357,24 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
         className="max-w-3xl"
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
+      <BentoGrid className="sm:!grid-cols-2 lg:!grid-cols-4">
+        <BentoStat
           label="Tổng cuộc gọi"
           value={loading ? '…' : stats.total}
           hint={kpiCallSource === 'calls_live' && stats.total > 0 ? 'Theo lịch sử gọi trong kỳ' : undefined}
+          tone="ink"
         />
-        <StatCard
+        <BentoStat
           label="Bắt máy"
           value={loading ? '…' : `${stats.connected} (${stats.connectRate}%)`}
         />
-        <StatCard label="Gọi hợp lệ (HL)" value={loading ? '…' : `${stats.validCalls} (${stats.validRate}%)`} />
-        <StatCard
+        <BentoStat label="Gọi hợp lệ (HL)" value={loading ? '…' : `${stats.validCalls} (${stats.validRate}%)`} tone="accent" />
+        <BentoStat
           label="Thời gian nói"
           value={loading ? '…' : formatCallDuration(stats.talkSeconds)}
           hint={`TB ${formatCallDuration(stats.avgBillSeconds)}/cuộc`}
         />
-      </div>
+      </BentoGrid>
 
       {showAdminInsights ? (
         <>
@@ -396,27 +393,29 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
                 Cọc, NE, doanh thu — báo cáo ngày; số gọi ở lưới phía trên cùng kỳ.
               </p>
             </div>
-            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
+            <div className="p-4">
+              <BentoGrid className="sm:!grid-cols-2 lg:!grid-cols-4">
+              <BentoStat
                 label="Gọi HL (KPI)"
                 value={kpiLoading ? '…' : fmtKpiNum(kpiTotals.validCalls)}
                 hint={`${fmtKpiNum(kpiTotals.totalCalls)} tổng · ${fmtKpiPct(kpiTotals.connectedCalls, kpiTotals.totalCalls)} bắt máy`}
               />
-              <StatCard
+              <BentoStat
                 label="Lead chạm (unique)"
                 value={kpiLoading ? '…' : fmtKpiNum(kpiTotals.uniqueLeadsCalled)}
                 hint={`WARM+ ${fmtKpiNum(kpiTotals.warmNew)} · HOT+ ${fmtKpiNum(kpiTotals.hotNew)}`}
               />
-              <StatCard
+              <BentoStat
                 label="Cọc / NB (kpiDaily)"
                 value={kpiLoading ? '…' : fmtKpiNum(kpiTotals.depositPaidCount)}
                 hint={`Chuyển cọc: ${fmtKpiNum(kpiTotals.toDeposit)} · NE: ${fmtKpiNum(kpiTotals.toEnrolled)}`}
               />
-              <StatCard
+              <BentoStat
                 label="Doanh thu duyệt"
                 value={kpiLoading ? '…' : fmtKpiVnd(kpiTotals.approvedRevenueVnd)}
                 hint={`Full NE: ${fmtKpiNum(kpiTotals.fullNeCount)} · ${fmtKpiMinutes(kpiTotals.talkSeconds)} nói`}
               />
+              </BentoGrid>
             </div>
           </section>
 
@@ -427,25 +426,27 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
                 Phễu chuyển đổi hồ sơ đã gọi
               </h2>
             </div>
-            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
+            <div className="p-4">
+              <BentoGrid className="sm:!grid-cols-2 lg:!grid-cols-4">
+              <BentoStat
                 label="Hồ sơ đã gọi"
                 value={outcomesLoading ? '…' : conversionFunnel.called}
                 hint="Unique lead trong kỳ"
               />
-              <StatCard
+              <BentoStat
                 label="Đã cọc (NB)"
                 value={outcomesLoading ? '…' : `${conversionFunnel.withDeposit} (${conversionFunnel.depositPct}%)`}
               />
-              <StatCard
+              <BentoStat
                 label="Nhập học / NE"
                 value={outcomesLoading ? '…' : `${conversionFunnel.enrolled} (${conversionFunnel.enrolledPct}%)`}
               />
-              <StatCard
+              <BentoStat
                 label="Full NE"
                 value={outcomesLoading ? '…' : conversionFunnel.fullNe}
                 hint="Tick FULL NE trên hồ sơ"
               />
+              </BentoGrid>
             </div>
           </section>
 
