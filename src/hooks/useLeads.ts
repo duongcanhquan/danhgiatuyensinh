@@ -1028,11 +1028,6 @@ export function useLeads(opts?: UseLeadsOptions) {
     return majors.filter((m) => idSet.has(m.id)).map((m) => m.label.trim()).filter(Boolean)
   }, [profile?.managedMajorIds, byKind.majors])
 
-  const hoDLabelsRef = useRef(hoDQueryLabels)
-  hoDLabelsRef.current = hoDQueryLabels
-  const profileRef = useRef(profile)
-  profileRef.current = profile
-
   /** Chỉ đổi khi quyền đọc list thực sự đổi — tránh refetch vì snapshot users/{uid} đổi identity. */
   const profileListKey = profile
     ? `${profile.id}|${profile.role}|${(profile.managedMajorIds ?? []).join(',')}|${(profile.managedCounselorIds ?? []).join(',')}`
