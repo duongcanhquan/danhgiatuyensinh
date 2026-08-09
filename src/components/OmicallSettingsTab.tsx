@@ -554,8 +554,9 @@ export function OmicallSettingsTab() {
           <div>
             <h3 className="text-base font-bold text-slate-900">Trạng thái & thử gọi</h3>
             <p className="text-xs text-slate-500">
-              Kết nối SIP cần domain + số nội bộ + mật khẩu. Sau lần kết nối/gọi đầu, app nhớ phiên trong tab và tự
-              nối lại khi mất kết nối tạm hoặc bạn quay lại trang.
+              Kết nối SIP cần domain + số nội bộ + mật khẩu. App tự kết nối khi bạn đăng nhập (đã có số nội bộ), và tự
+              nối lại khi mất kết nối tạm hoặc quay lại trang. Cửa sổ «Đóng và lưu lại» của tổng đài sẽ tự đóng — ghi
+              chú trên CRM.
             </p>
           </div>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(connectionStatus)}`}>

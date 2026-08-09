@@ -410,7 +410,88 @@ export function suppressOmicallVendorToasts(host?: OmicallToastSuppressHost): vo
 }
 
 export function getOmicallUi(): OmicallUiGlobal | null {
+  if (typeof window === 'undefined') return null
   return window.OMICallUI ?? null
+}
+
+/** Nhãn nút đóng dialog mặc định của SDK (VI/EN). */
+export function isOmicallVendorCloseSaveLabel(text: string): boolean {
+  const t = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!t) return false
+  return /^đóng và lưu lại$/i.test(t) || /^close and save$/i.test(t)
+}
+
+type OmicallCallSaveFn = (
+  info: { note?: string; tags?: string[] },
+  onSave: () => void,
+  onFinish: () => boolean,
+) => void
+
+/**
+ * Đóng dialog «Thông tin cuộc gọi» / «Đóng và lưu lại» của SDK —
+ * CRM dùng panel riêng; dialog vendor hay kẹt trên mobile và chặn thao tác.
+ */
+export function dismissOmicallVendorCallUi(opts?: {
+  rawCall?: unknown
+  sdk?: OmicallSdkGlobal | null
+  doc?: Document | null
+}): boolean {
+  let closed = false
+  const sdk = opts?.sdk ?? getOmicallSdk()
+  const raw = opts?.rawCall ?? (sdk ? getActiveCallFromSdk(sdk) : null)
+
+  if (raw && typeof raw === 'object') {
+    const call = raw as {
+      save?: OmicallCallSaveFn
+      minimize?: (fn?: unknown) => void
+    }
+    try {
+      if (typeof call.save === 'function') {
+        call.save({ note: '' }, () => {}, () => true)
+        closed = true
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (typeof call.minimize === 'function') call.minimize()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const doc = opts?.doc ?? (typeof document !== 'undefined' ? document : null)
+  if (doc?.querySelectorAll) {
+    for (const el of Array.from(doc.querySelectorAll('button, [role="button"]'))) {
+      if (!isOmicallVendorCloseSaveLabel(el.textContent ?? '')) continue
+      try {
+        ;(el as HTMLElement).click()
+        closed = true
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  return closed
+}
+
+/** Gọi dismiss vài lần — SDK render dialog sau event `ended`. */
+export function scheduleDismissOmicallVendorCallUi(opts?: {
+  rawCall?: unknown
+  sdk?: OmicallSdkGlobal | null
+}): void {
+  const run = () => {
+    dismissOmicallVendorCallUi(opts)
+  }
+  run()
+  if (typeof window === 'undefined') return
+  window.setTimeout(run, 200)
+  window.setTimeout(run, 600)
+  window.setTimeout(run, 1500)
+  window.setTimeout(run, 3000)
 }
 
 let loadPromise: Promise<OmicallSdkGlobal> | null = null

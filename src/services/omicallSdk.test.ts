@@ -3,6 +3,8 @@ import {
   hangUpOmicallCall,
   normalizeOmicallInjectedCss,
   sanitizeOmicallInjectedStyles,
+  isOmicallVendorCloseSaveLabel,
+  dismissOmicallVendorCallUi,
   suppressOmicallVendorToasts,
   tryEndOmicallCallInstance,
   unwrapOmicallBaseLayerCss,
@@ -170,5 +172,28 @@ describe('hangUpOmicallCall', () => {
     expect(hangUpOmicallCall(sdk)).toBe(true)
     expect(endCall).toHaveBeenCalledOnce()
     expect(stopCall).not.toHaveBeenCalled()
+  })
+})
+
+describe('dismissOmicallVendorCallUi', () => {
+  it('matches close-and-save labels', () => {
+    expect(isOmicallVendorCloseSaveLabel('Đóng và lưu lại')).toBe(true)
+    expect(isOmicallVendorCloseSaveLabel('  Close and save ')).toBe(true)
+    expect(isOmicallVendorCloseSaveLabel('Huỷ')).toBe(false)
+  })
+
+  it('calls call.save and clicks matching button', () => {
+    const save = vi.fn()
+    const click = vi.fn()
+    const btn = {
+      textContent: 'Đóng và lưu lại',
+      click,
+    }
+    const doc = {
+      querySelectorAll: () => [btn],
+    } as unknown as Document
+    expect(dismissOmicallVendorCallUi({ rawCall: { save }, doc })).toBe(true)
+    expect(save).toHaveBeenCalled()
+    expect(click).toHaveBeenCalledOnce()
   })
 })

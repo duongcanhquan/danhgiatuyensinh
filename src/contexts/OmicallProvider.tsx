@@ -38,6 +38,7 @@ import {
   loadOmicallSdk,
   normalizeOmicallSdkPayload,
   sanitizeOmicallInjectedStyles,
+  scheduleDismissOmicallVendorCallUi,
   suppressOmicallVendorToasts,
   watchOmicallStyleInjection,
   type OmicallCallData,
@@ -310,6 +311,23 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     sipCredsRef.current = sipCreds
   }, [sipCreds])
+
+  /**
+   * Tự vũ trang + kết nối SIP khi đã có cấu hình + số nội bộ —
+   * không bắt user bấm «Thử kết nối lại» mỗi lần vào app.
+   */
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || configLoading) return
+    if (!config.enabled || !sipCreds) return
+    setSipSessionArmed(true)
+  }, [
+    authStatus,
+    configLoading,
+    config.enabled,
+    sipCreds?.sipRealm,
+    sipCreds?.sipUser,
+    sipCreds?.sipPassword,
+  ])
 
   const refreshCallContext = useCallback(() => {
     if (!config.enabled || !profile) return
@@ -639,6 +657,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       } else if (call.state === 'accepted') {
         setLastCallHint('Đã bắt máy — nói qua micro trình duyệt / tai nghe.')
       } else if (call.state === 'ended') {
+        scheduleDismissOmicallVendorCallUi({
+          rawCall: activeSdkCallRawRef.current ?? raw,
+          sdk: sdkRef.current,
+        })
         if (call.rejectCode) {
           setLastCallHint(`Cuộc gọi kết thúc (mã lỗi tổng đài: ${call.rejectCode}). Kiểm tra đầu số gọi ra trên OMICall.`)
         } else if ((call.callingDuration?.value ?? 0) === 0 && (call.ringingDuration?.value ?? 0) === 0) {
@@ -837,8 +859,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         const ok = await sdk.init({
           lng: 'vi',
           ui: {
-            toggleDial: config.hideDialPad !== false ? 'hide' : 'show',
+            // Luôn ẩn FAB bàn phím vendor — CRM gọi từ hồ sơ + panel riêng.
+            toggleDial: 'hide',
             dialPosition: 'right',
+            minimizeNewCall: true,
           },
           /** Tắt — tránh treo «đang gọi» khi tra lịch sử OMICall (vài giây). */
           searchRecentCall: false,
@@ -1090,6 +1114,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
 
   const dismissActiveCall = useCallback(() => {
     void (async () => {
+      scheduleDismissOmicallVendorCallUi({
+        rawCall: activeSdkCallRawRef.current,
+        sdk: sdkRef.current,
+      })
       captureFinalizeSnapshot()
       await runFinalizeIfNeeded()
       pendingCallMetaRef.current = null
@@ -1132,6 +1160,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
 
     const enterWrapup = () => {
       setActiveCall((prev) => (prev ? { ...prev, state: 'ended', phase: 'wrapup' } : null))
+      scheduleDismissOmicallVendorCallUi({
+        rawCall: activeSdkCallRawRef.current,
+        sdk: sdkRef.current,
+      })
       captureFinalizeSnapshot()
       void runFinalizeIfNeeded()
       scheduleFinalizeLogging()
