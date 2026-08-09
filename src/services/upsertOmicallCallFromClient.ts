@@ -1,4 +1,4 @@
-import { doc, setDoc, Timestamp, type Firestore } from 'firebase/firestore'
+import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore'
 import { FS_COLLECTIONS, type OmicallCallTarget } from '../types'
 
 export type UpsertOmicallCallClientInput = {
@@ -15,6 +15,11 @@ export type UpsertOmicallCallClientInput = {
   sipUser?: string
 }
 
+export function isPlaceholderOmicallCallUid(uid: string): boolean {
+  const id = uid.trim()
+  return id.startsWith('pending-') || id.startsWith('c2c-')
+}
+
 /**
  * Ghi thẳng `omicallCalls` từ trình duyệt khi webhook/CF chậm hoặc lỗi —
  * đảm bảo Lịch sử cuộc gọi / KPI có bản ghi ngay sau khi gọi.
@@ -26,11 +31,16 @@ export async function upsertOmicallCallFromClient(
   const transactionId = input.transactionId.trim()
   const leadId = input.leadId.trim()
   if (!transactionId || !leadId) return
+  if (isPlaceholderOmicallCallUid(transactionId)) {
+    throw new Error('Chưa có mã cuộc gọi thật từ tổng đài — chờ SDK trả uid.')
+  }
 
   const bill = Math.max(0, Math.floor(input.billSeconds ?? 0))
   const outcome = bill > 0 ? 'CONNECTED' : 'NO_ANSWER'
   const now = Timestamp.now()
   const ref = doc(db, FS_COLLECTIONS.omicallCalls, transactionId)
+  const existing = await getDoc(ref)
+  const prevCreated = existing.exists() ? existing.data()?.createdAt : undefined
 
   await setDoc(
     ref,
@@ -59,7 +69,7 @@ export async function upsertOmicallCallFromClient(
       endedAt: now,
       syncedAt: now,
       updatedAt: now,
-      createdAt: now,
+      createdAt: prevCreated ?? now,
       userDataLeadId: leadId,
       userDataCounselorUid: input.counselorUid,
       userDataTarget: input.target ?? 'student',

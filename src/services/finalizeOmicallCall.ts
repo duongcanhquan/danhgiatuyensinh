@@ -53,26 +53,22 @@ export async function finalizeOmicallCallLogging(
   const call = buildEndedOmicallData(input)
   const logged = await logOmicallInteraction(db, call, profile)
 
-  // 1) Ghi omicallCalls ngay trên client — Lịch sử cuộc gọi không phụ thuộc webhook/CF.
-  try {
-    await upsertOmicallCallFromClient(db, {
-      transactionId: input.callUid,
-      callUuid: input.callUuid ?? input.callUid,
-      leadId: input.leadId,
-      phone: input.phone,
-      counselorUid: input.counselorUid || profile.id,
-      orgId: input.orgId,
-      target: input.target,
-      direction: input.direction === 'inbound' ? 'inbound' : 'outbound',
-      billSeconds: input.billSeconds,
-      hotline: input.sipNumber,
-      sipUser: input.sipUser || profile.omicallSipUser,
-    })
-  } catch (e) {
-    console.warn('[OMICall] upsert omicallCalls client', e)
-  }
+  // 1) omicallCalls — bắt buộc với uid thật; lỗi → throw để caller giữ snapshot retry.
+  await upsertOmicallCallFromClient(db, {
+    transactionId: input.callUid,
+    callUuid: input.callUuid ?? input.callUid,
+    leadId: input.leadId,
+    phone: input.phone,
+    counselorUid: input.counselorUid || profile.id,
+    orgId: input.orgId,
+    target: input.target,
+    direction: input.direction === 'inbound' ? 'inbound' : 'outbound',
+    billSeconds: input.billSeconds,
+    hotline: input.sipNumber,
+    sipUser: input.sipUser || profile.omicallSipUser,
+  })
 
-  // 2) CF bổ sung KPI / merge webhook — lỗi không chặn đã ghi ở trên.
+  // 2) CF bổ sung KPI / merge webhook — best-effort.
   try {
     await reportOmicallCallFromClient(call, {
       leadId: input.leadId,

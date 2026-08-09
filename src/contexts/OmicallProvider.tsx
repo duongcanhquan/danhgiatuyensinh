@@ -48,7 +48,13 @@ import {
 import { formatCallDuration } from '../utils/omicallCallMap'
 import { OmicallActiveCallPanel } from '../components/OmicallActiveCallPanel'
 import { CallSessionDraftProvider } from './CallSessionDraftProvider'
-import { finalizeOmicallCallLogging, type FinalizeOmicallInput } from '../services/finalizeOmicallCall'
+import {
+  buildEndedOmicallData,
+  finalizeOmicallCallLogging,
+  type FinalizeOmicallInput,
+} from '../services/finalizeOmicallCall'
+import { logOmicallInteraction } from '../services/logOmicallInteraction'
+import { isPlaceholderOmicallCallUid } from '../services/upsertOmicallCallFromClient'
 import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
 
 const SIP_ARM_STORAGE_KEY = 'vietmy.omicall.sipSessionArmed'
@@ -313,17 +319,19 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   }, [sipCreds])
 
   /**
-   * Tự vũ trang + kết nối SIP khi đã có cấu hình + số nội bộ —
-   * không bắt user bấm «Thử kết nối lại» mỗi lần vào app.
+   * Tự vũ trang + kết nối SIP khi đã có cấu hình + số nội bộ (chế độ trình duyệt).
+   * Máy bàn (deskPhone): không ép tải SDK — gọi click2call, tránh CSS vendor lúc mở app.
    */
   useEffect(() => {
     if (authStatus !== 'authenticated' || configLoading) return
     if (!config.enabled || !sipCreds) return
+    if (config.callMode === 'deskPhone') return
     setSipSessionArmed(true)
   }, [
     authStatus,
     configLoading,
     config.enabled,
+    config.callMode,
     sipCreds?.sipRealm,
     sipCreds?.sipUser,
     sipCreds?.sipPassword,
@@ -384,13 +392,20 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         callUid = prev.callUid
       }
 
+      // Chỉ đếm thời lượng nói chuyện sau khi bắt máy — không lấy cả thời gian đổ chuông.
       const talkStart = activeCallTalkStartedMsRef.current
-      const started = activeCallStartedMsRef.current
-      let billSeconds = overrides?.billSeconds ?? call?.durationSec ?? prev?.billSeconds ?? 0
-      if (talkStart && started) {
-        billSeconds = Math.max(billSeconds, Math.floor((Date.now() - talkStart) / 1000))
-      } else if (started) {
-        billSeconds = Math.max(billSeconds, Math.floor((Date.now() - started) / 1000))
+      let billSeconds = overrides?.billSeconds
+      if (billSeconds == null) {
+        if (talkStart) {
+          billSeconds = Math.max(0, Math.floor((Date.now() - talkStart) / 1000))
+        } else if (call?.state === 'accepted' || call?.phase === 'wrapup') {
+          billSeconds = Math.max(0, call.durationSec || 0)
+        } else {
+          billSeconds = 0
+        }
+      }
+      if (prev?.billSeconds != null && (billSeconds ?? 0) < prev.billSeconds) {
+        billSeconds = prev.billSeconds
       }
 
       const phone =
@@ -419,7 +434,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     [profile, orgKey],
   )
 
-  const runFinalizeIfNeeded = useCallback(async () => {
+  const runFinalizeIfNeeded = useCallback(async (opts?: { forcePlaceholder?: boolean }) => {
     if (!config.autoLogCalls || !profile) return
     if (activeCallRef.current?.phase === 'wrapup' || activeCallRef.current?.state === 'ended') {
       captureFinalizeSnapshot()
@@ -427,6 +442,16 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     const snap = pendingFinalizeRef.current
     if (!snap?.callUid || !snap.leadId) return
     if (loggedCallUidsRef.current.has(snap.callUid)) return
+
+    // Chờ uid thật từ SDK — tránh ghi đôi pending-* rồi uuid thật.
+    if (isPlaceholderOmicallCallUid(snap.callUid) && !opts?.forcePlaceholder) {
+      if (finalizeTimerRef.current) window.clearTimeout(finalizeTimerRef.current)
+      finalizeTimerRef.current = window.setTimeout(() => {
+        finalizeTimerRef.current = null
+        void runFinalizeIfNeeded({ forcePlaceholder: true })
+      }, 1800)
+      return
+    }
 
     loggedCallUidsRef.current.add(snap.callUid)
     const db = getFirestoreDb()
@@ -436,6 +461,15 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Placeholder: chỉ ghi interaction trên hồ sơ; omicallCalls đợi uid thật (onEnded).
+      if (isPlaceholderOmicallCallUid(snap.callUid)) {
+        await logOmicallInteraction(db, buildEndedOmicallData(snap), profile)
+        pendingCallMetaRef.current = null
+        pendingCallDisplayRef.current = null
+        // Giữ pendingFinalize nếu sau đó có uid thật — onEnded sẽ ghi omicallCalls.
+        return
+      }
+
       await finalizeOmicallCallLogging(db, profile, snap)
       void triggerOmicallHistorySync(60).catch((err) => {
         console.warn('[OMICall] sync history after call', err)
@@ -446,6 +480,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('[OMICall] finalize call logging', e)
       loggedCallUidsRef.current.delete(snap.callUid)
+      // Giữ pendingFinalizeRef để dismiss/retry sau.
     }
   }, [config.autoLogCalls, profile, captureFinalizeSnapshot])
 
@@ -455,7 +490,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     finalizeTimerRef.current = window.setTimeout(() => {
       finalizeTimerRef.current = null
       void runFinalizeIfNeeded()
-    }, 400)
+    }, 800)
   }, [runFinalizeIfNeeded, captureFinalizeSnapshot])
 
   useEffect(() => {
@@ -529,10 +564,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionStatus('registering')
       setConnectionLabel(data.name || 'Đang kết nối tổng đài…')
     } else {
-      // disconnect sau cuộc gọi / mất mạng — tự nối lại; đã từng OK thì reset bộ đếm.
+      // disconnect sau cuộc gọi / mất mạng — tự nối lại; không reset bộ đếm về 0 mỗi lần (tránh vòng vô hạn).
       setSipReady(false)
-      if (hadSuccessfulRegisterRef.current) {
-        reconnectAttemptRef.current = 0
+      if (hadSuccessfulRegisterRef.current && reconnectAttemptRef.current >= 5) {
+        reconnectAttemptRef.current = 3
       }
       if (connectionStatusRef.current === 'error' && reconnectAttemptRef.current >= 5) {
         setConnectionLabel(data.name || 'Chưa kết nối được tổng đài')
@@ -1005,13 +1040,14 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (authStatus !== 'authenticated' || !config.enabled || !sipCreds) return
 
-    const ensureConnected = () => {
+    const ensureConnected = (source: 'visibility' | 'poll') => {
       if (!sipSessionArmedRef.current) return
       if (sipReadyRef.current) return
       const st = connectionStatusRef.current
       if (st === 'loading' || st === 'registering' || st === 'off') return
-      // Quay lại tab / poll: mở lại cả sau lỗi tạm (đã từng kết nối được hoặc còn vũ trang).
-      if (st === 'error' || hadSuccessfulRegisterRef.current) {
+      // Poll không reset lỗi cứng — chỉ khi user quay lại tab mới cho thêm một chu kỳ.
+      if (st === 'error') {
+        if (source !== 'visibility') return
         reconnectAttemptRef.current = 0
       }
       if (!sessionActiveRef.current) {
@@ -1022,11 +1058,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
     }
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') ensureConnected()
+      if (document.visibilityState === 'visible') ensureConnected('visibility')
     }
 
     document.addEventListener('visibilitychange', onVisibility)
-    const intervalId = window.setInterval(ensureConnected, 30_000)
+    const intervalId = window.setInterval(() => ensureConnected('poll'), 30_000)
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)

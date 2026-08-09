@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const setDoc = vi.fn()
+const getDoc = vi.fn()
 const doc = vi.fn((_db: unknown, ...parts: string[]) => ({ path: parts.join('/') }))
 
 vi.mock('firebase/firestore', () => {
@@ -13,15 +14,18 @@ vi.mock('firebase/firestore', () => {
     Timestamp: FakeTs,
     doc: (...a: unknown[]) => doc(...a),
     setDoc: (...a: unknown[]) => setDoc(...a),
+    getDoc: (...a: unknown[]) => getDoc(...a),
   }
 })
 
-import { upsertOmicallCallFromClient } from './upsertOmicallCallFromClient'
+import { isPlaceholderOmicallCallUid, upsertOmicallCallFromClient } from './upsertOmicallCallFromClient'
 
 describe('upsertOmicallCallFromClient', () => {
   beforeEach(() => {
     setDoc.mockReset()
+    getDoc.mockReset()
     setDoc.mockResolvedValue(undefined)
+    getDoc.mockResolvedValue({ exists: () => false, data: () => undefined })
   })
 
   it('writes final omicallCalls doc with endedAt and lead mapping', async () => {
@@ -59,5 +63,33 @@ describe('upsertOmicallCallFromClient', () => {
       counselorUid: 'u1',
     })
     expect(setDoc).not.toHaveBeenCalled()
+  })
+
+  it('rejects placeholder call uids', async () => {
+    expect(isPlaceholderOmicallCallUid('pending-1')).toBe(true)
+    await expect(
+      upsertOmicallCallFromClient({} as never, {
+        transactionId: 'pending-1',
+        leadId: 'lead-1',
+        phone: '090',
+        counselorUid: 'u1',
+      }),
+    ).rejects.toThrow(/mã cuộc gọi thật/)
+    expect(setDoc).not.toHaveBeenCalled()
+  })
+
+  it('preserves createdAt on merge', async () => {
+    const oldCreated = { ms: 1 }
+    getDoc.mockResolvedValue({ exists: () => true, data: () => ({ createdAt: oldCreated }) })
+    await upsertOmicallCallFromClient({} as never, {
+      transactionId: 'tx-2',
+      leadId: 'lead-1',
+      phone: '090',
+      counselorUid: 'u1',
+      billSeconds: 0,
+    })
+    const payload = setDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(payload.createdAt).toBe(oldCreated)
+    expect(payload.outcome).toBe('NO_ANSWER')
   })
 })

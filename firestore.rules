@@ -296,7 +296,7 @@ service cloud.firestore {
       allow update: if orgScopedWrite();
       allow delete: if deleteInOwnOrg();
     }
-    // Lịch sử gọi — Admin SDK ghi; client đọc khi trường đang active (giống kpiDaily).
+    // Lịch sử gọi — CF/webhook + client (sau cuộc gọi SDK) ghi; đọc khi trường active.
     // Không bắt matchesOrgData trên list query (doc cũ thiếu orgId → permission-denied trên Tổng kết).
     match /omicallCalls/{id} {
       allow read: if signedIn() && schoolOrgActive();
