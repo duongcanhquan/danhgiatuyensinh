@@ -382,7 +382,8 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     name: 'Lưu chứng từ (R2 / Drive)',
     group: 'storage',
     maturity: 'live',
-    summary: 'Upload bill qua Cloudflare R2 hoặc Drive Apps Script (cấu hình máy chủ).',
+    summary: 'Upload bill qua Cloudflare R2 hoặc Drive Apps Script (cấu hình theo trường).',
+    settingsHref: '/settings?tab=connect&sub=receipts',
     fields: [],
   },
 ] as const

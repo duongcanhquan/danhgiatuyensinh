@@ -9,7 +9,7 @@ import {
   Save,
   Trash2,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
 import { getFirestoreDb } from '../services/firebase'
@@ -62,8 +62,9 @@ function isConnectorConfigured(hub: OrgIntegrationHubConfig, def: ConnectorDef):
   return Object.values(fields).some((v) => String(v).trim().length > 0)
 }
 
-/** Hub kết nối — lưới icon gọn, ít chữ, cấu hình nhanh. */
+/** Hub kết nối — lưới icon gọn; có trang cài đặt riêng thì bấm là mở tab đó. */
 export function IntegrationHubPanel() {
+  const navigate = useNavigate()
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
   const canEdit = can('config:master_data') || can('config:omicall')
@@ -74,6 +75,18 @@ export function IntegrationHubPanel() {
   const [msg, setMsg] = useState<string | null>(null)
   const [activeConnectorId, setActiveConnectorId] = useState<string | null>(null)
   const [freshApiKey, setFreshApiKey] = useState<string | null>(null)
+
+  const openConnector = useCallback(
+    (c: ConnectorDef) => {
+      // Có màn cấu hình chuyên sâu → mở thẳng (tránh chỉ bung panel trống dưới fold).
+      if (c.settingsHref) {
+        navigate(c.settingsHref)
+        return
+      }
+      setActiveConnectorId((prev) => (prev === c.id ? null : c.id))
+    },
+    [navigate],
+  )
 
   const groups = useMemo(() => connectorsByGroup(), [])
   const activeDef = useMemo(
@@ -94,6 +107,13 @@ export function IntegrationHubPanel() {
       cancelled = true
     }
   }, [db, effectiveOrgId])
+
+  useEffect(() => {
+    if (!activeConnectorId) return
+    queueMicrotask(() => {
+      document.getElementById('hub-connector-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }, [activeConnectorId])
 
   const patchConnectorField = useCallback((connectorId: string, key: string, value: string) => {
     setHub((h) => ({
@@ -199,6 +219,9 @@ export function IntegrationHubPanel() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-900">Hub kết nối</h2>
+          <p className="mt-0.5 text-xs text-slate-600">
+            Bấm đầu nối đã có màn riêng (Gọi điện, n8n, AI…) để mở cấu hình. Các đầu còn lại cấu hình ngay bên dưới.
+          </p>
           <p className="truncate text-xs text-slate-500">{currentOrgLabel}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
@@ -234,12 +257,20 @@ export function IntegrationHubPanel() {
                   <li key={c.id}>
                     <button
                       type="button"
-                      onClick={() => setActiveConnectorId(active ? null : c.id)}
+                      onClick={() => openConnector(c)}
+                      title={
+                        c.settingsHref
+                          ? `Mở cấu hình «${c.name}»`
+                          : c.maturity === 'planned'
+                            ? `${c.name} — sắp có`
+                            : `Cấu hình «${c.name}» tại đây`
+                      }
                       className={[
                         'group flex h-full w-full cursor-pointer flex-col items-center gap-2 rounded-2xl border px-2 py-3 text-center transition duration-200',
                         active
                           ? 'border-teal-400 bg-teal-50 shadow-sm ring-2 ring-teal-200/60'
                           : 'border-slate-200/90 bg-white hover:border-teal-200 hover:bg-slate-50',
+                        c.settingsHref ? 'hover:ring-2 hover:ring-teal-200/50' : '',
                       ].join(' ')}
                     >
                       <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-800 ring-1 ring-teal-100">
@@ -268,7 +299,10 @@ export function IntegrationHubPanel() {
       })}
 
       {activeDef ? (
-        <div className="rounded-2xl border border-teal-200/80 bg-white p-4 shadow-sm">
+        <div
+          id="hub-connector-detail"
+          className="scroll-mt-4 rounded-2xl border border-teal-200/80 bg-white p-4 shadow-sm"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-3">
               {(() => {
@@ -282,6 +316,7 @@ export function IntegrationHubPanel() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">{activeDef.name}</h3>
                 <p className="text-[11px] text-slate-500">{maturityLabel(activeDef.maturity)}</p>
+                <p className="mt-1 max-w-xl text-xs leading-snug text-slate-600">{activeDef.summary}</p>
               </div>
             </div>
             {activeDef.settingsHref ? (
@@ -294,6 +329,11 @@ export function IntegrationHubPanel() {
               </Link>
             ) : null}
           </div>
+          {activeDef.maturity === 'planned' && activeDef.fields.length === 0 ? (
+            <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              Đầu nối này đang ở trạng thái «Sắp có» — chưa cấu hình được trong app.
+            </p>
+          ) : null}
 
           {activeDef.fields.length > 0 ? (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">

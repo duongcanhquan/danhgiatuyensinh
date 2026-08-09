@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { doc, getDoc } from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
@@ -52,6 +52,7 @@ function healthLabel(h: IntegrationHealth): string {
 
 /** Dải trạng thái đầu mối — icon lớn, ít chữ. */
 export function IntegrationsStatusStrip() {
+  const navigate = useNavigate()
   const { can, permissions } = useAuth()
   const { effectiveOrgId } = useOrg()
   const show = canAccessSettingsPage(permissions) || can('config:omicall') || can('config:master_data')
@@ -134,17 +135,18 @@ export function IntegrationsStatusStrip() {
           const Icon = STATUS_ICONS[item.id] ?? STATUS_ICONS.hub
           return (
             <li key={item.id}>
-              <Link
-                to={item.settingsHref}
-                title={item.detail}
-                className={`flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center ring-1 transition duration-200 hover:shadow-sm ${healthRing(item.health)}`}
+              <button
+                type="button"
+                title={`${item.detail} — bấm để mở cấu hình`}
+                onClick={() => navigate(item.settingsHref)}
+                className={`flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center ring-1 transition duration-200 hover:shadow-sm ${healthRing(item.health)}`}
               >
                 <Icon className="h-6 w-6" aria-hidden />
                 <span className="text-xs font-semibold leading-tight">{item.label}</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">
                   {healthLabel(item.health)}
                 </span>
-              </Link>
+              </button>
             </li>
           )
         })}

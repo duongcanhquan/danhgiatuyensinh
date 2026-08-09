@@ -255,7 +255,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
       return (
         <>
           <p className="font-semibold text-slate-900">Hub kết nối</p>
-          <p className={`mt-1.5 ${settingsCopyMuted}`}>Chọn icon → điền URL/key → Lưu.</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Bấm đầu nối đã có tab riêng (Gọi điện, Webhook n8n, AI…) để mở màn cấu hình. Đầu nối khác: cấu hình ngay trên
+            Hub rồi Lưu.
+          </p>
         </>
       )
     case 'comms':
