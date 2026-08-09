@@ -1659,7 +1659,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     filterKey,
     directoryLabelsKey,
     hoDQueryLabels,
-    pagedReposDep,
+    pagedFirestoreDep,
     includeScopeTagCounts,
     includeScopeSourceOptions,
     includeScopeProgramOptions,
