@@ -334,20 +334,29 @@ export function OmicallSettingsTab() {
           </label>
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 sm:col-span-2">
             <p className="text-xs font-semibold text-amber-950">
-              Số nội bộ + mật khẩu SIP (bắt buộc để «Sẵn sàng gọi»)
+              Hai chỗ gắn số gọi — hồ sơ riêng ưu tiên hơn mặc định
             </p>
+            <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] leading-snug text-amber-900/90">
+              <li>
+                <strong>Hồ sơ riêng</strong> (Nhân sự → từng người, hoặc «Đồng bộ số theo email tôi»): mỗi TVV / admin
+                một số + mật khẩu. Nên dùng khi gọi thật.
+              </li>
+              <li>
+                <strong>Mặc định dưới đây</strong>: chỉ khi tài khoản <em>chưa</em> gắn số trên hồ sơ — thường admin /
+                superadmin thử gọi. Không nên nhiều người dùng chung một số mặc định.
+              </li>
+            </ul>
             <p className="mt-1 text-[11px] leading-snug text-amber-900/90">
-              API key chỉ dùng webhook / đồng bộ lịch sử — <strong>không</strong> thay mật khẩu số nội bộ. Lấy trong
-              OMICall: Cấu hình → Tổng đài → Số nội bộ. Có thể gán từng TVV ở Nhân sự, hoặc điền mặc định dưới đây.
+              API key chỉ dùng webhook / đồng bộ lịch sử — <strong>không</strong> thay mật khẩu số nội bộ.
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <label className="block text-sm">
-                <span className="mb-1 block font-medium text-slate-700">Số nội bộ mặc định</span>
+                <span className="mb-1 block font-medium text-slate-700">Số nội bộ mặc định (dự phòng)</span>
                 <input
                   className={INPUT}
                   value={draft.defaultSipUser ?? ''}
                   onChange={(e) => patch({ defaultSipUser: e.target.value })}
-                  placeholder="vd. 100"
+                  placeholder="vd. 100 — chỉ khi hồ sơ trống"
                   autoComplete="off"
                 />
               </label>
@@ -365,13 +374,16 @@ export function OmicallSettingsTab() {
             </div>
             {profile?.omicallSipUser?.trim() ? (
               <p className="mt-2 text-[11px] text-slate-600">
-                Tài khoản đang đăng nhập đã gắn số nội bộ <strong>{profile.omicallSipUser}</strong>
-                {profile.omicallSipPassword?.trim() ? ' (có mật khẩu trên hồ sơ).' : ' — chưa có mật khẩu trên hồ sơ.'}
+                Tài khoản đang đăng nhập đang dùng <strong>hồ sơ riêng</strong>: số{' '}
+                <strong>{profile.omicallSipUser}</strong>
+                {profile.omicallSipPassword?.trim()
+                  ? ' (đã có mật khẩu). Đổi số ở Nhân sự — sửa mặc định ở trên sẽ không đổi số này.'
+                  : ' — chưa có mật khẩu trên hồ sơ (có thể lấy mật khẩu mặc định nếu có).'}
               </p>
             ) : (
               <p className="mt-2 text-[11px] text-amber-900">
-                Superadmin / tài khoản này chưa gắn số nội bộ. Điền mặc định ở trên, hoặc bấm đồng bộ theo email nếu
-                OMICall đã tạo số trùng email đăng nhập.
+                Tài khoản này chưa gắn số trên hồ sơ — sẽ dùng <strong>mặc định</strong> ở trên (nếu đã điền), hoặc bấm
+                «Đồng bộ số theo email tôi».
               </p>
             )}
           </div>

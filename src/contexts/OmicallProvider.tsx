@@ -23,6 +23,7 @@ import {
   parseOmicallUserData,
   resolveOmicallSipCredentials,
   describeMissingOmicallSipParts,
+  explainOmicallSipRegisterFailure,
   resolveOmicallOutboundNumber,
   canUseOmicallClick2Call,
 } from '../utils/omicallConfig'
@@ -573,10 +574,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
           .then((reg) => {
             if (!sessionActiveRef.current) return
             if (!reg.status) {
-              const detail =
-                reg.error || reg.message || 'Đăng ký tổng đài thất bại (sai mật khẩu / domain / số nội bộ?).'
               setLastError(
-                `${detail} — đang dùng domain «${c.sipRealm}», số «${c.sipUser}».`,
+                explainOmicallSipRegisterFailure(reg.error || reg.message, {
+                  sipRealm: c.sipRealm,
+                  sipUser: c.sipUser,
+                }),
               )
               if (reconnectAttemptRef.current >= 5) {
                 setConnectionStatus('error')
@@ -714,10 +716,11 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         if (cancelled) return
         if (!reg.status) {
           setSipReady(false)
-          const detail =
-            reg.error || reg.message || 'Đăng ký tổng đài thất bại'
           setLastError(
-            `${detail} — domain «${sipCreds.sipRealm}», số «${sipCreds.sipUser}». Kiểm tra mật khẩu SIP trên OMICall.`,
+            explainOmicallSipRegisterFailure(reg.error || reg.message, {
+              sipRealm: sipCreds.sipRealm,
+              sipUser: sipCreds.sipUser,
+            }),
           )
           setConnectionStatus('registering')
           setConnectionLabel(reg.message || 'Đang thử kết nối tổng đài…')

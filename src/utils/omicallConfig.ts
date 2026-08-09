@@ -96,6 +96,27 @@ export function resolveOmicallSipCredentials(
   return { sipRealm, sipUser, sipPassword }
 }
 
+/** Giải thích mã lỗi đăng ký SIP từ OMICall (tiếng Việt đời thường). */
+export function explainOmicallSipRegisterFailure(
+  raw: string | null | undefined,
+  sip?: { sipRealm?: string; sipUser?: string } | null,
+): string {
+  const code = String(raw ?? '').trim()
+  const where =
+    sip?.sipRealm || sip?.sipUser
+      ? ` (domain «${sip?.sipRealm ?? '?'}», số «${sip?.sipUser ?? '?'}»)`
+      : ''
+  const upper = code.toUpperCase()
+  if (upper.includes('SIP_USER_INACTIVE') || upper.includes('USER_INACTIVE')) {
+    return `Số nội bộ đang bị tắt trên OMICall${where}. Vào trang quản trị OMICall → Số nội bộ → bật lại số này (hoặc gán số đang hoạt động cho tài khoản), rồi «Thử kết nối lại».`
+  }
+  if (upper.includes('UNAUTHORIZED') || upper.includes('FORBIDDEN') || upper.includes('AUTH')) {
+    return `Sai mật khẩu hoặc không được phép đăng ký SIP${where}. Kiểm tra mật khẩu số nội bộ trên OMICall.`
+  }
+  if (!code) return `Đăng ký tổng đài thất bại${where}.`
+  return `${code}${where}`
+}
+
 /** Thiếu gì để đăng ký SIP — dùng cho thông báo trạng thái. */
 export function describeMissingOmicallSipParts(
   config: OmicallIntegrationConfig,
