@@ -109,7 +109,7 @@ export function LoggedInPortalGate({
   const card =
     tone === 'emerald'
       ? 'w-full max-w-md rounded-3xl border border-emerald-400/25 bg-white p-6 shadow-2xl'
-      : 'liquid-glass w-full max-w-sm rounded-2xl border border-white/20 bg-slate-900/80 p-6 text-white shadow-2xl backdrop-blur-xl'
+      : 'liquid-glass w-full max-w-sm rounded-2xl border border-white/20 bg-slate-900/90 p-6 text-white shadow-2xl'
 
   return (
     <div className={shell}>

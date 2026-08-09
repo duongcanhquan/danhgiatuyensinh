@@ -5,10 +5,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
-import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
+import { collection, onSnapshot, query, Timestamp, where, type DocumentData, type QuerySnapshot } from 'firebase/firestore'
 import { normalizeUserRole } from '../auth/roleUtils'
 import type { VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
@@ -83,6 +84,23 @@ function userDocBelongsToOrg(data: Record<string, unknown>, scopeOrgId: string):
   return leadBelongsToOrg({ orgId: orgId || null }, scopeOrgId)
 }
 
+const DIRECTORY_SNAPSHOT_DEBOUNCE_MS = 100
+
+function directorySnapshotSignature(snap: QuerySnapshot<DocumentData>, omitOrgFilter: boolean, scopeOrgId: string): string {
+  const parts: string[] = []
+  snap.forEach((d) => {
+    const raw = d.data() as Record<string, unknown>
+    if (omitOrgFilter && !userDocBelongsToOrg(raw, scopeOrgId)) return
+    const u = raw.updatedAt as { seconds?: number; nanoseconds?: number } | undefined
+    const sec = u && typeof u.seconds === 'number' ? u.seconds : 0
+    const nano = u && typeof u.nanoseconds === 'number' ? u.nanoseconds : 0
+    const active = raw.isActive === false ? '0' : '1'
+    parts.push(`${d.id}:${sec}.${nano}:${active}:${String(raw.role ?? '')}`)
+  })
+  parts.sort()
+  return parts.join('|')
+}
+
 type CounselorDirectoryState = {
   users: VietMyUserProfile[]
   counselors: VietMyUserProfile[]
@@ -100,6 +118,10 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const configured = useMemo(() => isFirebaseConfigured(), [])
+  const lastSigRef = useRef<string | null>(null)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSnapRef = useRef<QuerySnapshot<DocumentData> | null>(null)
+  const isFirstSnapRef = useRef(true)
 
   const scopeOrgId = useMemo(() => {
     if (isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)) {
@@ -132,6 +154,8 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     }
 
     setLoading(true)
+    lastSigRef.current = null
+    isFirstSnapRef.current = true
 
     /**
      * Superadmin + VietMy: bỏ where(orgId) để lấy nhân sự cũ thiếu orgId (Rules isPlatform).
@@ -142,33 +166,62 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       ? query(collection(firestore, FS_COLLECTIONS.users))
       : query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
 
+    const applySnapshot = (snap: QuerySnapshot<DocumentData>) => {
+      const sig = directorySnapshotSignature(snap, omitOrgFilter, scopeOrgId)
+      if (sig === lastSigRef.current) {
+        setLoading(false)
+        return
+      }
+      lastSigRef.current = sig
+      const next: VietMyUserProfile[] = []
+      snap.forEach((d) => {
+        const raw = d.data() as Record<string, unknown>
+        if (!omitOrgFilter || userDocBelongsToOrg(raw, scopeOrgId)) {
+          const row = mapUser(d.id, raw)
+          if (row) next.push(row)
+        }
+      })
+      startTransition(() => {
+        setUsers(next)
+        setLoading(false)
+        setError(null)
+      })
+    }
+
     const unsubIdle = scheduleIdleAttach(() =>
       onSnapshot(
         qy,
         (snap) => {
-          const next: VietMyUserProfile[] = []
-          snap.forEach((d) => {
-            const raw = d.data() as Record<string, unknown>
-            if (!omitOrgFilter || userDocBelongsToOrg(raw, scopeOrgId)) {
-              const row = mapUser(d.id, raw)
-              if (row) next.push(row)
-            }
-          })
-          startTransition(() => {
-            setUsers(next)
-            setLoading(false)
-            setError(null)
-          })
+          pendingSnapRef.current = snap
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+          const flush = () => {
+            debounceTimerRef.current = null
+            const latest = pendingSnapRef.current
+            pendingSnapRef.current = null
+            if (latest) applySnapshot(latest)
+          }
+          if (isFirstSnapRef.current) {
+            isFirstSnapRef.current = false
+            flush()
+            return
+          }
+          debounceTimerRef.current = setTimeout(flush, DIRECTORY_SNAPSHOT_DEBOUNCE_MS)
         },
         (e) => {
           console.error(e)
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+          debounceTimerRef.current = null
           setUsers([])
           setLoading(false)
           setError(e instanceof Error ? e.message : 'Không đọc được danh bạ nhân sự.')
         },
       ),
     )
-    return () => unsubIdle()
+    return () => {
+      unsubIdle()
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      pendingSnapRef.current = null
+    }
   }, [configured, scopeOrgId, isPlatform])
 
   const value = useMemo(

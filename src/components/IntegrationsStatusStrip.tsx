@@ -24,6 +24,10 @@ import {
 } from '../utils/integrationStatus'
 import { STATUS_ICONS } from '../integrations/connectorIcons'
 
+const INTEGRATION_STATUS_TTL_MS = 45_000
+const portalEnabledCache = new Map<string, { at: number; enabled: boolean }>()
+const n8nHooksCache = new Map<string, { at: number; hooks: OrgN8nWebhooks }>()
+
 function healthRing(h: IntegrationHealth): string {
   switch (h) {
     case 'ok':
@@ -65,7 +69,13 @@ export function IntegrationsStatusStrip() {
   useEffect(() => {
     if (!show || !db) return
     let cancelled = false
+    const cached = n8nHooksCache.get(effectiveOrgId)
+    if (cached && Date.now() - cached.at < INTEGRATION_STATUS_TTL_MS) {
+      setN8nHooks(cached.hooks)
+      return
+    }
     void loadOrgN8nWebhooks(db, effectiveOrgId).then((hooks) => {
+      n8nHooksCache.set(effectiveOrgId, { at: Date.now(), hooks })
       if (!cancelled) setN8nHooks(hooks)
     })
     return () => {
@@ -76,20 +86,25 @@ export function IntegrationsStatusStrip() {
   useEffect(() => {
     if (!show || !db) return
     let cancelled = false
+    const cached = portalEnabledCache.get(effectiveOrgId)
+    if (cached && Date.now() - cached.at < INTEGRATION_STATUS_TTL_MS) {
+      setPortalEnabled(cached.enabled)
+      return
+    }
     void (async () => {
       try {
         const orgPortal = await getDoc(
           doc(db, ...orgSettingsDocSegments(effectiveOrgId, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID)),
         )
+        let enabled = false
         if (orgPortal.exists()) {
-          const orgEn = (orgPortal.data() as { enabled?: unknown }).enabled === true
-          if (!cancelled) setPortalEnabled(orgEn)
-          return
+          enabled = (orgPortal.data() as { enabled?: unknown }).enabled === true
+        } else {
+          const legacy = await getDoc(doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID))
+          enabled = legacy.exists() && (legacy.data() as { enabled?: boolean }).enabled === true
         }
-        const legacy = await getDoc(doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID))
-        if (!cancelled) {
-          setPortalEnabled(legacy.exists() && (legacy.data() as { enabled?: boolean }).enabled === true)
-        }
+        portalEnabledCache.set(effectiveOrgId, { at: Date.now(), enabled })
+        if (!cancelled) setPortalEnabled(enabled)
       } catch {
         if (!cancelled) setPortalEnabled(false)
       }

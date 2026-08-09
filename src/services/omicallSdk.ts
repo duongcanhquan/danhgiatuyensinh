@@ -520,7 +520,7 @@ export function suppressOmicallVendorToasts(host?: OmicallToastSuppressHost): vo
     doc.head.appendChild(style)
   }
 
-  watchOmicallStyleInjection(doc)
+  // Không gọi watch ở đây — OmicallProvider gắn/tắt observer theo SIP armed (tránh bật lại sau logout).
   sanitizeOmicallInjectedStyles(doc)
   scheduleOmicallStyleSanitizeBurst(doc)
 
