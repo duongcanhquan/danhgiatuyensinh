@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   hangUpOmicallCall,
   ensureOmicallLayoutShield,
+  OMICALL_LAYOUT_SHIELD_CSS,
   normalizeOmicallInjectedCss,
   sanitizeOmicallInjectedStyles,
   isOmicallVendorCloseSaveLabel,
@@ -22,7 +23,12 @@ function makeToastSuppressHost() {
       const el = nodes.get('vm-omicall-toast-suppress')
       return el ? [el] : []
     },
-    createElement: (tag: string) => ({ id: '', tagName: tag.toUpperCase(), textContent: '' }),
+    createElement: (tag: string) => ({
+      id: '',
+      tagName: tag.toUpperCase(),
+      textContent: '',
+      setAttribute: () => {},
+    }),
     head: {
       appendChild: (el: { id: string; tagName: string; textContent: string }) => {
         nodes.set(el.id, el)
@@ -84,6 +90,15 @@ describe('normalizeOmicallInjectedCss', () => {
     expect(out).toContain('--omi-primary')
     expect(out).toMatch(/@layer\s+omicall/i)
   })
+
+  it('strips global button/input resets from vendor theme', () => {
+    const out = normalizeOmicallInjectedCss(
+      '@layer base{button{font-family:OMIRoboto;font-size:13px}input{font-size:13px}:root{--omi-x:1}}',
+    )
+    expect(out).not.toMatch(/button\s*\{/i)
+    expect(out).not.toMatch(/input\s*\{/i)
+    expect(out).toContain('--omi-x')
+  })
 })
 
 describe('ensureOmicallLayoutShield', () => {
@@ -101,13 +116,24 @@ describe('ensureOmicallLayoutShield', () => {
         appendChild,
       },
       getElementById: (id: string) => headKids.find((x) => x.id === id) ?? null,
-      createElement: (tag: string) => ({ id: '', tagName: tag.toUpperCase(), textContent: '' }),
+      createElement: (tag: string) => ({
+        id: '',
+        tagName: tag.toUpperCase(),
+        textContent: '',
+        setAttribute: () => {},
+      }),
       querySelectorAll: () => [],
     }
     ensureOmicallLayoutShield(doc as unknown as Document)
     expect(appendChild).toHaveBeenCalledTimes(1)
     ensureOmicallLayoutShield(doc as unknown as Document)
     expect(appendChild).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores VietMy font and canvas on body shield', () => {
+    expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/Plus Jakarta Sans/)
+    expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/--vm-canvas/)
+    expect(OMICALL_LAYOUT_SHIELD_CSS).toMatch(/font-size:100%!important/)
   })
 })
 
@@ -126,7 +152,12 @@ describe('sanitizeOmicallInjectedStyles', () => {
         },
       },
       getElementById: (id: string) => headKids.find((x) => x.id === id) ?? null,
-      createElement: (tag: string) => ({ id: '', tagName: tag.toUpperCase(), textContent: '' }),
+      createElement: (tag: string) => ({
+        id: '',
+        tagName: tag.toUpperCase(),
+        textContent: '',
+        setAttribute: () => {},
+      }),
       querySelectorAll: (sel: string) => (sel === 'style' ? [style] : []),
     }
     sanitizeOmicallInjectedStyles(doc as unknown as Document)

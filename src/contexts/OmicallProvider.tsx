@@ -575,8 +575,8 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       setConnectionStatus('connected')
       setConnectionLabel(data.name || 'Sẵn sàng gọi')
       setLastError(null)
-      // Theme CSS OMICall hay gắn đúng lúc SIP connected — quét lại để tránh vỡ layout Chrome.
-      scheduleOmicallStyleSanitizeBurst(document)
+      // Theme CSS OMICall hay gắn đúng lúc SIP connected — force burst để khôi phục vỏ VietMy.
+      scheduleOmicallStyleSanitizeBurst(document, { force: true })
       sanitizeOmicallInjectedStyles(document)
       if (sipCreds?.sipUser) {
         refreshCallContext()
@@ -935,7 +935,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         // SDK gắn theme CSS + OMIToastify khi init — chặn toast và gỡ @layer base.
         suppressOmicallVendorToasts()
         sanitizeOmicallInjectedStyles(document)
-        scheduleOmicallStyleSanitizeBurst(document)
+        scheduleOmicallStyleSanitizeBurst(document, { force: true })
         if (cancelled) return
         if (!ok) {
           setConnectionStatus('error')
