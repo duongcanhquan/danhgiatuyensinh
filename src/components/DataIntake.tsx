@@ -312,21 +312,22 @@ export function DataIntake() {
         const buf = await file.arrayBuffer()
         await yieldToMain()
         const tpl = getLeadIntakeTemplate(templateId)
-        let parseDiag: ParseWorkbookDiag | null = null
+        const parseDiagHolder: { diag: ParseWorkbookDiag | null } = { diag: null }
         const rows = parseWorkbookToRows(buf, {
           headerRowIndex: tpl.headerRowIndex,
           fallbackOrderedHeaders: tpl.columns.map((c) => c.header),
           onDiag: (d) => {
-            parseDiag = d
+            parseDiagHolder.diag = d
           },
         })
         if (!rows.length) {
-          const sheets = parseDiag?.sheetNames?.length
-            ? `Sheet trong file: ${parseDiag.sheetNames.join(', ')}.`
-            : ''
-          const hdrs = parseDiag?.sampleHeaders?.length
-            ? ` Tiêu đề đọc được (hàng ${parseDiag.pickedHeaderRow ?? 1}): ${parseDiag.sampleHeaders.join(' | ')}.`
-            : ' Không đọc được hàng tiêu đề.'
+          const diag = parseDiagHolder.diag
+          const sheets =
+            diag && diag.sheetNames.length > 0 ? `Sheet trong file: ${diag.sheetNames.join(', ')}.` : ''
+          const hdrs =
+            diag && diag.sampleHeaders && diag.sampleHeaders.length > 0
+              ? ` Tiêu đề đọc được (hàng ${diag.pickedHeaderRow ?? 1}): ${diag.sampleHeaders.join(' | ')}.`
+              : ' Không đọc được hàng tiêu đề.'
           setBanner(
             `Không tìm thấy dữ liệu (${tpl.label}). ${sheets}${hdrs} Cần sheet dữ liệu (không dùng «Hướng dẫn»), hàng tiêu đề khớp mẫu (Họ tên, điện thoại…), dữ liệu từ hàng dưới. Tải lại file mẫu trong app rồi copy dữ liệu vào sheet «${tpl.sheetName}».`,
           )
