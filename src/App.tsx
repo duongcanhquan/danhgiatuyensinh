@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AuthProvider } from './contexts/AuthProvider'
@@ -9,49 +9,52 @@ import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginView } from './views/LoginView'
 import { AccountantProtectedRoute } from './components/accountant/AccountantProtectedRoute'
+import { lazyWithRetry } from './utils/lazyWithRetry'
 
-const SummaryHubView = lazy(() =>
+const SummaryHubView = lazyWithRetry(() =>
   import('./views/SummaryHubView').then((m) => ({ default: m.SummaryHubView })),
 )
-const LeadsWorkspace = lazy(() =>
+const LeadsWorkspace = lazyWithRetry(() =>
   import('./views/LeadsWorkspace').then((m) => ({ default: m.LeadsWorkspace })),
 )
-const SettingsView = lazy(() =>
+const SettingsView = lazyWithRetry(() =>
   import('./views/SettingsView').then((m) => ({ default: m.SettingsView })),
 )
-const UserManualView = lazy(() =>
+const UserManualView = lazyWithRetry(() =>
   import('./views/UserManualView').then((m) => ({ default: m.UserManualView })),
 )
-const AnalyticsAdvancedView = lazy(() =>
+const AnalyticsAdvancedView = lazyWithRetry(() =>
   import('./views/AnalyticsAdvancedView').then((m) => ({ default: m.AnalyticsAdvancedView })),
 )
-const AccountantView = lazy(() =>
+const AccountantView = lazyWithRetry(() =>
   import('./views/AccountantView').then((m) => ({ default: m.AccountantView })),
 )
-const AccountantLoginView = lazy(() =>
+const AccountantLoginView = lazyWithRetry(() =>
   import('./views/accountant/AccountantLoginView').then((m) => ({ default: m.AccountantLoginView })),
 )
-const AccountantStaffView = lazy(() =>
+const AccountantStaffView = lazyWithRetry(() =>
   import('./views/accountant/AccountantStaffView').then((m) => ({ default: m.AccountantStaffView })),
 )
-const AccountantReportsView = lazy(() =>
+const AccountantReportsView = lazyWithRetry(() =>
   import('./views/accountant/AccountantReportsView').then((m) => ({
     default: m.AccountantReportsView,
   })),
 )
-const AccountantLayout = lazy(() =>
+const AccountantLayout = lazyWithRetry(() =>
   import('./components/accountant/AccountantLayout').then((m) => ({ default: m.AccountantLayout })),
 )
-const MyDayView = lazy(() => import('./views/MyDayView').then((m) => ({ default: m.MyDayView })))
-const OrganizationsView = lazy(() =>
+const MyDayView = lazyWithRetry(() =>
+  import('./views/MyDayView').then((m) => ({ default: m.MyDayView })),
+)
+const OrganizationsView = lazyWithRetry(() =>
   import('./views/OrganizationsView').then((m) => ({ default: m.OrganizationsView })),
 )
-const StudentRegistrationView = lazy(() =>
+const StudentRegistrationView = lazyWithRetry(() =>
   import('./views/student/StudentRegistrationView').then((m) => ({
     default: m.StudentRegistrationView,
   })),
 )
-const StudentRegistrationSuccessView = lazy(() =>
+const StudentRegistrationSuccessView = lazyWithRetry(() =>
   import('./views/student/StudentRegistrationSuccessView').then((m) => ({
     default: m.StudentRegistrationSuccessView,
   })),
