@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { leadMatchesPurgeProgram } from './purgeLeadsByIntakeProgram'
+import { isFirestoreIndexError, leadMatchesPurgeProgram } from './purgeLeadsByIntakeProgram'
 import type { Lead } from '../types'
 import { Timestamp } from 'firebase/firestore'
 
@@ -32,5 +32,17 @@ describe('leadMatchesPurgeProgram', () => {
     expect(leadMatchesPurgeProgram(lead({ id: '1', intakeProgram: '' }), '__UNSET__')).toBe(true)
     expect(leadMatchesPurgeProgram(lead({ id: '2' }), '__UNSET__')).toBe(true)
     expect(leadMatchesPurgeProgram(lead({ id: '3', intakeProgram: 'X' }), '__UNSET__')).toBe(false)
+  })
+})
+
+describe('isFirestoreIndexError', () => {
+  it('nhận diện lỗi thiếu composite index', () => {
+    expect(
+      isFirestoreIndexError(
+        new Error('The query requires an index. You can create it here: https://console.firebase.google.com/...'),
+      ),
+    ).toBe(true)
+    expect(isFirestoreIndexError({ code: 'failed-precondition', message: 'x' })).toBe(true)
+    expect(isFirestoreIndexError(new Error('permission-denied'))).toBe(false)
   })
 })

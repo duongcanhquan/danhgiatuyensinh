@@ -1983,6 +1983,11 @@ export function LeadManagement() {
                   ),
               },
             )
+            if (collected.usedClientScanFallback && round === 1) {
+              setRescoreMsg(
+                'Index chương trình đang build — tạm quét rộng rồi lọc trên máy. Tiếp tục xóa bình thường…',
+              )
+            }
 
             if (!collected.ids.length) {
               if (round === 1) {

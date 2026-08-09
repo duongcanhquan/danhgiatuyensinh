@@ -23,11 +23,25 @@ function serverFiltersForProgram(programKey: string): LeadListServerFilters | un
   return { intakeProgram: normalizeIntakeProgramLabel(key) }
 }
 
+/** Firestore báo thiếu composite index (failed-precondition). */
+export function isFirestoreIndexError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e ?? '')
+  const code =
+    e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : ''
+  return (
+    /requires an index/i.test(msg) ||
+    code === 'failed-precondition' ||
+    code === 'FAILED_PRECONDITION'
+  )
+}
+
 export type PurgeProgramCollectResult = {
   ids: string[]
   /** Còn hồ sơ khớp nhưng đã chạm trần — cần chạy lại sau khi xóa. */
   mayHaveMore: boolean
   scanned: number
+  /** true = đã bỏ lọc server vì index chưa sẵn, quét rộng + khớp client. */
+  usedClientScanFallback?: boolean
 }
 
 /** Thu thập id hồ sơ thuộc chương trình (quét hết trong trần, không kẹt 1500). */
@@ -45,28 +59,41 @@ export async function collectLeadIdsByIntakeProgram(
   const key = programKey.trim()
   if (!key) return { ids: [], mayHaveMore: false, scanned: 0 }
 
-  const filters = serverFiltersForProgram(key)
-  const { ids, scanTruncated, matchTruncated, scanned } = await collectMatchingLeadIdsInScope(
-    db,
-    profile,
-    hoDQueryLabels,
-    filters,
-    (lead) => leadMatchesPurgeProgram(lead, key),
-    {
-      maxMatchIds: PURGE_PROGRAM_HARD_CAP,
-      // Chương trình có tên: mỗi doc đọc ra đã gần như khớp server filter.
-      // __UNSET__: cần quét rộng hơn để tìm hồ sơ chưa gắn.
-      maxScanDocs: key === '__UNSET__' ? 200_000 : PURGE_PROGRAM_HARD_CAP,
-      canReadGlobal: opts.canReadGlobal,
-      orgId: opts.orgId,
-      onProgress: opts.onProgress,
-    },
-  )
+  const run = async (filters: LeadListServerFilters | undefined, wideScan: boolean) => {
+    const { ids, scanTruncated, matchTruncated, scanned } = await collectMatchingLeadIdsInScope(
+      db,
+      profile,
+      hoDQueryLabels,
+      filters,
+      (lead) => leadMatchesPurgeProgram(lead, key),
+      {
+        maxMatchIds: PURGE_PROGRAM_HARD_CAP,
+        // Không filter server / __UNSET__: quét rộng hơn để không bỏ sót.
+        maxScanDocs: wideScan || key === '__UNSET__' ? 200_000 : PURGE_PROGRAM_HARD_CAP,
+        canReadGlobal: opts.canReadGlobal,
+        orgId: opts.orgId,
+        onProgress: opts.onProgress,
+      },
+    )
+    return {
+      ids,
+      mayHaveMore: scanTruncated || matchTruncated,
+      scanned,
+    }
+  }
 
-  return {
-    ids,
-    mayHaveMore: scanTruncated || matchTruncated,
-    scanned,
+  const filters = serverFiltersForProgram(key)
+  if (!filters) {
+    return run(undefined, true)
+  }
+
+  try {
+    return await run(filters, false)
+  } catch (e) {
+    // Index intakeProgram+orgId+updatedAt có thể chưa deploy / đang build.
+    if (!isFirestoreIndexError(e)) throw e
+    const fallback = await run(undefined, true)
+    return { ...fallback, usedClientScanFallback: true }
   }
 }
 
