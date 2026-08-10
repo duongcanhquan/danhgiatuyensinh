@@ -93,6 +93,7 @@ import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
 import {
   formatLeadCounselorNotePreview,
   formatLeadLatestInteractionLine,
+  leadListActivityPatch,
 } from '../utils/leadListActivity'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import {
@@ -3819,7 +3820,7 @@ export function LeadManagement() {
                 </th>
                 <th
                   className="w-[12%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Ghi chú tư vấn viên sau khi gọi / tương tác gần nhất"
+                  title="Ghi chú TVV trên hồ sơ — cùng nội dung ô «Ghi chú TVV» khi mở chi tiết"
                 >
                   Ghi chú
                 </th>
@@ -5399,7 +5400,7 @@ function LeadDetailPanel({
     setFinanceDraft(leadToFinanceDraft(lead))
   }, [lead.id])
 
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState(() => (lead.lastCounselorNote ?? '').trim())
   const [evalTag, setEvalTag] = useState<string>(EVALUATION_TAGS[0])
   const [dispositionDraft, setDispositionDraft] = useState<CallDispositionId | ''>(() =>
     lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
@@ -5422,6 +5423,9 @@ function LeadDetailPanel({
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
+
+  const noteBaseline = (lead.lastCounselorNote ?? '').trim()
+  const noteChanged = note.trim() !== noteBaseline
 
   const deleteThisLead = useCallback(async () => {
     if (!db || !profile || !canDeleteThisLead || deleteBusy) return
@@ -5447,7 +5451,7 @@ function LeadDetailPanel({
   }, [db, profile, canDeleteThisLead, deleteBusy, lead.id, lead.fullName, onDeleted])
 
   useEffect(() => {
-    setNote('')
+    setNote((lead.lastCounselorNote ?? '').trim())
     setEvalTag(EVALUATION_TAGS[0])
     setDispositionDraft(
       lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
@@ -5554,7 +5558,7 @@ function LeadDetailPanel({
       financeDirty ||
       (crmDirty !== null && crmForForm !== lead.status) ||
       (statusDirty !== null && statusForForm !== lead.pipelineStatus) ||
-      note.trim().length > 0 ||
+      noteChanged ||
       dispositionChanged,
     [
       coreDirty,
@@ -5565,7 +5569,7 @@ function LeadDetailPanel({
       statusDirty,
       statusForForm,
       lead.pipelineStatus,
-      note,
+      noteChanged,
       dispositionChanged,
     ],
   )
@@ -5818,6 +5822,8 @@ function LeadDetailPanel({
     }
     const canMutateLead = showCounselorProgressForm
     const noteTrim = note.trim()
+    const noteBaselineSaved = (lead.lastCounselorNote ?? '').trim()
+    const noteDidChange = noteTrim !== noteBaselineSaved
     const crmChanged = crmDirty !== null && crmForForm !== lead.status
     const pipeChanged = statusDirty !== null && statusForForm !== lead.pipelineStatus
     const corePatch = buildLeadCoreFirestorePatch(lead, coreDraft)
@@ -5830,12 +5836,12 @@ function LeadDetailPanel({
         ? lead.lastCallDispositionId
         : null)
 
-    if (!crmChanged && !pipeChanged && !noteTrim && !coreChanged && !dispChanged) {
+    if (!crmChanged && !pipeChanged && !noteDidChange && !coreChanged && !dispChanged) {
       setMsg('Không có thay đổi.')
       return
     }
-    if (dispChanged && !canSaveInteraction && !canMutateLead) {
-      setMsg('Bạn không có quyền cập nhật note sau gọi trên hồ sơ này.')
+    if ((noteDidChange || dispChanged) && !canSaveInteraction && !canMutateLead) {
+      setMsg('Bạn không có quyền cập nhật ghi chú / phản hồi nhanh trên hồ sơ này.')
       return
     }
     if (coreChanged && !canMutateLead) {
@@ -5846,13 +5852,13 @@ function LeadDetailPanel({
       setMsg('Bạn không có quyền đổi tình trạng tư vấn trên hồ sơ này.')
       return
     }
-    if (pipeChanged && !noteTrim && !canMutateLead) {
+    if (pipeChanged && !noteDidChange && !canMutateLead) {
       setMsg(
-        'Để chỉnh funnel không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc nhập ghi chú rồi bấm «Lưu cập nhật»).',
+        'Để chỉnh funnel không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc sửa ghi chú TVV rồi bấm «Lưu cập nhật»).',
       )
       return
     }
-    if (noteTrim && !canSaveInteraction) {
+    if (noteDidChange && !canSaveInteraction) {
       setMsg('Bạn không có quyền ghi tương tác.')
       return
     }
@@ -5930,6 +5936,15 @@ function LeadDetailPanel({
         if (pipeChanged) leadFirestorePatch.pipelineStatus = statusForForm
         else if (crmChanged) leadFirestorePatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
       }
+      const activityFromNote =
+        noteDidChange && noteTrim
+          ? leadListActivityPatch({
+              kind: 'note',
+              summary: 'Ghi chú TVV',
+              counselorNote: noteTrim,
+            })
+          : null
+      if (activityFromNote) Object.assign(leadFirestorePatch, activityFromNote)
 
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadFirestorePatch)
 
@@ -6006,11 +6021,11 @@ function LeadDetailPanel({
       }
 
       const dispDef = nextDispositionId ? getCallDisposition(nextDispositionId) : undefined
-      if (noteTrim || dispChanged) {
+      if ((noteDidChange && noteTrim) || dispChanged) {
         const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
         const counselorNote =
           noteTrim ||
-          (dispDef ? `Note sau gọi: ${dispDef.label}` : '')
+          (dispDef ? `Phản hồi nhanh: ${dispDef.label}` : '')
         await addDoc(sub, {
           leadId: lead.id,
           channel: dispChanged ? 'CALL' : 'NOTE',
@@ -6034,8 +6049,8 @@ function LeadDetailPanel({
           leadId: lead.id,
           actionType: 'NOTE_ADDED',
           description: dispDef
-            ? `Note sau gọi: ${dispDef.label}${noteTrim ? ` — ${noteTrim.slice(0, 200)}` : ''}`
-            : `Ghi chú tương tác (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
+            ? `Phản hồi nhanh: ${dispDef.label}${noteTrim ? ` — ${noteTrim.slice(0, 200)}` : ''}`
+            : `Ghi chú TVV (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -6049,6 +6064,14 @@ function LeadDetailPanel({
         ...(typeof leadFirestorePatch.priorityTag === 'string'
           ? { priorityTag: leadFirestorePatch.priorityTag as PriorityTag }
           : {}),
+        ...(activityFromNote
+          ? {
+              lastCounselorNote: activityFromNote.lastCounselorNote,
+              lastInteractionAt: activityFromNote.lastInteractionAt,
+              lastInteractionKind: activityFromNote.lastInteractionKind,
+              lastInteractionSummary: activityFromNote.lastInteractionSummary,
+            }
+          : {}),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       }
@@ -6061,15 +6084,23 @@ function LeadDetailPanel({
         ...(typeof leadFirestorePatch.priorityTag === 'string'
           ? { priorityTag: leadFirestorePatch.priorityTag as PriorityTag }
           : {}),
+        ...(activityFromNote
+          ? {
+              lastCounselorNote: activityFromNote.lastCounselorNote,
+              lastInteractionAt: activityFromNote.lastInteractionAt,
+              lastInteractionKind: activityFromNote.lastInteractionKind,
+              lastInteractionSummary: activityFromNote.lastInteractionSummary,
+            }
+          : {}),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
 
-      setNote('')
+      setNote(noteTrim || noteBaselineSaved)
       setStatusDirty(null)
       setCrmDirty(null)
       if (dispDef) setDispositionDraft(dispDef.id)
-      setMsg(dispDef ? `Đã lưu · Note sau gọi: ${dispDef.label}` : 'Đã lưu cập nhật.')
+      setMsg(dispDef ? `Đã lưu · Phản hồi nhanh: ${dispDef.label}` : 'Đã lưu cập nhật.')
     } catch (e) {
       console.error(e)
       setMsg('Không lưu được. Kiểm tra Firestore Rules.')
@@ -6662,16 +6693,12 @@ function LeadDetailPanel({
                                   </div>
                                 </div>
                                 <label className="mt-2 block text-xs font-medium text-slate-800">
-                                  Ghi chú tương tác
+                                  Ghi chú TVV
                                   <textarea
                                     value={note}
                                     onChange={(e) => setNote(e.target.value)}
                                     rows={3}
-                                    placeholder={
-                                      crmEditOnRight
-                                        ? 'Ghi nhận buổi làm việc — lưu kèm funnel / note sau gọi phía trên…'
-                                        : 'Ghi nhận buổi làm việc — lưu kèm tình trạng / note sau gọi phía trên…'
-                                    }
+                                    placeholder="Nội dung hiện trên cột Ghi chú của danh sách hồ sơ…"
                                     className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
                                   />
                                 </label>

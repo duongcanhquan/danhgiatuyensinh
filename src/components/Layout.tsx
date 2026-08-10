@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -42,6 +42,9 @@ type NavDef = {
 }
 
 const MOBILE_BOTTOM_ROUTES = ['/', '/leads', '/my-day', '/settings'] as const
+/** Chiều rộng thanh icon khi thu gọn / mở full (desktop). */
+const RAIL_COLLAPSED = 'lg:w-16'
+const RAIL_EXPANDED = 'lg:w-56'
 
 function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: readonly Permission[]) {
   if (item.to === '/settings') return canAccessSettingsPage(permissions)
@@ -80,9 +83,10 @@ const mainNav: NavDef[] = [
   { to: '/settings', label: 'Cài đặt', shortLabel: 'Cài đặt', icon: Settings2, group: 'more', bottomPrimary: true },
 ]
 
-function sidebarLinkClass(isActive: boolean) {
+function sidebarLinkClass(isActive: boolean, expanded: boolean) {
   return [
-    'flex w-full min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition duration-150',
+    'flex w-full min-h-11 cursor-pointer items-center rounded-xl py-2.5 text-left text-sm font-medium transition duration-150',
+    expanded ? 'gap-3 px-3' : 'justify-center px-2',
     isActive
       ? 'bg-[var(--vm-accent)] text-white shadow-sm'
       : 'text-slate-300 hover:bg-white/10 hover:text-white',
@@ -107,10 +111,35 @@ export function Layout() {
   const location = useLocation()
   const showSignOut = Boolean(isFirebaseConfigured() && getFirebaseAuth() && firebaseUser)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  /** Desktop: mở full khi hover / focus trong menu; thu về icon khi rời chuột. */
+  const [railExpanded, setRailExpanded] = useState(false)
+  const railLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    return () => {
+      if (railLeaveTimer.current) clearTimeout(railLeaveTimer.current)
+    }
+  }, [])
+
+  const openRail = () => {
+    if (railLeaveTimer.current) {
+      clearTimeout(railLeaveTimer.current)
+      railLeaveTimer.current = null
+    }
+    setRailExpanded(true)
+  }
+
+  const scheduleCloseRail = () => {
+    if (railLeaveTimer.current) clearTimeout(railLeaveTimer.current)
+    railLeaveTimer.current = setTimeout(() => {
+      setRailExpanded(false)
+      railLeaveTimer.current = null
+    }, 160)
+  }
 
   const navItems = mainNav
     .map((item) =>
@@ -137,15 +166,27 @@ export function Layout() {
     return hit?.label ?? 'VietMy'
   }, [navItems, location.pathname])
 
+  /** Mobile drawer luôn hiện chữ; desktop chỉ hiện chữ khi hover/focus mở rộng. */
+  const showLabels = sidebarOpen || railExpanded
+
   const sidebarContent = (
     <>
-      <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
+      <div
+        className={[
+          'flex items-center border-b border-white/10 py-3.5',
+          showLabels ? 'gap-3 px-4' : 'justify-center px-2',
+        ].join(' ')}
+      >
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary)]">
           <BarChart3 className="h-4 w-4 text-white" strokeWidth={2} aria-hidden />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold tracking-tight text-white">VietMy College</p>
-        </div>
+        {showLabels ? (
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold tracking-tight text-white">VietMy College</p>
+          </div>
+        ) : (
+          <span className="sr-only">VietMy College</span>
+        )}
         <button
           type="button"
           className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white lg:hidden"
@@ -156,19 +197,30 @@ export function Layout() {
         </button>
       </div>
 
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3" aria-label="Điều hướng chính">
+      <nav
+        className={[
+          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain py-3',
+          showLabels ? 'px-3' : 'px-2',
+        ].join(' ')}
+        aria-label="Điều hướng chính"
+      >
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={navTarget(to, location.pathname, location.search)}
             end={to === '/'}
             title={label}
-            className={({ isActive }) => sidebarLinkClass(isActive)}
+            aria-label={label}
+            className={({ isActive }) => sidebarLinkClass(isActive, showLabels)}
           >
             {({ isActive }) => (
               <>
-                <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} strokeWidth={2} aria-hidden />
-                <span className="truncate">{label}</span>
+                <Icon
+                  className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+                {showLabels ? <span className="truncate">{label}</span> : null}
               </>
             )}
           </NavLink>
@@ -176,49 +228,80 @@ export function Layout() {
         <NavLink
           to="/huong-dan"
           title="Hướng dẫn"
+          aria-label="Hướng dẫn"
           className={({ isActive }) =>
             [
-              'mt-1 flex w-full min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition duration-150',
+              'mt-1 flex w-full min-h-11 cursor-pointer items-center rounded-xl py-2.5 text-left text-sm font-medium transition duration-150',
+              showLabels ? 'gap-3 px-3' : 'justify-center px-2',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400',
-              isActive
-                ? 'bg-white/12 text-white'
-                : 'text-slate-400 hover:bg-white/8 hover:text-white',
+              isActive ? 'bg-white/12 text-white' : 'text-slate-400 hover:bg-white/8 hover:text-white',
             ].join(' ')
           }
         >
           {({ isActive }) => (
             <>
-              <BookOpen className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} strokeWidth={2} aria-hidden />
-              <span className="truncate">Hướng dẫn</span>
+              <BookOpen
+                className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`}
+                strokeWidth={2}
+                aria-hidden
+              />
+              {showLabels ? <span className="truncate">Hướng dẫn</span> : null}
             </>
           )}
         </NavLink>
 
         <div className="my-2 border-t border-white/15" role="separator" aria-hidden />
 
-        <OrgSwitcher className="mb-1.5" />
-        <div className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
-            <User className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        {showLabels ? (
+          <>
+            <OrgSwitcher className="mb-1.5" />
+            <div className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
+                <User className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-white">
+                  {profile?.displayName ?? 'Khách'}
+                </p>
+                <p className="truncate text-[11px] leading-tight text-slate-400">
+                  {profile ? USER_ROLE_LABELS[profile.role] : '—'}
+                </p>
+              </div>
+            </div>
+            {showSignOut ? <ChangePasswordPanel compact /> : null}
+            {showSignOut ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="mt-1.5 flex w-full min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition duration-150 hover:border-white/25 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden />
+                Đăng xuất
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 text-slate-300"
+              title={profile?.displayName ?? 'Tài khoản'}
+            >
+              <User className="h-4 w-4" strokeWidth={2} aria-hidden />
+              <span className="sr-only">{profile?.displayName ?? 'Tài khoản'}</span>
+            </div>
+            {showSignOut ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                title="Đăng xuất"
+                aria-label="Đăng xuất"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 hover:text-white"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white">{profile?.displayName ?? 'Khách'}</p>
-            <p className="truncate text-[11px] leading-tight text-slate-400">
-              {profile ? USER_ROLE_LABELS[profile.role] : '—'}
-            </p>
-          </div>
-        </div>
-        {showSignOut ? <ChangePasswordPanel compact /> : null}
-        {showSignOut ? (
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="mt-1.5 flex w-full min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition duration-150 hover:border-white/25 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
-          >
-            <LogOut className="h-3.5 w-3.5" aria-hidden />
-            Đăng xuất
-          </button>
-        ) : null}
+        )}
       </nav>
     </>
   )
@@ -240,20 +323,44 @@ export function Layout() {
           />
         ) : null}
 
+        {/* Desktop: khi mở rộng phủ lên nội dung — chỉ dành chỗ cố định bằng hàng icon. */}
+        {railExpanded ? (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 hidden cursor-default bg-slate-950/10 lg:block"
+            aria-label="Thu gọn menu"
+            tabIndex={-1}
+            onClick={() => setRailExpanded(false)}
+          />
+        ) : null}
+
         <aside
+          data-expanded={railExpanded ? 'true' : 'false'}
+          onMouseEnter={openRail}
+          onMouseLeave={scheduleCloseRail}
+          onFocusCapture={openRail}
+          onBlurCapture={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              scheduleCloseRail()
+            }
+          }}
           className={[
-            'app-shell-sidebar safe-area-pt fixed inset-y-0 left-0 z-50 flex w-[min(17rem,88vw)] shrink-0 flex-col',
+            'app-shell-sidebar safe-area-pt fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col overflow-hidden',
             'border-r',
-            'shadow-xl transition-transform duration-200 ease-out lg:shadow-none',
-            'lg:static lg:z-auto lg:h-auto lg:min-h-[100dvh] lg:w-56 lg:translate-x-0',
+            'w-[min(17rem,88vw)] transition-[width,transform,box-shadow] duration-200 ease-out',
+            railExpanded ? RAIL_EXPANDED : RAIL_COLLAPSED,
+            railExpanded ? 'lg:shadow-2xl lg:shadow-slate-950/40' : 'lg:shadow-none',
+            'lg:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
           ].join(' ')}
           aria-label="Menu bên trái"
+          aria-expanded={railExpanded || sidebarOpen}
         >
           {sidebarContent}
         </aside>
 
-        <div className="flex min-h-[100dvh] min-w-0 flex-1 flex-col lg:min-h-0">
+        {/* pl-16 = chỗ dành cho hàng icon; menu full phủ lên, không đẩy lead. */}
+        <div className="flex min-h-[100dvh] min-w-0 flex-1 flex-col lg:min-h-0 lg:pl-16">
           <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-2 sm:px-4 lg:hidden">
             <button
               type="button"
