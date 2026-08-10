@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, query, Timestamp } from 'firebase/firestore'
+import { collection, query, where, Timestamp } from 'firebase/firestore'
 import type { ScriptSnippet } from '../types'
 import { FS_COLLECTIONS, SCRIPT_CATEGORIES } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { subscribeSharedFirestoreQuery } from '../utils/sharedFirestoreQuery'
+import { useOrg } from '../contexts/OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 function isScriptCategory(x: string): x is ScriptSnippet['category'] {
   return (SCRIPT_CATEGORIES as readonly string[]).includes(x)
@@ -36,9 +39,9 @@ function mapSnippet(id: string, data: Record<string, unknown>): ScriptSnippet | 
   }
 }
 
-const SHARED_KEY = 'scriptSnippets:v1'
-
 export function useScriptSnippets() {
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [snippets, setSnippets] = useState<ScriptSnippet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -56,17 +59,17 @@ export function useScriptSnippets() {
     }
 
     return subscribeSharedFirestoreQuery(
-      SHARED_KEY,
-      (db) => query(collection(db, FS_COLLECTIONS.scriptSnippets)),
+      `scriptSnippets:org:${orgKey}`,
+      (db) => query(collection(db, FS_COLLECTIONS.scriptSnippets), where('orgId', '==', orgKey)),
       mapSnippet,
       firestore,
       (rows, err, isLoading) => {
         setSnippets(rows)
-        setError(err)
+        setError(err ? firestoreReadErrorMessage({ message: err }, 'Không đọc được kịch bản.') : null)
         setLoading(isLoading)
       },
     )
-  }, [configured])
+  }, [configured, orgKey])
 
   return { snippets, loading, error }
 }

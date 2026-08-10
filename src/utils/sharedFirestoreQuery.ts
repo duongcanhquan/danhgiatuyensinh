@@ -3,6 +3,7 @@
  */
 import type { Firestore, Query } from 'firebase/firestore'
 import { onSnapshot } from 'firebase/firestore'
+import { firestoreReadErrorMessage } from './firestoreReadError'
 
 type SharedEntry<T> = {
   listeners: Set<(rows: T[], error: string | null) => void>
@@ -47,7 +48,7 @@ export function subscribeSharedFirestoreQuery<T>(
       },
       (err) => {
         console.error(err)
-        const msg = err.message || 'Lỗi đọc Firestore'
+        const msg = firestoreReadErrorMessage(err, 'Lỗi đọc Firestore')
         entry!.error = msg
         entry!.loading = false
         for (const fn of entry!.listeners) fn(entry!.rows, msg)

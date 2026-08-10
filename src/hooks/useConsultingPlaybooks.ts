@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, query, Timestamp } from 'firebase/firestore'
+import { collection, query, where, Timestamp } from 'firebase/firestore'
 import type { ConsultingPlaybook } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { parsePlaybookContentCategory } from '../utils/playbookContentCategories'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { subscribeSharedFirestoreQuery } from '../utils/sharedFirestoreQuery'
+import { useOrg } from '../contexts/OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlaybook | null {
   try {
@@ -38,10 +41,10 @@ function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlayb
   }
 }
 
-const SHARED_KEY = 'consultingPlaybooks:v1'
-
 export function useConsultingPlaybooks(opts?: { enabled?: boolean }) {
   const enabled = opts?.enabled !== false
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [playbooks, setPlaybooks] = useState<ConsultingPlaybook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -69,17 +72,17 @@ export function useConsultingPlaybooks(opts?: { enabled?: boolean }) {
 
     setLoading(true)
     return subscribeSharedFirestoreQuery(
-      SHARED_KEY,
-      (db) => query(collection(db, FS_COLLECTIONS.consultingPlaybooks)),
+      `consultingPlaybooks:org:${orgKey}`,
+      (db) => query(collection(db, FS_COLLECTIONS.consultingPlaybooks), where('orgId', '==', orgKey)),
       mapPlaybook,
       firestore,
       (rows, err, isLoading) => {
         setPlaybooks(rows)
-        setError(err)
+        setError(err ? firestoreReadErrorMessage({ message: err }, 'Không đọc được playbook.') : null)
         setLoading(isLoading)
       },
     )
-  }, [configured, enabled])
+  }, [configured, enabled, orgKey])
 
   return { playbooks, loading, error }
 }

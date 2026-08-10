@@ -63,14 +63,14 @@ service cloud.firestore {
       return resolvedOrgId().size() > 0;
     }
 
-    function orgIsSuspended(orgId) {
+    function orgIsUnavailable(orgId) {
       return exists(/databases/$(database)/documents/organizations/$(orgId))
-        && get(/databases/$(database)/documents/organizations/$(orgId)).data.status == 'suspended';
+        && get(/databases/$(database)/documents/organizations/$(orgId)).data.status in ['suspended', 'deleted'];
     }
 
     function schoolOrgActive() {
       return isPlatform()
-        || (hasResolvedOrg() && !orgIsSuspended(resolvedOrgId()));
+        || (hasResolvedOrg() && !orgIsUnavailable(resolvedOrgId()));
     }
 
     function dataHasOrg(data) {
@@ -176,7 +176,14 @@ service cloud.firestore {
           && schoolOrgActive()
           && request.resource.data.orgId == resolvedOrgId());
 
+      // Cho phép tự gắn orgId lần đầu khi doc thiếu (login backfill) — không đổi role/isActive.
       allow update: if isPlatform()
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orgId', 'updatedAt'])
+          && (!('orgId' in resource.data) || resource.data.orgId == null || resource.data.orgId == '')
+          && request.resource.data.orgId is string
+          && request.resource.data.orgId.size() > 0)
         || (signedIn()
           && request.auth.uid == uid
           && !request.resource.data.diff(resource.data).affectedKeys()

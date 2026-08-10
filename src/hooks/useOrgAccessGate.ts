@@ -3,7 +3,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { FS_COLLECTIONS, type UserRole } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
-import { isOrgSuspendedStatus } from '../tenancy/platformOps'
+import { isOrgDeletedStatus, isOrgSuspendedStatus } from '../tenancy/platformOps'
 
 export type OrgAccessGate =
   | { state: 'loading' }
@@ -56,7 +56,7 @@ export function useOrgAccessGate(profile: {
           return
         }
         const data = snap.data() as { status?: string; name?: string }
-        if (isOrgSuspendedStatus(data.status)) {
+        if (isOrgSuspendedStatus(data.status) || isOrgDeletedStatus(data.status)) {
           setGate({
             state: 'blocked',
             orgId,

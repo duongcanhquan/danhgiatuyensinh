@@ -72,9 +72,10 @@ export function ProtectedRoute() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 text-slate-700">
         <div className="app-surface-elevated max-w-md rounded-2xl px-8 py-6 text-center text-sm">
-          <p className="font-semibold text-slate-900">Trường đang tạm ngưng</p>
+          <p className="font-semibold text-slate-900">Trường đang tạm ngưng hoặc đã xoá</p>
           <p className="mt-2 text-slate-600">
-            Không gian «{orgGate.orgName}» đang tạm dừng. Liên hệ Siêu quản trị nền tảng nếu cần mở lại.
+            Không gian «{orgGate.orgName}» đang tạm dừng / không còn hoạt động. Liên hệ Siêu quản trị nền tảng nếu cần
+            mở lại.
           </p>
           <button type="button" className="vm-btn vm-btn-secondary mt-4" onClick={() => void signOut()}>
             Đăng xuất

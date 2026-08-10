@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, limit, orderBy, query, Timestamp } from 'firebase/firestore'
+import { collection, limit, orderBy, query, where, Timestamp } from 'firebase/firestore'
 import type { KnowledgeDocument } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { normalizeKnowledgeCategoryId } from '../utils/knowledgeCategories'
 import { subscribeSharedFirestoreQuery } from '../utils/sharedFirestoreQuery'
+import { useOrg } from '../contexts/OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 function mapDoc(id: string, data: Record<string, unknown>): KnowledgeDocument | null {
   try {
@@ -25,10 +28,10 @@ function mapDoc(id: string, data: Record<string, unknown>): KnowledgeDocument | 
   }
 }
 
-const SHARED_KEY = 'knowledgeDocuments:v1'
-
 /** Real-time institutional knowledge for RAG — shared listener across mounts. */
 export function useKnowledgeDocuments() {
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,18 +49,23 @@ export function useKnowledgeDocuments() {
     }
 
     return subscribeSharedFirestoreQuery(
-      SHARED_KEY,
+      `knowledgeDocuments:org:${orgKey}`,
       (db) =>
-        query(collection(db, FS_COLLECTIONS.knowledgeDocuments), orderBy('uploadedAt', 'desc'), limit(100)),
+        query(
+          collection(db, FS_COLLECTIONS.knowledgeDocuments),
+          where('orgId', '==', orgKey),
+          orderBy('uploadedAt', 'desc'),
+          limit(100),
+        ),
       mapDoc,
       firestore,
       (rows, err, isLoading) => {
         setDocuments(rows)
-        setError(err)
+        setError(err ? firestoreReadErrorMessage({ message: err }, 'Không đọc được kho tri thức.') : null)
         setLoading(isLoading)
       },
     )
-  }, [configured])
+  }, [configured, orgKey])
 
   return { documents, loading, error }
 }

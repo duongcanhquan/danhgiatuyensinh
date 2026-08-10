@@ -9,12 +9,16 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { collection, onSnapshot, query, type DocumentData, type QuerySnapshot } from 'firebase/firestore'
+import { collection, onSnapshot, query, where, type DocumentData, type QuerySnapshot } from 'firebase/firestore'
 import type { MasterCatalogDefinition, MasterDataEntry } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { processMasterDataDocs } from '../utils/masterDataRegistry'
 import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
+import { useOrg } from './OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { leadBelongsToOrg } from '../tenancy/orgQuery'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 const MASTER_SNAPSHOT_DEBOUNCE_MS = 80
 
@@ -45,6 +49,8 @@ type MasterDataState = {
 const MasterDataContext = createContext<MasterDataState | null>(null)
 
 export function MasterDataProvider({ children }: { children: ReactNode }) {
+  const { effectiveOrgId, isPlatformSuperAdmin } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [byKind, setByKind] = useState<Record<string, MasterDataEntry[]>>({})
   const [catalogs, setCatalogs] = useState<MasterCatalogDefinition[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,10 +73,23 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const q = query(collection(firestore, FS_COLLECTIONS.masterData))
+    setLoading(true)
+    setError(null)
+    lastSigRef.current = null
+    isFirstMasterSnapRef.current = true
+
+    // School users: bắt buộc where(orgId==) — query cả collection → permission-denied dưới Rules multi-tenant.
+    // Superadmin + VietMy: đọc không lọc để gồm doc legacy thiếu orgId.
+    const allowLegacyUnscoped = isPlatformSuperAdmin && orgKey === DEFAULT_ORG_ID
+    const q = allowLegacyUnscoped
+      ? query(collection(firestore, FS_COLLECTIONS.masterData))
+      : query(collection(firestore, FS_COLLECTIONS.masterData), where('orgId', '==', orgKey))
 
     const applySnapshot = (snap: QuerySnapshot<DocumentData>) => {
-      const docs = snap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+      let docs = snap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+      if (allowLegacyUnscoped) {
+        docs = docs.filter((d) => leadBelongsToOrg({ orgId: d.data.orgId as string | null | undefined }, orgKey))
+      }
       const sig = snapshotSignatureFromDocs(docs)
       if (sig === lastSigRef.current) {
         setLoading(false)
@@ -109,7 +128,7 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
           console.error(err)
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
           debounceTimerRef.current = null
-          setError(err.message || 'Lỗi đọc masterData')
+          setError(firestoreReadErrorMessage(err, 'Không đọc được danh mục dữ liệu.'))
           setLoading(false)
         },
       ),
@@ -120,7 +139,7 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
       lastSigRef.current = null
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
     }
-  }, [configured])
+  }, [configured, orgKey, isPlatformSuperAdmin])
 
   const value = useMemo(
     () => ({ byKind, catalogs, loading, error, configured }),

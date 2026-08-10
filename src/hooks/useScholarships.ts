@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, orderBy, query, type DocumentData } from 'firebase/firestore'
+import { collection, onSnapshot, orderBy, query, where, type DocumentData } from 'firebase/firestore'
 import type { ScholarshipApplySlot, ScholarshipRecord } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { activeScholarships, mapScholarshipDoc } from '../utils/leadProfileCatalog'
 import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
+import { useOrg } from '../contexts/OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 export function useScholarships() {
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [items, setItems] = useState<ScholarshipRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -20,7 +25,11 @@ export function useScholarships() {
       setError(configured ? null : 'Chưa cấu hình Firebase.')
       return
     }
-    const q = query(collection(db, FS_COLLECTIONS.scholarships), orderBy('sortOrder', 'asc'))
+    const q = query(
+      collection(db, FS_COLLECTIONS.scholarships),
+      where('orgId', '==', orgKey),
+      orderBy('sortOrder', 'asc'),
+    )
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -31,12 +40,12 @@ export function useScholarships() {
       },
       (e) => {
         console.error(e)
-        setError(e instanceof Error ? e.message : 'Không tải được danh mục học bổng.')
+        setError(firestoreReadErrorMessage(e, 'Không tải được danh mục học bổng.'))
         setLoading(false)
       },
     )
     return () => unsub()
-  }, [configured])
+  }, [configured, orgKey])
 
   const active = useMemo(() => activeScholarships(items), [items])
 
