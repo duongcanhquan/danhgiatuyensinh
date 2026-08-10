@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, onSnapshot, query } from 'firebase/firestore'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import type { AITask } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
+import { useOrg } from './useOrg'
 import { ensureDefaultCounselingAiTask } from '../services/ensureDefaultCounselingAiTask'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 function mapAITask(id: string, data: Record<string, unknown>): AITask | null {
   try {
@@ -32,6 +35,8 @@ function mapAITask(id: string, data: Record<string, unknown>): AITask | null {
 
 export function useAITasks() {
   const { can } = useAuth()
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const canSeedTasks = can('config:ai_engine')
   const [tasks, setTasks] = useState<AITask[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,7 +55,7 @@ export function useAITasks() {
       return
     }
 
-    const q = query(collection(firestore, FS_COLLECTIONS.ai_tasks))
+    const q = query(collection(firestore, FS_COLLECTIONS.ai_tasks), where('orgId', '==', orgKey))
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -65,19 +70,19 @@ export function useAITasks() {
         setError(null)
         if (next.length === 0 && canSeedTasks && !seedAttemptedRef.current) {
           seedAttemptedRef.current = true
-          void ensureDefaultCounselingAiTask(firestore).catch((e) => {
+          void ensureDefaultCounselingAiTask(firestore, orgKey).catch((e) => {
             console.warn('[useAITasks] ensureDefaultCounselingAiTask', e)
           })
         }
       },
       (err) => {
         console.error(err)
-        setError(err.message || 'Lỗi đọc ai_tasks')
+        setError(firestoreReadErrorMessage(err, 'Không đọc được tác vụ AI của trường.'))
         setLoading(false)
       },
     )
     return () => unsub()
-  }, [configured, canSeedTasks])
+  }, [configured, canSeedTasks, orgKey])
 
-  return { tasks, loading, error, configured }
+  return { tasks, loading, error }
 }

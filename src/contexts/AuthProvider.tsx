@@ -56,20 +56,23 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
   const role = normalizeUserRole(String(d.role ?? 'counselor'))
   const rawOrg = d.orgId
   // Superadmin nền tảng: luôn coi như không gắn trường (dù Firestore còn orgId cũ)
-  const orgId =
-    role === 'super_admin'
-      ? null
-      : rawOrg === null
-        ? null
-        : typeof rawOrg === 'string' && rawOrg.trim()
-          ? rawOrg.trim()
-          : undefined
+  let orgId: string | null | undefined
+  if (role === 'super_admin') {
+    orgId = null
+  } else if (typeof rawOrg === 'string' && rawOrg.trim()) {
+    orgId = rawOrg.trim()
+  } else if (rawOrg === null || rawOrg === '') {
+    // Thiếu / null → coi như chưa gắn; syncUserProfile sẽ backfill vietmy.
+    orgId = undefined
+  } else {
+    orgId = undefined
+  }
   return {
     id: uid,
     email: String(d.email ?? user.email ?? ''),
     displayName: String(d.displayName ?? user.displayName ?? ''),
     role,
-    orgId: orgId === undefined ? undefined : orgId,
+    orgId,
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
     managedMajorIds: d.managedMajorIds as string[] | undefined,
@@ -200,7 +203,8 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
     data.role = 'team_lead'
   }
   // Phase 1: school users without orgId get vietmy backfill on login
-  if (!isSuper && role !== 'super_admin' && (data.orgId == null || data.orgId === '')) {
+  const existingOrg = typeof data.orgId === 'string' ? data.orgId.trim() : ''
+  if (!isSuper && role !== 'super_admin' && !existingOrg) {
     await updateDoc(ref, { orgId: DEFAULT_ORG_ID, updatedAt: now })
     data.orgId = DEFAULT_ORG_ID
   }
@@ -278,7 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
             console.warn('[firestoreBootstrap]', e)
           })
-          void ensureDefaultCounselingAiTask(db).catch((e) => {
+          void ensureDefaultCounselingAiTask(db, p.orgId?.trim() || DEFAULT_ORG_ID).catch((e) => {
             console.warn('[ensureDefaultCounselingAiTask]', e)
           })
         }

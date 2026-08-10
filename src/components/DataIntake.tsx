@@ -108,6 +108,8 @@ async function fetchExistingIdsByHash(
   hashes: string[],
   orgId: string,
   onWaveDone?: (waveIndex: number, waveCount: number) => void,
+  /** Chỉ Siêu quản trị: quét uniqueHash không lọc org (Rules isPlatform). Quản lý trường không được. */
+  allowLegacyUnscoped = false,
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   const uniq = [...new Set(hashes)].filter(Boolean)
@@ -133,7 +135,7 @@ async function fetchExistingIdsByHash(
         if (h && !map.has(String(h))) map.set(String(h), d.id)
       })
     }
-    if (shouldUseLegacyMissingOrgIdRead(orgId)) {
+    if (allowLegacyUnscoped && shouldUseLegacyMissingOrgIdRead(orgId)) {
       const legacySnaps = await Promise.all(
         group.map((part) =>
           getDocs(query(collection(db, FS_COLLECTIONS.leads), where('uniqueHash', 'in', part))),
@@ -159,7 +161,7 @@ export function DataIntake() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
   const { profile, can } = useAuth()
-  const { effectiveOrgId } = useOrg()
+  const { effectiveOrgId, isPlatformSuperAdmin } = useOrg()
   const { profiles } = useScoringProfiles()
   const { items: schoolTvvSignalDefs } = useSchoolTvvSignalDefinitions()
   const { regionLabels, highSchoolLabels, majorLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
@@ -380,11 +382,17 @@ export function DataIntake() {
 
         const existingByHash =
           uniqQueryCount > 0
-            ? await fetchExistingIdsByHash(db, hashesForQuery, effectiveOrgId, (wave, waves) => {
-                setBanner(
-                  `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
-                )
-              })
+            ? await fetchExistingIdsByHash(
+                db,
+                hashesForQuery,
+                effectiveOrgId,
+                (wave, waves) => {
+                  setBanner(
+                    `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
+                  )
+                },
+                isPlatformSuperAdmin,
+              )
             : new Map<string, string>()
         for (const p of prepared) {
           if (!p.inFileDuplicate && shouldQueryExistingByUniqueHash(p.row)) {

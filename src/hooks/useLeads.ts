@@ -50,6 +50,7 @@ import {
 import { parseScoringSignalsFromFirestore } from '../utils/leadScoringSignals'
 import { resolveLeadPrimarySource } from '../utils/leadSemanticFieldValue'
 import { pickFirstFirestoreString, readLeadSemanticFieldsFromFirestore } from '../utils/leadFirestoreFieldRead'
+import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 
 const PAYMENT_KEYS: LeadPaymentSlotKey[] = [
   'deposit',
@@ -1003,7 +1004,13 @@ const EMPTY_HOD_LABELS: string[] = []
 
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile, can } = useAuth()
-  const canReadGlobal = Boolean(profile && (can('leads:read:global') || profile.role === 'super_admin'))
+  const canReadGlobal = Boolean(
+    profile &&
+      (can('leads:read:global') ||
+        profile.role === 'super_admin' ||
+        // Vai trò Quản lý trường luôn xem hồ sơ toàn trường (kể cả khi capability doc cũ thiếu module).
+        profile.role === 'admin'),
+  )
   const { effectiveOrgId } = useOrg()
   const { byKind } = useMasterData()
   const serverFilters = opts?.serverFilters
@@ -1261,7 +1268,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         console.error(e)
         if (!cancelled) {
           setTotalLeadCount(null)
-          setTotalLeadCountError(e instanceof Error ? e.message : 'Không đếm được tổng hồ sơ')
+          setTotalLeadCountError(firestoreReadErrorMessage(e, 'Không đếm được tổng hồ sơ'))
           totalRef.current = null
         }
         return null
@@ -1682,7 +1689,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       } catch (e) {
         console.error(e)
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Lỗi đọc danh sách hồ sơ')
+          setError(firestoreReadErrorMessage(e, 'Không đọc được danh sách hồ sơ.'))
           setLeads([])
           setScopeFetchTruncated(false)
         }

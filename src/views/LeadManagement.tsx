@@ -2722,7 +2722,9 @@ export function LeadManagement() {
 
       {error ? (
         <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-base text-rose-900 shadow-sm backdrop-blur-xl">
-          {error}
+          {/permission|insufficient/i.test(error)
+            ? 'Không đọc được hồ sơ của trường. Đăng xuất rồi đăng nhập lại; nếu vẫn lỗi, nhờ Siêu quản trị kiểm tra mã trường trên tài khoản và deploy Firestore Rules.'
+            : error}
         </div>
       ) : null}
 

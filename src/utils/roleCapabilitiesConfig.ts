@@ -58,6 +58,8 @@ export const SCHOOL_ADMIN_CAPABILITY_MODULES: readonly SchoolAdminCapabilityModu
     id: 'leads_school',
     label: 'Hồ sơ toàn trường',
     hint: 'Xem/sửa/xóa mọi hồ sơ trong trường (không chỉ nhóm)',
+    /** Quản lý trường luôn cần xem hồ sơ — không để tắt nhầm gây trống danh sách. */
+    required: true,
     permissions: ['leads:read:global', 'leads:write:team_scope', 'leads:reassign:team', 'leads:delete'],
   },
 ] as const

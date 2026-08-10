@@ -19,6 +19,7 @@ import {
 import { processMasterDataDocs } from '../utils/masterDataRegistry'
 import { getRealtimeDb } from './firebase'
 import { ensureDefaultCounselingAiTask } from './ensureDefaultCounselingAiTask'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 const SEED_MARKER = { collection: 'meta', docId: 'firestoreSeed' } as const
 
@@ -417,7 +418,7 @@ export async function ensureDefaultFirestoreData(db: Firestore, actorUid: string
     console.warn('[firestoreBootstrap] Không ghi được Realtime Database (kiểm tra Rules):', e)
   }
 
-  await ensureDefaultCounselingAiTask(db).catch((e) => {
+  await ensureDefaultCounselingAiTask(db, DEFAULT_ORG_ID).catch((e) => {
     console.warn('[ensureDefaultCounselingAiTask]', e)
   })
 }
