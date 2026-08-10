@@ -74,9 +74,14 @@ service cloud.firestore {
       return resolvedOrgId().size() > 0;
     }
 
+    /**
+     * Chỉ chặn khi trường bị tạm ngưng.
+     * status == deleted: cổng app (useOrgAccessGate) vẫn chặn; Rules không khóa cứng
+     * để tránh một lần soft-delete nhầm làm cả trường mất quyền đọc (chỉ còn superadmin).
+     */
     function orgIsUnavailable(orgId) {
       return exists(/databases/$(database)/documents/organizations/$(orgId))
-        && get(/databases/$(database)/documents/organizations/$(orgId)).data.status in ['suspended', 'deleted'];
+        && get(/databases/$(database)/documents/organizations/$(orgId)).data.status == 'suspended';
     }
 
     function schoolOrgActive() {
@@ -90,11 +95,27 @@ service cloud.firestore {
         && data.orgId.size() > 0;
     }
 
-    /** Platform OR same org OR (legacy doc without orgId while school is vietmy). */
+    /**
+     * Cùng trường với user/token, hoặc legacy VietMy thiếu orgId.
+     * Thêm nhánh tokenOrg để tránh lệch claims ↔ users/{uid}.orgId làm fail cả query list.
+     */
     function matchesOrgData(data) {
       return isPlatform()
         || (hasResolvedOrg() && dataHasOrg(data) && data.orgId == resolvedOrgId())
-        || (hasResolvedOrg() && resolvedOrgId() == 'vietmy' && !dataHasOrg(data));
+        || (hasTokenOrg() && dataHasOrg(data) && data.orgId == tokenOrg())
+        || (hasResolvedOrg() && resolvedOrgId() == 'vietmy' && !dataHasOrg(data))
+        || (signedIn() && !isPlatform() && !dataHasOrg(data) && resolvedOrgId() == 'vietmy');
+    }
+
+    /** Quản lý trường đọc mọi doc thuộc org của mình (và legacy vietmy). */
+    function schoolAdminOrgRead(data) {
+      return isSchoolAdmin()
+        && schoolOrgActive()
+        && (
+          matchesOrgData(data)
+          || (dataHasOrg(data) && data.orgId == resolvedOrgId())
+          || (resolvedOrgId() == 'vietmy' && !dataHasOrg(data))
+        );
     }
 
     function createInOwnOrg() {
@@ -138,7 +159,8 @@ service cloud.firestore {
     }
 
     function orgScopedRead() {
-      return signedIn() && schoolOrgActive() && matchesOrgData(resource.data);
+      return (signedIn() && schoolOrgActive() && matchesOrgData(resource.data))
+        || schoolAdminOrgRead(resource.data);
     }
 
     function orgScopedCreate() {
