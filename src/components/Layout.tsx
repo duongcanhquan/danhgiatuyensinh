@@ -26,7 +26,6 @@ import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
 import { OrgAiIntegrationProvider } from '../contexts/OrgAiIntegrationContext'
 import { OrgSwitcher } from './OrgSwitcher'
 import { ChangePasswordPanel } from './ChangePasswordPanel'
-import { FirestoreHealthBanner } from './FirestoreHealthBanner'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 
 type NavGroup = 'work' | 'more'
@@ -289,7 +288,6 @@ export function Layout() {
           </header>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[var(--vm-canvas)]">
-            <FirestoreHealthBanner />
             <main className="safe-area-pb-nav flex min-h-0 min-w-0 w-full flex-1 flex-col">
               <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-3 text-sm font-normal leading-relaxed text-[var(--vm-text)] sm:px-4 sm:py-4 md:px-6 md:py-5 lg:px-8">
                 <OrgAiIntegrationProvider>

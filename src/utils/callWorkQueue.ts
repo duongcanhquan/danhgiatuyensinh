@@ -25,7 +25,7 @@ export type CallDispositionDef = {
 
 /** Catalog kết quả sau gọi — TVV chọn 1 note; quản lý lọc theo id. */
 export const CALL_DISPOSITIONS: readonly CallDispositionDef[] = [
-  { id: 'knm', label: 'KNM', bucket: 'callback' },
+  { id: 'knm', label: 'Không nghe máy', bucket: 'callback' },
   { id: 'callback_later', label: 'Gọi lại sau', bucket: 'callback' },
   { id: 'undecided_school', label: 'Chưa chọn trường', bucket: 'callback' },
   { id: 'wrong_number', label: 'Thuê bao / sai số', bucket: 'called' },

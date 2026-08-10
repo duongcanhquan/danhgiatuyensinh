@@ -6623,13 +6623,10 @@ function LeadDetailPanel({
                                     </select>
                                   </label>
                                 </div>
-                                <div className="mt-2" role="group" aria-label="Note sau gọi">
+                                <div className="mt-2" role="group" aria-label="Phản hồi nhanh">
                                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                    <p className="text-xs font-medium text-slate-800">
-                                      Note sau gọi{' '}
-                                      <span className="font-normal text-slate-500">
-                                        (bấm chọn nhanh — đưa hồ sơ vào Gọi lại / Đã xử lý)
-                                      </span>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                                      Phản hồi nhanh
                                     </p>
                                     {dispositionDraft ? (
                                       <button
@@ -6641,55 +6638,28 @@ function LeadDetailPanel({
                                       </button>
                                     ) : null}
                                   </div>
-                                  {dispositionDraft ? (
-                                    <p className="mt-1 text-[11px] text-amber-900">
-                                      Đang chọn:{' '}
-                                      <span className="font-semibold">
-                                        {getCallDisposition(dispositionDraft)?.label ?? dispositionDraft}
-                                      </span>
-                                    </p>
-                                  ) : (
-                                    <p className="mt-1 text-[11px] text-slate-500">Chưa chọn note</p>
-                                  )}
-                                  {(
-                                    [
-                                      { bucket: 'callback' as const, title: 'Gọi lại' },
-                                      { bucket: 'called' as const, title: 'Đã xử lý' },
-                                    ] as const
-                                  ).map((group) => {
-                                    const items = CALL_DISPOSITIONS.filter((d) => d.bucket === group.bucket)
-                                    if (!items.length) return null
-                                    return (
-                                      <div key={group.bucket} className="mt-2">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                                          {group.title}
-                                        </p>
-                                        <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                          {items.map((d) => {
-                                            const selected = dispositionDraft === d.id
-                                            return (
-                                              <button
-                                                key={d.id}
-                                                type="button"
-                                                aria-pressed={selected}
-                                                onClick={() =>
-                                                  setDispositionDraft(selected ? '' : d.id)
-                                                }
-                                                className={[
-                                                  'min-h-10 rounded-lg border px-2.5 py-2 text-left text-xs font-semibold leading-snug transition',
-                                                  selected
-                                                    ? 'border-amber-600 bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/45'
-                                                    : 'border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50',
-                                                ].join(' ')}
-                                              >
-                                                {d.label}
-                                              </button>
-                                            )
-                                          })}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
+                                  <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                                    {CALL_DISPOSITIONS.map((d) => {
+                                      const selected = dispositionDraft === d.id
+                                      return (
+                                        <button
+                                          key={d.id}
+                                          type="button"
+                                          aria-pressed={selected}
+                                          title={d.label}
+                                          onClick={() => setDispositionDraft(selected ? '' : d.id)}
+                                          className={[
+                                            'min-h-9 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold leading-snug transition sm:text-xs',
+                                            selected
+                                              ? 'border-amber-600 bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/45'
+                                              : 'border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50',
+                                          ].join(' ')}
+                                        >
+                                          {d.label}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
                                 </div>
                                 <label className="mt-2 block text-xs font-medium text-slate-800">
                                   Ghi chú tương tác

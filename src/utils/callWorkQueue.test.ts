@@ -33,7 +33,7 @@ describe('callWorkQueue catalog', () => {
       'college_hot',
       'enrolled_elsewhere',
     ])
-    expect(getCallDisposition('knm')?.label).toBe('KNM')
+    expect(getCallDisposition('knm')?.label).toBe('Không nghe máy')
     expect(getCallDisposition('enrolled_elsewhere')?.label).toMatch(/nhập học/i)
     expect(getCallDisposition('enrolled_elsewhere')?.label).toMatch(/trường khác|fail/i)
   })
