@@ -32,4 +32,5 @@ serviceAccount*.json
 *.sln
 *.sw?
 .vercel
+.superpowers/
 __pycache__/

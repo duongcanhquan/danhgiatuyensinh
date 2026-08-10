@@ -1,5 +1,40 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { planLeadAssignments, summarizeAssignPlan } from './smartLeadAssign'
+import {
+  pickLeadIdsForAssign,
+  planLeadAssignments,
+  summarizeAssignPlan,
+} from './smartLeadAssign'
+
+describe('pickLeadIdsForAssign', () => {
+  const rows = [
+    { id: 'c', createdAtMs: 300 },
+    { id: 'a', createdAtMs: 100 },
+    { id: 'b', createdAtMs: 200 },
+  ]
+
+  it('keeps table_order and caps n', () => {
+    expect(pickLeadIdsForAssign(rows, 'table_order', 2)).toEqual(['c', 'a'])
+  })
+
+  it('sorts oldest first', () => {
+    expect(pickLeadIdsForAssign(rows, 'oldest', 2)).toEqual(['a', 'b'])
+  })
+
+  it('random uses provided rng', () => {
+    // Always swap toward reverse-ish: floor(0.99 * (i+1)) = i → no swap; use 0 to always pick j=0
+    const seq = [0, 0, 0]
+    let i = 0
+    const ids = pickLeadIdsForAssign(rows, 'random', 3, {
+      random: () => seq[i++] ?? 0,
+    })
+    expect(ids).toHaveLength(3)
+    expect(new Set(ids)).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('returns empty when n<=0', () => {
+    expect(pickLeadIdsForAssign(rows, 'table_order', 0)).toEqual([])
+  })
+})
 
 describe('planLeadAssignments', () => {
   it('assigns all to single uid', () => {

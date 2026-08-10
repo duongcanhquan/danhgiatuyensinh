@@ -3,12 +3,61 @@ import { pickCounselorByLowestLoad } from './routing'
 
 export type SmartAssignMode = 'single' | 'round_robin' | 'lowest_load'
 
+/** Cách lấy N lead từ kết quả lọc trước khi lập plan phân. */
+export type AssignPickRule = 'oldest' | 'table_order' | 'random'
+
+export type AssignPickLeadMeta = {
+  id: string
+  /** ms epoch — thiếu thì xếp cuối khi chọn oldest */
+  createdAtMs?: number | null
+}
+
 export type SmartAssignPlan = {
   /** leadId → counselorUid */
   assignments: Map<string, string>
   /** counselorUid → số hồ sơ được gán trong plan */
   perCounselor: Map<string, number>
   mode: SmartAssignMode
+}
+
+/**
+ * Chọn tối đa `n` lead theo quy tắc.
+ * - `table_order`: giữ thứ tự mảng đầu vào (thường = thứ tự bảng / lọc).
+ * - `oldest`: `createdAt` sớm trước; thiếu timestamp xếp cuối.
+ * - `random`: xáo một lần (Fisher–Yates); truyền `random` để test ổn định.
+ */
+export function pickLeadIdsForAssign(
+  leads: AssignPickLeadMeta[],
+  rule: AssignPickRule,
+  n: number,
+  opts?: { random?: () => number },
+): string[] {
+  const limit = Math.max(0, Math.floor(n))
+  if (!limit || !leads.length) return []
+  const uniq = new Map<string, AssignPickLeadMeta>()
+  for (const row of leads) {
+    const id = String(row.id ?? '').trim()
+    if (!id || uniq.has(id)) continue
+    uniq.set(id, { id, createdAtMs: row.createdAtMs })
+  }
+  let ordered = [...uniq.values()]
+  if (rule === 'oldest') {
+    ordered.sort((a, b) => {
+      const am = a.createdAtMs != null && Number.isFinite(a.createdAtMs) ? a.createdAtMs : Number.POSITIVE_INFINITY
+      const bm = b.createdAtMs != null && Number.isFinite(b.createdAtMs) ? b.createdAtMs : Number.POSITIVE_INFINITY
+      if (am !== bm) return am - bm
+      return a.id.localeCompare(b.id)
+    })
+  } else if (rule === 'random') {
+    const rnd = opts?.random ?? Math.random
+    for (let i = ordered.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rnd() * (i + 1))
+      const tmp = ordered[i]!
+      ordered[i] = ordered[j]!
+      ordered[j] = tmp
+    }
+  }
+  return ordered.slice(0, Math.min(limit, ordered.length)).map((r) => r.id)
 }
 
 function uniqIds(ids: string[]): string[] {

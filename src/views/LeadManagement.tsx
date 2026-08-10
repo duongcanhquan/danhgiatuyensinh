@@ -112,8 +112,10 @@ import {
 import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
 import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
 import {
+  pickLeadIdsForAssign,
   planLeadAssignments,
   summarizeAssignPlan,
+  type AssignPickRule,
   type SmartAssignMode,
 } from '../utils/smartLeadAssign'
 import { countAssignments } from '../utils/routing'
@@ -704,6 +706,10 @@ export function LeadManagement() {
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
   const [bulkAssignMode, setBulkAssignMode] = useState<SmartAssignMode>('single')
   const [bulkAssignPoolIds, setBulkAssignPoolIds] = useState<string[]>([])
+  /** Số hồ sơ tối đa phân trong lần này (≤ full-scope max). */
+  const [bulkAssignLimit, setBulkAssignLimit] = useState(500)
+  const [bulkAssignPickRule, setBulkAssignPickRule] = useState<AssignPickRule>('oldest')
+  const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false)
   const [bulkReassignProgress, setBulkReassignProgress] = useState<null | { done: number; total: number }>(
     null,
   )
@@ -1698,8 +1704,8 @@ export function LeadManagement() {
     [leads],
   )
 
-  const selectAllMatchingFilters = useCallback(async () => {
-    if (!db || !profile) return
+  const selectAllMatchingFilters = useCallback(async (): Promise<number | null> => {
+    if (!db || !profile) return null
     setSelectScopeBusy(true)
     setRescoreMsg(null)
     try {
@@ -1766,9 +1772,11 @@ export function LeadManagement() {
       setRescoreMsg(
         `Đã chọn ${rows.length.toLocaleString('vi-VN')} hồ sơ theo bộ lọc hiện tại${truncNote}.`,
       )
+      return rows.length
     } catch (e) {
       console.error(e)
       setRescoreMsg(e instanceof Error ? e.message : 'Không chọn được theo bộ lọc.')
+      return null
     } finally {
       setSelectScopeBusy(false)
     }
@@ -1798,7 +1806,26 @@ export function LeadManagement() {
 
   const applyBulkReassign = useCallback(async () => {
     if (!db || !profile || !selectedIds.size) return
-    const ids = [...selectedIds]
+    const selectedList = [...selectedIds]
+    const meta = selectedList.map((id) => {
+      const row = resolveLeadForBulk(id)
+      const createdAt = row?.createdAt
+      const createdAtMs =
+        createdAt && typeof (createdAt as { toMillis?: () => number }).toMillis === 'function'
+          ? (createdAt as { toMillis: () => number }).toMillis()
+          : null
+      return { id, createdAtMs }
+    })
+    const limitCap = Math.min(
+      Math.max(1, Math.floor(Number(bulkAssignLimit) || 1)),
+      LEADS_UI_FULL_SCOPE_MAX,
+      selectedList.length,
+    )
+    const ids = pickLeadIdsForAssign(meta, bulkAssignPickRule, limitCap)
+    if (!ids.length) {
+      window.alert('Không còn hồ sơ để phân với số lượng / quy tắc đã chọn.')
+      return
+    }
 
     if (!isElevatedLeadScope && canPeerReassignLeads) {
       for (const id of ids) {
@@ -2022,6 +2049,8 @@ export function LeadManagement() {
     bulkAssignMode,
     bulkReassignUid,
     bulkAssignPoolIds,
+    bulkAssignLimit,
+    bulkAssignPickRule,
     assignmentLoadByUid,
     activeScoringProfile,
     scoringMasterBuckets,
@@ -2032,6 +2061,34 @@ export function LeadManagement() {
     applyLocalLeadPatch,
     refetchLeads,
   ])
+
+  const openBulkAssignModal = useCallback(
+    (selectedCount: number) => {
+      const others = bulkReassignTargets.filter((c) => c.id !== profile?.id)
+      const defaultUid = others[0]?.id ?? bulkReassignTargets[0]?.id ?? ''
+      setBulkReassignUid(defaultUid)
+      setBulkAssignMode('single')
+      setBulkAssignPoolIds([])
+      setBulkAssignPickRule('oldest')
+      const capped = Math.min(
+        Math.max(1, selectedCount || 1),
+        LEADS_UI_FULL_SCOPE_MAX,
+      )
+      setBulkAssignLimit(Math.min(500, capped))
+      setBulkModal('reassign')
+      void hydrateAssignmentLoads()
+    },
+    [bulkReassignTargets, profile?.id, hydrateAssignmentLoads],
+  )
+
+  const openAssignFromFilters = useCallback(async () => {
+    const n = await selectAllMatchingFilters()
+    if (n == null || n <= 0) {
+      window.alert('Không có hồ sơ khớp bộ lọc để phân.')
+      return
+    }
+    openBulkAssignModal(n)
+  }, [selectAllMatchingFilters, openBulkAssignModal])
 
   const applyBulkCrmStatus = useCallback(async () => {
     if (!db || !profile || !selectedIds.size) return
@@ -2839,9 +2896,9 @@ export function LeadManagement() {
           ) : null}
         </div>
 
-        {/* Tìm kiếm + thao tác chính */}
+        {/* Tìm kiếm + thao tác chính (gọn) */}
         <div className="flex flex-wrap items-end gap-2.5">
-          <label className={`${LEAD_FILTER_LABEL} min-w-[14rem] flex-1`}>
+          <label className={`${LEAD_FILTER_LABEL} min-w-[12rem] flex-1`}>
             <span>Tìm kiếm</span>
             <input
               value={searchParams.get(LWF.Q) ?? ''}
@@ -2863,6 +2920,46 @@ export function LeadManagement() {
                 Tạo mới
               </button>
             ) : null}
+            {canBulkWrite && showBulkReassign ? (
+              <button
+                type="button"
+                disabled={selectScopeBusy || loading || !filtered.length}
+                onClick={() => void openAssignFromFilters()}
+                className={`${LEAD_BTN} border-violet-500 bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40`}
+                title={`Lọc xong → chọn số lượng (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}) → phân cho TVV.`}
+              >
+                {selectScopeBusy ? 'Đang tải…' : 'Phân theo lọc'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setWorkspaceToolsOpen((v) => !v)}
+              className={[
+                LEAD_BTN,
+                workspaceToolsOpen
+                  ? 'border-amber-400 bg-amber-100 text-amber-950'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
+              ].join(' ')}
+              aria-expanded={workspaceToolsOpen}
+              title="Hiện/ẩn bộ lọc, hàng chờ và chấm điểm"
+            >
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 transition ${workspaceToolsOpen ? 'rotate-180' : ''}`}
+                aria-hidden
+              />
+              Công cụ
+              {activeFilterChips.length > 0 ? (
+                <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-amber-950">
+                  {activeFilterChips.length}
+                </span>
+              ) : null}
+            </button>
+          </div>
+        </div>
+
+        {workspaceToolsOpen ? (
+          <>
+        <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               title="Bật/tắt lọc AI Shortlist ngay"
@@ -2973,7 +3070,6 @@ export function LeadManagement() {
                 {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa theo lọc'}
               </button>
             ) : null}
-          </div>
         </div>
 
         {/* Tổng kết hàng chờ của tôi + lọc nhanh */}
@@ -3443,6 +3539,14 @@ export function LeadManagement() {
             ) : null}
           </div>
         </details>
+          </>
+        ) : null}
+
+        {rescoreMsg && !workspaceToolsOpen ? (
+          <p className="text-xs font-medium text-sky-900" role="status">
+            {rescoreMsg}
+          </p>
+        ) : null}
       </BentoCell>
 
       {inspectProfileOpen && activeScoringProfile ? (
@@ -3793,16 +3897,7 @@ export function LeadManagement() {
         <BulkLeadActionBar
           count={selectedIds.size}
           onClear={() => setSelectedIds(new Set())}
-          onReassign={() => {
-            const others = bulkReassignTargets.filter((c) => c.id !== profile?.id)
-            const defaultUid = others[0]?.id ?? bulkReassignTargets[0]?.id ?? ''
-            setBulkReassignUid(defaultUid)
-            setBulkAssignMode('single')
-            // Không tick sẵn cả danh sách — tránh chia nhầm toàn bộ TVV khi Admin mở modal.
-            setBulkAssignPoolIds([])
-            setBulkModal('reassign')
-            void hydrateAssignmentLoads()
-          }}
+          onReassign={() => openBulkAssignModal(selectedIds.size)}
           onBulkStatus={() => {
             setBulkCrmStatus('NEW')
             setBulkModal('crm')
@@ -3843,14 +3938,47 @@ export function LeadManagement() {
           <div className="app-modal app-modal-sheet shadow-xl">
             <h3 className="app-section-heading">Giao việc hàng loạt</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Phân {selectedIds.size.toLocaleString('vi-VN')} hồ sơ đã chọn — một người, chia đều, hoặc theo tải
-              thấp nhất.
+              Đã chọn {selectedIds.size.toLocaleString('vi-VN')} hồ sơ · lần này phân tối đa{' '}
+              {Math.min(bulkAssignLimit, selectedIds.size, LEADS_UI_FULL_SCOPE_MAX).toLocaleString('vi-VN')}{' '}
+              theo quy tắc bên dưới (trần {LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}/lần).
               {!isElevatedLeadScope && canPeerReassignLeads ? (
                 <span className="mt-1 block font-medium text-amber-800">
                   Bạn chỉ có thể chuyển các hồ sơ đang gán cho chính bạn sang đồng nghiệp (theo quyền TVV).
                 </span>
               ) : null}
             </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-slate-700">
+                Số hồ sơ lần này
+                <input
+                  type="number"
+                  min={1}
+                  max={Math.min(selectedIds.size || 1, LEADS_UI_FULL_SCOPE_MAX)}
+                  value={bulkAssignLimit}
+                  disabled={bulkBusy}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value)
+                    const max = Math.min(selectedIds.size || 1, LEADS_UI_FULL_SCOPE_MAX)
+                    setBulkAssignLimit(Math.min(max, Math.max(1, Number.isFinite(raw) ? raw : 1)))
+                  }}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">
+                Cách lấy hồ sơ
+                <select
+                  value={bulkAssignPickRule}
+                  disabled={bulkBusy}
+                  onChange={(e) => setBulkAssignPickRule(e.target.value as AssignPickRule)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                >
+                  <option value="oldest">Cũ nhất trước</option>
+                  <option value="table_order">Theo thứ tự bảng / lọc</option>
+                  <option value="random">Ngẫu nhiên trong kết quả lọc</option>
+                </select>
+              </label>
+            </div>
 
             <fieldset className="mt-4 space-y-2">
               <legend className="text-sm font-medium text-slate-700">Cách phân</legend>
@@ -3936,8 +4064,18 @@ export function LeadManagement() {
                 </div>
                 {(() => {
                   try {
+                    const limitCap = Math.min(
+                      Math.max(1, Math.floor(Number(bulkAssignLimit) || 1)),
+                      LEADS_UI_FULL_SCOPE_MAX,
+                      selectedIds.size,
+                    )
+                    const picked = pickLeadIdsForAssign(
+                      [...selectedIds].map((id) => ({ id })),
+                      bulkAssignPickRule,
+                      limitCap,
+                    )
                     const preview = planLeadAssignments(
-                      [...selectedIds].slice(0, Math.min(selectedIds.size, 5000)),
+                      picked,
                       bulkAssignPoolIds,
                       bulkAssignMode,
                       { currentLoads: assignmentLoadByUid },
@@ -6009,7 +6147,7 @@ function LeadDetailPanel({
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
               <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
                 <nav
-                  className="sticky top-0 z-10 grid shrink-0 grid-cols-2 gap-1.5 rounded-xl border border-slate-200/90 bg-slate-100/95 p-1.5 shadow-sm backdrop-blur-sm"
+                  className="sticky top-0 z-10 grid shrink-0 grid-cols-2 gap-1 rounded-lg border border-slate-200/90 bg-slate-100/95 p-1 shadow-sm backdrop-blur-sm"
                   role="tablist"
                   aria-label="Nội dung chính chi tiết hồ sơ"
                 >
@@ -6019,33 +6157,27 @@ function LeadDetailPanel({
                     aria-selected={detailLeftTab === 'counselor'}
                     onClick={() => setDetailLeftTab('counselor')}
                     className={[
-                      'relative flex min-h-[3.25rem] flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left transition sm:min-h-[3.5rem] sm:flex-row sm:items-center sm:gap-2.5 sm:px-4',
+                      'relative flex min-h-9 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left transition sm:px-3',
                       detailLeftTab === 'counselor'
-                        ? 'border-amber-500/70 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-md ring-2 ring-amber-400/40'
+                        ? 'border-amber-500/70 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm ring-1 ring-amber-400/40'
                         : 'border-transparent bg-white text-slate-800 hover:border-amber-200 hover:bg-amber-50/80',
                     ].join(' ')}
                   >
                     <ClipboardList
                       className={[
-                        'h-5 w-5 shrink-0',
+                        'h-4 w-4 shrink-0',
                         detailLeftTab === 'counselor' ? 'text-amber-50' : 'text-amber-700',
                       ].join(' ')}
                       aria-hidden
                     />
                     <span className="min-w-0">
-                      <span className="block text-sm font-bold leading-tight tracking-tight">Thao tác TVV</span>
-                      <span
-                        className={[
-                          'mt-0.5 block text-[11px] font-medium leading-snug',
-                          detailLeftTab === 'counselor' ? 'text-amber-50/95' : 'text-slate-600',
-                        ].join(' ')}
-                      >
-                        Ghi chú · gọi điện · funnel
+                      <span className="block text-xs font-bold leading-tight tracking-tight sm:text-sm">
+                        Thao tác TVV
                       </span>
                     </span>
                     {hasUnsavedProgress && detailLeftTab !== 'counselor' ? (
                       <span
-                        className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white"
+                        className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
                         title="Có thay đổi chưa lưu"
                         aria-hidden
                       />
@@ -6057,46 +6189,73 @@ function LeadDetailPanel({
                     aria-selected={detailLeftTab === 'profile'}
                     onClick={() => setDetailLeftTab('profile')}
                     className={[
-                      'relative flex min-h-[3.25rem] flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left transition sm:min-h-[3.5rem] sm:flex-row sm:items-center sm:gap-2.5 sm:px-4',
+                      'relative flex min-h-9 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left transition sm:px-3',
                       detailLeftTab === 'profile'
-                        ? 'border-slate-600/60 bg-slate-800 text-white shadow-md ring-2 ring-slate-500/30'
+                        ? 'border-slate-600/60 bg-slate-800 text-white shadow-sm ring-1 ring-slate-500/30'
                         : 'border-transparent bg-white text-slate-800 hover:border-slate-200 hover:bg-slate-50',
                     ].join(' ')}
                   >
                     <UserRound
                       className={[
-                        'h-5 w-5 shrink-0',
+                        'h-4 w-4 shrink-0',
                         detailLeftTab === 'profile' ? 'text-slate-200' : 'text-slate-600',
                       ].join(' ')}
                       aria-hidden
                     />
                     <span className="min-w-0">
-                      <span className="block text-sm font-bold leading-tight tracking-tight">Hồ sơ ứng viên</span>
-                      <span
-                        className={[
-                          'mt-0.5 block text-[11px] font-medium leading-snug',
-                          detailLeftTab === 'profile' ? 'text-slate-300' : 'text-slate-600',
-                        ].join(' ')}
-                      >
-                        Thông tin · học tập · tài chính
+                      <span className="block text-xs font-bold leading-tight tracking-tight sm:text-sm">
+                        Hồ sơ ứng viên
                       </span>
                     </span>
                     {(coreDirty || financeDirty) && detailLeftTab !== 'profile' ? (
                       <span
-                        className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white"
+                        className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
                         title="Có thay đổi hồ sơ chưa lưu"
                         aria-hidden
                       />
                     ) : null}
                   </button>
                 </nav>
-                {/* SĐT dùng chung — hiện khi đang ở Thao tác TVV hoặc Hồ sơ ứng viên */}
-                <section
-                  className="shrink-0 rounded-xl border border-sky-200/80 bg-sky-50/50 px-2.5 py-2"
-                  aria-label="Điện thoại liên hệ"
-                >
+                {/* SĐT — thu gọn mặc định để lộ nội dung bên dưới */}
+                <details className="group shrink-0 rounded-lg border border-sky-200/80 bg-sky-50/50 open:bg-sky-50/80">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <ChevronDown
+                        className="h-3.5 w-3.5 shrink-0 text-sky-800 transition group-open:rotate-180"
+                        aria-hidden
+                      />
+                      <span className="text-xs font-semibold text-sky-950">Gọi nhanh</span>
+                      <span className="truncate text-[11px] text-sky-800/90">
+                        {[coreDraft.phone?.trim(), coreDraft.parentPhone?.trim()].filter(Boolean).join(' · ') ||
+                          'Chưa có SĐT'}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {coreDraft.phone?.trim() ? (
+                        <OmicallCallButton
+                          leadId={lead.id}
+                          leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
+                          phone={coreDraft.phone}
+                          target="student"
+                          disabled={saving || financeSaving}
+                          placement="beside"
+                        />
+                      ) : null}
+                      {coreDraft.parentPhone?.trim() ? (
+                        <OmicallCallButton
+                          leadId={lead.id}
+                          leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
+                          phone={coreDraft.parentPhone}
+                          target="parent"
+                          disabled={saving || financeSaving}
+                          placement="beside"
+                        />
+                      ) : null}
+                    </span>
+                  </summary>
+                  <section className="border-t border-sky-200/60 px-2.5 pb-2 pt-2" aria-label="Điện thoại liên hệ">
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-sky-950">Gọi nhanh</p>
+                    <p className="text-[11px] font-medium text-sky-900">Sửa số điện thoại</p>
                     {showCounselorProgressForm && coreDirty ? (
                       <button
                         type="button"
@@ -6152,7 +6311,8 @@ function LeadDetailPanel({
                       </div>
                     </label>
                   </div>
-                </section>
+                  </section>
+                </details>
                 <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                   {detailLeftTab === 'profile' ? (
                     <aside className="flex min-h-0 flex-1 flex-col space-y-2 text-sm leading-snug text-slate-800">
