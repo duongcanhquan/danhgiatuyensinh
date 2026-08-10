@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore'
+import { collection, query, Timestamp } from 'firebase/firestore'
 import type { ConsultingPlaybook } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { parsePlaybookContentCategory } from '../utils/playbookContentCategories'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { subscribeSharedFirestoreQuery } from '../utils/sharedFirestoreQuery'
 
 function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlaybook | null {
   try {
@@ -37,6 +38,8 @@ function mapPlaybook(id: string, data: Record<string, unknown>): ConsultingPlayb
   }
 }
 
+const SHARED_KEY = 'consultingPlaybooks:v1'
+
 export function useConsultingPlaybooks(opts?: { enabled?: boolean }) {
   const enabled = opts?.enabled !== false
   const [playbooks, setPlaybooks] = useState<ConsultingPlaybook[]>([])
@@ -65,26 +68,17 @@ export function useConsultingPlaybooks(opts?: { enabled?: boolean }) {
     }
 
     setLoading(true)
-    const q = query(collection(firestore, FS_COLLECTIONS.consultingPlaybooks))
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next: ConsultingPlaybook[] = []
-        snap.forEach((d) => {
-          const p = mapPlaybook(d.id, d.data() as Record<string, unknown>)
-          if (p) next.push(p)
-        })
-        setPlaybooks(next)
-        setLoading(false)
-        setError(null)
-      },
-      (err) => {
-        console.error(err)
-        setError(err.message || 'Lỗi đọc consultingPlaybooks')
-        setLoading(false)
+    return subscribeSharedFirestoreQuery(
+      SHARED_KEY,
+      (db) => query(collection(db, FS_COLLECTIONS.consultingPlaybooks)),
+      mapPlaybook,
+      firestore,
+      (rows, err, isLoading) => {
+        setPlaybooks(rows)
+        setError(err)
+        setLoading(isLoading)
       },
     )
-    return () => unsub()
   }, [configured, enabled])
 
   return { playbooks, loading, error }

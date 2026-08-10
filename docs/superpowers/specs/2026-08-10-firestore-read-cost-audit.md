@@ -68,8 +68,8 @@ Tham chiếu trước: `2026-08-09-system-audit-perf-omicall.md` (chủ yếu cl
 - `npm run build` + `functions` `tsc`: OK  
 
 ### Chưa làm (để tránh rủi ro lớn)
-- Shared providers knowledge/scripts/playbooks (H1) — cần PR riêng.
-- Rewrite KPI daily UID-targeted thay vì `getDocs` cả `counselors/` (vẫn còn khi mở KPI kỳ dài).
-- Directory Superadmin `onSnapshot(users)` không org.
+- ~~Shared providers knowledge/scripts/playbooks (H1)~~ → **đã làm** qua `subscribeSharedFirestoreQuery` (1 listener / collection).
+- ~~Rewrite KPI daily UID-targeted~~ → **đã làm** `fetchKpiDailyCounselorRows` + `resolveKpiDailyTargetUids`.
+- ~~Directory Superadmin `onSnapshot(users)` không org~~ → **đã làm**: live `orgId==` + legacy fill định kỳ 10 phút (không giữ listener full collection).
 
 **Deploy:** cần `npm run deploy:functions` (hoặc deploy schedule `syncOmicallCallHistory`) để server áp dụng trên prod.

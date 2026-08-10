@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import type { CounselorDailyKpi } from '../types'
-import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
 import { useCounselorDirectory } from './useCounselorDirectory'
-import { foldKpiRows, mapKpiDoc, sumKpiSummaries } from '../utils/kpiMap'
+import { foldKpiRows, sumKpiSummaries } from '../utils/kpiMap'
 import { foldOmicallCallsToKpiSummaries, kpiDayKeyFromDate, mergeCallKpiFromOmicall, vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
 import { resolveKpiCallDataSource, type KpiCallDataSource } from '../utils/kpiDisplaySource'
 import { enrichTeamLeadUidOnRows, counselorInTeamLeadScope } from '../utils/kpiTeamLeadEnrich'
+import { counselorIdsInManagerScope } from '../utils/teamScope'
+import { fetchKpiDailyCounselorRows } from '../utils/fetchKpiDailyCounselorRows'
+import { resolveKpiDailyTargetUids } from '../utils/resolveKpiDailyTargetUids'
 import { useOmicallCallsForKpi } from './useOmicallCallsForKpi'
 
 function dateKeysBetween(from: string, to: string): string[] {
@@ -45,6 +46,32 @@ export function useCounselorKpiDateRange(
   const canGlobal = can('analytics:advanced') || can('leads:read:global')
   const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
 
+  const directoryIds = useMemo(() => {
+    if (canGlobal) {
+      return directory
+        .filter((u) => u.isActive && (u.role === 'counselor' || u.role === 'ctv' || u.role === 'team_lead'))
+        .map((u) => u.id)
+    }
+    if (canTeam && profile) {
+      return counselorIdsInManagerScope(profile, directory)
+    }
+    return []
+  }, [canGlobal, canTeam, directory, profile])
+
+  const targetUids = useMemo(
+    () =>
+      resolveKpiDailyTargetUids({
+        canGlobal,
+        canTeam,
+        selfUid: firebaseUser?.uid,
+        directoryIds,
+        counselorUidFilter,
+      }),
+    [canGlobal, canTeam, firebaseUser?.uid, directoryIds, counselorUidFilter],
+  )
+
+  const targetKey = targetUids === null ? 'all' : targetUids.join(',')
+
   useEffect(() => {
     const db = getFirestoreDb()
     if (!enabled || !db || !isFirebaseConfigured() || !firebaseUser || dates.length === 0) {
@@ -58,18 +85,7 @@ export function useCounselorKpiDateRange(
     setError(null)
     ;(async () => {
       try {
-        const next: CounselorDailyKpi[] = []
-        for (const date of dates) {
-          if (!canGlobal && !canTeam) {
-            const snap = await getDoc(doc(db, FS_COLLECTIONS.kpiDaily, date, 'counselors', firebaseUser.uid))
-            if (snap.exists()) next.push(mapKpiDoc(snap.id, snap.data() as Record<string, unknown>))
-            continue
-          }
-          const snap = await getDocs(collection(db, FS_COLLECTIONS.kpiDaily, date, 'counselors'))
-          snap.forEach((d) => {
-            next.push(mapKpiDoc(d.id, d.data() as Record<string, unknown>))
-          })
-        }
+        const next = await fetchKpiDailyCounselorRows(db, dates, targetUids)
         if (!cancelled) setRows(next)
       } catch (e) {
         if (!cancelled) {
@@ -88,7 +104,7 @@ export function useCounselorKpiDateRange(
     return () => {
       cancelled = true
     }
-  }, [canGlobal, canTeam, dates, enabled, firebaseUser])
+  }, [dates, enabled, firebaseUser, targetKey, targetUids])
 
   const { calls: omicallCalls, loading: callsLoading } = useOmicallCallsForKpi(
     from,

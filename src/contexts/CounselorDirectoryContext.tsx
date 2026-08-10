@@ -9,7 +9,16 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { collection, onSnapshot, query, Timestamp, where, type DocumentData, type QuerySnapshot } from 'firebase/firestore'
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  Timestamp,
+  where,
+  type DocumentData,
+  type QuerySnapshot,
+} from 'firebase/firestore'
 import { normalizeUserRole } from '../auth/roleUtils'
 import type { VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
@@ -86,21 +95,6 @@ function userDocBelongsToOrg(data: Record<string, unknown>, scopeOrgId: string):
 
 const DIRECTORY_SNAPSHOT_DEBOUNCE_MS = 100
 
-function directorySnapshotSignature(snap: QuerySnapshot<DocumentData>, omitOrgFilter: boolean, scopeOrgId: string): string {
-  const parts: string[] = []
-  snap.forEach((d) => {
-    const raw = d.data() as Record<string, unknown>
-    if (omitOrgFilter && !userDocBelongsToOrg(raw, scopeOrgId)) return
-    const u = raw.updatedAt as { seconds?: number; nanoseconds?: number } | undefined
-    const sec = u && typeof u.seconds === 'number' ? u.seconds : 0
-    const nano = u && typeof u.nanoseconds === 'number' ? u.nanoseconds : 0
-    const active = raw.isActive === false ? '0' : '1'
-    parts.push(`${d.id}:${sec}.${nano}:${active}:${String(raw.role ?? '')}`)
-  })
-  parts.sort()
-  return parts.join('|')
-}
-
 type CounselorDirectoryState = {
   users: VietMyUserProfile[]
   counselors: VietMyUserProfile[]
@@ -158,34 +152,73 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     isFirstSnapRef.current = true
 
     /**
-     * Superadmin + VietMy: bỏ where(orgId) để lấy nhân sự cũ thiếu orgId (Rules isPlatform).
-     * Admin trường / org khác: where(orgId==) — bắt buộc theo multi-tenant Rules.
+     * Luôn live theo orgId (rẻ, đúng multi-tenant).
+     * Superadmin + VietMy legacy: bổ sung một lần (và định kỳ) quét users thiếu orgId —
+     * không giữ onSnapshot toàn collection (mỗi user write = broadcast lớn).
      */
-    const omitOrgFilter = isPlatform && shouldUseLegacyMissingOrgIdRead(scopeOrgId)
-    const qy = omitOrgFilter
-      ? query(collection(firestore, FS_COLLECTIONS.users))
-      : query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
+    const needLegacyFill = isPlatform && shouldUseLegacyMissingOrgIdRead(scopeOrgId)
+    const qy = query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
+    const scopedByIdRef = { current: new Map<string, VietMyUserProfile>() }
+    const legacyByIdRef = { current: new Map<string, VietMyUserProfile>() }
 
-    const applySnapshot = (snap: QuerySnapshot<DocumentData>) => {
-      const sig = directorySnapshotSignature(snap, omitOrgFilter, scopeOrgId)
+    const publishMerged = () => {
+      const merged = new Map<string, VietMyUserProfile>()
+      for (const [id, row] of scopedByIdRef.current) merged.set(id, row)
+      for (const [id, row] of legacyByIdRef.current) {
+        if (!merged.has(id)) merged.set(id, row)
+      }
+      const next = [...merged.values()]
+      const sig = next
+        .map((u) => `${u.id}:${u.updatedAt?.seconds ?? 0}:${u.isActive ? 1 : 0}:${u.role}`)
+        .sort()
+        .join('|')
       if (sig === lastSigRef.current) {
         setLoading(false)
         return
       }
       lastSigRef.current = sig
-      const next: VietMyUserProfile[] = []
-      snap.forEach((d) => {
-        const raw = d.data() as Record<string, unknown>
-        if (!omitOrgFilter || userDocBelongsToOrg(raw, scopeOrgId)) {
-          const row = mapUser(d.id, raw)
-          if (row) next.push(row)
-        }
-      })
       startTransition(() => {
         setUsers(next)
         setLoading(false)
         setError(null)
       })
+    }
+
+    const applyScopedSnapshot = (snap: QuerySnapshot<DocumentData>) => {
+      const next = new Map<string, VietMyUserProfile>()
+      snap.forEach((d) => {
+        const row = mapUser(d.id, d.data() as Record<string, unknown>)
+        if (row) next.set(d.id, row)
+      })
+      scopedByIdRef.current = next
+      publishMerged()
+    }
+
+    let legacyTimer: ReturnType<typeof setInterval> | null = null
+    let legacyInFlight = false
+
+    const fillLegacyMissingOrg = async () => {
+      if (!needLegacyFill || legacyInFlight) return
+      legacyInFlight = true
+      try {
+        // Một lần / định kỳ — lọc client nhân sự thuộc VietMy nhưng thiếu orgId.
+        const snap = await getDocs(collection(firestore, FS_COLLECTIONS.users))
+        const next = new Map<string, VietMyUserProfile>()
+        snap.forEach((d) => {
+          const raw = d.data() as Record<string, unknown>
+          const oid = typeof raw.orgId === 'string' ? raw.orgId.trim() : ''
+          if (oid) return
+          if (!userDocBelongsToOrg(raw, scopeOrgId)) return
+          const row = mapUser(d.id, raw)
+          if (row) next.set(d.id, row)
+        })
+        legacyByIdRef.current = next
+        publishMerged()
+      } catch (e) {
+        console.error(e)
+      } finally {
+        legacyInFlight = false
+      }
     }
 
     const unsubIdle = scheduleIdleAttach(() =>
@@ -198,11 +231,12 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
             debounceTimerRef.current = null
             const latest = pendingSnapRef.current
             pendingSnapRef.current = null
-            if (latest) applySnapshot(latest)
+            if (latest) applyScopedSnapshot(latest)
           }
           if (isFirstSnapRef.current) {
             isFirstSnapRef.current = false
             flush()
+            if (needLegacyFill) void fillLegacyMissingOrg()
             return
           }
           debounceTimerRef.current = setTimeout(flush, DIRECTORY_SNAPSHOT_DEBOUNCE_MS)
@@ -217,9 +251,17 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
         },
       ),
     )
+
+    if (needLegacyFill) {
+      legacyTimer = setInterval(() => {
+        void fillLegacyMissingOrg()
+      }, 10 * 60_000)
+    }
+
     return () => {
       unsubIdle()
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      if (legacyTimer) clearInterval(legacyTimer)
       pendingSnapRef.current = null
     }
   }, [configured, scopeOrgId, isPlatform])

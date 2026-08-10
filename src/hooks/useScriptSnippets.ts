@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, query, Timestamp } from 'firebase/firestore'
+import { collection, query, Timestamp } from 'firebase/firestore'
 import type { ScriptSnippet } from '../types'
 import { FS_COLLECTIONS, SCRIPT_CATEGORIES } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { subscribeSharedFirestoreQuery } from '../utils/sharedFirestoreQuery'
 
 function isScriptCategory(x: string): x is ScriptSnippet['category'] {
   return (SCRIPT_CATEGORIES as readonly string[]).includes(x)
@@ -35,6 +36,8 @@ function mapSnippet(id: string, data: Record<string, unknown>): ScriptSnippet | 
   }
 }
 
+const SHARED_KEY = 'scriptSnippets:v1'
+
 export function useScriptSnippets() {
   const [snippets, setSnippets] = useState<ScriptSnippet[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,26 +55,17 @@ export function useScriptSnippets() {
       return
     }
 
-    const q = query(collection(firestore, FS_COLLECTIONS.scriptSnippets))
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next: ScriptSnippet[] = []
-        snap.forEach((d) => {
-          const s = mapSnippet(d.id, d.data() as Record<string, unknown>)
-          if (s) next.push(s)
-        })
-        setSnippets(next)
-        setLoading(false)
-        setError(null)
-      },
-      (err) => {
-        console.error(err)
-        setError(err.message || 'Lỗi đọc scriptSnippets')
-        setLoading(false)
+    return subscribeSharedFirestoreQuery(
+      SHARED_KEY,
+      (db) => query(collection(db, FS_COLLECTIONS.scriptSnippets)),
+      mapSnippet,
+      firestore,
+      (rows, err, isLoading) => {
+        setSnippets(rows)
+        setError(err)
+        setLoading(isLoading)
       },
     )
-    return () => unsub()
   }, [configured])
 
   return { snippets, loading, error }
