@@ -90,6 +90,10 @@ import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
+import {
+  formatLeadCounselorNotePreview,
+  formatLeadLatestInteractionLine,
+} from '../utils/leadListActivity'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import {
   formatLeadLastCallLine,
@@ -279,41 +283,14 @@ function effectiveLeadAssigneeUid(l: Lead): string {
   return leadAssignedUid(l) ?? ''
 }
 
-/** Bỏ dòng nhật ký nhập `[Import]…` khỏi mô tả — chỉ dùng khi hiển thị, không sửa dữ liệu gốc. */
-function leadDescriptionForDisplay(raw: string | undefined): string {
-  if (!raw?.trim()) return ''
-  const kept = raw.split('\n').filter((line) => {
-    const t = line.trim()
-    return !(t && /^\[Import\]/i.test(t))
-  })
-  return kept.join('\n').replace(/^\s+|\s+$/g, '')
-}
-
 /** Rút gọn ghi chú / mô tả trên bảng — bản đầy đủ trong `title` ô hoặc trong panel chi tiết. */
 function formatDescPreview(raw: string | undefined, max = 64): string {
-  const cleaned = leadDescriptionForDisplay(raw)
-  const t = cleaned.replace(/\s+/g, ' ').trim()
+  const t = (raw ?? '').replace(/\s+/g, ' ').trim()
   if (!t) return '—'
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
-const LEAD_TABLE_COL_COUNT = 12
-
-/** Ghi chú bổ sung (các trường Excel / hồ sơ ngoài cột mô tả chính). */
-function leadSupplementaryNotesText(lead: Lead): string {
-  const chunks: string[] = []
-  const add = (label: string, val?: string) => {
-    const t = val?.trim()
-    if (t) chunks.push(`${label}: ${t}`)
-  }
-  add('Ghi chú 1', lead.profileNote1)
-  add('Ghi chú 2', lead.profileNote2)
-  add('Lưu ý khác', lead.otherAttentionNotes)
-  add('Nguyện vọng', lead.aspirations)
-  add('Sở thích', lead.hobbies)
-  add('Field trip', lead.fieldTripNotes)
-  return chunks.join(' · ')
-}
+const LEAD_TABLE_COL_COUNT = 11
 
 export function LeadManagement() {
   const db = getFirestoreDb()
@@ -449,7 +426,7 @@ export function LeadManagement() {
   const counselorDisplayNameById = useMemo(() => {
     const m = new Map<string, string>()
     for (const c of directoryUsers) {
-      if (c.isActive) m.set(c.id, formatStaffDisplayName(c))
+      m.set(c.id, formatStaffDisplayName(c))
     }
     return m
   }, [directoryUsers])
@@ -3646,9 +3623,6 @@ export function LeadManagement() {
                     {sortKey === 'fullName' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
                   </button>
                 </th>
-                <th className="w-[7%] max-w-[5.5rem] px-1.5 py-2 font-semibold normal-case tracking-normal">
-                  Mã KH
-                </th>
                 <th
                   className="w-[11%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
                   title="Chương trình / đợt gắn khi nhập hoặc gán hàng loạt"
@@ -3679,15 +3653,15 @@ export function LeadManagement() {
                 </th>
                 <th
                   className="w-[12%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Mô tả, ghi chú chính và nguyện vọng trên hồ sơ"
+                  title="Ghi chú tư vấn viên sau khi gọi / tương tác gần nhất"
                 >
                   Ghi chú
                 </th>
                 <th
-                  className="w-[10%] max-w-[8rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Ghi chú 1, ghi chú 2, nguyện vọng, sở thích…"
+                  className="w-[14%] max-w-[11rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Tương tác gần nhất: gọi điện, cập nhật hồ sơ…"
                 >
-                  Ghi chú thêm
+                  Tương tác gần nhất
                 </th>
                 <th className="w-[5%] px-1.5 py-2 font-semibold">
                   <button
@@ -3735,8 +3709,8 @@ export function LeadManagement() {
                     ) : null}
                   </button>
                 </th>
-                <th className="w-[8%] max-w-[7rem] px-1.5 py-2 font-semibold normal-case tracking-normal">
-                  TVV
+                <th className="w-[9%] max-w-[7.5rem] px-1.5 py-2 font-semibold normal-case tracking-normal">
+                  Tư vấn viên
                 </th>
               </tr>
             </thead>
@@ -3777,8 +3751,8 @@ export function LeadManagement() {
                   : l.calculatedScore
                 const displayTag = effectiveLeadTag(l)
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
-                const descForTable = leadDescriptionForDisplay(l.description)
-                const extraNotesFull = leadSupplementaryNotesText(l)
+                const notePreview = formatLeadCounselorNotePreview(l, 40)
+                const latestInteraction = formatLeadLatestInteractionLine(l)
                 const callAiLine = formatLeadLastCallAiLine(l)
                 const callQueueLine = formatLeadLastCallLine(l)
                 return (
@@ -3837,9 +3811,6 @@ export function LeadManagement() {
                       </p>
                     ) : null}
                   </td>
-                  <td className="truncate px-1.5 py-1.5 text-slate-600" title={l.customerId || undefined}>
-                    {l.customerId || '—'}
-                  </td>
                   <td
                     className="truncate px-1.5 py-1.5 text-slate-700"
                     title={(l.intakeProgram ?? '').trim() || undefined}
@@ -3860,15 +3831,15 @@ export function LeadManagement() {
                   </td>
                   <td
                     className="truncate px-1.5 py-1.5 text-slate-600"
-                    title={descForTable.trim() ? descForTable : undefined}
+                    title={notePreview.full || undefined}
                   >
-                    {formatDescPreview(l.description, 40)}
+                    {notePreview.text}
                   </td>
                   <td
                     className="truncate px-1.5 py-1.5 text-slate-600"
-                    title={extraNotesFull.trim() ? extraNotesFull : undefined}
+                    title={latestInteraction !== '—' ? latestInteraction : undefined}
                   >
-                    {extraNotesFull.trim() ? formatDescPreview(extraNotesFull, 36) : '—'}
+                    {latestInteraction}
                   </td>
                   <td className="px-1.5 py-1.5 font-medium tabular-nums text-[var(--color-primary)]">
                     {displayScore}
@@ -3880,7 +3851,7 @@ export function LeadManagement() {
                     <TagBadge tag={displayTag} />
                   </td>
                   <td
-                    className="truncate px-1.5 py-1.5 text-slate-600"
+                    className="truncate px-1.5 py-1.5 text-slate-700"
                     title={formatAssignedCounselorLabel(l, counselorDisplayNameById)}
                   >
                     {formatAssignedCounselorLabel(l, counselorDisplayNameById)}

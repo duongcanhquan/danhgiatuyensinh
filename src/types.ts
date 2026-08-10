@@ -468,6 +468,14 @@ export interface Lead {
   lastCallEnrollmentSignalId?: string
   /** Mã mức sẵn sàng sau gọi gần nhất (`readiness`). */
   lastCallReadinessId?: string
+  /**
+   * Denormalize cho bảng Hồ sơ — ghi chú TVV / tương tác gần nhất
+   * (tránh đọc subcollection interactions trên từng dòng).
+   */
+  lastCounselorNote?: string
+  lastInteractionAt?: Timestamp
+  lastInteractionKind?: 'call' | 'note' | 'profile' | 'system'
+  lastInteractionSummary?: string
   /** Thành phần điểm hồ sơ 0–100 (khi bật phân loại tỷ trọng). */
   leadScoreProfilePart?: number
   /** Thành phần điểm tương tác/gọi 0–100 (khi bật phân loại tỷ trọng). */

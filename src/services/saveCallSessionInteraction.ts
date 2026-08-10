@@ -36,6 +36,7 @@ import type { AIIntegrationConfig } from '../types'
 import { behaviorScoreFromPicks } from '../utils/callSessionBehaviorScore'
 import { mergeCallEvalPriorityBoost } from '../utils/callSessionPriorityFromEvaluation'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { leadListActivityPatch } from '../utils/leadListActivity'
 import { buildLastCallLeadPatch } from '../utils/leadCallSignals'
 import {
   buildCallWorkLeadPatch,
@@ -311,6 +312,15 @@ export async function saveCallSessionInteraction(
       leadPatch.callEvalPriorityBoostAt = Timestamp.now()
     }
   }
+
+  Object.assign(
+    leadPatch,
+    leadListActivityPatch({
+      kind: 'call',
+      summary: dispositionDef?.label || formatEvaluationSummaryLine(picks) || 'Đánh giá cuộc gọi',
+      counselorNote,
+    }),
+  )
 
   await updateDoc(leadRef, leadPatch)
 

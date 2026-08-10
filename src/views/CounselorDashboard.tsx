@@ -36,6 +36,7 @@ import { useMasterData } from '../hooks/useMasterData'
 import { BulkLeadActionBar } from '../components/bulk/BulkLeadActionBar'
 import { commitAuditLog } from '../services/auditLog'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { leadListActivityPatch } from '../utils/leadListActivity'
 import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
 import { planLeadAssignments } from '../utils/smartLeadAssign'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
@@ -217,7 +218,14 @@ function CounselorLeadListRow({
         timestamp: Timestamp.now(),
         counselorNote: text.trim(),
       })
-      const touch = leadTouchPatch()
+      const touch = {
+        ...leadTouchPatch(),
+        ...leadListActivityPatch({
+          kind: 'note',
+          summary: 'Ghi chú nhanh',
+          counselorNote: text.trim(),
+        }),
+      }
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), touch)
       onLeadLocallyPatched?.(lead.id, touch)
       await commitAuditLog(db, {

@@ -10,6 +10,7 @@ import {
   type CallDispositionId,
 } from './callWorkQueue'
 import { leadTouchPatch } from './leadTouch'
+import { leadListActivityPatch } from './leadListActivity'
 
 export type PersistLeadCallDispositionResult = {
   leadPatch: Record<string, unknown>
@@ -61,9 +62,19 @@ export async function persistLeadCallDisposition(
   })
 
   const overrides = dispositionPriorityOverridesAfterScoring(def.id, lead.priorityTag)
+
+  const note =
+    input.counselorNote?.trim() ||
+    `Note sau gọi: ${def.label}`
+
   const leadPatch: Record<string, unknown> = {
     ...leadTouchPatch(),
     ...workPatch,
+    ...leadListActivityPatch({
+      kind: 'call',
+      summary: def.label,
+      counselorNote: note,
+    }),
   }
   if (overrides.priorityTag) leadPatch.priorityTag = overrides.priorityTag
   if (overrides.clearCallEvalPriorityBoost) {
@@ -75,10 +86,6 @@ export async function persistLeadCallDisposition(
   }
 
   await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadPatch)
-
-  const note =
-    input.counselorNote?.trim() ||
-    `Note sau gọi: ${def.label}`
 
   await addDoc(collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions), {
     leadId: lead.id,

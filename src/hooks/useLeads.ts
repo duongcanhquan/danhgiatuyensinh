@@ -376,6 +376,19 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
           : undefined,
       lastCallAiAt: asFirestoreTimestamp(data.lastCallAiAt),
       lastCallAt: asFirestoreTimestamp(data.lastCallAt),
+      lastCounselorNote:
+        data.lastCounselorNote !== undefined && data.lastCounselorNote !== null
+          ? String(data.lastCounselorNote).slice(0, 500)
+          : undefined,
+      lastInteractionAt: asFirestoreTimestamp(data.lastInteractionAt),
+      lastInteractionKind: (() => {
+        const k = data.lastInteractionKind
+        return k === 'call' || k === 'note' || k === 'profile' || k === 'system' ? k : undefined
+      })(),
+      lastInteractionSummary:
+        data.lastInteractionSummary !== undefined && data.lastInteractionSummary !== null
+          ? String(data.lastInteractionSummary).slice(0, 160)
+          : undefined,
       lastCalledByLabel:
         data.lastCalledByLabel !== undefined && data.lastCalledByLabel !== null
           ? String(data.lastCalledByLabel).slice(0, 120)

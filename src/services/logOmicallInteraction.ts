@@ -23,6 +23,7 @@ import {
   isSoftOverwritableDisposition,
 } from '../utils/callWorkQueue'
 import { leadTouchPatch } from '../utils/leadTouch'
+import { leadListActivityPatch } from '../utils/leadListActivity'
 
 function durationSecondsFromCall(call: OmicallCallData): number | undefined {
   const talk = call.callingDuration?.value ?? 0
@@ -48,6 +49,7 @@ async function patchLeadLastCall(
   leadId: string,
   calledByLabel: string,
   outcome: Interaction['callOutcome'],
+  counselorNote?: string,
 ): Promise<void> {
   const leadRef = doc(db, FS_COLLECTIONS.leads, leadId)
   const snap = await getDoc(leadRef)
@@ -55,6 +57,18 @@ async function patchLeadLastCall(
   const existingDisp =
     typeof data.lastCallDispositionId === 'string' ? data.lastCallDispositionId : null
   const preserveUserNote = !isSoftOverwritableDisposition(existingDisp)
+  const activity = leadListActivityPatch({
+    kind: 'call',
+    summary:
+      outcome === 'CONNECTED'
+        ? 'Đã bắt máy'
+        : outcome === 'NO_ANSWER'
+          ? 'Không bắt máy'
+          : outcome === 'FOLLOW_UP'
+            ? 'Cần gọi lại'
+            : 'Cuộc gọi',
+    counselorNote,
+  })
 
   // Note panel đã lưu (khác soft KNM) — chỉ cập nhật lần gọi gần nhất, không đè note/bucket.
   if (preserveUserNote) {
@@ -64,6 +78,7 @@ async function patchLeadLastCall(
         calledByLabel,
         outcome: outcome ?? undefined,
       }),
+      ...activity,
     })
     return
   }
@@ -73,6 +88,7 @@ async function patchLeadLastCall(
     await updateDoc(leadRef, {
       ...leadTouchPatch(),
       ...buildNoAnswerSoftCallWorkPatch({ calledByLabel }),
+      ...activity,
     })
     return
   }
@@ -81,6 +97,7 @@ async function patchLeadLastCall(
     await updateDoc(leadRef, {
       ...leadTouchPatch(),
       ...buildConnectedClearSoftLeadPatch({ calledByLabel }),
+      ...activity,
     })
     return
   }
@@ -99,6 +116,7 @@ async function patchLeadLastCall(
           lastCallDispositionLabel: 'Gọi lại sau',
         }
       : {}),
+    ...activity,
   })
 }
 
@@ -161,7 +179,7 @@ export async function logOmicallInteraction(
   })
 
   // Không nuốt lỗi — caller (OmicallProvider) cần xóa uid khỏi cache để retry.
-  await patchLeadLastCall(db, meta.leadId, callerLabel, outcome)
+  await patchLeadLastCall(db, meta.leadId, callerLabel, outcome, noteParts.join(' · '))
 
   await commitAuditLog(db, {
     leadId: meta.leadId,
