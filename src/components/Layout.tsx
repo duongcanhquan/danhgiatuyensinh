@@ -180,16 +180,18 @@ export function Layout() {
           )}
         </NavLink>
 
-        <div className="my-3 border-t border-white/15" role="separator" aria-hidden />
+        <div className="my-2 border-t border-white/15" role="separator" aria-hidden />
 
-        <OrgSwitcher className="mb-2" />
-        <div className="flex items-center gap-2.5 rounded-xl bg-white/5 px-3 py-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
-            <User className="h-4 w-4" strokeWidth={2} aria-hidden />
+        <OrgSwitcher className="mb-1.5" />
+        <div className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
+            <User className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{profile?.displayName ?? 'Khách'}</p>
-            <p className="truncate text-xs text-slate-400">{profile ? USER_ROLE_LABELS[profile.role] : '—'}</p>
+            <p className="truncate text-sm font-medium text-white">{profile?.displayName ?? 'Khách'}</p>
+            <p className="truncate text-[11px] leading-tight text-slate-400">
+              {profile ? USER_ROLE_LABELS[profile.role] : '—'}
+            </p>
           </div>
         </div>
         {showSignOut ? <ChangePasswordPanel compact /> : null}
@@ -197,9 +199,9 @@ export function Layout() {
           <button
             type="button"
             onClick={() => void signOut()}
-            className="mt-2 flex w-full min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 py-2.5 text-sm font-semibold text-slate-200 transition duration-150 hover:border-white/25 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+            className="mt-1.5 flex w-full min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition duration-150 hover:border-white/25 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
           >
-            <LogOut className="h-4 w-4" aria-hidden />
+            <LogOut className="h-3.5 w-3.5" aria-hidden />
             Đăng xuất
           </button>
         ) : null}
@@ -238,7 +240,7 @@ export function Layout() {
         </aside>
 
         <div className="flex min-h-[100dvh] min-w-0 flex-1 flex-col lg:min-h-0">
-          <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-2 sm:px-4 lg:px-6">
+          <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-2 sm:px-4 lg:hidden">
             <button
               type="button"
               className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 lg:hidden"

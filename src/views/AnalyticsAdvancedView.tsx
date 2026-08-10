@@ -22,7 +22,6 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import type { Lead, LeadPipelineStatus, PriorityTag } from '../types'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { CallEvaluationAnalyticsPanel } from '../components/CallEvaluationAnalyticsPanel'
-import { AppPageHeader } from '../components/AppPageHeader'
 import { useCallEvaluationStats } from '../hooks/useCallEvaluationStats'
 import {
   buildAnalyticsSummaryCsv,
@@ -253,21 +252,6 @@ export function AnalyticsAdvancedView() {
 
   return (
     <div className="space-y-4">
-      <AppPageHeader
-        title="Phân tích"
-        meta={scopeLabel}
-        actions={
-          <button
-            type="button"
-            onClick={exportSummary}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            Tải CSV
-          </button>
-        }
-      />
-
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-3 py-2.5 shadow-sm">
         <Filter className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden />
         <select
@@ -299,6 +283,14 @@ export function AnalyticsAdvancedView() {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={exportSummary}
+          className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden />
+          Tải CSV
+        </button>
       </div>
 
       {scopeFetchTruncated ? (

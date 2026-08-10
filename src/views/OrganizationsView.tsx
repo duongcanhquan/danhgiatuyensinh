@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 import { Building2, ChevronDown, Download, Loader2, Plus, Settings2, Pencil, UserCog } from 'lucide-react'
-import { AppPageHeader } from '../components/AppPageHeader'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
@@ -624,11 +623,6 @@ export function OrganizationsView() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <AppPageHeader
-        title="Quản lý trường"
-        meta="Xem · sửa · quản lý · cài đặt theo từng trường"
-      />
-
       <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
         <BentoStat label="Đang hoạt động" value={loading ? '…' : String(activeCount)} tone="accent" />
         <BentoStat label="Tạm ngưng" value={loading ? '…' : String(suspendedCount)} tone="ink" />

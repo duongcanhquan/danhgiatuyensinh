@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { BookOpen, ChevronRight, Home } from 'lucide-react'
+import { ChevronRight, Home } from 'lucide-react'
 
 type SectionId =
   | 'gioi-thieu'
@@ -555,15 +555,7 @@ export function UserManualView() {
 
   return (
     <div className="-mx-2 -mt-2 flex min-h-[calc(100dvh-4.5rem)] flex-col overflow-hidden rounded-none border-y border-slate-200/90 bg-white shadow-none sm:-mx-3 sm:min-h-[calc(100dvh-5rem)] md:-mx-4 md:rounded-2xl md:border md:shadow-[0_8px_40px_rgba(15,23,42,0.08)]">
-      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/90 bg-white px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-200/80 bg-white shadow-sm">
-            <BookOpen className="h-6 w-6 text-amber-700" strokeWidth={1.75} aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Hướng dẫn</h1>
-          </div>
-        </div>
+      <header className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 bg-white px-4 py-2.5 sm:px-6">
         <Link
           to="/"
           className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80"

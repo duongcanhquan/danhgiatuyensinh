@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { AppPageHeader } from '../components/AppPageHeader'
 import { TabStrip } from '../components/TabStrip'
-import { BentoCell, BentoGrid } from '../components/bento'
+import { BentoCell } from '../components/bento'
 import { CrmAdminShortcuts } from '../components/CrmAdminShortcuts'
 import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import {
@@ -47,24 +46,16 @@ export function SummaryHubView() {
       <CrmAdminShortcuts />
       <IntegrationsStatusStrip />
 
-      <BentoGrid className="lg:!grid-cols-4">
-        <BentoCell variant="hero" colSpan={4} className="!p-3 sm:!p-5">
-          <AppPageHeader
-            title="Tổng kết"
-            meta={<span className="hidden sm:inline">Nhóm · KPI · bảng điểm · lịch gọi</span>}
-            tone="onDark"
-          >
-            <TabStrip
-              tabs={tabItems}
-              active={activeTab}
-              onChange={setTab}
-              ariaLabel="Phần trong Tổng kết"
-              panelId={SUMMARY_PANEL_ID}
-              className="-mx-0.5"
-            />
-          </AppPageHeader>
-        </BentoCell>
-      </BentoGrid>
+      <BentoCell className="!p-2 sm:!p-2.5">
+        <TabStrip
+          tabs={tabItems}
+          active={activeTab}
+          onChange={setTab}
+          ariaLabel="Phần trong Tổng kết"
+          panelId={SUMMARY_PANEL_ID}
+          className="-mx-0.5"
+        />
+      </BentoCell>
 
       <BentoCell colSpan={4} className="min-h-0 flex-1 !p-2.5 sm:!p-4">
         <div

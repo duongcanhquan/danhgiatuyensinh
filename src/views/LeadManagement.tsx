@@ -60,7 +60,6 @@ import { leadNeedsAutoScorePersist } from '../hooks/leadNeedsAutoScorePersist'
 import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
-import { AppPageHeader } from '../components/AppPageHeader'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import { LlmAccessHelpPanel } from '../components/LlmAccessHelpPanel'
@@ -2713,15 +2712,6 @@ export function LeadManagement() {
 
   return (
     <div className="bento-board gap-4">
-      <BentoCell variant="hero" className="!p-4 sm:!p-5">
-        <AppPageHeader
-          title="Hồ sơ"
-          meta="Tìm · lọc · gọi · cập nhật — xếp Gọi lại → Chưa gọi → Đã xử lý"
-          tone="onDark"
-          className="!mb-0 [&_h1]:text-2xl sm:[&_h1]:text-3xl"
-        />
-      </BentoCell>
-
       {!configured || !db ? (
         <div className="flex justify-end">
           <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-sm text-amber-900">

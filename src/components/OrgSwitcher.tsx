@@ -9,11 +9,11 @@ export function OrgSwitcher({ className = '' }: { className?: string }) {
   if (!isPlatformSuperAdmin) return null
 
   return (
-    <div className={`min-w-0 space-y-2 ${className}`.trim()}>
-      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+    <div className={`min-w-0 space-y-1 ${className}`.trim()}>
+      <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
         Đang làm việc tại
         <select
-          className="mt-1 w-full cursor-pointer truncate rounded-lg border border-white/15 bg-white/10 px-2 py-1.5 text-xs font-semibold text-white outline-none focus:border-indigo-400/60"
+          className="mt-0.5 w-full cursor-pointer truncate rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-sm font-medium text-white outline-none focus:border-indigo-400/60"
           value={effectiveOrgId}
           disabled={organizationsLoading || organizations.length === 0}
           onChange={(e) => setActiveOrgId(e.target.value)}
@@ -29,7 +29,7 @@ export function OrgSwitcher({ className = '' }: { className?: string }) {
       </label>
       <NavLink
         to="/organizations"
-        className="block text-center text-[11px] font-semibold text-indigo-200/90 underline-offset-2 hover:text-white hover:underline"
+        className="block text-center text-[11px] font-medium text-indigo-200/90 underline-offset-2 hover:text-white hover:underline"
       >
         Quản lý trường
       </NavLink>

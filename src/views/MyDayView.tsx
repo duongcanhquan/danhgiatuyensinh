@@ -6,7 +6,6 @@ import { useCounselorKpi } from '../hooks/useCounselorKpi'
 import { useCounselorKpiDateRange } from '../hooks/useCounselorKpiDateRange'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { useOrg } from '../hooks/useOrg'
-import { AppPageHeader } from '../components/AppPageHeader'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { KpiCallHint } from '../components/KpiCallHint'
 import { KpiMetricsSections } from '../components/KpiMetricsSections'
@@ -196,10 +195,6 @@ export function MyDayView() {
 
   return (
     <div className="bento-board mx-auto max-w-4xl">
-      <BentoCell variant="hero" className="!p-3 sm:!p-4">
-        <AppPageHeader title="Ngày của tôi" meta={today} tone="onDark" />
-      </BentoCell>
-
       <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
         <BentoStat label="Hôm nay" value={today.slice(8)} hint={today} tone="ink" />
         <BentoStat

@@ -38,7 +38,6 @@ import {
   uniqueCatalogIdFromLabel,
 } from '../utils/masterDataRegistry'
 import { CircleHelp, Maximize2, X } from 'lucide-react'
-import { AppPageHeader } from '../components/AppPageHeader'
 import { BentoCell } from '../components/bento'
 import { InfoCompletenessRulesPanel } from '../components/InfoCompletenessRulesPanel'
 import { LeadClassificationRulesPanel } from '../components/LeadClassificationRulesPanel'
@@ -722,19 +721,6 @@ export function SettingsView() {
 
   return (
     <div className={`bento-board min-w-0 max-w-full ${settingsCopy}`}>
-      <BentoCell variant="hero" className="!p-3 sm:!p-4">
-        <AppPageHeader
-          title="Cài đặt"
-          meta={
-            isPlatformSuperAdmin
-              ? `Đang cấu hình · ${currentOrgLabel}`
-              : 'Dữ liệu · chấm điểm · nhân sự · kết nối'
-          }
-          tone="onDark"
-          className="!mb-0"
-        />
-      </BentoCell>
-
       {isPlatformSuperAdmin ? (
         <BentoCell variant="muted" className="!p-3 text-sm text-indigo-950">
           <p className="font-semibold">
