@@ -20,6 +20,7 @@ import {
 import { STAFF_ASSIGNABLE_PERMISSIONS } from '../utils/roleCapabilitiesConfig'
 import { defaultPermissionsForRole } from '../auth/permissions'
 import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
+import { confirmDangerousStaffAccountDelete } from '../utils/dangerousDeleteConfirm'
 import {
   counselorIdsInManagerScope,
   explicitManagedCounselorIds,
@@ -411,13 +412,7 @@ export function StaffManagementView({
   }
 
   const removeUser = async (u: VietMyUserProfile) => {
-    if (
-      !window.confirm(
-        `Xóa vĩnh viễn «${u.displayName || u.email}»?\n\nHồ sơ Firestore và tài khoản Auth sẽ bị gỡ — không hoàn tác.`,
-      )
-    ) {
-      return
-    }
+    if (!confirmDangerousStaffAccountDelete(u.displayName || u.email || u.id)) return
     setErr(null)
     setMsg(null)
     try {

@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useCounselorDirectory } from '../../hooks/useCounselorDirectory'
 import { canManageAccountantStaff } from '../../auth/accountantPortal'
 import { USER_ROLE_LABELS, type VietMyUserProfile } from '../../types'
+import { confirmDangerousStaffAccountDelete } from '../../utils/dangerousDeleteConfirm'
 
 export function AccountantStaffView() {
   const {
@@ -105,13 +106,7 @@ export function AccountantStaffView() {
   }
 
   const removeUser = async (u: VietMyUserProfile) => {
-    if (
-      !window.confirm(
-        `Xóa vĩnh viễn kế toán viên «${u.displayName || u.email}»?\n\nKhông thể hoàn tác.`,
-      )
-    ) {
-      return
-    }
+    if (!confirmDangerousStaffAccountDelete(u.displayName || u.email || u.id)) return
     setErr(null)
     setMsg(null)
     try {

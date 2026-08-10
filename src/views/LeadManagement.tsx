@@ -130,6 +130,11 @@ import {
 import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDeleteLeads'
 import { collectLeadIdsByIntakeProgram, PURGE_PROGRAM_HARD_CAP } from '../utils/purgeLeadsByIntakeProgram'
 import {
+  confirmDangerousLeadBatchDelete,
+  confirmDangerousSelectedLeadsDelete,
+  confirmDangerousSingleLeadDelete,
+} from '../utils/dangerousDeleteConfirm'
+import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
   rememberIntakeProgram,
@@ -2263,6 +2268,7 @@ export function LeadManagement() {
     if (!db || !profile || !canDeleteLeads || !selectedIds.size || bulkBusy) return
     const ids = [...selectedIds]
     const n = ids.length
+    if (!confirmDangerousSelectedLeadsDelete(n)) return
     setBulkBusy(true)
     setRescoreMsg(`Đang xóa ${n.toLocaleString('vi-VN')} hồ sơ đã chọn…`)
     try {
@@ -2351,7 +2357,21 @@ export function LeadManagement() {
             : `chương trình «${prog}»`
           : `bộ lọc hiện tại (${activeFilterChips.length} điều kiện)`
 
-      // Một lần bấm = xóa ngay (không confirm / không gõ lại tên).
+      const estimatedCount =
+        mode === 'filters'
+          ? filtered.length || null
+          : mode === 'program' && programFilterActive && programFilter === prog
+            ? filtered.length || null
+            : null
+      if (
+        !confirmDangerousLeadBatchDelete({
+          scopeLabel,
+          estimatedCount,
+        })
+      ) {
+        return
+      }
+
       setSelectScopeBusy(true)
       setBulkBusy(true)
       setRescoreMsg(`Đang quét hồ sơ thuộc ${scopeLabel}…`)
@@ -2390,6 +2410,26 @@ export function LeadManagement() {
                 void refetchLeads()
               }
               return
+            }
+
+            if (round === 1) {
+              const moreHint = collected.mayHaveMore
+                ? '\n\nCó thể còn thêm hồ sơ ngoài lô này — hệ thống sẽ quét tiếp sau khi xóa lô đầu.'
+                : ''
+              if (
+                !window.confirm(
+                  [
+                    'Xác nhận lần cuối trước khi xóa',
+                    '',
+                    `Đã tìm thấy ${collected.ids.length.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.${moreHint}`,
+                    '',
+                    'Bấm OK để bắt đầu xóa vĩnh viễn. Hủy để dừng.',
+                  ].join('\n'),
+                )
+              ) {
+                setRescoreMsg('Đã hủy — chưa xóa hồ sơ nào.')
+                return
+              }
             }
 
             setRescoreMsg(`Đang xóa ${totalDeleted.toLocaleString('vi-VN')}… (+${collected.ids.length})`)
@@ -2526,6 +2566,26 @@ export function LeadManagement() {
 
       const n = rows.length
       const ids = rows.map((l) => l.id)
+      if (
+        !window.confirm(
+          [
+            'Xác nhận lần cuối trước khi xóa',
+            '',
+            `Đã quét được ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
+            truncated
+              ? `(Đã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ ngoài danh sách này.)`
+              : '',
+            '',
+            'Bấm OK để xóa vĩnh viễn. Hủy để dừng.',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        )
+      ) {
+        setBulkBusy(false)
+        setRescoreMsg('Đã hủy — chưa xóa hồ sơ nào.')
+        return
+      }
       setRescoreMsg(
         truncated
           ? `Đang xóa 0/${n}… (đã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ; chạy lại nếu cần)`
@@ -3124,8 +3184,8 @@ export function LeadManagement() {
                 className={`${LEAD_BTN} border-rose-400 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40`}
                 title={
                   (programFilterActive ? programFilter : draftFilters.program) === '__UNSET__'
-                    ? 'Xóa hết hồ sơ chưa gắn chương trình'
-                    : `Xóa hết hồ sơ chương trình «${programFilterActive ? programFilter : draftFilters.program}»`
+                    ? 'Xóa hết hồ sơ chưa gắn chương trình — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa'
+                    : `Xóa hết hồ sơ chương trình «${programFilterActive ? programFilter : draftFilters.program}» — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa`
                 }
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -3138,7 +3198,7 @@ export function LeadManagement() {
                 disabled={bulkBusy || selectScopeBusy || loading}
                 onClick={() => void deleteEntireBatch('filters')}
                 className={`${LEAD_BTN} border-rose-300 bg-rose-50 text-rose-900 hover:border-rose-400 hover:bg-rose-100 disabled:opacity-40`}
-                title="Xóa toàn bộ hồ sơ đang khớp bộ lọc hiện tại"
+                title="Xóa toàn bộ hồ sơ đang khớp bộ lọc — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa"
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa theo lọc'}
@@ -5366,13 +5426,7 @@ function LeadDetailPanel({
   const deleteThisLead = useCallback(async () => {
     if (!db || !profile || !canDeleteThisLead || deleteBusy) return
     const label = lead.fullName?.trim() || 'hồ sơ này'
-    if (
-      !window.confirm(
-        `Xóa vĩnh viễn «${label}»?\n\nKhông hoàn tác được. Chỉ Admin được xóa.`,
-      )
-    ) {
-      return
-    }
+    if (!confirmDangerousSingleLeadDelete(label)) return
     setDeleteBusy(true)
     setMsg(null)
     try {

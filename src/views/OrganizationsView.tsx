@@ -26,6 +26,7 @@ import {
   type PlatformAuditAction,
 } from '../tenancy/platformOps'
 import { normalizeUserRole } from '../auth/roleUtils'
+import { confirmDangerousStaffAccountDelete } from '../utils/dangerousDeleteConfirm'
 import {
   defaultRoleCapabilities,
   loadRoleCapabilities,
@@ -406,7 +407,14 @@ export function OrganizationsView() {
     if (org.id === DEFAULT_ORG_ID) return
     if (
       !window.confirm(
-        `Xóa trường «${org.name}» khỏi danh sách?\n\nTrường sẽ không hiện trên CRM và OrgSwitcher. Hồ sơ / cấu hình vẫn giữ trong hệ thống (không xóa sạch dữ liệu).`,
+        [
+          'CẢNH BÁO — ẨN TRƯỜNG KHỎI DANH SÁCH',
+          '',
+          `Ẩn trường «${org.name}» khỏi CRM và bộ chọn trường?`,
+          '',
+          'Hồ sơ / cấu hình vẫn giữ trong hệ thống (không xóa sạch dữ liệu hồ sơ).',
+          'Chỉ tiếp tục nếu bạn chắc chắn.',
+        ].join('\n'),
       )
     ) {
       return
@@ -579,13 +587,7 @@ export function OrganizationsView() {
   }
 
   const onDeleteAdmin = async (admin: AdminRow) => {
-    if (
-      !window.confirm(
-        `Xóa vĩnh viễn quản lý «${admin.displayName || admin.email}»?\n\nHồ sơ Firestore và tài khoản Auth sẽ bị gỡ — không hoàn tác.`,
-      )
-    ) {
-      return
-    }
+    if (!confirmDangerousStaffAccountDelete(admin.displayName || admin.email || admin.id)) return
     const db = getFirestoreDb()
     if (!db || !detailOrg || !actor.uid) return
     setBusy(true)
