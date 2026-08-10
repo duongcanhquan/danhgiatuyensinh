@@ -47,6 +47,21 @@ export function isUserInManagerTeamScope(
   return team.has(target.id)
 }
 
+/** Roster rõ trên `managedCounselorIds` — khớp CF vô hiệu/xóa nhân sự (không dùng fallback khoa/phòng). */
+export function explicitManagedCounselorIds(manager: VietMyUserProfile): string[] {
+  if (!canOwnFieldStaffTeam(manager.role)) return []
+  return [...new Set((manager.managedCounselorIds ?? []).map(String).filter(Boolean))]
+}
+
+export function isUserInExplicitTeamRoster(
+  manager: VietMyUserProfile,
+  target: Pick<VietMyUserProfile, 'id' | 'role'>,
+): boolean {
+  if (target.id === manager.id) return true
+  if (!isAssignableFieldStaffRole(target.role)) return false
+  return explicitManagedCounselorIds(manager).includes(target.id)
+}
+
 /** Profile chấm điểm mà quản lý được phép sửa (của mình + TVV trong nhóm). */
 export function canManagerEditScoringProfile(
   manager: VietMyUserProfile,

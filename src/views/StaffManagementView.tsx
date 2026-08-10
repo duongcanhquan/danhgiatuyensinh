@@ -22,7 +22,8 @@ import { defaultPermissionsForRole } from '../auth/permissions'
 import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import {
   counselorIdsInManagerScope,
-  isUserInManagerTeamScope,
+  explicitManagedCounselorIds,
+  isUserInExplicitTeamRoster,
   patchesForCounselorTeamAssignment,
   primaryTeamLeadForCounselor,
   teamLeadUsesExplicitRoster,
@@ -105,11 +106,11 @@ export function StaffManagementView({
 
   const counselorPickList = useMemo(() => {
     if (teamScopeOnly && profile) {
-      const team = new Set(counselorIdsInManagerScope(profile, users))
+      const team = new Set(explicitManagedCounselorIds(profile))
       return fieldStaff.filter((c) => team.has(c.id))
     }
     return fieldStaff
-  }, [fieldStaff, teamScopeOnly, profile, users])
+  }, [fieldStaff, teamScopeOnly, profile])
 
   /** Trưởng nhóm Sale (cầm roster TVV/CTV). */
   const teamLeads = useMemo(
@@ -137,8 +138,8 @@ export function StaffManagementView({
   const sortedUsers = useMemo(() => {
     let list = users
     if (teamScopeOnly && profile) {
-      const teamIds = new Set(counselorIdsInManagerScope(profile, users))
-      list = users.filter((u) => teamIds.has(u.id))
+      const teamIds = new Set(explicitManagedCounselorIds(profile))
+      list = users.filter((u) => teamIds.has(u.id) || u.id === profile.id)
     }
     return [...list].sort((a, b) => {
       const la = (a.displayName || a.email).toLocaleLowerCase('vi')
@@ -158,9 +159,17 @@ export function StaffManagementView({
   }
 
   const teamBanner = teamScopeOnly ? (
-    <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
-      <strong>Trưởng nhóm Sale:</strong> quản lý nhân viên sale và CTV trong nhóm; gán hồ sơ qua roster bên dưới.
-    </p>
+    <div className="space-y-2">
+      <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
+        <strong>Trưởng nhóm Sale:</strong> quản lý TVV / CTV đã gán trong nhóm; đặt mật khẩu do Quản lý trường.
+      </p>
+      {profile && !teamLeadUsesExplicitRoster(profile) ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Chưa có danh sách sale rõ trên hồ sơ nhóm. Nhờ Quản lý trường gán TVV/CTV vào nhóm bạn — khi đó mới sửa /
+          vô hiệu / xóa được trên màn này.
+        </p>
+      ) : null}
+    </div>
   ) : canStaffAll ? (
     <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
       <strong>Quản lý trường:</strong> xem, sửa, vô hiệu và đặt mật khẩu mọi nhân sự trong trường (TVV, CTV, Trưởng
@@ -172,7 +181,7 @@ export function StaffManagementView({
     if (isSuperAdminRole(u.role) && !isSuperAdminRole(profile?.role)) return false
     if (canStaffAll) return true
     if (!profile || !teamScopeOnly) return false
-    return isUserInManagerTeamScope(profile, u, users)
+    return isUserInExplicitTeamRoster(profile, u)
   }
 
   const omicallSyncBanner =

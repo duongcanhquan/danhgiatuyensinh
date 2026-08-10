@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { VietMyUserProfile } from '../types'
 import {
   counselorIdsInManagerScope,
+  isUserInExplicitTeamRoster,
   patchesForCounselorTeamAssignment,
   primaryTeamLeadForCounselor,
   teamLeadsForCounselor,
@@ -57,6 +58,16 @@ describe('teamScope roster', () => {
     ]
     expect(primaryTeamLeadForCounselor('c1', dir)?.id).toBe('lead-explicit')
     expect(counselorIdsInManagerScope(dir[0], dir)).toContain('c1')
+  })
+
+  it('explicit roster ignores department fallback for staff ops', () => {
+    const lead = u('lead-a', 'team_lead', { departmentId: 'd1', managedCounselorIds: [] })
+    const c1 = u('c1', 'counselor', { departmentId: 'd1' })
+    const dir = [lead, c1]
+    expect(counselorIdsInManagerScope(lead, dir)).toContain('c1')
+    expect(isUserInExplicitTeamRoster(lead, c1)).toBe(false)
+    const withRoster = u('lead-a', 'team_lead', { departmentId: 'd1', managedCounselorIds: ['c1'] })
+    expect(isUserInExplicitTeamRoster(withRoster, c1)).toBe(true)
   })
 
   it('clears orphan managedCounselorIds on admin when reassigning counselor', () => {

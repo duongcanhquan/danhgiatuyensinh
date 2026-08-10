@@ -1987,7 +1987,10 @@ async function assertStaffManagementPermission(
 }
 
 async function removeCounselorFromTeamRosters(counselorId: string): Promise<void> {
-  const snap = await db.collection(COLLECTIONS.users).where('role', '==', 'team_lead').get()
+  const snap = await db
+    .collection(COLLECTIONS.users)
+    .where('managedCounselorIds', 'array-contains', counselorId)
+    .get()
   const batch = db.batch()
   let writes = 0
   for (const doc of snap.docs) {

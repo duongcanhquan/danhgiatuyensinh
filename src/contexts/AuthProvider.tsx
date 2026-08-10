@@ -16,7 +16,7 @@ import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
 import { type OrgRoleCapabilities } from '../utils/roleCapabilitiesConfig'
 import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
 import { canOwnFieldStaffTeam, normalizeUserRole } from '../auth/roleUtils'
-import { isUserInManagerTeamScope } from '../utils/teamScope'
+import { isUserInExplicitTeamRoster } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
 import { ensureDefaultFirestoreData } from '../services/firestoreBootstrap'
@@ -520,8 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (canTeam && !canAll && !canAcctStaff && profile) {
         const targetProfile = mapProfileFromDoc(uid, firebaseUser!, data)
-        // Roster explicit trên profile TL đủ để kiểm; directory chỉ cần khi fallback khoa/phòng.
-        if (!isUserInManagerTeamScope(profile, targetProfile, [profile, targetProfile])) {
+        if (!isUserInExplicitTeamRoster(profile, targetProfile)) {
           throw new Error('Chỉ được sửa tư vấn viên / CTV trong nhóm bạn quản lý.')
         }
         if (input.role !== undefined && input.role !== 'counselor' && input.role !== 'ctv') {
