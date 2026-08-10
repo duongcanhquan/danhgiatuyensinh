@@ -150,4 +150,9 @@ export function BulkLeadActionBar({
   )
 }
 
-export const BULK_PRIORITY_TAG_OPTIONS: PriorityTag[] = ['HOT', 'WARM', 'COLD', 'LOSS']
+export const BULK_PRIORITY_TAG_OPTIONS: { value: PriorityTag; label: string }[] = [
+  { value: 'HOT', label: 'HOT' },
+  { value: 'WARM', label: 'WARM' },
+  { value: 'COLD', label: 'COLD' },
+  { value: 'LOSS', label: 'LOSS' },
+]
