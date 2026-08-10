@@ -5529,11 +5529,6 @@ function LeadDetailPanel({
   const leadIsMineForCrm = (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id
   const crmQuickBlockVisible =
     canReassignLead && Boolean(db) && !(peerModeForCrmBlock && !leadIsMineForCrm)
-
-  /** Một nguồn sự thật: khi khối phân công hiển thị thì chỉnh tình trạng TVV ở đó. */
-  const crmEditOnRight = crmQuickBlockVisible
-  const crmEditOnLeft = showCounselorProgressForm && !crmEditOnRight
-
   const dispositionChanged =
     (dispositionDraft || null) !== (lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
       ? lead.lastCallDispositionId
@@ -5841,7 +5836,7 @@ function LeadDetailPanel({
     }
     if (pipeChanged && !noteDidChange && !canMutateLead) {
       setMsg(
-        'Để chỉnh funnel không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc sửa ghi chú TVV rồi bấm «Lưu cập nhật»).',
+        'Để chỉnh tình trạng hồ sơ không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc sửa ghi chú TVV rồi bấm «Lưu cập nhật»).',
       )
       return
     }
@@ -6309,74 +6304,84 @@ function LeadDetailPanel({
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
               <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
                 <nav
-                  className="sticky top-0 z-10 grid shrink-0 grid-cols-2 gap-1 rounded-lg border border-slate-200/90 bg-slate-100/95 p-1 shadow-sm backdrop-blur-sm"
+                  className="sticky top-0 z-10 flex shrink-0 items-stretch gap-1 rounded-lg border border-slate-200/90 bg-slate-100/95 p-0.5 shadow-sm backdrop-blur-sm"
                   role="tablist"
                   aria-label="Nội dung chính chi tiết hồ sơ"
                 >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailLeftTab === 'counselor'}
-                    onClick={() => setDetailLeftTab('counselor')}
-                    className={[
-                      'relative flex min-h-9 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left transition sm:px-3',
-                      detailLeftTab === 'counselor'
-                        ? 'border-amber-500/70 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm ring-1 ring-amber-400/40'
-                        : 'border-transparent bg-white text-slate-800 hover:border-amber-200 hover:bg-amber-50/80',
-                    ].join(' ')}
-                  >
-                    <ClipboardList
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-0.5">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={detailLeftTab === 'counselor'}
+                      onClick={() => setDetailLeftTab('counselor')}
                       className={[
-                        'h-4 w-4 shrink-0',
-                        detailLeftTab === 'counselor' ? 'text-amber-50' : 'text-amber-700',
+                        'relative flex min-h-8 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-center transition sm:px-2',
+                        detailLeftTab === 'counselor'
+                          ? 'border-amber-500/70 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm ring-1 ring-amber-400/40'
+                          : 'border-transparent bg-white text-slate-800 hover:border-amber-200 hover:bg-amber-50/80',
                       ].join(' ')}
-                      aria-hidden
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-xs font-bold leading-tight tracking-tight sm:text-sm">
+                    >
+                      <ClipboardList
+                        className={[
+                          'h-3.5 w-3.5 shrink-0',
+                          detailLeftTab === 'counselor' ? 'text-amber-50' : 'text-amber-700',
+                        ].join(' ')}
+                        aria-hidden
+                      />
+                      <span className="truncate text-[11px] font-bold leading-tight tracking-tight sm:text-xs">
                         Thao tác TVV
                       </span>
-                    </span>
-                    {hasUnsavedProgress && detailLeftTab !== 'counselor' ? (
-                      <span
-                        className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
-                        title="Có thay đổi chưa lưu"
+                      {hasUnsavedProgress && detailLeftTab !== 'counselor' ? (
+                        <span
+                          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500 ring-2 ring-white"
+                          title="Có thay đổi chưa lưu"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={detailLeftTab === 'profile'}
+                      onClick={() => setDetailLeftTab('profile')}
+                      className={[
+                        'relative flex min-h-8 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-center transition sm:px-2',
+                        detailLeftTab === 'profile'
+                          ? 'border-slate-600/60 bg-slate-800 text-white shadow-sm ring-1 ring-slate-500/30'
+                          : 'border-transparent bg-white text-slate-800 hover:border-slate-200 hover:bg-slate-50',
+                      ].join(' ')}
+                    >
+                      <UserRound
+                        className={[
+                          'h-3.5 w-3.5 shrink-0',
+                          detailLeftTab === 'profile' ? 'text-slate-200' : 'text-slate-600',
+                        ].join(' ')}
                         aria-hidden
                       />
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailLeftTab === 'profile'}
-                    onClick={() => setDetailLeftTab('profile')}
-                    className={[
-                      'relative flex min-h-9 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left transition sm:px-3',
-                      detailLeftTab === 'profile'
-                        ? 'border-slate-600/60 bg-slate-800 text-white shadow-sm ring-1 ring-slate-500/30'
-                        : 'border-transparent bg-white text-slate-800 hover:border-slate-200 hover:bg-slate-50',
-                    ].join(' ')}
-                  >
-                    <UserRound
-                      className={[
-                        'h-4 w-4 shrink-0',
-                        detailLeftTab === 'profile' ? 'text-slate-200' : 'text-slate-600',
-                      ].join(' ')}
-                      aria-hidden
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-xs font-bold leading-tight tracking-tight sm:text-sm">
+                      <span className="truncate text-[11px] font-bold leading-tight tracking-tight sm:text-xs">
                         Hồ sơ ứng viên
                       </span>
+                      {(coreDirty || financeDirty) && detailLeftTab !== 'profile' ? (
+                        <span
+                          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500 ring-2 ring-white"
+                          title="Có thay đổi hồ sơ chưa lưu"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </button>
+                  </div>
+                  <div
+                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200/80 bg-white px-2 py-1"
+                    title="Điểm và nhãn theo bộ chấm đang chọn"
+                  >
+                    <span className="hidden text-[9px] font-bold uppercase tracking-wide text-slate-500 sm:inline">
+                      Điểm
                     </span>
-                    {(coreDirty || financeDirty) && detailLeftTab !== 'profile' ? (
-                      <span
-                        className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
-                        title="Có thay đổi hồ sơ chưa lưu"
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
+                    <span className="tabular-nums text-sm font-bold text-[var(--color-primary)]">
+                      {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
+                    </span>
+                    <TagBadge tag={detailScoringPreview?.priorityTag ?? lead.priorityTag} />
+                  </div>
                 </nav>
                 {/* SĐT — thu gọn mặc định để lộ nội dung bên dưới */}
                 <details className="group shrink-0 rounded-lg border border-sky-200/80 bg-sky-50/50 open:bg-sky-50/80">
@@ -6477,25 +6482,25 @@ function LeadDetailPanel({
                 </details>
                 <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                   {detailLeftTab === 'profile' ? (
-                    <aside className="flex min-h-0 flex-1 flex-col space-y-2 text-sm leading-snug text-slate-800">
-                      <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm sm:p-2.5">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <aside className="flex min-h-0 flex-1 flex-col space-y-1.5 text-xs leading-snug text-slate-800">
+                      <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200/90 bg-white p-1.5 shadow-sm sm:p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-100 pb-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-600">
                             <span className="tabular-nums">
                               Điểm: {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
                             </span>
                             <TagBadge tag={detailScoringPreview?.priorityTag ?? lead.priorityTag} />
                           </div>
                           {showCounselorProgressForm ? (
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               {coreDirty || financeDirty ? (
-                                <span className="text-[10px] font-semibold text-amber-800">Chưa lưu thay đổi</span>
+                                <span className="text-[10px] font-semibold text-amber-800">Chưa lưu</span>
                               ) : null}
                               <button
                                 type="button"
                                 disabled={saving || financeSaving || !financeDirty}
                                 onClick={() => void saveFinanceProfile()}
-                                className="rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-md border border-blue-600 bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 {financeSaving ? 'Đang lưu…' : 'Lưu tài chính'}
                               </button>
@@ -6503,17 +6508,17 @@ function LeadDetailPanel({
                                 type="button"
                                 disabled={saving || financeSaving || !coreDirty}
                                 onClick={() => void saveCoreProfile()}
-                                className="rounded-lg border border-emerald-600 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-md border border-emerald-600 bg-indigo-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
                               >
-                                {saving ? 'Đang lưu…' : 'Lưu thông tin hồ sơ'}
+                                {saving ? 'Đang lưu…' : 'Lưu hồ sơ'}
                               </button>
                             </div>
                           ) : null}
                         </div>
                         {msg && detailLeftTab === 'profile' ? (
-                          <p className="mt-1 shrink-0 text-xs font-medium text-amber-900">{msg}</p>
+                          <p className="mt-1 shrink-0 text-[11px] font-medium text-amber-900">{msg}</p>
                         ) : null}
-                        <div className="mt-2 flex flex-col">
+                        <div className="mt-1.5 flex flex-col">
                           <LeadProfileCoreForm
                             draft={coreDraft}
                             onChange={setCoreDraft}
@@ -6556,15 +6561,6 @@ function LeadDetailPanel({
                     </aside>
                   ) : (
                     <aside className="space-y-2 text-sm leading-snug text-slate-800">
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/90 bg-white px-2 py-1.5 text-[11px] text-slate-700 shadow-sm">
-                        <span className="font-semibold text-slate-800">Tóm tắt nhanh</span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="tabular-nums">
-                            Điểm: {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
-                          </span>
-                          <TagBadge tag={detailScoringPreview?.priorityTag ?? lead.priorityTag} />
-                        </div>
-                      </div>
                       {db ? (
                         <div className="space-y-2">
                           {showCounselorProgressForm || canSaveInteraction ? (
@@ -6592,10 +6588,8 @@ function LeadDetailPanel({
                                     </>
                                   ) : null}
                                 </p>
-                                <div
-                                  className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}
-                                >
-                                  {crmEditOnLeft ? (
+                                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                  {showCounselorProgressForm ? (
                                     <label className="block text-xs font-medium text-slate-800">
                                       Tình trạng tư vấn
                                       <select
@@ -6612,7 +6606,7 @@ function LeadDetailPanel({
                                     </label>
                                   ) : null}
                                   <label className="block text-xs font-medium text-slate-800">
-                                    Funnel tuyển sinh
+                                    Tình trạng hồ sơ
                                     <select
                                       value={statusForForm}
                                       onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
@@ -6744,8 +6738,8 @@ function LeadDetailPanel({
                                   </p>
                                   <p className="mt-2">
                                     <span className="font-semibold text-slate-900">Tiến độ &amp; ghi chú</span> — thẻ màu
-                                    cam: funnel, nhãn đánh giá, ghi chú tương tác và nút <strong>Lưu cập nhật</strong>. Khi có
-                                    tab «Phân công &amp; tình trạng», <strong>tình trạng TVV</strong> chỉnh ở đó để tránh trùng.
+                                    cam: tình trạng tư vấn, tình trạng hồ sơ, phản hồi nhanh, ghi chú TVV và nút{' '}
+                                    <strong>Lưu cập nhật</strong>.
                                   </p>
                                 </div>
                               </div>
@@ -6860,7 +6854,7 @@ function LeadDetailPanel({
               Có thay đổi chưa lưu
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              Bạn đang chỉnh funnel, ghi chú hoặc tình trạng TVV. Đóng chi tiết bây giờ sẽ bỏ các thay đổi chưa lưu.
+              Bạn đang chỉnh tình trạng hồ sơ, ghi chú hoặc tình trạng TVV. Đóng chi tiết bây giờ sẽ bỏ các thay đổi chưa lưu.
             </p>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button

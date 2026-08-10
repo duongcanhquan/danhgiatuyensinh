@@ -54,6 +54,45 @@ const PROFILE_TABS: { id: LeadProfileFormTabId; label: string; short: string }[]
   { id: 'invite', label: 'Giấy mời', short: 'Giấy mời' },
 ]
 
+/** Màu tab nổi — mỗi nhóm một tone để không bị chìm trên nền xám. */
+const PROFILE_TAB_TONE: Record<
+  LeadProfileFormTabId,
+  { idle: string; active: string }
+> = {
+  contact: {
+    idle: 'border-sky-300/90 bg-sky-100 text-sky-950 hover:bg-sky-200/90',
+    active: 'border-sky-700 bg-sky-600 text-white shadow-md ring-1 ring-sky-400/50',
+  },
+  family: {
+    idle: 'border-rose-300/90 bg-rose-100 text-rose-950 hover:bg-rose-200/90',
+    active: 'border-rose-700 bg-rose-600 text-white shadow-md ring-1 ring-rose-400/50',
+  },
+  scholarship: {
+    idle: 'border-amber-300/90 bg-amber-100 text-amber-950 hover:bg-amber-200/90',
+    active: 'border-amber-700 bg-amber-500 text-white shadow-md ring-1 ring-amber-400/50',
+  },
+  geo: {
+    idle: 'border-emerald-300/90 bg-emerald-100 text-emerald-950 hover:bg-emerald-200/90',
+    active: 'border-emerald-700 bg-emerald-600 text-white shadow-md ring-1 ring-emerald-400/50',
+  },
+  study: {
+    idle: 'border-violet-300/90 bg-violet-100 text-violet-950 hover:bg-violet-200/90',
+    active: 'border-violet-700 bg-violet-600 text-white shadow-md ring-1 ring-violet-400/50',
+  },
+  notes: {
+    idle: 'border-slate-300 bg-slate-100 text-slate-900 hover:bg-slate-200',
+    active: 'border-slate-700 bg-slate-700 text-white shadow-md ring-1 ring-slate-400/40',
+  },
+  finance: {
+    idle: 'border-blue-300/90 bg-blue-100 text-blue-950 hover:bg-blue-200/90',
+    active: 'border-blue-700 bg-blue-600 text-white shadow-md ring-1 ring-blue-400/50',
+  },
+  invite: {
+    idle: 'border-indigo-300/90 bg-indigo-100 text-indigo-950 hover:bg-indigo-200/90',
+    active: 'border-indigo-700 bg-indigo-600 text-white shadow-md ring-1 ring-indigo-400/50',
+  },
+}
+
 const FIXED_ACADEMIC_PERFORMANCE_OPTIONS = ['Yếu', 'Trung Bình', 'Khá', 'Giỏi'] as const
 
 function Field({ label, span = 1, children }: { label: string; span?: 1 | 2 | 3; children: ReactNode }) {
@@ -61,8 +100,8 @@ function Field({ label, span = 1, children }: { label: string; span?: 1 | 2 | 3;
     span === 3 ? 'lg:col-span-3' : span === 2 ? 'sm:col-span-2 lg:col-span-2' : ''
   return (
     <label className={['block min-w-0', spanCls].filter(Boolean).join(' ')}>
-      <span className="text-sm font-semibold text-slate-800">{label}</span>
-      <div className="mt-1">{children}</div>
+      <span className="text-[11px] font-semibold leading-tight text-slate-700">{label}</span>
+      <div className="mt-0.5">{children}</div>
     </label>
   )
 }
@@ -79,13 +118,13 @@ function CollapsibleBlock({
   return (
     <details
       open={defaultOpen}
-      className="group rounded-xl border border-slate-200/90 bg-white shadow-sm open:shadow-md"
+      className="group rounded-lg border border-slate-200/90 bg-white shadow-sm open:shadow-md"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 marker:content-none hover:bg-slate-50/80 [&::-webkit-details-marker]:hidden">
-        <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition group-open:rotate-90" aria-hidden />
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 marker:content-none hover:bg-slate-50/80 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500 transition group-open:rotate-90" aria-hidden />
         <span className="min-w-0 flex-1">{title}</span>
       </summary>
-      <div className="border-t border-slate-100 px-3 pb-3 pt-2">{children}</div>
+      <div className="border-t border-slate-100 px-2.5 pb-2 pt-1.5">{children}</div>
     </details>
   )
 }
@@ -109,14 +148,15 @@ function ProfileTabBar({
   return (
     <nav
       className={[
-        'flex shrink-0 gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200/90 bg-slate-50/90 p-1 [scrollbar-width:thin]',
-        sticky ? 'sticky top-0 z-10 bg-slate-50/95 shadow-sm backdrop-blur-sm' : '',
+        'flex shrink-0 gap-1 overflow-x-auto overscroll-x-contain rounded-lg border border-slate-200/90 bg-white p-1 shadow-sm [scrollbar-width:thin]',
+        sticky ? 'sticky top-0 z-10 bg-white/95 shadow-md backdrop-blur-sm' : '',
       ].join(' ')}
       role="tablist"
       aria-label="Nhóm thông tin hồ sơ"
     >
       {tabs.map((t) => {
         const selected = active === t.id
+        const tone = PROFILE_TAB_TONE[t.id]
         return (
           <button
             key={t.id}
@@ -127,11 +167,9 @@ function ProfileTabBar({
             aria-controls={panelId}
             onClick={() => onChange(t.id)}
             className={[
-              'min-h-10 shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition duration-150 sm:text-sm',
-              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-600',
-              selected
-                ? 'border-emerald-600/40 bg-indigo-600 text-white shadow-sm'
-                : 'border-transparent bg-white text-slate-700 hover:border-slate-200 hover:bg-slate-50/80',
+              'min-h-8 shrink-0 rounded-md border px-2 py-1 text-[11px] font-bold tracking-tight transition duration-150 sm:min-h-9 sm:px-2.5 sm:text-xs',
+              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-500',
+              selected ? tone.active : tone.idle,
             ].join(' ')}
           >
             {compact ? t.short : t.label}
@@ -383,7 +421,7 @@ function ScholarshipSelect({
 /** Hai cột trên một hàng (nguồn…). Ô SĐT dùng {@link PhoneFieldsRow} — tránh co input khi có nút gọi. */
 function TwoColRow({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
+    <div className="grid grid-cols-1 gap-1.5 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
       {children}
     </div>
   )
@@ -391,7 +429,7 @@ function TwoColRow({ children }: { children: ReactNode }) {
 
 function PhoneFieldsRow({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:col-span-2 lg:col-span-3 xl:grid-cols-2">{children}</div>
+    <div className="grid grid-cols-1 gap-1.5 sm:col-span-2 lg:col-span-3 xl:grid-cols-2">{children}</div>
   )
 }
 
@@ -437,12 +475,12 @@ function PhoneFieldWithCall({
 
 function TabPlaceholder({ title, hint }: { title: string; hint: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center">
-      <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-        <Info className="h-5 w-5" aria-hidden />
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center">
+      <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+        <Info className="h-4 w-4" aria-hidden />
       </span>
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
-      <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-600">{hint}</p>
+      <p className="text-xs font-semibold text-slate-800">{title}</p>
+      <p className="mt-1 max-w-sm text-[11px] leading-snug text-slate-600">{hint}</p>
     </div>
   )
 }
@@ -509,8 +547,8 @@ export function LeadProfileCoreForm({
     tabPanelRef.current?.scrollTo(0, 0)
   }, [activeTab, scrollContained])
   const grid = wideGrid
-    ? 'grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3'
-    : 'grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2'
+    ? 'grid grid-cols-1 gap-x-2 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3'
+    : 'grid grid-cols-1 gap-x-2 gap-y-1.5 sm:grid-cols-2'
   const noteSpan = wideGrid ? 3 : 2
 
   const studyFormatValue = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
@@ -809,7 +847,7 @@ export function LeadProfileCoreForm({
       </FormSection>
 
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Nguyện vọng">
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div className={grid}>
             <Field label="Hình thức học quan tâm">
               <CatalogCombobox
@@ -866,10 +904,10 @@ export function LeadProfileCoreForm({
       </FormSection>
 
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'notes'} title="Mô tả & ghi chú">
-        <div className="space-y-2.5">
-          <details open className="rounded-lg border border-slate-200/80 bg-slate-50/60">
-            <summary className="cursor-pointer px-2.5 py-2 text-sm font-semibold text-slate-700">Ghi chú bổ sung</summary>
-            <div className={`${grid} p-2.5 pt-0`}>
+        <div className="space-y-1.5">
+          <details open className="rounded-md border border-slate-200/80 bg-slate-50/60">
+            <summary className="cursor-pointer px-2 py-1.5 text-[11px] font-semibold text-slate-700">Ghi chú bổ sung</summary>
+            <div className={`${grid} p-2 pt-0`}>
               <Field label="Ghi chú 1" span={noteSpan}>
                 <textarea rows={2} className={`${INPUT_CLS} resize-y`} value={draft.profileNote1} disabled={disabled} onChange={(e) => patch('profileNote1', e.target.value)} />
               </Field>
@@ -922,18 +960,21 @@ export function LeadProfileCoreForm({
       return body
     })()
 
-    const rootCls = 'flex flex-col gap-3 text-sm text-slate-800'
+    const rootCls =
+      'lead-profile-form-dense flex flex-col gap-1.5 text-xs text-slate-800 ' +
+      '[&_.vm-input]:!min-h-8 [&_.vm-input]:!rounded-md [&_.vm-input]:!px-2 [&_.vm-input]:!py-1 [&_.vm-input]:!text-xs ' +
+      '[&_textarea.vm-input]:!min-h-[2.5rem] [&_select]:text-xs'
 
     const panelCls = scrollContained
-      ? 'rounded-xl border border-slate-200/90 bg-white p-3 sm:p-4'
-      : 'min-h-[18rem] overflow-y-auto overscroll-y-contain rounded-xl border border-slate-200/90 bg-white p-3 sm:p-4 [scrollbar-width:thin]'
+      ? 'rounded-lg border border-slate-200/90 bg-white p-2 sm:p-2.5'
+      : 'min-h-[14rem] overflow-y-auto overscroll-y-contain rounded-lg border border-slate-200/90 bg-white p-2 sm:p-2.5 [scrollbar-width:thin]'
 
     return (
       <div className={rootCls}>
         <ProfileTabBar
           active={activeTab}
           onChange={setActiveTab}
-          compact={!wideGrid}
+          compact
           tabs={visibleTabs}
           sticky={scrollContained}
         />
@@ -950,5 +991,5 @@ export function LeadProfileCoreForm({
     )
   }
 
-  return <div className="space-y-2 text-sm text-slate-800">{body}</div>
+  return <div className="space-y-1.5 text-xs text-slate-800">{body}</div>
 }

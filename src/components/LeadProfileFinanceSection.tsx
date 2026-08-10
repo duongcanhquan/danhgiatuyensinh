@@ -3,23 +3,23 @@ import { PAYMENT_SLOT_DEFS, formatAmountInput, sumFinanceDraft } from '../utils/
 import type { LeadPaymentApprovalStatus, LeadPaymentSlotKey } from '../types'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/25 disabled:bg-slate-50'
+  'w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/25 disabled:bg-slate-50'
 
 function ApprovalBadge({ status, note }: { status: LeadPaymentApprovalStatus; note?: string }) {
-  if (!status) return <span className="text-xs text-slate-400">Chờ duyệt kế toán</span>
+  if (!status) return <span className="text-[10px] text-slate-400">Chờ duyệt kế toán</span>
   const ok = status === 'ĐỒNG Ý'
   return (
     <span className="block text-end">
       <span
         className={[
-          'inline-block rounded-full px-2 py-0.5 text-xs font-bold',
+          'inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold',
           ok ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900',
         ].join(' ')}
       >
         {status}
       </span>
       {note && status === 'TỪ CHỐI' ? (
-        <span className="mt-1 block text-[11px] leading-snug text-rose-800">Lý do: {note}</span>
+        <span className="mt-0.5 block text-[10px] leading-snug text-rose-800">Lý do: {note}</span>
       ) : null}
     </span>
   )
@@ -49,8 +49,8 @@ export function LeadProfileFinanceSection({
   const total = sumFinanceDraft(draft)
 
   return (
-    <div className="space-y-3 text-sm text-slate-800">
-      <p className="rounded-lg border border-sky-200/80 bg-sky-50/70 px-3 py-2 text-xs leading-snug text-sky-950">
+    <div className="space-y-2 text-xs text-slate-800">
+      <p className="rounded-md border border-sky-200/80 bg-sky-50/70 px-2 py-1.5 text-[11px] leading-snug text-sky-950">
         Chứng từ lưu theo từng ứng viên trên <strong>Cloudflare R2</strong> (hoặc Drive/Firebase nếu chưa cấu hình).
         Ảnh bill được <strong>nén tự động</strong> trước khi tải lên — tiết kiệm dung lượng, tải nhanh hơn.
       </p>
@@ -66,11 +66,11 @@ export function LeadProfileFinanceSection({
         const row = draft.payments[key]
         const toneCls = tone === 'success' ? 'text-emerald-800' : 'text-blue-800'
         return (
-          <div key={key} className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(7rem,1fr)_1fr_1fr_minmax(6rem,0.8fr)_minmax(7rem,0.9fr)] lg:items-center">
-              <div className={`text-sm font-extrabold ${toneCls}`}>{label}</div>
+          <div key={key} className="rounded-lg border border-slate-200/90 bg-white p-2 shadow-sm">
+            <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-[minmax(6rem,1fr)_1fr_1fr_minmax(5.5rem,0.8fr)_minmax(6rem,0.9fr)] lg:items-center">
+              <div className={`text-xs font-bold ${toneCls}`}>{label}</div>
               <label className="block min-w-0">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-600 lg:hidden">Số tiền</span>
+                <span className="mb-0.5 block text-[10px] font-semibold text-slate-600 lg:hidden">Số tiền</span>
                 <input
                   className={INPUT}
                   inputMode="numeric"
@@ -81,7 +81,7 @@ export function LeadProfileFinanceSection({
                 />
               </label>
               <label className="block min-w-0">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-600 lg:hidden">Ngày thu</span>
+                <span className="mb-0.5 block text-[10px] font-semibold text-slate-600 lg:hidden">Ngày thu</span>
                 <input
                   type="date"
                   className={INPUT}
@@ -91,10 +91,10 @@ export function LeadProfileFinanceSection({
                 />
               </label>
               <label className="block min-w-0">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-600 lg:hidden">Chứng từ</span>
+                <span className="mb-0.5 block text-[10px] font-semibold text-slate-600 lg:hidden">Chứng từ</span>
                 <input
                   type="file"
-                  className={`${INPUT} text-xs file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1`}
+                  className={`${INPUT} text-[10px] file:mr-1.5 file:rounded file:border-0 file:bg-slate-100 file:px-1.5 file:py-0.5`}
                   disabled={disabled}
                   onChange={(e) => patchLine(key, { pendingFile: e.target.files?.[0] ?? null })}
                 />
@@ -103,13 +103,13 @@ export function LeadProfileFinanceSection({
                     href={row.receiptUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-1 inline-block text-xs font-semibold text-emerald-700 underline"
+                    className="mt-0.5 inline-block text-[10px] font-semibold text-emerald-700 underline"
                   >
                     Xem bill đã lưu
                   </a>
                 ) : null}
               </label>
-              <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-1 lg:justify-end">
                 <ApprovalBadge status={row.approvalStatus} note={row.approvalNote} />
               </div>
             </div>
@@ -117,26 +117,28 @@ export function LeadProfileFinanceSection({
         )
       })}
 
-      <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex cursor-pointer items-start gap-3">
+      <div className="flex flex-col gap-2 border-t border-slate-200 pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <label className="flex cursor-pointer items-start gap-2">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
+            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
             checked={draft.reqFullNe}
             disabled={disabled}
             onChange={(e) => onChange({ ...draft, reqFullNe: e.target.checked })}
           />
           <span>
-            <span className="block text-sm font-extrabold text-blue-800">Đánh dấu: đã thu đủ FULL NE</span>
-            <span className="block text-xs text-slate-500">Tick để báo kế toán (gửi n8n khi lưu, giống hệ cũ)</span>
+            <span className="block text-xs font-bold text-blue-800">Đánh dấu: đã thu đủ FULL NE</span>
+            <span className="block text-[10px] text-slate-500">Tick để báo kế toán (gửi n8n khi lưu)</span>
             {draft.fullNeStatus ? (
-              <span className="mt-1 block text-xs font-semibold text-slate-700">Trạng thái: {draft.fullNeStatus}</span>
+              <span className="mt-0.5 block text-[10px] font-semibold text-slate-700">
+                Trạng thái: {draft.fullNeStatus}
+              </span>
             ) : null}
           </span>
         </label>
-        <div className="rounded-full bg-slate-900 px-5 py-2.5 text-center text-white shadow-md">
-          <span className="text-xs uppercase opacity-75">Tổng khai báo</span>
-          <span className="ml-2 text-lg font-extrabold text-amber-300 tabular-nums">
+        <div className="rounded-full bg-slate-900 px-3 py-1.5 text-center text-white shadow-md">
+          <span className="text-[10px] uppercase opacity-75">Tổng khai báo</span>
+          <span className="ml-1.5 text-sm font-extrabold text-amber-300 tabular-nums">
             {total.toLocaleString('vi-VN')}đ
           </span>
         </div>
