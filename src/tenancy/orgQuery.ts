@@ -8,8 +8,8 @@ export function orgIdEqualityConstraint(orgId: string): QueryFilterConstraint {
 
 /**
  * Trường mặc định (VietMy) còn nhiều hồ sơ cũ thiếu `orgId`.
- * Chỉ Superadmin (Rules `isPlatform`) mới được bỏ lọc server — school user phải
- * `where(orgId==)` nếu không query bị permission-denied dưới multi-tenant Rules.
+ * Query `where(orgId==vietmy)` không trả các doc đó → danh sách trống dù chưa xóa.
+ * Superadmin / Quản lý trường VietMy: caller có thể bỏ constraint rồi lọc client (`leadBelongsToOrg`).
  */
 export function shouldUseLegacyMissingOrgIdRead(orgId: string | null | undefined): boolean {
   return String(orgId ?? '').trim() === DEFAULT_ORG_ID

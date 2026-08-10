@@ -680,7 +680,9 @@ function composeQuery(col: ReturnType<typeof collection>, parts: QueryFilterCons
 }
 
 /**
- * Superadmin xem VietMy: bỏ where(orgId) để lấy cả hồ sơ cũ thiếu orgId (Rules isPlatform).
+ * Superadmin / Quản lý trường xem VietMy: bỏ where(orgId) để lấy cả hồ sơ cũ thiếu orgId.
+ * (Rules `matchesOrgData` cho phép đọc doc thiếu orgId khi resolvedOrgId == vietmy;
+ *  query `orgId==vietmy` thì không trả các doc đó — trông như «mất dữ liệu».)
  * Mọi trường hợp khác: luôn where(orgId==) — nếu bỏ lọc, multi-tenant Rules từ chối cả query.
  */
 function shouldOmitOrgServerFilter(
@@ -690,7 +692,7 @@ function shouldOmitOrgServerFilter(
 ): boolean {
   if (orgFilter === 'strict') return false
   if (!orgId || !shouldUseLegacyMissingOrgIdRead(orgId)) return false
-  return isSuperAdminRole(profile.role)
+  return isSuperAdminRole(profile.role) || isAdminLikeRole(profile.role)
 }
 
 function buildListDataQuery(
@@ -1262,7 +1264,7 @@ export function useLeads(opts?: UseLeadsOptions) {
 
     const fetchTotalOnly = async (): Promise<number | null> => {
       try {
-        const base = buildListDataQuery(
+        const strictBase = buildListDataQuery(
           firestore,
           profile,
           hoDQueryLabels,
@@ -1271,7 +1273,27 @@ export function useLeads(opts?: UseLeadsOptions) {
           canReadGlobal,
           'strict',
         )
-        const total = (await getCountFromServer(base)).data().count
+        let total = (await getCountFromServer(strictBase)).data().count
+        // VietMy + hồ sơ cũ thiếu orgId: đếm scoped = 0 dù data còn — thử đếm không lọc org.
+        if (
+          total === 0 &&
+          shouldOmitOrgServerFilter(profile, effectiveOrgId, 'auto')
+        ) {
+          try {
+            const legacyBase = buildListDataQuery(
+              firestore,
+              profile,
+              hoDQueryLabels,
+              serverFilters,
+              effectiveOrgId,
+              canReadGlobal,
+              'auto',
+            )
+            total = (await getCountFromServer(legacyBase)).data().count
+          } catch (legacyErr) {
+            console.warn('[useLeads] legacy count failed', legacyErr)
+          }
+        }
         if (cancelled) return null
         setTotalLeadCount(total)
         setTotalLeadCountError(null)
