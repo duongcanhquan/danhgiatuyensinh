@@ -1,0 +1,147 @@
+{
+  "exportedAt": "2026-07-29T04:14:00.169872Z",
+  "repo": "danhgiatuyensinh",
+  "url": "https://github.com/duongcanhquan/danhgiatuyensinh",
+  "defaultBranch": "main",
+  "counts": {
+    "branches": 6,
+    "prs": 6,
+    "pureIssues": 0,
+    "commitsMainApi": 33,
+    "commitsAllGit": 35,
+    "filesMain": 585,
+    "collaborators": 1,
+    "contributors": 2,
+    "workflowRuns": 170,
+    "tags": 0,
+    "releases": 0
+  },
+  "branches": [
+    {
+      "name": "cursor/bento-ui-phase0-3c2e",
+      "sha": "426ca4bfea5c9e6b2ee665f599779516d245b2a2"
+    },
+    {
+      "name": "cursor/crm-integration-hub-3c2e",
+      "sha": "e41b0ceb66fd4b1895c9822c9bcc6b01be46983c"
+    },
+    {
+      "name": "cursor/multi-tenant-org-design-3c2e",
+      "sha": "afcf2e51dc3328a591a449a58199602eefa4898c"
+    },
+    {
+      "name": "cursor/pull-rtdb-full-export-3c2e",
+      "sha": "a594bd338c3bb30829914f7f93a0347d63659412"
+    },
+    {
+      "name": "cursor/student-registration-portal-a390",
+      "sha": "a2b87032a1bae0a22a7b2e4a1364b93c859033c7"
+    },
+    {
+      "name": "main",
+      "sha": "7488ec6c868d172de9bbe2c12dd6a1e28f1042ec"
+    }
+  ],
+  "pulls": [
+    {
+      "number": 6,
+      "title": "Hub kết nối CRM hiện đại — catalog đầu nối + event bus + API đối tác",
+      "state": "closed",
+      "merged_at": "2026-07-29T03:56:20Z",
+      "user": "duongcanhquan",
+      "head": "cursor/crm-integration-hub-3c2e",
+      "base": "main",
+      "created_at": "2026-07-29T03:56:18Z",
+      "updated_at": "2026-07-29T03:56:24Z",
+      "files_count": 20,
+      "commits_count": 1,
+      "issue_comments_count": 1,
+      "review_comments_count": 0,
+      "reviews_count": 0
+    },
+    {
+      "number": 5,
+      "title": "CRM: cài đặt tích hợp ngoài + báo cáo sâu theo đơn vị/cá nhân",
+      "state": "closed",
+      "merged_at": "2026-07-29T03:44:53Z",
+      "user": "duongcanhquan",
+      "head": "cursor/bento-ui-phase0-3c2e",
+      "base": "main",
+      "created_at": "2026-07-29T03:44:43Z",
+      "updated_at": "2026-07-29T03:44:53Z",
+      "files_count": 20,
+      "commits_count": 1,
+      "issue_comments_count": 1,
+      "review_comments_count": 0,
+      "reviews_count": 0
+    },
+    {
+      "number": 4,
+      "title": "Bento UI + multi-tenant Phase 0–4 (claims + Rules)",
+      "state": "closed",
+      "merged_at": "2026-07-29T03:00:30Z",
+      "user": "duongcanhquan",
+      "head": "cursor/bento-ui-phase0-3c2e",
+      "base": "main",
+      "created_at": "2026-07-29T02:11:35Z",
+      "updated_at": "2026-07-29T03:00:30Z",
+      "files_count": 77,
+      "commits_count": 12,
+      "issue_comments_count": 1,
+      "review_comments_count": 0,
+      "reviews_count": 0
+    },
+    {
+      "number": 3,
+      "title": "docs: multi-tenant school (org) design spec",
+      "state": "closed",
+      "merged_at": "2026-07-29T03:00:30Z",
+      "user": "duongcanhquan",
+      "head": "cursor/multi-tenant-org-design-3c2e",
+      "base": "main",
+      "created_at": "2026-07-29T01:48:10Z",
+      "updated_at": "2026-07-29T03:00:31Z",
+      "files_count": 2,
+      "commits_count": 4,
+      "issue_comments_count": 1,
+      "review_comments_count": 0,
+      "reviews_count": 0
+    },
+    {
+      "number": 2,
+      "title": "Pull full live RTDB export (1576 students)",
+      "state": "open",
+      "merged_at": null,
+      "user": "duongcanhquan",
+      "head": "cursor/pull-rtdb-full-export-3c2e",
+      "base": "main",
+      "created_at": "2026-07-29T01:31:53Z",
+      "updated_at": "2026-07-29T01:34:06Z",
+      "files_count": 27,
+      "commits_count": 2,
+      "issue_comments_count": 1,
+      "review_comments_count": 0,
+      "reviews_count": 0
+    },
+    {
+      "number": 1,
+      "title": "feat: Cổng đăng ký sinh viên công khai + n8n email",
+      "state": "closed",
+      "merged_at": "2026-07-05T09:56:10Z",
+      "user": "duongcanhquan",
+      "head": "cursor/student-registration-portal-a390",
+      "base": "main",
+      "created_at": "2026-07-05T09:51:09Z",
+      "updated_at": "2026-07-05T09:56:10Z",
+      "files_count": 14,
+      "commits_count": 1,
+      "issue_comments_count": 1,
+      "review_comments_count": 0,
+      "reviews_count": 0
+    }
+  ],
+  "prStates": {
+    "merged": 5,
+    "open": 1
+  }
+}
