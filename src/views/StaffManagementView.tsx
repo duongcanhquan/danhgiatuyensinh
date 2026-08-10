@@ -32,6 +32,11 @@ import {
 /** Vai trò quản trị được tạo trong app; kế toán là cổng riêng, không nằm trong quyền admin. */
 const ROLES_BASE: UserRole[] = ['counselor', 'ctv', 'team_lead', 'admin', 'accountant']
 
+/** Quản lý gán số nội bộ / mật khẩu SIP cho nhân viên gọi điện và Trưởng nhóm. */
+function canAssignOmicallSip(role: UserRole): boolean {
+  return role === 'counselor' || role === 'ctv' || role === 'team_lead' || role === 'admin'
+}
+
 export function StaffManagementView({
   embedded = false,
   teamScopeOnly = false,
@@ -106,7 +111,7 @@ export function StaffManagementView({
     return fieldStaff
   }, [fieldStaff, teamScopeOnly, profile, users])
 
-  /** Trưởng nhóm Sale + Quản lý (có thể cầm nhóm sale). */
+  /** Trưởng nhóm Sale (cầm roster TVV/CTV). */
   const teamLeads = useMemo(
     () => users.filter((u) => canOwnFieldStaffTeam(u.role) && u.isActive !== false),
     [users],
@@ -156,9 +161,15 @@ export function StaffManagementView({
     <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
       <strong>Trưởng nhóm Sale:</strong> quản lý nhân viên sale và CTV trong nhóm; gán hồ sơ qua roster bên dưới.
     </p>
+  ) : canStaffAll ? (
+    <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
+      <strong>Quản lý trường:</strong> xem, sửa, vô hiệu và đặt mật khẩu mọi nhân sự trong trường (TVV, CTV, Trưởng
+      nhóm, Quản lý khác) — trừ Siêu quản trị. Nhiều Quản lý cùng làm được.
+    </p>
   ) : null
 
   const canManageUser = (u: VietMyUserProfile) => {
+    if (isSuperAdminRole(u.role) && !isSuperAdminRole(profile?.role)) return false
     if (canStaffAll) return true
     if (!profile || !teamScopeOnly) return false
     return isUserInManagerTeamScope(profile, u, users)
@@ -168,7 +179,8 @@ export function StaffManagementView({
     canOmicallConfig && !teamScopeOnly ? (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
         <p>
-          <strong>OMICall:</strong> đồng bộ số nội bộ, SIP, agent ID và đầu số từ API Tổng đài vào hồ sơ TVV (match email).
+          <strong>OMICall:</strong> đồng bộ số nội bộ, SIP, agent ID và đầu số từ tổng đài vào hồ sơ nhân sự (khớp
+          email) — TVV, CTV, Trưởng nhóm, Quản lý.
         </p>
         <button
           type="button"
@@ -179,7 +191,7 @@ export function StaffManagementView({
             void syncOmicallInternalPhones(false)
               .then((r) =>
                 setMsg(
-                  `Đồng bộ OMICall: ${r.updated} TVV cập nhật / ${r.matched} khớp · ${r.totalExtensions} extension trên tổng đài.`,
+                  `Đồng bộ OMICall: ${r.updated} hồ sơ cập nhật / ${r.matched} khớp · ${r.totalExtensions} số nội bộ trên tổng đài.`,
                 ),
               )
               .catch((e) => setErr(e instanceof Error ? e.message : 'Lỗi đồng bộ OMICall'))
@@ -187,7 +199,7 @@ export function StaffManagementView({
           }}
           className="rounded-lg bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50"
         >
-          {omicallSyncBusy ? 'Đang đồng bộ…' : 'Đồng bộ số nội bộ → TVV'}
+          {omicallSyncBusy ? 'Đang đồng bộ…' : 'Đồng bộ số nội bộ → hồ sơ'}
         </button>
       </div>
     ) : null
@@ -204,7 +216,7 @@ export function StaffManagementView({
     setBusy(true)
     try {
       const omicallPayload =
-        role === 'counselor' && canOmicallConfig
+        canAssignOmicallSip(role) && canOmicallConfig
           ? {
               ...(createOmicallUser.trim() ? { omicallSipUser: createOmicallUser.trim() } : {}),
               ...(createOmicallPassword.trim() ? { omicallSipPassword: createOmicallPassword.trim() } : {}),
@@ -301,25 +313,34 @@ export function StaffManagementView({
           : canStaffAll && (isAdminLikeRole(editRole) || editRole === 'accountant')
             ? { extraPermissions: [], deniedPermissions: [] }
             : {}),
-        ...(canOmicallConfig
+        ...(canOmicallConfig && canAssignOmicallSip(editRole)
           ? {
               omicallSipUser: editOmicallUser,
               omicallSipPassword: editOmicallPassword,
               omicallAgentId: editOmicallAgentId,
               omicallOutboundNumber: editOmicallOutbound,
             }
-          : {}),
+          : canOmicallConfig &&
+              canAssignOmicallSip(editing.role) &&
+              !canAssignOmicallSip(editRole)
+            ? {
+                omicallSipUser: '',
+                omicallSipPassword: '',
+                omicallAgentId: '',
+                omicallOutboundNumber: '',
+              }
+            : {}),
         ...(!isSelf
           ? {
               role: editRole,
               ...(editActive !== (editing.isActive !== false) ? { isActive: editActive } : {}),
             }
           : {}),
-        ...(canOwnFieldStaffTeam(editRole) || canOwnFieldStaffTeam(editing.role)
-          ? {
-              managedCounselorIds: canOwnFieldStaffTeam(editRole) ? editTeamIds : [],
-            }
-          : {}),
+        ...(canOwnFieldStaffTeam(editRole)
+          ? { managedCounselorIds: editTeamIds }
+          : canOwnFieldStaffTeam(editing.role) || (editing.managedCounselorIds?.length ?? 0) > 0
+            ? { managedCounselorIds: [] }
+            : {}),
       })
       if (
         canStaffAll &&
@@ -347,6 +368,7 @@ export function StaffManagementView({
       }
       const pwd = editNewPassword.trim()
       if (pwd) {
+        if (!canStaffAll) throw new Error('Chỉ Quản lý trường được đặt mật khẩu nhân sự.')
         if (pwd.length < 6) throw new Error('Mật khẩu mới cần ít nhất 6 ký tự.')
         await setStaffPassword(editing.id, pwd)
         setEditNewPassword('')
@@ -443,11 +465,12 @@ export function StaffManagementView({
 
       {canStaffAll && !teamScopeOnly ? (
         <section className="app-surface-elevated p-4 sm:p-5">
-          <h2 className="app-section-heading">Phân nhóm sale ↔ Trưởng nhóm / Quản lý</h2>
+          <h2 className="app-section-heading">Phân nhóm sale ↔ Trưởng nhóm</h2>
           {teamLeads.length === 0 ? (
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              Chưa có tài khoản <strong>Trưởng nhóm Sale</strong> hoặc <strong>Quản lý</strong> để cầm nhóm. Tạo / chọn
-              vai trò đó, rồi gán sale ở «Chỉnh nhóm» hoặc form Sửa.
+              Chưa có tài khoản <strong>Trưởng nhóm Sale</strong> để cầm nhóm. Tạo / chọn vai trò đó, rồi gán sale ở
+              «Chỉnh nhóm» hoặc form Sửa. Quản lý trường vẫn xem và sửa được mọi nhân sự trong trường (trừ Siêu quản
+              trị).
             </p>
           ) : (
             <ul className="mt-4 space-y-3">
@@ -528,7 +551,8 @@ export function StaffManagementView({
         </p>
       ) : null}
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className={`grid gap-8 ${canStaffAll ? 'lg:grid-cols-2' : ''}`}>
+        {canStaffAll ? (
         <form onSubmit={(e) => void submit(e)} className="app-surface-elevated p-4 sm:p-5">
           <h2 className="app-section-heading">Thêm nhân viên</h2>
           <label className="mt-4 block text-sm font-medium text-slate-700">
@@ -568,6 +592,12 @@ export function StaffManagementView({
                 const r = e.target.value as UserRole
                 setRole(r)
                 if (!canOwnFieldStaffTeam(r)) setCreateTeamIds([])
+                if (!canAssignOmicallSip(r)) {
+                  setCreateOmicallUser('')
+                  setCreateOmicallPassword('')
+                  setCreateOmicallOutbound('')
+                  setCreateOmicallAgentId('')
+                }
               }}
               className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
             >
@@ -583,15 +613,15 @@ export function StaffManagementView({
             : null}
           {canOwnFieldStaffTeam(role) && canStaffAll && createTeamIds.length === 0 ? (
             <p className="mt-2 text-xs text-amber-800">
-              Có thể chọn sẵn sale trong nhóm — hoặc chỉnh sau ở mục «Phân nhóm» phía trên. Quản lý vẫn xem được toàn
-              trường; danh sách này là nhóm trực tiếp.
+              Có thể chọn sẵn sale trong nhóm — hoặc chỉnh sau ở mục «Phân nhóm» phía trên.
             </p>
           ) : null}
-          {role === 'counselor' && canOmicallConfig ? (
+          {canAssignOmicallSip(role) && canOmicallConfig ? (
             <div className="mt-4 rounded-xl border border-sky-200/80 bg-sky-50/50 px-3 py-3 space-y-2">
               <p className="text-xs font-semibold text-sky-950">OMICall (tuỳ chọn)</p>
               <p className="text-xs leading-snug text-slate-600">
-                Tạo số nội bộ trên OMICall cùng <strong>email</strong> này, rồi bấm «Đồng bộ số nội bộ → TVV» hoặc điền tay bên dưới.
+                Quản lý gán số nội bộ và mật khẩu SIP cho nhân viên / Trưởng nhóm. Có thể tạo số trên OMICall cùng{' '}
+                <strong>email</strong> này rồi đồng bộ, hoặc điền tay bên dưới.
               </p>
               <label className="block text-sm font-medium text-slate-700">
                 Số nội bộ
@@ -643,9 +673,12 @@ export function StaffManagementView({
             {busy ? 'Đang tạo…' : 'Tạo tài khoản'}
           </button>
         </form>
+        ) : null}
 
         <div className="app-surface-elevated p-4 sm:p-5">
-          <h2 className="app-section-heading">Danh sách nhân sự</h2>
+          <h2 className="app-section-heading">
+            {teamScopeOnly ? 'Nhân viên trong nhóm' : 'Danh sách nhân sự'}
+          </h2>
           {loading ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p> : null}
           {!loading && !directoryError && sortedUsers.length === 0 ? (
             <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -694,7 +727,6 @@ export function StaffManagementView({
                         {primaryLead ? (
                           <span className="ml-2 block font-normal text-slate-600">
                             Nhóm: {primaryLead.displayName || primaryLead.email}
-                            {primaryLead.role === 'admin' ? ' (Quản lý)' : ''}
                           </span>
                         ) : null}
                         {unassignedCounselor ? (
@@ -818,7 +850,7 @@ export function StaffManagementView({
                 : null}
               {isFieldStaffRole(editRole) && canStaffAll ? (
                 <label className="block text-sm font-medium text-slate-700">
-                  Nhóm phụ trách (Trưởng nhóm / Quản lý)
+                  Nhóm phụ trách (Trưởng nhóm)
                   <select
                     value={editTeamLeadId}
                     onChange={(e) => setEditTeamLeadId(e.target.value)}
@@ -827,16 +859,17 @@ export function StaffManagementView({
                     <option value="">— Chưa gán / gỡ khỏi nhóm —</option>
                     {teamLeads.map((lead) => (
                       <option key={lead.id} value={lead.id}>
-                        {lead.displayName || lead.email}
-                        {lead.role === 'admin' ? ' — Quản lý' : ' — Trưởng nhóm'}
+                        {lead.displayName || lead.email} — Trưởng nhóm
                       </option>
                     ))}
                   </select>
                   <span className="mt-1 block text-xs text-slate-500">
-                    Sale / CTV thuộc một nhóm. Có thể gán vào Trưởng nhóm Sale hoặc Quản lý đang cầm nhóm.
+                    Sale / CTV thuộc một nhóm do Trưởng nhóm cầm. Quản lý trường quản mọi nhân sự trong trường, không
+                    cần cầm nhóm riêng.
                   </span>
                 </label>
               ) : null}
+              {canStaffAll ? (
               <div className="rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/40 px-3 py-2.5 space-y-2">
                 <p className="text-xs font-medium text-slate-800">Mật khẩu đăng nhập</p>
                 <label className="block text-sm font-medium text-slate-700">
@@ -868,6 +901,11 @@ export function StaffManagementView({
                   {resetPwdBusy ? 'Đang gửi…' : 'Hoặc gửi email đặt lại (tuỳ chọn)'}
                 </button>
               </div>
+              ) : (
+                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  Đặt / gửi mật khẩu do Quản lý trường thực hiện.
+                </p>
+              )}
               <label className="flex items-center gap-2 text-sm text-slate-800">
                 <input
                   type="checkbox"
@@ -942,9 +980,13 @@ export function StaffManagementView({
                   </ul>
                 </div>
               ) : null}
-              {canOmicallConfig ? (
+              {canOmicallConfig && canAssignOmicallSip(editRole) ? (
                 <div className="rounded-lg border border-sky-200/80 bg-sky-50/50 px-3 py-2.5 space-y-2">
-                  <p className="text-xs font-semibold text-sky-950">OMICall — số nội bộ (tuỳ chọn)</p>
+                  <p className="text-xs font-semibold text-sky-950">OMICall — số nội bộ & mật khẩu SIP</p>
+                  <p className="text-xs leading-snug text-slate-600">
+                    Chỉ Quản lý gán cho nhân viên và Trưởng nhóm. Để trống nếu dùng số mặc định trong Cài đặt → Gọi
+                    điện.
+                  </p>
                   <label className="block text-sm font-medium text-slate-700">
                     Số nội bộ
                     <input
@@ -986,10 +1028,7 @@ export function StaffManagementView({
                     />
                   </label>
                   <p className="text-xs text-slate-600">
-                    Agent ID lấy từ lịch sử cuộc gọi API (`create_by.id`) — giúp map cuộc gọi đúng TVV khi SIP trùng.
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    Để trống SIP nếu TVV dùng số mặc định trong Cài đặt → Gọi điện (OMICall).
+                    Agent ID lấy từ lịch sử cuộc gọi API (`create_by.id`) — giúp map cuộc gọi đúng người khi SIP trùng.
                   </p>
                 </div>
               ) : null}

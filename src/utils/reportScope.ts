@@ -1,4 +1,5 @@
 import type { Permission, VietMyUserProfile } from '../types'
+import { isAdminLikeRole } from '../auth/roleUtils'
 
 export type ReportScope = 'self' | 'team' | 'school'
 
@@ -8,14 +9,25 @@ export const REPORT_SCOPE_LABELS: Record<ReportScope, string> = {
   school: 'Toàn trường',
 }
 
-export function getReportScope(can: (p: Permission) => boolean): ReportScope {
-  if (can('analytics:advanced') || can('leads:read:global')) return 'school'
+/** Toàn trường: quyền xem hồ sơ toàn trường, hoặc vai trò Quản lý / Siêu quản trị (không dựa analytics). */
+export function canSchoolWideReportScope(
+  can: (p: Permission) => boolean,
+  role?: string | null,
+): boolean {
+  return can('leads:read:global') || isAdminLikeRole(role)
+}
+
+export function getReportScope(
+  can: (p: Permission) => boolean,
+  role?: string | null,
+): ReportScope {
+  if (canSchoolWideReportScope(can, role)) return 'school'
   if (can('leads:read:team_scope') || can('dashboard:team_lead')) return 'team'
   return 'self'
 }
 
 export function reportScopeLabel(can: (p: Permission) => boolean, profile?: VietMyUserProfile | null): string {
-  const scope = getReportScope(can)
+  const scope = getReportScope(can, profile?.role)
   if (scope === 'self') return profile?.displayName?.trim() || REPORT_SCOPE_LABELS.self
   return REPORT_SCOPE_LABELS[scope]
 }

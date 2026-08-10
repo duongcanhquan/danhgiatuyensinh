@@ -52,8 +52,13 @@ async function resolveTeamLeadUidForUpsert(
     let preferred: string | null = null
     snap.forEach((d) => {
       const role = String(d.data()?.role ?? '')
-      if (role === 'team_lead') preferred = d.id
-      else if (!preferred) preferred = d.id
+      if (
+        role === 'team_lead' ||
+        role === 'head_of_profession' ||
+        role === 'head_of_department'
+      ) {
+        preferred = d.id
+      }
     })
     return preferred
   } catch {

@@ -34,7 +34,7 @@ describe('resolveTeamRosterMembers', () => {
   it('team lead only sees managed roster', () => {
     const rows = resolveTeamRosterMembers({
       profile: lead,
-      can: (p) => p === 'dashboard:team_lead' || p === 'analytics:advanced',
+      can: (p) => p === 'dashboard:team_lead' || p === 'leads:read:team_scope',
       directory,
     })
     expect(rows.map((r) => r.counselorUid)).toEqual(['tvv1', 'tvv2'])
@@ -43,7 +43,7 @@ describe('resolveTeamRosterMembers', () => {
   it('admin sees all field staff and can filter by team lead', () => {
     const all = resolveTeamRosterMembers({
       profile: admin,
-      can: (p) => p === 'leads:read:global' || p === 'analytics:advanced',
+      can: (p) => p === 'leads:read:global',
       directory,
     })
     expect(all.map((r) => r.counselorUid)).toEqual(['tvv1', 'tvv2', 'tvv3'])

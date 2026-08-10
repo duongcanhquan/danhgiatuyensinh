@@ -5,7 +5,7 @@ import {
   normalizeUserRole,
 } from '../auth/roleUtils'
 
-/** UID tư vấn viên thuộc phạm vi quản lý của trưởng nhóm / quản lý cầm nhóm. */
+/** UID tư vấn viên / CTV thuộc phạm vi quản lý của trưởng nhóm (roster). */
 export function counselorIdsInManagerScope(
   manager: VietMyUserProfile,
   directory: readonly VietMyUserProfile[],
@@ -60,12 +60,12 @@ export function canManagerEditScoringProfile(
   return team.has(profileCreatedBy.trim())
 }
 
-/** Trưởng nhóm / Quản lý có `managedCounselorIds` rõ ràng (không chỉ fallback khoa/phòng). */
+/** Trưởng nhóm có `managedCounselorIds` rõ ràng (không chỉ fallback khoa/phòng). */
 export function teamLeadUsesExplicitRoster(lead: VietMyUserProfile): boolean {
   return canOwnFieldStaffTeam(lead.role) && (lead.managedCounselorIds?.length ?? 0) > 0
 }
 
-/** Các trưởng nhóm / quản lý cầm nhóm mà TVV này thuộc phạm vi. */
+/** Các trưởng nhóm mà TVV/CTV này thuộc phạm vi. */
 export function teamLeadsForCounselor(
   counselorId: string,
   directory: readonly VietMyUserProfile[],
@@ -88,7 +88,8 @@ export function primaryTeamLeadForCounselor(
 export type TeamLeadRosterPatch = { userId: string; managedCounselorIds: string[] }
 
 /**
- * Gán TVV vào đúng một trưởng nhóm / quản lý cầm nhóm (`newTeamLeadId`), gỡ khỏi các nhóm khác.
+ * Gán TVV/CTV vào đúng một Trưởng nhóm (`newTeamLeadId`), gỡ khỏi các nhóm khác.
+ * Đồng thời gỡ khỏi roster «mồ côi» trên tài khoản không còn quyền cầm nhóm (vd. admin cũ).
  * `newTeamLeadId === null` → chỉ gỡ khỏi mọi nhóm.
  */
 export function patchesForCounselorTeamAssignment(
@@ -98,9 +99,17 @@ export function patchesForCounselorTeamAssignment(
 ): TeamLeadRosterPatch[] {
   const patches: TeamLeadRosterPatch[] = []
   for (const lead of directory) {
-    if (!canOwnFieldStaffTeam(lead.role)) continue
     const ids = [...(lead.managedCounselorIds ?? [])]
     const has = ids.includes(counselorId)
+    if (!canOwnFieldStaffTeam(lead.role)) {
+      if (has) {
+        patches.push({
+          userId: lead.id,
+          managedCounselorIds: ids.filter((id) => id !== counselorId).slice(0, 60),
+        })
+      }
+      continue
+    }
     const shouldHave = lead.id === newTeamLeadId
     if (has === shouldHave) continue
     const next = shouldHave ? [...ids, counselorId] : ids.filter((id) => id !== counselorId)

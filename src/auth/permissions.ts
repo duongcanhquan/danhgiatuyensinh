@@ -30,7 +30,6 @@ const TEAM_LEAD_PERMISSIONS: readonly Permission[] = [
   'config:scoring_profiles_team',
   'config:users:team',
   'config:playbooks',
-  'analytics:advanced',
   'ai:use',
 ]
 

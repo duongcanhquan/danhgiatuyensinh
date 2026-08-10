@@ -21,11 +21,10 @@ export function isTeamLeadRole(role: UserRole | string | undefined | null): bool
 
 /**
  * Có thể cầm roster sale/CTV (`managedCounselorIds`).
- * Trưởng nhóm Sale và Quản lý (admin) — Quản lý vừa xem toàn trường vừa có thể dẫn một nhóm.
+ * Chỉ Trưởng nhóm — Quản lý trường quản toàn trường qua `config:users`, không cần cầm nhóm.
  */
 export function canOwnFieldStaffTeam(role: UserRole | string | undefined | null): boolean {
-  const r = normalizeUserRole(role)
-  return r === 'team_lead' || r === 'admin'
+  return normalizeUserRole(role) === 'team_lead'
 }
 
 /** TVV + CTV — cùng phạm vi hồ sơ được gán. */

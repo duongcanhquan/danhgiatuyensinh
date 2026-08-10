@@ -21,7 +21,7 @@ function canAccessPersonnelReport(can: (p: import('../types').Permission) => boo
 
 export function PerformanceReportView() {
   const { can, profile } = useAuth()
-  const scope = getReportScope(can)
+  const scope = getReportScope(can, profile?.role)
   const scopeLabel = reportScopeLabel(can, profile)
   const showManagerPanel = canAccessPersonnelReport(can)
 

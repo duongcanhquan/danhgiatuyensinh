@@ -7,7 +7,6 @@ export function canAccessTeamRosterTab(can: (p: Permission) => boolean): boolean
   return (
     can('dashboard:team_lead') ||
     can('leads:read:team_scope') ||
-    can('analytics:advanced') ||
     can('leads:read:global')
   )
 }
@@ -40,13 +39,13 @@ export function resolveTeamRosterMembers(input: {
       .sort((a, b) => memberLabel(a).localeCompare(memberLabel(b), 'vi'))
       .map((u) => ({ counselorUid: u.id, displayName: memberLabel(u) }))
 
-  // Trưởng nhóm: luôn nhóm của mình (kể cả khi có analytics:advanced).
+  // Trưởng nhóm: luôn nhóm của mình.
   if (isTeamLeadRole(profile.role) && !isAdminLikeRole(profile.role)) {
     const ids = new Set(counselorIdsInManagerScope(profile, directory))
     return toMembers(staff.filter((u) => ids.has(u.id)))
   }
 
-  if (can('leads:read:global') || isAdminLikeRole(profile.role) || can('analytics:advanced')) {
+  if (can('leads:read:global') || isAdminLikeRole(profile.role)) {
     const filterUid = input.filterTeamLeadUid?.trim()
     if (filterUid) {
       const tl = directory.find((u) => u.id === filterUid)

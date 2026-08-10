@@ -11,6 +11,7 @@ import { mergeMonthlyKpiWithPeriodSummaries } from '../utils/kpiMonthlyMerge'
 import { useCounselorKpiDateRange } from './useCounselorKpiDateRange'
 import { kpiDayKeyFromDate } from '../utils/kpiFromOmicallCalls'
 import { monthlyLiveMergeBounds } from '../utils/kpiMonthlyLiveBounds'
+import { canSchoolWideReportScope } from '../utils/reportScope'
 
 function mapMonthly(id: string, data: Record<string, unknown>): CounselorMonthlyKpi {
   return {
@@ -59,7 +60,7 @@ export function useCounselorMonthlyKpi(
   const [loadingOfficial, setLoadingOfficial] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const canGlobal = can('analytics:advanced') || can('leads:read:global')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role)
   const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
   const { from, to } = useMemo(
     () => (mergeLiveCalls ? monthlyLiveMergeBounds(month, mergeLiveDays) : { from: '', to: '' }),

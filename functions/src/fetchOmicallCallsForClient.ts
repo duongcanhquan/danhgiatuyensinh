@@ -79,8 +79,7 @@ function isTeamManagerRole(role: string): boolean {
   return (
     role === 'team_lead' ||
     role === 'head_of_profession' ||
-    role === 'head_of_department' ||
-    role === 'admin'
+    role === 'head_of_department'
   )
 }
 

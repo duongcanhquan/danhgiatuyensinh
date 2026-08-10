@@ -1974,11 +1974,11 @@ async function assertStaffManagementPermission(
   if (callerAdmin) return caller
 
   if (callerTeamLead) {
-    if (target.role !== 'counselor') {
-      throw new HttpsError('permission-denied', 'Trưởng nhóm chỉ quản lý tư vấn viên trong nhóm.')
+    if (target.role !== 'counselor' && target.role !== 'ctv') {
+      throw new HttpsError('permission-denied', 'Trưởng nhóm chỉ quản lý TVV / CTV trong nhóm.')
     }
     if (!counselorInTeamRoster(target.id, caller)) {
-      throw new HttpsError('permission-denied', 'TVV không thuộc nhóm bạn quản lý.')
+      throw new HttpsError('permission-denied', 'Nhân sự không thuộc nhóm bạn quản lý.')
     }
     return caller
   }
@@ -2117,7 +2117,7 @@ export const adminStaffAccountAction = onCall(async (request) => {
     return { ok: true, action, targetUserId }
   }
 
-  if (target.role === 'counselor') {
+  if (target.role === 'counselor' || target.role === 'ctv') {
     await removeCounselorFromTeamRosters(targetUserId)
   }
   await db.collection(COLLECTIONS.users).doc(targetUserId).delete()

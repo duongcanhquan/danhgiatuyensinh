@@ -11,6 +11,7 @@ import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { fetchKpiDailyCounselorRows } from '../utils/fetchKpiDailyCounselorRows'
 import { resolveKpiDailyTargetUids } from '../utils/resolveKpiDailyTargetUids'
 import { useOmicallCallsForKpi } from './useOmicallCallsForKpi'
+import { canSchoolWideReportScope } from '../utils/reportScope'
 
 function dateKeysBetween(from: string, to: string): string[] {
   const { from: start, to: end } = vnDayRangeFromKeys(from, to)
@@ -43,7 +44,7 @@ export function useCounselorKpiDateRange(
   const dates = useMemo(() => dateKeysBetween(from, to), [from, to])
   const enabled = options?.enabled !== false
   const includeOmicallCalls = options?.includeOmicallCalls !== false
-  const canGlobal = can('analytics:advanced') || can('leads:read:global')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role)
   const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
 
   const directoryIds = useMemo(() => {

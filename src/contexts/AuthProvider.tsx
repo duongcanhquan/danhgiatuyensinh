@@ -15,7 +15,7 @@ import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
 import { type OrgRoleCapabilities } from '../utils/roleCapabilitiesConfig'
 import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
-import { normalizeUserRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, normalizeUserRole } from '../auth/roleUtils'
 import { isUserInManagerTeamScope } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
@@ -430,6 +430,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
         throw new Error('Chỉ Siêu quản trị mới được tạo tài khoản Siêu quản trị.')
       }
+      if (
+        (input.omicallSipUser !== undefined ||
+          input.omicallSipPassword !== undefined ||
+          input.omicallAgentId !== undefined ||
+          input.omicallOutboundNumber !== undefined) &&
+        !hasPermission(permissions, 'config:omicall')
+      ) {
+        throw new Error('Chỉ Quản lý có quyền tổng đài mới gán số nội bộ / mật khẩu SIP.')
+      }
       const secondary = getStaffCreatorAuth()
       const db = getFirestoreDb()
       if (!secondary || !db) throw new Error('Không khởi tạo được Firebase.')
@@ -511,11 +520,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (canTeam && !canAll && !canAcctStaff && profile) {
         const targetProfile = mapProfileFromDoc(uid, firebaseUser!, data)
-        if (!isUserInManagerTeamScope(profile, targetProfile, [targetProfile])) {
-          throw new Error('Chỉ được sửa tư vấn viên trong nhóm bạn quản lý.')
+        // Roster explicit trên profile TL đủ để kiểm; directory chỉ cần khi fallback khoa/phòng.
+        if (!isUserInManagerTeamScope(profile, targetProfile, [profile, targetProfile])) {
+          throw new Error('Chỉ được sửa tư vấn viên / CTV trong nhóm bạn quản lý.')
         }
-        if (input.role !== undefined && input.role !== 'counselor') {
-          throw new Error('Quản lý nhóm không đổi vai trò sang quản trị.')
+        if (input.role !== undefined && input.role !== 'counselor' && input.role !== 'ctv') {
+          throw new Error('Trưởng nhóm không đổi vai trò sang quản trị.')
         }
       }
 
@@ -572,7 +582,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         patch.deniedPermissions = input.deniedPermissions
       }
       if (input.managedCounselorIds !== undefined) {
-        patch.managedCounselorIds = input.managedCounselorIds.filter(Boolean).slice(0, 60)
+        const nextRoleForRoster =
+          input.role !== undefined ? normalizeUserRole(input.role) : normalizeUserRole(String(currentRole))
+        patch.managedCounselorIds = canOwnFieldStaffTeam(nextRoleForRoster)
+          ? input.managedCounselorIds.filter(Boolean).slice(0, 60)
+          : []
+      } else {
+        const nextRoleForRoster =
+          input.role !== undefined ? normalizeUserRole(input.role) : normalizeUserRole(String(currentRole))
+        const existingRoster = Array.isArray(data.managedCounselorIds) ? data.managedCounselorIds : []
+        if (!canOwnFieldStaffTeam(nextRoleForRoster) && existingRoster.length > 0) {
+          patch.managedCounselorIds = []
+        }
+      }
+      if (
+        input.omicallSipUser !== undefined ||
+        input.omicallSipPassword !== undefined ||
+        input.omicallAgentId !== undefined ||
+        input.omicallOutboundNumber !== undefined
+      ) {
+        if (!hasPermission(permissions, 'config:omicall')) {
+          throw new Error('Chỉ Quản lý có quyền tổng đài mới gán số nội bộ / mật khẩu SIP.')
+        }
       }
       if (input.omicallSipUser !== undefined) {
         const v = input.omicallSipUser.trim()
@@ -605,7 +636,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [permissions, firebaseUser?.uid, profile?.role],
+    [permissions, firebaseUser, profile],
   )
 
   const disableStaffLogin = useCallback(

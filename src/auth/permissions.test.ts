@@ -78,6 +78,8 @@ describe('defaultPermissionsForRole', () => {
     expect(hasPermission(perms, 'config:scoring_profiles_own')).toBe(false)
     expect(hasPermission(perms, 'dashboard:team_lead')).toBe(true)
     expect(hasPermission(perms, 'config:master_data')).toBe(false)
+    expect(hasPermission(perms, 'analytics:advanced')).toBe(false)
+    expect(hasPermission(perms, 'leads:read:global')).toBe(false)
   })
 
   it('legacy head_of_profession resolves to team_lead permissions', () => {

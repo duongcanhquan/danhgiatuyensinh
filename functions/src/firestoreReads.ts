@@ -18,7 +18,7 @@ const teamLeadMapCache = new WeakMap<Firestore, Map<string, TeamLeadMapCacheEntr
 
 /**
  * Map counselorUid → teamLeadUid.
- * Nguồn: role team_lead (+ legacy) và admin có managedCounselorIds — khớp roster client.
+ * Nguồn: role team_lead (+ legacy) có managedCounselorIds — Quản lý trường không cầm roster.
  */
 export async function loadTeamLeadMap(fs: Firestore, usersCollection: string): Promise<Map<string, string>> {
   const out = new Map<string, string>()
@@ -39,16 +39,14 @@ export async function loadTeamLeadMap(fs: Firestore, usersCollection: string): P
     }
   }
 
-  const [teamLeads, legacyHoP, legacyHoD, admins] = await Promise.all([
+  const [teamLeads, legacyHoP, legacyHoD] = await Promise.all([
     fs.collection(usersCollection).where('role', '==', 'team_lead').get(),
     fs.collection(usersCollection).where('role', '==', 'head_of_profession').get(),
     fs.collection(usersCollection).where('role', '==', 'head_of_department').get(),
-    fs.collection(usersCollection).where('role', '==', 'admin').get(),
   ])
   ingest(teamLeads.docs)
   ingest(legacyHoP.docs)
   ingest(legacyHoD.docs)
-  ingest(admins.docs)
   return out
 }
 

@@ -13,6 +13,9 @@ import { fmtKpiNum, todayDateKey } from '../utils/kpiDisplay'
 import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { counselorIdsInManagerScope } from '../utils/teamScope'
+import { isFieldStaffRole } from '../auth/roleUtils'
+import { canSchoolWideReportScope } from '../utils/reportScope'
 
 /** Trần đọc hồ sơ khi thống kê nguồn trên «Ngày của tôi» — tránh quét cả collection. */
 const MY_DAY_SOURCE_LEAD_CAP = 1500
@@ -44,23 +47,22 @@ export function MyDayView() {
   const [sourceRows, setSourceRows] = useState<SourceCountRow[]>([])
   const [sourceByDayRows, setSourceByDayRows] = useState<SourceDayRow[]>([])
 
-  const canGlobal = can('analytics:advanced') || can('leads:read:global')
-  const canTeam = can('leads:read:team_scope')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role)
+  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
 
   const allowedCounselorIds = useMemo(() => {
     if (canGlobal) return null
-    if (canTeam) {
-      const set = new Set<string>()
-      for (const id of profile?.managedCounselorIds ?? []) set.add(id)
+    if (canTeam && profile) {
+      const set = new Set(counselorIdsInManagerScope(profile, users))
       if (firebaseUser?.uid) set.add(firebaseUser.uid)
       return set
     }
     return firebaseUser?.uid ? new Set([firebaseUser.uid]) : new Set<string>()
-  }, [canGlobal, canTeam, profile?.managedCounselorIds, firebaseUser?.uid])
+  }, [canGlobal, canTeam, profile, users, firebaseUser?.uid])
 
   const counselorOptions = useMemo(() => {
-    const activeCounselors = users.filter((u) => u.role === 'counselor' && u.isActive)
-    const scoped = activeCounselors.filter((u) => !allowedCounselorIds || allowedCounselorIds.has(u.id))
+    const activeStaff = users.filter((u) => isFieldStaffRole(u.role) && u.isActive)
+    const scoped = activeStaff.filter((u) => !allowedCounselorIds || allowedCounselorIds.has(u.id))
     return scoped
       .map((u) => ({
         id: u.id,

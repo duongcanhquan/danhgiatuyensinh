@@ -19,6 +19,7 @@ import {
 import { sumKpiSummaries } from '../utils/kpiMap'
 import { resolveKpiCallDataSource } from '../utils/kpiDisplaySource'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
+import { canSchoolWideReportScope } from '../utils/reportScope'
 import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
 import type { LeadCallOutcomeSnapshot } from '../utils/leadFinanceHelpers'
 import { BentoGrid, BentoStat } from '../components/bento'
@@ -127,7 +128,7 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
   const [searchParams] = useSearchParams()
   const { users, counselors } = useCounselorDirectory()
   const canTeam = can('dashboard:team_lead') || can('leads:read:team_scope')
-  const canGlobal = can('analytics:advanced') || can('leads:read:global')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role)
   const allowed = can('dashboard:counselor') || canTeam || canGlobal
 
   const [range, setRange] = useState(() => {

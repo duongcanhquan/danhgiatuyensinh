@@ -12,6 +12,7 @@ import { shiftVnDateKey, todayDateKey } from '../utils/kpiDisplay'
 import { fetchKpiDailyCounselorRows } from '../utils/fetchKpiDailyCounselorRows'
 import { resolveKpiDailyTargetUids } from '../utils/resolveKpiDailyTargetUids'
 import { useOmicallCallsForKpi } from './useOmicallCallsForKpi'
+import { canSchoolWideReportScope } from '../utils/reportScope'
 
 export type KpiRangePreset = 'today' | '7d' | '30d'
 export type { CounselorKpiSummary, KpiCallDataSource }
@@ -35,7 +36,7 @@ export function useCounselorKpi(range: KpiRangePreset, singleDate?: string) {
   const [error, setError] = useState<string | null>(null)
 
   const dates = useMemo(() => kpiDateKeys(range, singleDate), [range, singleDate])
-  const canGlobal = can('analytics:advanced') || can('leads:read:global')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role)
   const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
 
   const directoryIds = useMemo(() => {

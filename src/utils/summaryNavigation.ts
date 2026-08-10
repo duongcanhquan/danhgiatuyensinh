@@ -37,7 +37,7 @@ export function canAccessSummaryTab(tab: SummaryTabId, can: (p: Permission) => b
     case 'kpi-nhan-su':
       return can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead')
     case 'bang-diem':
-      return can('analytics:advanced')
+      return can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead')
     case 'lich-goi':
       return can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead')
     case 'van-hanh':
