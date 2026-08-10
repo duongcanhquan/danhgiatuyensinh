@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,
+  assertCanSoftDeleteOrganization,
   buildOrganizationRecord,
   buildOrganizationUpdatePatch,
   orgIdFromSlug,
@@ -158,5 +159,16 @@ describe('buildOrganizationUpdatePatch', () => {
       slug: 'cao-dang-demo',
       notes: 'nội bộ',
     })
+  })
+})
+
+describe('assertCanSoftDeleteOrganization', () => {
+  it('rejects empty and default vietmy org', () => {
+    expect(assertCanSoftDeleteOrganization('')).toMatch(/thiếu|mã trường/i)
+    expect(assertCanSoftDeleteOrganization('vietmy')).toMatch(/mặc định|vietmy/i)
+  })
+
+  it('allows other org ids', () => {
+    expect(assertCanSoftDeleteOrganization('demo-school')).toBeNull()
   })
 })

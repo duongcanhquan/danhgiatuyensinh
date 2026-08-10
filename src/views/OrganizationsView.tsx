@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
-import { Building2, ChevronDown, Download, Loader2, Plus, Settings2, Pencil, UserCog } from 'lucide-react'
+import { Building2, ChevronDown, Download, Loader2, Plus, Settings2, Pencil, Trash2, UserCog } from 'lucide-react'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
@@ -10,6 +10,7 @@ import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import {
   provisionOrganization,
   setOrganizationStatus,
+  softDeleteOrganization,
   updateOrganization,
 } from '../services/createOrganization'
 import { ensureDefaultOrganization } from '../services/ensureDefaultOrganization'
@@ -53,7 +54,8 @@ type AdminRow = {
 
 export function OrganizationsView() {
   const navigate = useNavigate()
-  const { profile, firebaseUser, createStaffAccount, updateStaffProfile, setStaffPassword } = useAuth()
+  const { profile, firebaseUser, createStaffAccount, updateStaffProfile, setStaffPassword, deleteStaffAccount } =
+    useAuth()
   const { setActiveOrgId, effectiveOrgId } = useOrg()
   const isPlatform = isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)
 
@@ -118,11 +120,14 @@ export function OrganizationsView() {
       (snap) => {
         const list = snap.docs.map((d) => {
           const data = d.data() as Partial<Organization>
+          const rawStatus = String(data.status ?? 'active')
+          const status: Organization['status'] =
+            rawStatus === 'deleted' ? 'deleted' : rawStatus === 'suspended' ? 'suspended' : 'active'
           return {
             id: d.id,
             name: String(data.name ?? d.id),
             slug: String(data.slug ?? d.id),
-            status: data.status === 'suspended' ? 'suspended' : 'active',
+            status,
             notes: typeof data.notes === 'string' ? data.notes : '',
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
@@ -138,9 +143,10 @@ export function OrganizationsView() {
         setLoading(false)
         setError(null)
         setDetailId((prev) => {
-          if (prev) return prev
-          const vietmy = list.find((r) => r.id === DEFAULT_ORG_ID)
-          return vietmy?.id ?? list[0]?.id ?? null
+          if (prev && list.some((r) => r.id === prev && r.status !== 'deleted')) return prev
+          const visible = list.filter((r) => r.status !== 'deleted')
+          const vietmy = visible.find((r) => r.id === DEFAULT_ORG_ID)
+          return vietmy?.id ?? visible[0]?.id ?? null
         })
       },
       (e) => {
@@ -203,6 +209,7 @@ export function OrganizationsView() {
     void (async () => {
       const next: Record<string, OrgLeadHealth> = {}
       for (const org of rows) {
+        if (org.status === 'deleted') continue
         next[org.id] = await fetchOrgLeadHealth7d(db, org.id)
         if (cancelled) return
       }
@@ -214,7 +221,7 @@ export function OrganizationsView() {
   }, [isPlatform, rows])
 
   useEffect(() => {
-    if (!detailOrg) {
+    if (!detailOrg || detailOrg.status === 'deleted') {
       setEditName('')
       setEditSlug('')
       setEditNotes('')
@@ -301,8 +308,12 @@ export function OrganizationsView() {
     return () => unsub()
   }, [detailId, isPlatform])
 
-  const activeCount = useMemo(() => rows.filter((r) => r.status === 'active').length, [rows])
-  const suspendedCount = useMemo(() => rows.filter((r) => r.status === 'suspended').length, [rows])
+  const visibleRows = useMemo(() => rows.filter((r) => r.status !== 'deleted'), [rows])
+  const activeCount = useMemo(() => visibleRows.filter((r) => r.status === 'active').length, [visibleRows])
+  const suspendedCount = useMemo(
+    () => visibleRows.filter((r) => r.status === 'suspended').length,
+    [visibleRows],
+  )
 
   const onSlugFromName = () => {
     if (!slug.trim() && name.trim()) setSlug(normalizeOrgSlug(name))
@@ -359,6 +370,31 @@ export function OrganizationsView() {
       setBanner(next === 'suspended' ? `Đã tạm ngưng ${org.name}.` : `Đã mở lại ${org.name}.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không đổi được trạng thái.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSoftDelete = async (org: OrgRow) => {
+    if (org.id === DEFAULT_ORG_ID) return
+    if (
+      !window.confirm(
+        `Xóa trường «${org.name}» khỏi danh sách?\n\nTrường sẽ không hiện trên CRM và OrgSwitcher. Hồ sơ / cấu hình vẫn giữ trong hệ thống (không xóa sạch dữ liệu).`,
+      )
+    ) {
+      return
+    }
+    const db = getFirestoreDb()
+    if (!db || !actor.uid) return
+    setBusy(true)
+    setError(null)
+    try {
+      await softDeleteOrganization(db, actor, org.id, org.name)
+      if (effectiveOrgId === org.id) setActiveOrgId(DEFAULT_ORG_ID)
+      if (detailId === org.id) setDetailId(null)
+      setBanner(`Đã xóa «${org.name}» khỏi danh sách trường.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không xóa được trường.')
     } finally {
       setBusy(false)
     }
@@ -512,6 +548,40 @@ export function OrganizationsView() {
     }
   }
 
+  const onDeleteAdmin = async (admin: AdminRow) => {
+    if (
+      !window.confirm(
+        `Xóa vĩnh viễn quản lý «${admin.displayName || admin.email}»?\n\nHồ sơ Firestore và tài khoản Auth sẽ bị gỡ — không hoàn tác.`,
+      )
+    ) {
+      return
+    }
+    const db = getFirestoreDb()
+    if (!db || !detailOrg || !actor.uid) return
+    setBusy(true)
+    setError(null)
+    try {
+      await deleteStaffAccount(admin.id)
+      try {
+        await commitPlatformAudit(db, {
+          action: 'ORG_ADMIN_DELETED',
+          orgId: detailOrg.id,
+          orgName: detailOrg.name,
+          performedBy: actor.uid,
+          performedByName: actor.displayName,
+          detail: admin.email || admin.id,
+        })
+      } catch {
+        /* ignore */
+      }
+      setBanner(`Đã xóa quản lý ${admin.email || admin.displayName}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Không xóa được quản lý.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const onSetAdminPassword = async (admin: AdminRow) => {
     const pwd = (pwdDraftByUid[admin.id] ?? '').trim()
     if (pwd.length < 6) {
@@ -640,19 +710,19 @@ export function OrganizationsView() {
         <div className="border-b border-slate-200 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900">Danh sách trường</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Mở <strong>Chi tiết</strong> để sửa thông tin trường và thêm / sửa quản lý (admin) của trường đó. Trường
-            Việt Mỹ (dữ liệu cũ) luôn nằm đầu danh sách.
+            Bấm <strong>Sửa</strong> để đổi thông tin trường và quản lý (admin). <strong>Xóa</strong> ẩn trường khỏi
+            CRM (giữ dữ liệu hồ sơ). Trường Việt Mỹ (dữ liệu cũ) luôn nằm đầu danh sách — không xóa được.
           </p>
         </div>
         {loading ? (
           <p className="px-4 py-6 text-sm text-slate-600">Đang tải…</p>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <p className="px-4 py-6 text-sm text-slate-600">
             Chưa có trường nào trong danh sách — tạo trường đầu tiên bên trên, hoặc nhờ kỹ thuật chạy đồng bộ dữ liệu Phase 0.
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {rows.map((org) => {
+            {visibleRows.map((org) => {
               const health = healthByOrg[org.id]
               const open = detailId === org.id
               return (
@@ -689,7 +759,17 @@ export function OrganizationsView() {
                       onClick={() => setDetailId(open ? null : org.id)}
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
-                      {open ? 'Đóng' : 'Chi tiết'}
+                      {open ? 'Đóng' : 'Sửa'}
+                    </button>
+                    <button
+                      type="button"
+                      className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
+                      disabled={busy || org.id === DEFAULT_ORG_ID}
+                      title={org.id === DEFAULT_ORG_ID ? 'Không xóa trường mặc định Việt Mỹ' : 'Xóa khỏi danh sách'}
+                      onClick={() => void onSoftDelete(org)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      Xóa
                     </button>
                     <button
                       type="button"
@@ -862,6 +942,20 @@ export function OrganizationsView() {
                                     onClick={() => void onToggleAdminActive(a)}
                                   >
                                     {a.isActive ? 'Vô hiệu' : 'Bật lại'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
+                                    disabled={busy || a.id === firebaseUser?.uid}
+                                    title={
+                                      a.id === firebaseUser?.uid
+                                        ? 'Không xóa tài khoản đang đăng nhập'
+                                        : 'Xóa vĩnh viễn'
+                                    }
+                                    onClick={() => void onDeleteAdmin(a)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                    Xóa
                                   </button>
                                 </div>
                                 <div className="mt-2 flex flex-wrap items-end gap-2">

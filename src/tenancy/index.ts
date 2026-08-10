@@ -7,6 +7,7 @@ export { orgIdEqualityConstraint, leadBelongsToOrg, orgIdQueryConstraint, should
 export { ACTIVE_ORG_STORAGE_KEY, readStoredActiveOrgId, writeStoredActiveOrgId } from './activeOrgStorage'
 export {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,
+  assertCanSoftDeleteOrganization,
   buildOrganizationRecord,
   buildOrganizationUpdatePatch,
   orgIdFromSlug,
@@ -17,6 +18,7 @@ export {
   PLATFORM_AUDIT_ACTIONS,
   buildOrgSettingsExportPayload,
   buildPlatformAuditRecord,
+  isOrgDeletedStatus,
   isOrgSuspendedStatus,
   orgHealthBand,
   orgHealthBandLabel,

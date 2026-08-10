@@ -3,10 +3,12 @@ export const PLATFORM_AUDIT_ACTIONS = [
   'ORG_UPDATED',
   'ORG_SUSPENDED',
   'ORG_REACTIVATED',
+  'ORG_DELETED',
   'ORG_SETTINGS_EXPORT',
   'ORG_ADMIN_ADDED',
   'ORG_ADMIN_DISABLED',
   'ORG_ADMIN_ENABLED',
+  'ORG_ADMIN_DELETED',
 ] as const
 
 export type PlatformAuditAction = (typeof PLATFORM_AUDIT_ACTIONS)[number]
@@ -50,6 +52,8 @@ export function platformAuditActionLabel(action: PlatformAuditAction): string {
       return 'Tạm ngưng trường'
     case 'ORG_REACTIVATED':
       return 'Mở lại trường'
+    case 'ORG_DELETED':
+      return 'Xóa trường'
     case 'ORG_SETTINGS_EXPORT':
       return 'Tải cấu hình trường'
     case 'ORG_ADMIN_ADDED':
@@ -58,6 +62,8 @@ export function platformAuditActionLabel(action: PlatformAuditAction): string {
       return 'Vô hiệu quản lý trường'
     case 'ORG_ADMIN_ENABLED':
       return 'Bật lại quản lý trường'
+    case 'ORG_ADMIN_DELETED':
+      return 'Xóa quản lý trường'
     default: {
       const _exhaustive: never = action
       return String(_exhaustive)
@@ -115,4 +121,8 @@ export function buildOrgSettingsExportPayload(input: {
 
 export function isOrgSuspendedStatus(status: string | undefined | null): boolean {
   return status === 'suspended'
+}
+
+export function isOrgDeletedStatus(status: string | undefined | null): boolean {
+  return status === 'deleted'
 }

@@ -1,7 +1,7 @@
 # Superadmin — sửa rõ + xóa trường / xóa quản lý (soft-delete)
 
 **Ngày:** 2026-08-10  
-**Trạng thái:** Chờ duyệt spec (user chọn hướng A)  
+**Trạng thái:** Đã duyệt + đang triển khai (user: «ok làm đi», hướng A)  
 **Liên quan:** `2026-07-29-superadmin-org-management-design.md` (đã có sửa/chi tiết; lần này bổ sung xóa + UX rõ)
 
 ---

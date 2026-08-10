@@ -13,6 +13,7 @@ import { FS_COLLECTIONS } from '../types'
 import { getStaffCreatorAuth } from './firebase'
 import {
   ORG_SETTINGS_TEMPLATE_DOC_IDS,
+  assertCanSoftDeleteOrganization,
   buildOrganizationRecord,
   buildOrganizationUpdatePatch,
   orgIdFromSlug,
@@ -228,5 +229,42 @@ export async function setOrganizationStatus(
     } catch (e) {
       console.warn('[setOrganizationStatus] platform audit', e)
     }
+  }
+}
+
+export async function softDeleteOrganization(
+  db: Firestore,
+  actor: { uid: string; displayName?: string; isPlatformSuperAdmin: boolean },
+  orgId: string,
+  orgName?: string,
+): Promise<void> {
+  if (!actor.isPlatformSuperAdmin) {
+    throw new Error('Chỉ Siêu quản trị nền tảng mới được xóa trường.')
+  }
+  const gate = assertCanSoftDeleteOrganization(orgId)
+  if (gate) throw new Error(gate)
+  const id = orgId.trim()
+  const ref = doc(db, FS_COLLECTIONS.organizations, id)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Không tìm thấy trường.')
+
+  const now = Timestamp.now()
+  await updateDoc(ref, {
+    status: 'deleted',
+    updatedAt: now,
+    deletedAt: now,
+    deletedBy: actor.uid,
+  })
+
+  try {
+    await commitPlatformAudit(db, {
+      action: 'ORG_DELETED',
+      orgId: id,
+      orgName: (orgName ?? String((snap.data() as { name?: string }).name ?? id)).trim() || id,
+      performedBy: actor.uid,
+      performedByName: actor.displayName,
+    })
+  } catch (e) {
+    console.warn('[softDeleteOrganization] platform audit', e)
   }
 }

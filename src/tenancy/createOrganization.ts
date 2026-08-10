@@ -1,4 +1,4 @@
-import { normalizeOrgSlug } from './orgConstants'
+import { DEFAULT_ORG_ID, normalizeOrgSlug } from './orgConstants'
 
 export const ORG_SETTINGS_TEMPLATE_DOC_IDS = [
   'kpiV2Config',
@@ -121,4 +121,14 @@ export function buildOrganizationUpdatePatch(input: {
     slug: normalizeOrgSlug(input.slug),
     notes: (input.notes ?? '').trim(),
   }
+}
+
+/** null = được phép soft-delete; string = lý do từ chối. */
+export function assertCanSoftDeleteOrganization(orgId: string): string | null {
+  const id = orgId.trim()
+  if (!id) return 'Thiếu mã trường.'
+  if (id === DEFAULT_ORG_ID) {
+    return 'Không xóa trường mặc định vietmy từ đây — liên hệ kỹ thuật nếu thật sự cần.'
+  }
+  return null
 }

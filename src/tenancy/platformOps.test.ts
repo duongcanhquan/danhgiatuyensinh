@@ -52,6 +52,13 @@ describe('platformAuditActionLabel', () => {
     expect(platformAuditActionLabel('ORG_ADMIN_ADDED')).toMatch(/thêm|quản lý/i)
     expect(platformAuditActionLabel('ORG_ADMIN_DISABLED')).toMatch(/vô hiệu/i)
     expect(platformAuditActionLabel('ORG_ADMIN_ENABLED')).toMatch(/bật/i)
+    expect(platformAuditActionLabel('ORG_DELETED')).toMatch(/xóa.*trường/i)
+    expect(platformAuditActionLabel('ORG_ADMIN_DELETED')).toMatch(/xóa.*quản lý/i)
+  })
+
+  it('lists delete actions in PLATFORM_AUDIT_ACTIONS', () => {
+    expect(PLATFORM_AUDIT_ACTIONS).toContain('ORG_DELETED')
+    expect(PLATFORM_AUDIT_ACTIONS).toContain('ORG_ADMIN_DELETED')
   })
 })
 

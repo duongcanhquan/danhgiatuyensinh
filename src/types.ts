@@ -1380,7 +1380,7 @@ export const SCHOLARSHIP_AUDIENCE_LABELS: Record<ScholarshipAudienceTag, string>
 export type FsCollectionKey = keyof typeof FS_COLLECTIONS
 
 /** School tenant registry — `organizations/{orgId}` */
-export type OrganizationStatus = 'active' | 'suspended'
+export type OrganizationStatus = 'active' | 'suspended' | 'deleted'
 
 export interface Organization {
   id: DocumentId
