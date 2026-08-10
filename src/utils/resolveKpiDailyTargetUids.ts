@@ -12,15 +12,18 @@ export function resolveKpiDailyTargetUids(input: {
   const filter = input.counselorUidFilter?.trim()
   if (filter) return [filter]
 
-  if (!input.canGlobal && !input.canTeam) {
-    const self = input.selfUid?.trim()
+  const self = input.selfUid?.trim()
+
+  // Admin/global: luôn full scan — danh bạ active không đủ (thiếu inactive / legacy orgId).
+  if (input.canGlobal) return null
+
+  if (!input.canTeam) {
     return self ? [self] : []
   }
 
   const ids = [...new Set(input.directoryIds.map((x) => x.trim()).filter(Boolean))]
-  if (ids.length > 0) return ids
-  // Admin/global chưa có danh bạ → giữ full scan như cũ.
-  if (input.canGlobal) return null
-  const self = input.selfUid?.trim()
+  if (self) ids.push(self)
+  const deduped = [...new Set(ids)]
+  if (deduped.length > 0) return deduped
   return self ? [self] : []
 }

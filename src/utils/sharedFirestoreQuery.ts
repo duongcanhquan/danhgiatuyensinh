@@ -65,7 +65,10 @@ export function subscribeSharedFirestoreQuery<T>(
     entry!.listeners.delete(listener)
     if (entry!.listeners.size === 0) {
       entry!.unsub?.()
-      registry.delete(key)
+      entry!.unsub = null
+      if (registry.get(key) === entry && entry!.listeners.size === 0) {
+        registry.delete(key)
+      }
     }
   }
 }

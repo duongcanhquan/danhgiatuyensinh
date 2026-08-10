@@ -160,8 +160,14 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     const qy = query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
     const scopedByIdRef = { current: new Map<string, VietMyUserProfile>() }
     const legacyByIdRef = { current: new Map<string, VietMyUserProfile>() }
+    let cancelled = false
+    let legacyReady = !needLegacyFill
+    let scopedReady = false
+    let legacyTimer: ReturnType<typeof setInterval> | null = null
+    let legacyInFlight = false
 
-    const publishMerged = () => {
+    const publishMerged = (opts?: { fromLegacyError?: string | null }) => {
+      if (cancelled) return
       const merged = new Map<string, VietMyUserProfile>()
       for (const [id, row] of scopedByIdRef.current) merged.set(id, row)
       for (const [id, row] of legacyByIdRef.current) {
@@ -172,37 +178,40 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
         .map((u) => `${u.id}:${u.updatedAt?.seconds ?? 0}:${u.isActive ? 1 : 0}:${u.role}`)
         .sort()
         .join('|')
-      if (sig === lastSigRef.current) {
+      const ready = scopedReady && legacyReady
+      if (sig === lastSigRef.current && ready) {
         setLoading(false)
         return
       }
       lastSigRef.current = sig
       startTransition(() => {
+        if (cancelled) return
         setUsers(next)
-        setLoading(false)
-        setError(null)
+        if (ready) {
+          setLoading(false)
+          setError(opts?.fromLegacyError ?? null)
+        }
       })
     }
 
     const applyScopedSnapshot = (snap: QuerySnapshot<DocumentData>) => {
+      if (cancelled) return
       const next = new Map<string, VietMyUserProfile>()
       snap.forEach((d) => {
         const row = mapUser(d.id, d.data() as Record<string, unknown>)
         if (row) next.set(d.id, row)
       })
       scopedByIdRef.current = next
+      scopedReady = true
       publishMerged()
     }
 
-    let legacyTimer: ReturnType<typeof setInterval> | null = null
-    let legacyInFlight = false
-
     const fillLegacyMissingOrg = async () => {
-      if (!needLegacyFill || legacyInFlight) return
+      if (!needLegacyFill || legacyInFlight || cancelled) return
       legacyInFlight = true
       try {
-        // Một lần / định kỳ — lọc client nhân sự thuộc VietMy nhưng thiếu orgId.
         const snap = await getDocs(collection(firestore, FS_COLLECTIONS.users))
+        if (cancelled) return
         const next = new Map<string, VietMyUserProfile>()
         snap.forEach((d) => {
           const raw = d.data() as Record<string, unknown>
@@ -213,9 +222,16 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
           if (row) next.set(d.id, row)
         })
         legacyByIdRef.current = next
+        legacyReady = true
         publishMerged()
       } catch (e) {
         console.error(e)
+        if (cancelled) return
+        legacyReady = true
+        publishMerged({
+          fromLegacyError:
+            e instanceof Error ? e.message : 'Không bổ sung được nhân sự thiếu orgId (legacy).',
+        })
       } finally {
         legacyInFlight = false
       }
@@ -225,6 +241,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       onSnapshot(
         qy,
         (snap) => {
+          if (cancelled) return
           pendingSnapRef.current = snap
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
           const flush = () => {
@@ -242,6 +259,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
           debounceTimerRef.current = setTimeout(flush, DIRECTORY_SNAPSHOT_DEBOUNCE_MS)
         },
         (e) => {
+          if (cancelled) return
           console.error(e)
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
           debounceTimerRef.current = null
@@ -259,6 +277,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     }
 
     return () => {
+      cancelled = true
       unsubIdle()
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
       if (legacyTimer) clearInterval(legacyTimer)

@@ -14,16 +14,28 @@ describe('resolveKpiDailyTargetUids', () => {
     ).toEqual(['u1'])
   })
 
-  it('team scope uses directory roster', () => {
+  it('team scope includes roster and self even if self missing from roster', () => {
     expect(
       resolveKpiDailyTargetUids({
         canGlobal: false,
         canTeam: true,
         selfUid: 'tl',
-        directoryIds: ['a', 'b', 'tl'],
+        directoryIds: ['a', 'b'],
         counselorUidFilter: undefined,
       }),
     ).toEqual(['a', 'b', 'tl'])
+  })
+
+  it('team scope dedupes self already in roster', () => {
+    expect(
+      resolveKpiDailyTargetUids({
+        canGlobal: false,
+        canTeam: true,
+        selfUid: 'tl',
+        directoryIds: ['a', 'tl'],
+        counselorUidFilter: undefined,
+      }),
+    ).toEqual(['a', 'tl'])
   })
 
   it('filter wins', () => {
@@ -38,7 +50,19 @@ describe('resolveKpiDailyTargetUids', () => {
     ).toEqual(['b'])
   })
 
-  it('global without directory falls back to null (full scan)', () => {
+  it('global always full scan even with directory', () => {
+    expect(
+      resolveKpiDailyTargetUids({
+        canGlobal: true,
+        canTeam: false,
+        selfUid: 'u1',
+        directoryIds: ['a', 'b'],
+        counselorUidFilter: undefined,
+      }),
+    ).toBeNull()
+  })
+
+  it('global without directory still full scan', () => {
     expect(
       resolveKpiDailyTargetUids({
         canGlobal: true,
@@ -48,17 +72,5 @@ describe('resolveKpiDailyTargetUids', () => {
         counselorUidFilter: undefined,
       }),
     ).toBeNull()
-  })
-
-  it('global with directory uses those ids', () => {
-    expect(
-      resolveKpiDailyTargetUids({
-        canGlobal: true,
-        canTeam: false,
-        selfUid: 'u1',
-        directoryIds: ['a', 'b'],
-        counselorUidFilter: undefined,
-      }),
-    ).toEqual(['a', 'b'])
   })
 })
