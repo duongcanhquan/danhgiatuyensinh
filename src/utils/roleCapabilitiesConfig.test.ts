@@ -28,4 +28,10 @@ describe('roleCapabilitiesConfig', () => {
     expect(allowed!.has('config:omicall')).toBe(false)
     expect(allowed!.has('config:ai_engine')).toBe(false)
   })
+
+  it('keeps leads_school and staff required when parsing partial modules', () => {
+    const parsed = parseRoleCapabilities({ adminEnabledModuleIds: ['ai'] })
+    expect(parsed.adminEnabledModuleIds).toContain('staff')
+    expect(parsed.adminEnabledModuleIds).toContain('leads_school')
+  })
 })

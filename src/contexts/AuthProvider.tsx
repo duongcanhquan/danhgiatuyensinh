@@ -278,14 +278,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('authenticating')
       try {
         const p = await withTimeout(syncUserProfileWithRetry(db, user), 22_000, 'Đồng bộ users/{uid}')
-        if (p.role === 'admin' || p.role === 'super_admin') {
-          void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
-            console.warn('[firestoreBootstrap]', e)
-          })
-          void ensureDefaultCounselingAiTask(db, p.orgId?.trim() || DEFAULT_ORG_ID).catch((e) => {
-            console.warn('[ensureDefaultCounselingAiTask]', e)
-          })
-        }
         setProfile(p)
         if (p.isActive === false) {
           const auth = getFirebaseAuth()
@@ -294,14 +286,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('unauthenticated')
           return
         }
-        // Mở shell ngay sau khi có profile — claims refresh chạy nền (Rules đã có fallback users/{uid}).
+        // Đồng bộ Auth claims (orgId/role) trước khi mở shell — tránh permission-denied Rules.
+        try {
+          await Promise.race([
+            ensureAuthClaimsFresh(user, p),
+            new Promise<void>((resolve) => {
+              window.setTimeout(resolve, 8_000)
+            }),
+          ])
+        } catch (e) {
+          console.warn('[ensureAuthClaimsFresh]', e)
+        }
         setStatus('authenticated')
-        void Promise.race([
-          ensureAuthClaimsFresh(user, p),
-          new Promise<void>((resolve) => {
-            window.setTimeout(resolve, 4_000)
-          }),
-        ]).catch((e) => console.warn('[ensureAuthClaimsFresh background]', e))
+        if (p.role === 'admin' || p.role === 'super_admin') {
+          void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
+            console.warn('[firestoreBootstrap]', e)
+          })
+          void ensureDefaultCounselingAiTask(db, p.orgId?.trim() || DEFAULT_ORG_ID).catch((e) => {
+            console.warn('[ensureDefaultCounselingAiTask]', e)
+          })
+        }
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
         setProfile(null)

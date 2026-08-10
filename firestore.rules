@@ -37,6 +37,14 @@ service cloud.firestore {
       );
     }
 
+    /** Quản lý trường (campus admin) — toàn quyền trong org, không phải nền tảng. */
+    function isSchoolAdmin() {
+      return signedIn() && !isPlatform() && (
+        request.auth.token.role == 'admin'
+        || (callerHasUserDoc() && callerUser().role == 'admin')
+      );
+    }
+
     function tokenOrg() {
       return request.auth.token.orgId;
     }
@@ -45,17 +53,20 @@ service cloud.firestore {
       return tokenOrg() is string && tokenOrg().size() > 0;
     }
 
-    /** orgId hiệu lực: claims → users/{uid}.orgId (tránh Tổng kết permission-denied khi token cũ). */
+    /**
+     * orgId hiệu lực (ưu tiên hồ sơ Firestore → claims → mặc định vietmy cho nhân sự trường).
+     * Tránh permission-denied khi token chưa sync / users thiếu orgId.
+     */
     function resolvedOrgId() {
-      return hasTokenOrg()
-        ? tokenOrg()
+      return callerHasUserDoc()
+          && callerUser().keys().hasAll(['orgId'])
+          && callerUser().orgId is string
+          && callerUser().orgId.size() > 0
+        ? callerUser().orgId
         : (
-          callerHasUserDoc()
-            && callerUser().keys().hasAll(['orgId'])
-            && callerUser().orgId is string
-            && callerUser().orgId.size() > 0
-              ? callerUser().orgId
-              : ''
+          hasTokenOrg()
+            ? tokenOrg()
+            : (signedIn() && !isPlatform() ? 'vietmy' : '')
         );
     }
 
@@ -120,11 +131,7 @@ service cloud.firestore {
     /** Chỉ Admin trường / Siêu quản trị được xóa hồ sơ. */
     function canDeleteLead() {
       return isPlatform()
-        || (signedIn()
-          && (
-            request.auth.token.role == 'admin'
-            || (callerHasUserDoc() && callerUser().role == 'admin')
-          )
+        || (isSchoolAdmin()
           && hasResolvedOrg()
           && schoolOrgActive()
           && matchesOrgData(resource.data));

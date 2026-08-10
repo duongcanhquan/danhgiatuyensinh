@@ -2,7 +2,6 @@ import type { Permission, UserRole, VietMyUserProfile } from '../types'
 import { PERMISSIONS } from '../types'
 import { normalizeUserRole } from './roleUtils'
 import {
-  getRoleCapabilitiesCache,
   SCHOOL_ADMIN_CAPABILITY_MODULES,
   type OrgRoleCapabilities,
 } from '../utils/roleCapabilitiesConfig'
@@ -113,7 +112,7 @@ export function adminPermissionsAllowedByCapabilities(
 
 export function resolveEffectivePermissions(
   profile: Pick<VietMyUserProfile, 'role' | 'extraPermissions' | 'deniedPermissions'> | null | undefined,
-  orgCaps?: OrgRoleCapabilities | null,
+  _orgCaps?: OrgRoleCapabilities | null,
 ): readonly Permission[] {
   if (!profile) return []
   const base = new Set<Permission>(defaultPermissionsForRole(profile.role))
@@ -125,14 +124,18 @@ export function resolveEffectivePermissions(
   }
 
   const role = normalizeUserRole(profile.role)
+  // Quản lý trường = toàn quyền vận hành trong trường (giống «siêu quản trị cơ sở»).
+  // Module capability từ Siêu QT chỉ dùng khi tạo/cấu hình trường — không tước quyền CRM đang chạy.
   if (role === 'admin') {
-    const caps = orgCaps ?? getRoleCapabilitiesCache().caps
-    const allowed = adminPermissionsAllowedByCapabilities(caps)
-    if (allowed) {
-      for (const p of [...base]) {
-        if (!allowed.has(p)) base.delete(p)
-      }
-    }
+    base.add('leads:read:global')
+    base.add('leads:write:team_scope')
+    base.add('leads:reassign:team')
+    base.add('leads:delete')
+    base.add('config:users')
+    base.add('config:omicall')
+    base.add('config:master_data')
+    base.add('config:scoring_rules')
+    base.add('data:intake')
   }
 
   return [...base]

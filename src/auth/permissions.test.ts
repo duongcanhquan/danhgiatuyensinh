@@ -111,13 +111,15 @@ describe('resolveEffectivePermissions', () => {
     expect(hasPermission(perms, 'leads:reassign:peer')).toBe(false)
   })
 
-  it('intersects school admin capabilities for admin role', () => {
+  it('school admin keeps campus CRM powers even if capability modules omit integrations', () => {
     const perms = resolveEffectivePermissions(
       { role: 'admin' },
       { adminEnabledModuleIds: ['staff', 'data'] },
     )
     expect(hasPermission(perms, 'config:users')).toBe(true)
     expect(hasPermission(perms, 'config:master_data')).toBe(true)
-    expect(hasPermission(perms, 'config:omicall')).toBe(false)
+    expect(hasPermission(perms, 'leads:read:global')).toBe(true)
+    expect(hasPermission(perms, 'config:omicall')).toBe(true)
+    expect(hasPermission(perms, 'config:llm_api')).toBe(false)
   })
 })
