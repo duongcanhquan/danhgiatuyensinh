@@ -9,10 +9,11 @@ import {
 } from 'firebase/firestore'
 import { getDatabase, type Database } from 'firebase/database'
 import { getStorage, type FirebaseStorage } from 'firebase/storage'
+import { resolveFirestoreDatabaseIdForCrm } from '../utils/firestoreDatabaseHint'
 
 /**
  * Khởi tạo Firebase từ biến môi trường Vite (.env).
- * Firestore: CRM chính (tuỳ chọn `VITE_FIREBASE_FIRESTORE_DATABASE_ID` nếu không dùng `(default)`).
+ * Firestore: mặc định CRM dùng database `warmlist` (thiếu env không rơi về `(default)` trống).
  * Realtime Database: có `databaseURL` khi cần RTDB.
  */
 const requiredEnv = [
@@ -116,11 +117,13 @@ export function getFirebaseApp(): FirebaseApp | null {
   return ensureApp()
 }
 
-/** Firestore — mặc định `(default)`; database đặt tên (vd. `warmlist`) cần `VITE_FIREBASE_FIRESTORE_DATABASE_ID`. */
+/** Firestore — CRM mặc định `warmlist` (không dùng `(default)` trống khi thiếu env). */
 export function getFirestoreDb(): Firestore | null {
   const a = ensureApp()
   if (!a) return null
-  const customId = (import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID as string | undefined)?.trim()
+  const customId = resolveFirestoreDatabaseIdForCrm(
+    import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID as string | undefined,
+  )
   const cacheKey = customId || '(default)'
   if (db && firestoreCacheKey === cacheKey) return db
 
@@ -130,7 +133,7 @@ export function getFirestoreDb(): Firestore | null {
       ? initializeFirestore(a, { localCache }, customId)
       : initializeFirestore(a, { localCache })
   } catch {
-    // Đã khởi tạo Firestore trước đó (vd. getFirestore ở module khác) — dùng instance mặc định.
+    // Đã khởi tạo Firestore trước đó (vd. getFirestore ở module khác) — dùng instance đã cấu hình.
     db = customId ? getFirestore(a, customId) : getFirestore(a)
   }
   firestoreCacheKey = cacheKey
