@@ -9,9 +9,15 @@ export type CallDispositionId =
   | 'knm'
   | 'callback_later'
   | 'undecided_school'
+  | 'undecided'
+  | 'financial_issue'
+  | 'unclear'
   | 'wrong_number'
   | 'not_interested'
   | 'working'
+  | 'negative'
+  | 'positive'
+  | 'high_interest'
   | 'uni_top_high'
   | 'uni_top_mid'
   | 'college_hot'
@@ -23,14 +29,20 @@ export type CallDispositionDef = {
   bucket: Exclude<CallWorkBucket, 'uncalled'>
 }
 
-/** Catalog kết quả sau gọi — TVV chọn 1 note; quản lý lọc theo id. */
+/** Catalog phản hồi nhanh — TVV chọn 1 kết quả; quản lý lọc theo id. */
 export const CALL_DISPOSITIONS: readonly CallDispositionDef[] = [
   { id: 'knm', label: 'Không nghe máy', bucket: 'callback' },
   { id: 'callback_later', label: 'Gọi lại sau', bucket: 'callback' },
   { id: 'undecided_school', label: 'Chưa chọn trường', bucket: 'callback' },
+  { id: 'undecided', label: 'Chưa quyết định', bucket: 'callback' },
+  { id: 'financial_issue', label: 'Vấn đề tài chính', bucket: 'callback' },
+  { id: 'unclear', label: 'Chưa rõ ràng', bucket: 'callback' },
   { id: 'wrong_number', label: 'Thuê bao / sai số', bucket: 'called' },
   { id: 'not_interested', label: 'Không quan tâm', bucket: 'called' },
   { id: 'working', label: 'Em đang đi làm', bucket: 'called' },
+  { id: 'negative', label: 'Tiêu cực', bucket: 'called' },
+  { id: 'positive', label: 'Tích cực', bucket: 'called' },
+  { id: 'high_interest', label: 'Quan tâm cao', bucket: 'called' },
   { id: 'uni_top_high', label: 'Đại học top cao', bucket: 'called' },
   { id: 'uni_top_mid', label: 'Đại học top trung bình', bucket: 'called' },
   { id: 'college_hot', label: 'Chọn cao đẳng, HOT', bucket: 'called' },
@@ -111,8 +123,23 @@ function defaultOutcomeForDisposition(
   id: CallDispositionId,
 ): NonNullable<Interaction['callOutcome']> {
   if (id === 'knm') return 'NO_ANSWER'
-  if (id === 'callback_later' || id === 'undecided_school') return 'FOLLOW_UP'
-  if (id === 'not_interested' || id === 'wrong_number' || id === 'enrolled_elsewhere') return 'DISQUALIFIED'
+  if (
+    id === 'callback_later' ||
+    id === 'undecided_school' ||
+    id === 'undecided' ||
+    id === 'financial_issue' ||
+    id === 'unclear'
+  ) {
+    return 'FOLLOW_UP'
+  }
+  if (
+    id === 'not_interested' ||
+    id === 'wrong_number' ||
+    id === 'enrolled_elsewhere' ||
+    id === 'negative'
+  ) {
+    return 'DISQUALIFIED'
+  }
   return 'CONNECTED'
 }
 

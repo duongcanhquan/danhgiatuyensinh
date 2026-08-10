@@ -25,15 +25,23 @@ describe('callWorkQueue catalog', () => {
       'knm',
       'callback_later',
       'undecided_school',
+      'undecided',
+      'financial_issue',
+      'unclear',
       'wrong_number',
       'not_interested',
       'working',
+      'negative',
+      'positive',
+      'high_interest',
       'uni_top_high',
       'uni_top_mid',
       'college_hot',
       'enrolled_elsewhere',
     ])
     expect(getCallDisposition('knm')?.label).toBe('Không nghe máy')
+    expect(getCallDisposition('positive')?.label).toBe('Tích cực')
+    expect(getCallDisposition('financial_issue')?.bucket).toBe('callback')
     expect(getCallDisposition('enrolled_elsewhere')?.label).toMatch(/nhập học/i)
     expect(getCallDisposition('enrolled_elsewhere')?.label).toMatch(/trường khác|fail/i)
   })
@@ -42,6 +50,9 @@ describe('callWorkQueue catalog', () => {
     expect(bucketForDisposition('knm')).toBe('callback')
     expect(bucketForDisposition('callback_later')).toBe('callback')
     expect(bucketForDisposition('undecided_school')).toBe('callback')
+    expect(bucketForDisposition('undecided')).toBe('callback')
+    expect(bucketForDisposition('financial_issue')).toBe('callback')
+    expect(bucketForDisposition('high_interest')).toBe('called')
     expect(bucketForDisposition('wrong_number')).toBe('called')
     expect(bucketForDisposition('college_hot')).toBe('called')
     expect(bucketForDisposition('enrolled_elsewhere')).toBe('called')

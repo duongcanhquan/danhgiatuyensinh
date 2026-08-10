@@ -289,17 +289,6 @@ function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
   )
 }
 
-const EVALUATION_TAGS = [
-  'Tích cực',
-  'Cần follow-up',
-  'Vấn đề tài chính',
-  'Chưa quyết định',
-  'Quan tâm cao',
-  'Tiêu cực',
-  'Không quan tâm',
-  'Chưa rõ ràng',
-] as const
-
 /** Tooltip cột Điểm thông tin — đặt chuột lên nút ? hoặc gauge để xem chi tiết. */
 const ML_WIN_COLUMN_HINT =
   'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
@@ -5401,7 +5390,6 @@ function LeadDetailPanel({
   }, [lead.id])
 
   const [note, setNote] = useState(() => (lead.lastCounselorNote ?? '').trim())
-  const [evalTag, setEvalTag] = useState<string>(EVALUATION_TAGS[0])
   const [dispositionDraft, setDispositionDraft] = useState<CallDispositionId | ''>(() =>
     lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
       ? lead.lastCallDispositionId
@@ -5452,7 +5440,6 @@ function LeadDetailPanel({
 
   useEffect(() => {
     setNote((lead.lastCounselorNote ?? '').trim())
-    setEvalTag(EVALUATION_TAGS[0])
     setDispositionDraft(
       lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
         ? lead.lastCallDispositionId
@@ -6032,7 +6019,6 @@ function LeadDetailPanel({
           authorUid: profile.id,
           authorRole: profile.role,
           counselorNote,
-          evaluationTag: evalTag,
           ...(dispDef
             ? {
                 callDispositionId: dispDef.id,
@@ -6050,7 +6036,7 @@ function LeadDetailPanel({
           actionType: 'NOTE_ADDED',
           description: dispDef
             ? `Phản hồi nhanh: ${dispDef.label}${noteTrim ? ` — ${noteTrim.slice(0, 200)}` : ''}`
-            : `Ghi chú TVV (${evalTag}): ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
+            : `Ghi chú TVV: ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -6607,7 +6593,7 @@ function LeadDetailPanel({
                                   ) : null}
                                 </p>
                                 <div
-                                  className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+                                  className={`mt-2 grid gap-1.5 ${crmEditOnLeft ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}
                                 >
                                   {crmEditOnLeft ? (
                                     <label className="block text-xs font-medium text-slate-800">
@@ -6635,20 +6621,6 @@ function LeadDetailPanel({
                                       {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
                                         <option key={k} value={k} className="bg-white">
                                           {PIPELINE_LABEL[k]}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <label className="block text-xs font-medium text-slate-800">
-                                    Nhãn đánh giá
-                                    <select
-                                      value={evalTag}
-                                      onChange={(e) => setEvalTag(e.target.value)}
-                                      className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                    >
-                                      {EVALUATION_TAGS.map((t) => (
-                                        <option key={t} value={t} className="bg-white">
-                                          {t}
                                         </option>
                                       ))}
                                     </select>
