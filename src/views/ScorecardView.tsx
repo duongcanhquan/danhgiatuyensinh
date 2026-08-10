@@ -33,7 +33,10 @@ export function ScorecardView({ embedded = false }: { embedded?: boolean }) {
   const tierLabels = useMemo(() => getBonusTierLabels(runtime), [runtime])
   const allowed = can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead')
   const [month, setMonth] = useState(currentMonthKey())
-  const { rows, loading, error } = useCounselorMonthlyKpi(month)
+  const { rows, loading, error } = useCounselorMonthlyKpi(month, {
+    mergeLiveCalls: month === currentMonthKey(),
+    mergeLiveDays: 2,
+  })
   const { users } = useCounselorDirectory()
   const [expandedUid, setExpandedUid] = useState<string | null>(null)
 

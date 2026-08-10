@@ -15,7 +15,10 @@ export function PersonalMonthlyKpiSection() {
   const { runtime } = useKpiEvaluationRules()
   const { config: v2Config } = useKpiV2Config()
   const [month, setMonth] = useState(currentMonthKey())
-  const { rows, loading, error } = useCounselorMonthlyKpi(month)
+  const { rows, loading, error } = useCounselorMonthlyKpi(month, {
+    mergeLiveCalls: month === currentMonthKey(),
+    mergeLiveDays: 2,
+  })
   const { users } = useCounselorDirectory()
   const tierLabels = useMemo(() => getBonusTierLabels(runtime), [runtime])
 

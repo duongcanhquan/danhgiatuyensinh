@@ -10,6 +10,7 @@ import { enrichTeamLeadUidOnRows, counselorInTeamLeadScope } from '../utils/kpiT
 import { mergeMonthlyKpiWithPeriodSummaries } from '../utils/kpiMonthlyMerge'
 import { useCounselorKpiDateRange } from './useCounselorKpiDateRange'
 import { kpiDayKeyFromDate } from '../utils/kpiFromOmicallCalls'
+import { monthlyLiveMergeBounds } from '../utils/kpiMonthlyLiveBounds'
 
 function mapMonthly(id: string, data: Record<string, unknown>): CounselorMonthlyKpi {
   return {
@@ -46,22 +47,12 @@ export function currentMonthKey(d = new Date()): string {
   return kpiDayKeyFromDate(d).slice(0, 7)
 }
 
-function monthDateBounds(month: string): { from: string; to: string } {
-  const [y, m] = month.split('-').map(Number)
-  if (!y || !m) {
-    const today = kpiDayKeyFromDate(new Date())
-    return { from: today, to: today }
-  }
-  const last = new Date(y, m, 0).getDate()
-  const from = `${month}-01`
-  const monthEnd = `${month}-${String(last).padStart(2, '0')}`
-  const today = kpiDayKeyFromDate(new Date())
-  const to = today.startsWith(month) && today < monthEnd ? today : monthEnd
-  return { from, to }
-}
-
-export function useCounselorMonthlyKpi(month: string, options?: { mergeLiveCalls?: boolean }) {
-  const mergeLiveCalls = options?.mergeLiveCalls !== false
+export function useCounselorMonthlyKpi(
+  month: string,
+  options?: { mergeLiveCalls?: boolean; mergeLiveDays?: number },
+) {
+  const mergeLiveCalls = options?.mergeLiveCalls === true
+  const mergeLiveDays = options?.mergeLiveDays ?? 2
   const { firebaseUser, profile, can } = useAuth()
   const { users: directory } = useCounselorDirectory()
   const [officialRows, setOfficialRows] = useState<CounselorMonthlyKpi[]>([])
@@ -71,14 +62,14 @@ export function useCounselorMonthlyKpi(month: string, options?: { mergeLiveCalls
   const canGlobal = can('analytics:advanced') || can('leads:read:global')
   const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
   const { from, to } = useMemo(
-    () => (mergeLiveCalls ? monthDateBounds(month) : { from: '', to: '' }),
-    [month, mergeLiveCalls],
+    () => (mergeLiveCalls ? monthlyLiveMergeBounds(month, mergeLiveDays) : { from: '', to: '' }),
+    [month, mergeLiveCalls, mergeLiveDays],
   )
   const {
     summaries: periodSummaries,
     loading: periodLoading,
     error: periodError,
-  } = useCounselorKpiDateRange(from, to)
+  } = useCounselorKpiDateRange(from, to, undefined, { enabled: Boolean(from && to) })
 
   useEffect(() => {
     const db = getFirestoreDb()

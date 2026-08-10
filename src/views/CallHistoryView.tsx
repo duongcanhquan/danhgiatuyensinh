@@ -11,7 +11,13 @@ import { KpiCallHint } from '../components/KpiCallHint'
 import { aggregateOmicallCalls, formatCallDuration } from '../utils/omicallCallMap'
 import { resolveCallIsValid } from '../utils/kpiCallValidity'
 import { fmtKpiMinutes, fmtKpiNum, fmtKpiPct, fmtKpiVnd, defaultVnDateRange } from '../utils/kpiDisplay'
-import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
+import {
+  foldOmicallCallsToKpiSummaries,
+  mergeCallKpiFromOmicall,
+  vnDayRangeFromKeys,
+} from '../utils/kpiFromOmicallCalls'
+import { sumKpiSummaries } from '../utils/kpiMap'
+import { resolveKpiCallDataSource } from '../utils/kpiDisplaySource'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { LEAD_COUNSELOR_STATUS_LABELS } from '../types'
 import type { LeadCallOutcomeSnapshot } from '../utils/leadFinanceHelpers'
@@ -184,11 +190,31 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
   const showAdminInsights = canTeam || canGlobal
   const kpiCounselorFilter = counselorFilter || (viewMode === 'self' ? profile?.id : undefined)
   const {
-    totals: kpiTotals,
-    loading: kpiLoading,
+    summaries: dailyKpiSummaries,
+    loading: dailyKpiLoading,
     error: kpiError,
-    kpiCallSource,
-  } = useCounselorKpiDateRange(range.from, range.to, kpiCounselorFilter)
+  } = useCounselorKpiDateRange(range.from, range.to, kpiCounselorFilter, {
+    includeOmicallCalls: false,
+  })
+  const liveKpiSummaries = useMemo(
+    () => foldOmicallCallsToKpiSummaries(filteredCalls, []),
+    [filteredCalls],
+  )
+  const mergedKpiSummaries = useMemo(
+    () => mergeCallKpiFromOmicall(dailyKpiSummaries, liveKpiSummaries),
+    [dailyKpiSummaries, liveKpiSummaries],
+  )
+  const kpiTotals = useMemo(() => sumKpiSummaries(mergedKpiSummaries), [mergedKpiSummaries])
+  const kpiCallSource = useMemo(
+    () =>
+      resolveKpiCallDataSource(
+        sumKpiSummaries(dailyKpiSummaries).totalCalls,
+        sumKpiSummaries(liveKpiSummaries).totalCalls,
+        kpiTotals.totalCalls,
+      ),
+    [dailyKpiSummaries, liveKpiSummaries, kpiTotals.totalCalls],
+  )
+  const kpiLoading = dailyKpiLoading || loading
 
   const uniqueLeadIds = useMemo(() => {
     const ids = new Set<string>()

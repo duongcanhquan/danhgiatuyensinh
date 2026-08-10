@@ -27,7 +27,12 @@ function dateKeysBetween(from: string, to: string): string[] {
 }
 
 /** KPI daily gộp theo khoảng ngày tùy chọn (admin / team). */
-export function useCounselorKpiDateRange(from: string, to: string, counselorUidFilter?: string) {
+export function useCounselorKpiDateRange(
+  from: string,
+  to: string,
+  counselorUidFilter?: string,
+  options?: { enabled?: boolean; includeOmicallCalls?: boolean },
+) {
   const { firebaseUser, profile, can } = useAuth()
   const { users: directory } = useCounselorDirectory()
   const [rows, setRows] = useState<CounselorDailyKpi[]>([])
@@ -35,14 +40,17 @@ export function useCounselorKpiDateRange(from: string, to: string, counselorUidF
   const [error, setError] = useState<string | null>(null)
 
   const dates = useMemo(() => dateKeysBetween(from, to), [from, to])
+  const enabled = options?.enabled !== false
+  const includeOmicallCalls = options?.includeOmicallCalls !== false
   const canGlobal = can('analytics:advanced') || can('leads:read:global')
   const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
 
   useEffect(() => {
     const db = getFirestoreDb()
-    if (!db || !isFirebaseConfigured() || !firebaseUser || dates.length === 0) {
+    if (!enabled || !db || !isFirebaseConfigured() || !firebaseUser || dates.length === 0) {
       setRows([])
       setLoading(false)
+      setError(null)
       return
     }
     let cancelled = false
@@ -80,9 +88,14 @@ export function useCounselorKpiDateRange(from: string, to: string, counselorUidF
     return () => {
       cancelled = true
     }
-  }, [canGlobal, canTeam, dates, firebaseUser])
+  }, [canGlobal, canTeam, dates, enabled, firebaseUser])
 
-  const { calls: omicallCalls, loading: callsLoading } = useOmicallCallsForKpi(from, to, counselorUidFilter)
+  const { calls: omicallCalls, loading: callsLoading } = useOmicallCallsForKpi(
+    from,
+    to,
+    counselorUidFilter,
+    enabled && includeOmicallCalls,
+  )
 
   const rawKpiSummaries = useMemo(() => {
     const folded = foldKpiRows(enrichTeamLeadUidOnRows(rows, directory), '30d')

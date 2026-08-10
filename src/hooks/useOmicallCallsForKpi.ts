@@ -6,7 +6,12 @@ import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 
 /** Tải omicallCalls trong khoảng ngày để bù KPI khi kpiDaily chưa đồng bộ. */
-export function useOmicallCallsForKpi(from: string, to: string, counselorUidFilter?: string) {
+export function useOmicallCallsForKpi(
+  from: string,
+  to: string,
+  counselorUidFilter?: string,
+  enabled = true,
+) {
   const { firebaseUser, profile, can } = useAuth()
   const { users: directory } = useCounselorDirectory()
   const viewerSip = profile?.omicallSipUser ?? undefined
@@ -35,12 +40,11 @@ export function useOmicallCallsForKpi(from: string, to: string, counselorUidFilt
   }, [canGlobal, canTeam, counselorUidFilter, profile, directory, firebaseUser?.uid])
 
   const maxRows = scope.mode === 'global' ? 1500 : 800
-  // from/to rỗng (vd. monthly tắt merge live) — không quét OMICall.
-  const disabledScope: OmicallCallsScope = { mode: 'counselor', counselorUid: '' }
   return useOmicallCalls({
-    scope: rangeOk ? scope : disabledScope,
+    scope,
     from: fromDate,
     to: toDate,
+    enabled: enabled && rangeOk,
     maxRows,
     viewerSipUser: viewerSip,
   })

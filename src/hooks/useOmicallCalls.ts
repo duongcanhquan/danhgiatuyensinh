@@ -26,6 +26,8 @@ export type UseOmicallCallsOpts = {
   scope: OmicallCallsScope
   from: Date
   to: Date
+  /** Khi false, không chạy bất kỳ truy vấn Firestore / Cloud Function nào. */
+  enabled?: boolean
   maxRows?: number
   /** Máy lẻ OMICall của người xem — bù khi doc chưa có counselorUid. */
   viewerSipUser?: string
@@ -66,15 +68,6 @@ type OmicallServerScopeFilter =
   | { kind: 'none' }
   | { kind: 'counselor'; counselorUid: string }
   | { kind: 'team'; teamLeadUid: string }
-
-function callMatchesServerScopeFilter(
-  c: OmicallCallRecord,
-  scopeFilter: OmicallServerScopeFilter,
-): boolean {
-  if (scopeFilter.kind === 'none') return true
-  if (scopeFilter.kind === 'counselor') return c.counselorUid === scopeFilter.counselorUid
-  return c.teamLeadUid === scopeFilter.teamLeadUid
-}
 
 function filterCallsByScope(
   calls: OmicallCallRecord[],
@@ -201,35 +194,18 @@ async function fetchCallsByDateChunks(
     }
     if (merged.size >= cap) break
 
-    // startedAt + counselorUid/teamLeadUid có thể thiếu composite index → bỏ qua nếu lỗi.
+    // Không quét toàn trường để bù index thiếu cho phạm vi TVV/nhóm.
     const started = await fetchChunkByField(db, 'startedAt', chunkFrom, chunkTo, scopeFilter)
-    if (started.indexMissing && scopeFilter.kind !== 'none') {
-      const startedGlobal = await fetchChunkByField(db, 'startedAt', chunkFrom, chunkTo, { kind: 'none' })
-      if (startedGlobal.indexMissing) startedAtIndexMissing = true
-      else if (startedGlobal.rows.length > 0) startedAtFallback = true
-      if (startedGlobal.hitLimit) truncated = true
-      for (const row of startedGlobal.rows) {
-        if (merged.has(row.id)) continue
-        if (!callMatchesServerScopeFilter(row, scopeFilter)) continue
-        if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
-        merged.set(row.id, row)
-        if (merged.size >= cap) {
-          truncated = true
-          break
-        }
-      }
-    } else {
-      if (started.indexMissing) startedAtIndexMissing = true
-      else if (started.rows.length > 0) startedAtFallback = true
-      if (started.hitLimit) truncated = true
-      for (const row of started.rows) {
-        if (merged.has(row.id)) continue
-        if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
-        merged.set(row.id, row)
-        if (merged.size >= cap) {
-          truncated = true
-          break
-        }
+    if (started.indexMissing) startedAtIndexMissing = true
+    else if (started.rows.length > 0) startedAtFallback = true
+    if (started.hitLimit) truncated = true
+    for (const row of started.rows) {
+      if (merged.has(row.id)) continue
+      if (!callInDateRange(row, fromMs, toMs) || !isDisplayableCall(row)) continue
+      merged.set(row.id, row)
+      if (merged.size >= cap) {
+        truncated = true
+        break
       }
     }
   }
@@ -248,6 +224,7 @@ export function useOmicallCalls({
   scope,
   from,
   to,
+  enabled = true,
   maxRows = 500,
   viewerSipUser,
   orgId,
@@ -264,6 +241,14 @@ export function useOmicallCalls({
   const orgFilter = orgId?.trim() || ''
 
   useEffect(() => {
+    if (!enabled) {
+      setCalls([])
+      setLoading(false)
+      setError(null)
+      setNotice(null)
+      return
+    }
+
     const db = getFirestoreDb()
     if (!db || !isFirebaseConfigured()) {
       setCalls([])
@@ -367,38 +352,6 @@ export function useOmicallCalls({
           truncatedOut = truncated
           startedAtFallbackOut = startedAtFallback
 
-          // Nhóm: doc thiếu teamLeadUid → query theo teamLeadUid trống; quét rộng rồi lọc roster.
-          if (
-            raw.length === 0 &&
-            scope.mode === 'team' &&
-            (scope.counselorUids?.length ?? 0) > 0
-          ) {
-            const fill = await fetchCallsByDateChunks(db, fromTs, toTs, fetchCap, { kind: 'none' })
-            if (fill.truncated) truncatedOut = true
-            if (fill.startedAtFallback) startedAtFallbackOut = true
-            raw = applyOrgFilter(fill.rows)
-          }
-        }
-
-        // Doc cũ có thể chỉ có sipUser, chưa gắn counselorUid — bù nhẹ theo SIP (trần thấp).
-        const sip = viewerSipUser?.trim()
-        if (scope.mode === 'counselor' && sip && raw.length < maxRows) {
-          const sipCap = Math.min(300, fetchCap)
-          const sipFill = await fetchCallsByDateChunks(db, fromTs, toTs, sipCap, { kind: 'none' })
-          if (sipFill.truncated) truncatedOut = true
-          if (sipFill.startedAtFallback) startedAtFallbackOut = true
-          const seen = new Set(raw.map((r) => r.id))
-          for (const row of applyOrgFilter(sipFill.rows)) {
-            if (seen.has(row.id)) continue
-            if (row.counselorUid) continue
-            if (row.sipUser?.trim() !== sip) continue
-            raw.push(row)
-            seen.add(row.id)
-            if (raw.length >= fetchCap) {
-              truncatedOut = true
-              break
-            }
-          }
         }
 
         // Khi client trống (không phải global đã thử CF): nhờ Cloud Function.
@@ -484,7 +437,7 @@ export function useOmicallCalls({
     return () => {
       cancelled = true
     }
-  }, [scope, fromTs, toTs, maxRows, viewerSipUser, orgFilter])
+  }, [enabled, scope, fromTs, toTs, maxRows, viewerSipUser, orgFilter])
 
   return { calls, loading, error, notice }
 }

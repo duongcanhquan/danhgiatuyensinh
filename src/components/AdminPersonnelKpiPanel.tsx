@@ -45,9 +45,10 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
   const tierLabels = useMemo(() => getBonusTierLabels(runtime), [runtime])
   const [month, setMonth] = useState(currentMonthKey())
   const [reportTab, setReportTab] = useState<'period' | 'monthly'>(variant === 'monthly-only' ? 'monthly' : 'period')
+  const shouldMergeLiveCalls = reportTab === 'monthly' && month === currentMonthKey()
   const { rows, loading, error } = useCounselorMonthlyKpi(month, {
-    // Tháng hiện tại luôn bù live; tháng cũ cũng bù nhẹ khi rollup chưa kịp.
-    mergeLiveCalls: true,
+    mergeLiveCalls: shouldMergeLiveCalls,
+    mergeLiveDays: 2,
   })
   const { users } = useCounselorDirectory()
   const [expandedUid, setExpandedUid] = useState<string | null>(null)

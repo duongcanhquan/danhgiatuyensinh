@@ -46,7 +46,7 @@ import { registerPublicRegistrationFunctions } from './publicRegistration.js'
 import { isAuthUserNotFound, toStaffAuthHttpsError } from './authAdminErrors.js'
 import {
   getAllDocumentsChunked,
-  loadTeamLeadMap,
+  loadTeamLeadMapCached,
   resolveCounselorUidForOmicall,
 } from './firestoreReads.js'
 import {
@@ -308,8 +308,12 @@ function normalizeCall(rawInput: Record<string, unknown>): NormalizedOmicallCall
   }
 }
 
-async function resolveCounselorAndLead(fs: Firestore, call: NormalizedOmicallCall): Promise<LeadMatch> {
-  const teamLeadMap = await loadTeamLeadMap(fs, COLLECTIONS.users)
+async function resolveCounselorAndLead(
+  fs: Firestore,
+  call: NormalizedOmicallCall,
+  teamLeadMap?: Map<string, string>,
+): Promise<LeadMatch> {
+  teamLeadMap = teamLeadMap ?? (await loadTeamLeadMapCached(fs, COLLECTIONS.users))
   const counselorCache = new Map<string, string | null>()
   const sipOrUserDataUid = await resolveCounselorUidForOmicall(fs, COLLECTIONS.users, call, counselorCache)
 
@@ -446,9 +450,13 @@ function resolveStoredEndedAt(
   return call.startedAt ?? call.createdAt
 }
 
-async function upsertCallAndInteraction(call: NormalizedOmicallCall, source: 'webhook' | 'history_sync') {
+async function upsertCallAndInteraction(
+  call: NormalizedOmicallCall,
+  source: 'webhook' | 'history_sync',
+  ctx?: { teamLeadMap: Map<string, string> },
+) {
   const kpiCfg = await loadKpiEvalConfig(db)
-  const match = await resolveCounselorAndLead(db, call)
+  const match = await resolveCounselorAndLead(db, call, ctx?.teamLeadMap)
   const callRef = db.collection(COLLECTIONS.omicallCalls).doc(call.transactionId)
   const now = Timestamp.now()
   const existing = await callRef.get()
@@ -793,8 +801,13 @@ async function updateDailyKpi(
 async function updateDailyCrmKpiFromAuditLogs() {
   const since = Timestamp.fromMillis(Date.now() - 60 * 60_000)
   const [snap, teamLeadMap] = await Promise.all([
-    db.collection(COLLECTIONS.auditLogs).where('timestamp', '>=', since).get(),
-    loadTeamLeadMap(db, COLLECTIONS.users),
+    db
+      .collection(COLLECTIONS.auditLogs)
+      .where('timestamp', '>=', since)
+      .orderBy('timestamp', 'desc')
+      .limit(500)
+      .get(),
+    loadTeamLeadMapCached(db, COLLECTIONS.users),
   ])
   for (const docSnap of snap.docs) {
     const processedRef = db.collection(COLLECTIONS.kpiActivityEvents).doc(docSnap.id)
@@ -865,8 +878,13 @@ async function updateDailyFinanceKpiFromLeads(kpiCfg: Awaited<ReturnType<typeof 
   const kpiV2 = await loadKpiV2Config(db)
   const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60_000)
   const [leadSnap, teamLeadMap] = await Promise.all([
-    db.collection(COLLECTIONS.leads).where('updatedAt', '>=', since).get(),
-    loadTeamLeadMap(db, COLLECTIONS.users),
+    db
+      .collection(COLLECTIONS.leads)
+      .where('updatedAt', '>=', since)
+      .orderBy('updatedAt', 'desc')
+      .limit(400)
+      .get(),
+    loadTeamLeadMapCached(db, COLLECTIONS.users),
   ])
 
   for (const leadDoc of leadSnap.docs) {
@@ -1024,6 +1042,7 @@ async function runOmicallHistorySync(opts: {
   lookbackMinutes: number
   maxPages: number
   apiVersion: OmicallHistoryApiVersion
+  backfillScanLimit?: number | false
 }): Promise<{
   processed: number
   analysesProcessed: number
@@ -1033,6 +1052,7 @@ async function runOmicallHistorySync(opts: {
   const to = Date.now()
   const from = to - opts.lookbackMinutes * 60_000
   const analysisTransactionIds: string[] = []
+  const teamLeadMap = await loadTeamLeadMapCached(db, COLLECTIONS.users)
   let processed = 0
   for (let page = 1; page <= opts.maxPages; page++) {
     const result = await fetchOmicallHistoryPage(opts.baseUrl, opts.apiKey, page, {
@@ -1044,7 +1064,7 @@ async function runOmicallHistorySync(opts: {
     for (const row of result.items) {
       const call = normalizeCall(row)
       if (!call) continue
-      await upsertCallAndInteraction(call, 'history_sync')
+      await upsertCallAndInteraction(call, 'history_sync', { teamLeadMap })
       if (call.outcome === 'CONNECTED') analysisTransactionIds.push(call.transactionId)
       processed++
     }
@@ -1057,7 +1077,10 @@ async function runOmicallHistorySync(opts: {
   } catch (e) {
     analysisError = e instanceof Error ? e.message : String(e)
   }
-  const backfilledEndedAt = await backfillOmicallCallsMissingEndedAt(500)
+  const backfilledEndedAt =
+    opts.backfillScanLimit === false
+      ? 0
+      : await backfillOmicallCallsMissingEndedAt(opts.backfillScanLimit ?? 500)
   return { processed, analysesProcessed, analysisError, backfilledEndedAt }
 }
 
@@ -1282,27 +1305,35 @@ export const syncOmicallCallHistory = onSchedule(
     }
     let processed = 0
     let analysesProcessed = 0
+    let backfilledEndedAt = 0
     let analysisError: string | null = null
     let error: string | null = null
     try {
+      const isHourlyBoundary = new Date().getUTCMinutes() < 15
       const syncResult = await runOmicallHistorySync({
         apiKey,
         baseUrl,
         lookbackMinutes: serverConfig.historyLookbackMinutes,
         maxPages: serverConfig.historyMaxPages,
         apiVersion: serverConfig.historyApiVersion,
+        backfillScanLimit: false,
       })
       processed = syncResult.processed
       analysesProcessed = syncResult.analysesProcessed
       analysisError = syncResult.analysisError
+      if (processed > 0 || isHourlyBoundary) {
+        backfilledEndedAt = await backfillOmicallCallsMissingEndedAt(isHourlyBoundary ? 200 : 500)
+      }
       const kpiCfg = await loadKpiEvalConfig(db)
       await reconcileKpiFromStoredCalls(21)
-      await reconcileKpiFromClientInteractions(14)
       await updateDailyCrmKpiFromAuditLogs()
       await updateDailyFinanceKpiFromLeads(kpiCfg)
-      await processRecentLeadEvents(db, COLLECTIONS.kpiDaily)
-      const monthKey = kpiMonthKeyFromTs()
-      await rollupKpiMonthly(db, COLLECTIONS.kpiDaily, monthKey, kpiCfg)
+      if (isHourlyBoundary) {
+        await reconcileKpiFromClientInteractions(14)
+        await processRecentLeadEvents(db, COLLECTIONS.kpiDaily)
+        const monthKey = kpiMonthKeyFromTs()
+        await rollupKpiMonthly(db, COLLECTIONS.kpiDaily, monthKey, kpiCfg)
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -1311,6 +1342,7 @@ export const syncOmicallCallHistory = onSchedule(
         finishedAt: Timestamp.now(),
         processed,
         analysesProcessed,
+        backfilledEndedAt,
         lookbackMinutes: serverConfig.historyLookbackMinutes,
         apiVersion: serverConfig.historyApiVersion,
         ...(analysisError ? { analysisError } : {}),

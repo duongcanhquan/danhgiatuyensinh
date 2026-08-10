@@ -6,6 +6,15 @@ function str(v: unknown): string {
 
 const COUNSELOR_LOADS_COLLECTION = 'stats'
 const COUNSELOR_LOADS_DOC = 'counselorLoads'
+const DEFAULT_TEAM_LEAD_MAP_TTL_MS = 5 * 60_000
+
+type TeamLeadMapCacheEntry = {
+  value?: Map<string, string>
+  expiresAt: number
+  loading?: Promise<Map<string, string>>
+}
+
+const teamLeadMapCache = new WeakMap<Firestore, Map<string, TeamLeadMapCacheEntry>>()
 
 /**
  * Map counselorUid → teamLeadUid.
@@ -41,6 +50,41 @@ export async function loadTeamLeadMap(fs: Firestore, usersCollection: string): P
   ingest(legacyHoD.docs)
   ingest(admins.docs)
   return out
+}
+
+export async function loadTeamLeadMapCached(
+  fs: Firestore,
+  usersCollection: string,
+  opts: { force?: boolean; ttlMs?: number } = {},
+): Promise<Map<string, string>> {
+  let cacheForFirestore = teamLeadMapCache.get(fs)
+  if (!cacheForFirestore) {
+    cacheForFirestore = new Map()
+    teamLeadMapCache.set(fs, cacheForFirestore)
+  }
+
+  const now = Date.now()
+  const cached = cacheForFirestore.get(usersCollection)
+  if (!opts.force && cached?.value && cached.expiresAt > now) return cached.value
+  if (!opts.force && cached?.loading) return cached.loading
+
+  const entry = cached ?? { expiresAt: 0 }
+  const ttlMs = Math.max(0, opts.ttlMs ?? DEFAULT_TEAM_LEAD_MAP_TTL_MS)
+  const loading = loadTeamLeadMap(fs, usersCollection)
+    .then((value) => {
+      entry.value = value
+      entry.expiresAt = Date.now() + ttlMs
+      entry.loading = undefined
+      return value
+    })
+    .catch((error) => {
+      entry.loading = undefined
+      if (!entry.value) cacheForFirestore!.delete(usersCollection)
+      throw error
+    })
+  entry.loading = loading
+  cacheForFirestore.set(usersCollection, entry)
+  return loading
 }
 
 type OmicallCounselorLookup = {

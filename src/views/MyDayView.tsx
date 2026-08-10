@@ -82,9 +82,15 @@ export function MyDayView() {
     totals: reportTotals,
     loading: reportLoading,
     error: reportError,
-  } = useCounselorKpiDateRange(reportFrom, reportTo, selectedCounselorId)
+  } = useCounselorKpiDateRange(reportFrom, reportTo, selectedCounselorId, {
+    enabled: activeTab === 'period',
+  })
 
   useEffect(() => {
+    if (activeTab !== 'sources') {
+      setSourceLoading(false)
+      return
+    }
     const db = getFirestoreDb()
     if (!db || !isFirebaseConfigured() || !firebaseUser) {
       setSourceRows([])
@@ -184,7 +190,7 @@ export function MyDayView() {
     return () => {
       cancelled = true
     }
-  }, [reportFrom, reportTo, selectedCounselorId, allowedCounselorIds, firebaseUser?.uid, effectiveOrgId])
+  }, [activeTab, reportFrom, reportTo, selectedCounselorId, allowedCounselorIds, firebaseUser?.uid, effectiveOrgId])
 
   const safeTab = MY_DAY_TABS.some((t) => t.id === activeTab) ? activeTab : 'today'
 

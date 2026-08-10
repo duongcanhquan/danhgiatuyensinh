@@ -132,7 +132,7 @@ export const LEADS_UI_FULL_SCOPE_MAX = 1500
  * Chỉ dùng khi lọc «Chưa gắn chương trình» (thiếu field — không query server được).
  * Trần quét vừa đủ tìm hồ sơ cũ, tránh treo UI với hàng trăm nghìn getDocs.
  */
-export const LEADS_UI_PROGRAM_SCAN_MAX = 12_000
+export const LEADS_UI_PROGRAM_SCAN_MAX = 3_000
 
 /** Cap riêng cho Dashboard TVV — chỉ khi lọc client bắt buộc (follow-up / HOT SLA / chưa gán). */
 export const DASHBOARD_FULL_SCOPE_MAX = 1000
@@ -750,31 +750,25 @@ async function getDocsListWithOrgFallback(
     }
   }
 
-  // Song song scoped + legacy — cắt nửa thời gian chờ so với tuần tự (đặc biệt Superadmin VietMy).
+  // Ưu tiên query có orgId; chỉ đọc legacy không scope khi chunk scoped thật sự rỗng.
+  let scopedSnap: QuerySnapshot<DocumentData>
+  try {
+    scopedSnap = await getDocs(scopedQ)
+  } catch (e) {
+    if (!isFsPermissionDenied(e)) throw e
+    throw e instanceof Error ? e : new Error('Không đọc được danh sách hồ sơ.')
+  }
+  if (scopedSnap.docs.length > 0) return scopedSnap
+
   const legacyQ = withConstraints(
     buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'auto'),
   )
-  const [scopedSettled, legacySettled] = await Promise.allSettled([getDocs(scopedQ), getDocs(legacyQ)])
-
-  const scopedSnap =
-    scopedSettled.status === 'fulfilled'
-      ? scopedSettled.value
-      : isFsPermissionDenied(scopedSettled.reason)
-        ? null
-        : (() => {
-            throw scopedSettled.reason
-          })()
-
-  if (legacySettled.status === 'fulfilled') {
-    const legacySnap = legacySettled.value
-    if (legacySnap.docs.length >= (scopedSnap?.docs.length ?? 0)) return legacySnap
-    if (scopedSnap && scopedSnap.docs.length > 0) return scopedSnap
-    return legacySnap
+  try {
+    return await getDocs(legacyQ)
+  } catch (e) {
+    console.warn('[useLeads] legacy VietMy unscoped failed — dùng kết quả orgId== rỗng', orgId, e)
+    return scopedSnap
   }
-
-  console.warn('[useLeads] legacy VietMy unscoped failed — dùng orgId==', orgId, legacySettled.reason)
-  if (scopedSnap) return scopedSnap
-  throw legacySettled.reason
 }
 
 function applyRoleClientFilter(
