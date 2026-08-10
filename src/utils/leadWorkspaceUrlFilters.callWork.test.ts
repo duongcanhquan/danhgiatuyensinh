@@ -4,6 +4,7 @@ import {
   parseCallWorkBucketFromUrl,
   parseDispositionFromUrl,
   leadFilterSignatureForHydrate,
+  urlHasLeadListFilters,
 } from './leadWorkspaceUrlFilters'
 
 describe('leadWorkspaceUrlFilters call work', () => {
@@ -27,5 +28,12 @@ describe('leadWorkspaceUrlFilters call work', () => {
     const sig = leadFilterSignatureForHydrate(sp)
     expect(sig).toContain('cq=callback')
     expect(sig).toContain('disp=knm')
+  })
+
+  it('detects list filters on URL without counting q', () => {
+    expect(urlHasLeadListFilters(new URLSearchParams())).toBe(false)
+    expect(urlHasLeadListFilters(new URLSearchParams('q=an'))).toBe(false)
+    expect(urlHasLeadListFilters(new URLSearchParams('tag=HOT'))).toBe(true)
+    expect(urlHasLeadListFilters(new URLSearchParams('cq=uncalled&q=an'))).toBe(true)
   })
 })

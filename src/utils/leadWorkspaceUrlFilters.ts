@@ -108,6 +108,15 @@ export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
   return keys.map((k) => `${k}=${sp.get(k) ?? ''}`).join('|')
 }
 
+/** Có điều kiện lọc danh sách trên URL (không tính ô tìm `q`). */
+export function urlHasLeadListFilters(sp: URLSearchParams): boolean {
+  for (const key of Object.values(LWF)) {
+    if (key === LWF.Q) continue
+    if ((sp.get(key) ?? '').trim()) return true
+  }
+  return false
+}
+
 export function counselorListFilterSignature(sp: URLSearchParams): string {
   return leadFilterSignatureForHydrate(sp) + `|${LWF.Q}=${sp.get(LWF.Q) ?? ''}`
 }

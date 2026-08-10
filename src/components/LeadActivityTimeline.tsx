@@ -7,6 +7,12 @@ import { useAuditLogs } from '../hooks/useAuditLogs'
 import { useLeadOmicallCalls } from '../hooks/useLeadOmicallCalls'
 import { TagBadge } from './TagBadge'
 import { resolveCallIsValid } from '../utils/kpiCallValidity'
+import {
+  auditActionLabelVi,
+  callActionTitle,
+  timelineActorName,
+  timelineHeadline,
+} from '../utils/leadActivityTimelineLabels'
 
 const PIPELINE_LABEL: Record<string, string> = {
   NEW: 'Mới',
@@ -87,61 +93,59 @@ export function LeadActivityTimeline({
   const loading = intLoading || audLoading || callLoading
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">Dòng thời gian</h3>
-        <p className="text-[10px] text-slate-500">
-          {calls.length} gọi · {interactions.length} tương tác · {audits.length} sự kiện
+    <section className="flex min-h-0 flex-1 flex-col rounded-md border border-slate-200/80 bg-white p-1.5 shadow-sm">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-1">
+        <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Dòng thời gian</h3>
+        <p className="text-[10px] tabular-nums text-slate-500">
+          {calls.length} gọi · {interactions.length} TT · {audits.length} SK
         </p>
       </div>
-      {loading ? <p className="mt-1 shrink-0 text-xs text-slate-500">Đang tải…</p> : null}
-      <ul className="scroll-touch mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
+      {loading ? <p className="mt-0.5 shrink-0 text-[11px] text-slate-500">Đang tải…</p> : null}
+      <ul className="scroll-touch mt-1 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
         {rows.map((row) => {
           const when = row.at ? new Date(row.at).toLocaleString('vi-VN') : '—'
           if (row.kind === 'call') {
             const c = row.call
             const connected = c.answerSeconds > 0 || c.billSeconds > 0
             const valid = resolveCallIsValid(c)
+            const actor = timelineActorName({
+              uid: c.counselorUid,
+              labelUid,
+            })
+            const action = callActionTitle({
+              direction: c.direction,
+              connected,
+              valid,
+            })
             return (
               <li
                 key={row.id}
                 className={[
-                  'rounded-md border p-2 text-xs',
+                  'rounded border p-1.5 text-[11px] leading-snug',
                   valid
                     ? 'border-emerald-200/90 bg-emerald-50/90 text-emerald-950'
                     : 'border-sky-200/80 bg-sky-50/90 text-slate-800',
                 ].join(' ')}
               >
-                <div className="flex items-start gap-2">
-                  <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-700" aria-hidden />
+                <div className="flex items-start gap-1.5">
+                  <Phone className="mt-0.5 h-3 w-3 shrink-0 text-sky-700" aria-hidden />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-1">
-                      <span className="font-semibold">
-                        OMICall · {c.direction === 'inbound' ? 'Gọi vào' : 'Gọi ra'}
-                        {connected ? ' · Nghe máy' : ' · Không nghe'}
-                        {valid ? (
-                          <span className="ml-1 rounded bg-emerald-200 px-1 py-0.5 text-[10px] font-bold text-emerald-900">
-                            HL
-                          </span>
-                        ) : c.invalidReason ? (
-                          <span className="ml-1 text-[10px] font-normal text-amber-800" title={c.invalidReason}>
-                            (chưa HL)
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="text-[11px] text-slate-500">{when}</span>
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-1 gap-y-0.5">
+                      <span className="font-semibold text-slate-900">{timelineHeadline(actor, action)}</span>
+                      <span className="text-[10px] text-slate-500">{when}</span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-slate-600">
+                    <p className="mt-0.5 text-[10px] text-slate-600">
                       {c.phoneNumber}
                       {c.billSeconds ? ` · Nói ${formatSec(c.billSeconds)}` : ''}
                       {c.sipUser ? ` · Máy lẻ ${c.sipUser}` : ''}
+                      {!valid && c.invalidReason ? ` · Chưa HL` : ''}
                     </p>
                     {c.recordingFileUrl ? (
                       <a
                         href={c.recordingFileUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-1 inline-block rounded border border-sky-300 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-sky-800 hover:bg-sky-100"
+                        className="mt-0.5 inline-block rounded border border-sky-300 bg-white px-1 py-0.5 text-[10px] font-semibold text-sky-800 hover:bg-sky-100"
                       >
                         Nghe ghi âm
                       </a>
@@ -153,67 +157,69 @@ export function LeadActivityTimeline({
           }
           if (row.kind === 'audit') {
             const log = row.log
+            const actor = timelineActorName({
+              performedByName: log.performedByName,
+              uid: log.performedBy,
+              labelUid,
+            })
+            const action = auditActionLabelVi(log.actionType)
             return (
               <li
                 key={row.id}
-                className="rounded-md border border-violet-200/70 bg-violet-50/80 p-2 text-xs text-slate-800"
+                className="rounded border border-violet-200/70 bg-violet-50/80 p-1.5 text-[11px] leading-snug text-slate-800"
               >
-                <div className="flex items-start gap-2">
-                  <ClipboardList className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-700" aria-hidden />
+                <div className="flex items-start gap-1.5">
+                  <ClipboardList className="mt-0.5 h-3 w-3 shrink-0 text-violet-700" aria-hidden />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-1">
-                      <span className="font-semibold text-violet-950">Hệ thống · {log.actionType}</span>
-                      <span className="text-[11px] text-slate-500">
-                        {log.performedByName || labelUid(log.performedBy)} · {when}
-                      </span>
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-1 gap-y-0.5">
+                      <span className="font-semibold text-violet-950">{timelineHeadline(actor, action)}</span>
+                      <span className="text-[10px] text-slate-500">{when}</span>
                     </div>
-                    <p className="mt-1 leading-snug text-slate-700">{log.description}</p>
+                    <p className="mt-0.5 text-[10px] leading-snug text-slate-700">{log.description}</p>
                   </div>
                 </div>
               </li>
             )
           }
           const it = row.it
+          const actor = timelineActorName({ uid: it.authorUid, labelUid })
+          const actionParts = [channelVi(it.channel)]
+          if (it.evaluationTag) actionParts.push(it.evaluationTag)
           return (
             <li
               key={row.id}
-              className="rounded-md border border-slate-200/70 bg-slate-50/90 p-2 text-xs text-slate-700"
+              className="rounded border border-slate-200/70 bg-slate-50/90 p-1.5 text-[11px] leading-snug text-slate-700"
             >
-              <div className="flex items-start gap-2">
-                <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-600" aria-hidden />
+              <div className="flex items-start gap-1.5">
+                <FileText className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-200/60 pb-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-1 gap-y-0.5 border-b border-slate-200/60 pb-0.5">
                     <span className="font-semibold text-slate-900">
-                      {channelVi(it.channel)}
-                      {it.evaluationTag ? (
-                        <span className="font-normal text-slate-600"> · {it.evaluationTag}</span>
-                      ) : null}
+                      {timelineHeadline(actor, actionParts.join(' · '))}
                     </span>
-                    <span className="text-[11px] text-slate-500">
-                      {labelUid(it.authorUid)} · {when}
-                    </span>
+                    <span className="text-[10px] text-slate-500">{when}</span>
                   </div>
                   {(it.snapshotCrmStatus || it.snapshotPipelineStatus || it.snapshotPriorityTag) && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className="mt-1 flex flex-wrap gap-0.5">
                       {it.snapshotCrmStatus ? (
-                        <span className="rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-950">
+                        <span className="rounded border border-amber-200/80 bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-950">
                           TVV: {LEAD_COUNSELOR_STATUS_LABELS[it.snapshotCrmStatus]}
                         </span>
                       ) : null}
                       {it.snapshotPipelineStatus ? (
-                        <span className="rounded border border-sky-200/80 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-950">
+                        <span className="rounded border border-sky-200/80 bg-sky-50 px-1 py-0.5 text-[10px] font-medium text-sky-950">
                           Funnel: {PIPELINE_LABEL[it.snapshotPipelineStatus] ?? it.snapshotPipelineStatus}
                         </span>
                       ) : null}
                       {it.snapshotPriorityTag ? (
-                        <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px]">
+                        <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px]">
                           Nhãn: <TagBadge tag={it.snapshotPriorityTag} />
                         </span>
                       ) : null}
                     </div>
                   )}
                   {it.callSessionEvaluation?.picks?.length ? (
-                    <dl className="mt-1.5 space-y-0.5 rounded-md border border-violet-200/70 bg-violet-50/80 px-2 py-1.5 text-[10px]">
+                    <dl className="mt-1 space-y-0.5 rounded border border-violet-200/70 bg-violet-50/80 px-1.5 py-1 text-[10px]">
                       <dt className="font-bold text-violet-950">Đánh giá trực tiếp</dt>
                       {it.callSessionEvaluation.picks.map((p) => (
                         <dd key={`${p.dimensionId}-${p.optionId}`} className="text-slate-800">
@@ -223,11 +229,11 @@ export function LeadActivityTimeline({
                       ))}
                     </dl>
                   ) : it.callSessionTags?.length ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className="mt-1 flex flex-wrap gap-0.5">
                       {it.callSessionTags.map((t) => (
                         <span
                           key={`${t.category}-${t.label}`}
-                          className="rounded-md border border-violet-200/80 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-900"
+                          className="rounded border border-violet-200/80 bg-violet-50 px-1 py-0.5 text-[10px] font-medium text-violet-900"
                         >
                           {t.label}
                         </span>
@@ -235,23 +241,23 @@ export function LeadActivityTimeline({
                     </div>
                   ) : null}
                   {it.counselorNote ? (
-                    <p className="mt-1.5 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
+                    <p className="mt-1 whitespace-pre-wrap leading-snug text-slate-800">{it.counselorNote}</p>
                   ) : null}
                   {it.callAiAssessment ? (
-                    <div className="mt-2 rounded-md border border-amber-200/80 bg-amber-50/90 px-2 py-1.5 text-[11px] text-amber-950">
+                    <div className="mt-1 rounded border border-amber-200/80 bg-amber-50/90 px-1.5 py-1 text-[10px] text-amber-950">
                       <p className="font-bold">
                         AI sau gọi · {it.callAiAssessment.mucDoSanSang} · {it.callAiAssessment.diemCamXuc}/100
                       </p>
-                      <p className="mt-1 leading-snug text-slate-800">{it.callAiAssessment.tomTatCuocGoi}</p>
+                      <p className="mt-0.5 leading-snug text-slate-800">{it.callAiAssessment.tomTatCuocGoi}</p>
                       {it.callAiAssessment.hanhDongTiepTheo ? (
-                        <p className="mt-1 font-medium text-emerald-900">
+                        <p className="mt-0.5 font-medium text-emerald-900">
                           Tiếp theo: {it.callAiAssessment.hanhDongTiepTheo}
                         </p>
                       ) : null}
                     </div>
                   ) : null}
                   {it.callDispositionLabel || it.callOutcome ? (
-                    <p className="mt-1 text-[11px] font-medium text-slate-600">
+                    <p className="mt-0.5 text-[10px] font-medium text-slate-600">
                       {it.callDispositionLabel
                         ? `Note: ${it.callDispositionLabel}`
                         : `Kết quả: ${it.callOutcome}`}
@@ -264,7 +270,7 @@ export function LeadActivityTimeline({
           )
         })}
         {!loading && rows.length === 0 ? (
-          <li className="text-xs text-slate-500">Chưa có hoạt động — gọi từ hồ sơ để ghi nhận OMICall.</li>
+          <li className="text-[11px] text-slate-500">Chưa có hoạt động trên hồ sơ này.</li>
         ) : null}
       </ul>
     </section>

@@ -94,6 +94,14 @@ function isNavActive(pathname: string, to: string) {
   return to === '/' ? pathname === '/' : pathname.startsWith(to)
 }
 
+/** Giữ bộ lọc trên URL khi đang ở Hồ sơ rồi bấm lại «Hồ sơ» trên menu. */
+function navTarget(to: string, pathname: string, search: string) {
+  if (to === '/leads' && (pathname === '/leads' || pathname.startsWith('/leads/'))) {
+    return { pathname: '/leads', search }
+  }
+  return to
+}
+
 export function Layout() {
   const { profile, firebaseUser, can, signOut, permissions } = useAuth()
   const location = useLocation()
@@ -150,7 +158,13 @@ export function Layout() {
 
       <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3" aria-label="Điều hướng chính">
         {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === '/'} title={label} className={({ isActive }) => sidebarLinkClass(isActive)}>
+          <NavLink
+            key={to}
+            to={navTarget(to, location.pathname, location.search)}
+            end={to === '/'}
+            title={label}
+            className={({ isActive }) => sidebarLinkClass(isActive)}
+          >
             {({ isActive }) => (
               <>
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} strokeWidth={2} aria-hidden />
@@ -295,7 +309,7 @@ export function Layout() {
           return (
             <NavLink
               key={to}
-              to={to}
+              to={navTarget(to, location.pathname, location.search)}
               end={to === '/'}
               className="app-bottom-nav-link"
               data-active={active ? 'true' : 'false'}

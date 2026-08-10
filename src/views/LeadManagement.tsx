@@ -178,7 +178,32 @@ import {
   parsePipelineFromUrl,
   parseTagFromUrl,
   stripListFiltersKeepOpenView,
+  urlHasLeadListFilters,
 } from '../utils/leadWorkspaceUrlFilters'
+
+const LEADS_UI_TOOLS_SS = 'vietmy.leads.workspaceToolsOpen'
+const LEADS_UI_FILTER_PANEL_SS = 'vietmy.leads.filterPanelOpen'
+
+function readLeadsUiSessionFlag(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (raw === '1') return true
+    if (raw === '0') return false
+  } catch {
+    /* ignore */
+  }
+  return fallback
+}
+
+function writeLeadsUiSessionFlag(key: string, value: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
 import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/counselorDisplay'
 import { CreateLeadModal } from '../components/CreateLeadModal'
 
@@ -686,7 +711,27 @@ export function LeadManagement() {
   /** Số hồ sơ tối đa phân trong lần này (≤ full-scope max). */
   const [bulkAssignLimit, setBulkAssignLimit] = useState(500)
   const [bulkAssignPickRule, setBulkAssignPickRule] = useState<AssignPickRule>('oldest')
-  const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(false)
+  /** Giữ «Công cụ» mở qua phiên / sau khi đóng chi tiết hồ sơ. */
+  const [workspaceToolsOpen, setWorkspaceToolsOpen] = useState(() => {
+    const saved = readLeadsUiSessionFlag(LEADS_UI_TOOLS_SS, false)
+    if (saved) return true
+    if (typeof window === 'undefined') return false
+    try {
+      return urlHasLeadListFilters(new URLSearchParams(window.location.search))
+    } catch {
+      return false
+    }
+  })
+  /** Giữ khối «Bộ lọc» bung trong Công cụ (không mất sau đóng popup hồ sơ). */
+  const [filterPanelOpen, setFilterPanelOpen] = useState(() =>
+    readLeadsUiSessionFlag(LEADS_UI_FILTER_PANEL_SS, false),
+  )
+  const listChromeBeforeDetailRef = useRef<{
+    toolsOpen: boolean
+    filterPanelOpen: boolean
+    scrollY: number
+    keepToolsExpanded: boolean
+  } | null>(null)
   const [bulkReassignProgress, setBulkReassignProgress] = useState<null | { done: number; total: number }>(
     null,
   )
@@ -721,10 +766,56 @@ export function LeadManagement() {
     leadDetailUnsavedRef.current = false
   }, [selected?.id])
 
+  useEffect(() => {
+    writeLeadsUiSessionFlag(LEADS_UI_TOOLS_SS, workspaceToolsOpen)
+  }, [workspaceToolsOpen])
+
+  useEffect(() => {
+    writeLeadsUiSessionFlag(LEADS_UI_FILTER_PANEL_SS, filterPanelOpen)
+  }, [filterPanelOpen])
+
+  const captureListChromeBeforeDetail = useCallback(() => {
+    listChromeBeforeDetailRef.current = {
+      toolsOpen: workspaceToolsOpen,
+      filterPanelOpen,
+      scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+      keepToolsExpanded:
+        workspaceToolsOpen ||
+        filterPanelOpen ||
+        filtersPendingApply ||
+        urlHasLeadListFilters(searchParams),
+    }
+  }, [workspaceToolsOpen, filterPanelOpen, filtersPendingApply, searchParams])
+
+  const captureListChromeBeforeDetailRef = useRef(captureListChromeBeforeDetail)
+  captureListChromeBeforeDetailRef.current = captureListChromeBeforeDetail
+
+  const restoreListChromeAfterDetail = useCallback(() => {
+    const snap = listChromeBeforeDetailRef.current
+    listChromeBeforeDetailRef.current = null
+    if (!snap) return
+    if (snap.keepToolsExpanded || snap.toolsOpen) setWorkspaceToolsOpen(true)
+    if (snap.filterPanelOpen || snap.keepToolsExpanded) setFilterPanelOpen(true)
+    const y = snap.scrollY
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: y, left: 0, behavior: 'auto' })
+    })
+  }, [])
+
   const closeLeadDetailPanel = useCallback(() => {
     leadDetailUnsavedRef.current = false
     setSelected(null)
-  }, [])
+    setSearchParams(
+      (prev) => {
+        if (!prev.has('open')) return prev
+        const next = new URLSearchParams(prev)
+        next.delete('open')
+        return next
+      },
+      { replace: true },
+    )
+    restoreListChromeAfterDetail()
+  }, [restoreListChromeAfterDetail, setSearchParams])
 
   useEffect(() => {
     setPage(1)
@@ -749,7 +840,10 @@ export function LeadManagement() {
         if (cancelled) return
         if (!snap.exists()) return
         const row = mapDoc(openLeadIdFromUrl, snap.data() as Record<string, unknown>)
-        if (row) setSelected(row)
+        if (row) {
+          captureListChromeBeforeDetailRef.current()
+          setSelected(row)
+        }
       } catch (e) {
         console.error(e)
         if (!cancelled) {
@@ -800,6 +894,7 @@ export function LeadManagement() {
         if (!snap.exists()) return
         const row = mapDoc(leadId, snap.data() as Record<string, unknown>)
         if (row) {
+          captureListChromeBeforeDetail()
           setSelected(row)
           setSearchParams(
             (prev) => {
@@ -814,7 +909,7 @@ export function LeadManagement() {
         console.error(e)
       }
     },
-    [db, setSearchParams],
+    [db, setSearchParams, captureListChromeBeforeDetail],
   )
 
   const handleManualLeadCreated = useCallback(
@@ -1128,9 +1223,9 @@ export function LeadManagement() {
       scoreMax: prev.scoreMax,
       aiShortlistOnly: prev.aiShortlistOnly,
     }))
-    // Chỉ hydrate từ URL — không đưa score/AI vào deps để tránh ghi đè nháp khi gõ điểm.
+    // Chỉ hydrate khi chữ ký lọc đổi — không phụ thuộc cả `searchParams` (tránh mất nháp khi đổi `open` / `q`).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filterHydrateSig
-  }, [filterHydrateSig, searchParams])
+  }, [filterHydrateSig])
 
   const applyDraftFilters = useCallback(() => {
     const d = draftFilters
@@ -1161,6 +1256,8 @@ export function LeadManagement() {
       [LWF.SCHOOL]: d.school === 'ALL' ? null : d.school,
       [LWF.ASSIGN]: d.assignee ? d.assignee : null,
     })
+    setWorkspaceToolsOpen(true)
+    setFilterPanelOpen(true)
     setPage(1)
   }, [draftFilters, mergeListFilterUrl, setPage])
 
@@ -3209,8 +3306,36 @@ export function LeadManagement() {
           </div>
         </div>
 
+        {/* Chip đang lọc — luôn thấy khi mở Công cụ (không phụ thuộc bung «Bộ lọc»). */}
+        {activeFilterChips.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Đang lọc</span>
+            {activeFilterChips.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => c.onClear()}
+                className="inline-flex h-7 max-w-full items-center gap-1 rounded-md border border-amber-300/80 bg-amber-50/95 px-2 text-xs font-medium text-amber-950 transition hover:border-amber-500 hover:bg-amber-100"
+                title={`${c.label} — bấm để bỏ`}
+              >
+                <span className="min-w-0 truncate">{c.label}</span>
+                <span className="shrink-0 font-bold text-amber-800" aria-hidden>
+                  ×
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {/* Bộ lọc chi tiết */}
-        <details className="group rounded-lg border border-slate-200/80 bg-white/60 open:bg-white/90">
+        <details
+          className="group rounded-lg border border-slate-200/80 bg-white/60 open:bg-white/90"
+          open={filterPanelOpen}
+          onToggle={(e) => {
+            const next = e.currentTarget.open
+            if (next !== filterPanelOpen) setFilterPanelOpen(next)
+          }}
+        >
           <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
             <ChevronDown
               className="h-3.5 w-3.5 shrink-0 text-slate-500 transition duration-200 group-open:rotate-180"
@@ -3396,25 +3521,6 @@ export function LeadManagement() {
                 <span className="text-[11px] text-slate-500">Chọn điều kiện rồi bấm Áp dụng lọc.</span>
               )}
             </div>
-            {activeFilterChips.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Đang lọc</span>
-                {activeFilterChips.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => c.onClear()}
-                    className="inline-flex h-7 max-w-full items-center gap-1 rounded-md border border-amber-300/80 bg-amber-50/95 px-2 text-xs font-medium text-amber-950 transition hover:border-amber-500 hover:bg-amber-100"
-                    title={`${c.label} — bấm để bỏ`}
-                  >
-                    <span className="min-w-0 truncate">{c.label}</span>
-                    <span className="shrink-0 font-bold text-amber-800" aria-hidden>
-                      ×
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </div>
         </details>
 
@@ -3758,7 +3864,10 @@ export function LeadManagement() {
                 return (
                 <tr
                   key={`${l.id}-${resolvedScoringProfileId ?? 'persisted'}`}
-                  onClick={() => setSelected(l)}
+                  onClick={() => {
+                    captureListChromeBeforeDetail()
+                    setSelected(l)
+                  }}
                   title="Bấm để xem chi tiết: hồ sơ sinh viên, ghi chú, đánh giá, lịch sử tương tác, AI…"
                   className="group cursor-pointer border-b border-slate-100 hover:bg-amber-50/50"
                 >
@@ -4579,6 +4688,7 @@ export function LeadManagement() {
                 })
                 setSelected(null)
                 leadDetailUnsavedRef.current = false
+                restoreListChromeAfterDetail()
                 void refetchLeads()
               }}
             />,
@@ -4962,24 +5072,24 @@ function LeadCrmQuickBlock({
     <section
       className={
         compact
-          ? 'shrink-0 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/50 p-2 shadow-sm'
+          ? 'shrink-0 rounded-md border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/50 p-1.5 shadow-sm'
           : 'rounded-xl border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/50 p-3 shadow-sm'
       }
     >
       <h3
         className={
           compact
-            ? 'text-xs font-bold uppercase tracking-wider text-slate-600'
+            ? 'text-[10px] font-bold uppercase tracking-wider text-slate-600'
             : 'app-section-heading'
         }
       >
-        Phân công &amp; tình trạng
+        {compact ? 'Phân công' : 'Phân công & tình trạng'}
       </h3>
       {peerMode ? (
         <p
           className={
             compact
-              ? 'mt-0.5 text-xs leading-snug text-slate-600'
+              ? 'mt-0.5 text-[10px] leading-snug text-slate-600'
               : 'mt-0.5 text-sm leading-snug text-slate-600'
           }
         >
@@ -4989,7 +5099,9 @@ function LeadCrmQuickBlock({
       ) : null}
       <label
         className={
-          compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
+          compact
+            ? 'mt-1 block text-[11px] font-medium text-slate-700'
+            : 'mt-2 block text-sm font-medium text-slate-700'
         }
       >
         {reassignElevated ? 'Phụ trách (TVV / Admin)' : 'Tư vấn viên'}
@@ -4999,7 +5111,7 @@ function LeadCrmQuickBlock({
           disabled={counselorsLoading}
           className={
             compact
-              ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-[var(--color-primary)]/20 disabled:opacity-50'
+              ? 'mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] text-slate-900 outline-none focus:ring-1 focus:ring-[var(--color-primary)]/20 disabled:opacity-50'
               : 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 disabled:opacity-50'
           }
         >
@@ -5013,7 +5125,9 @@ function LeadCrmQuickBlock({
       </label>
       <label
         className={
-          compact ? 'mt-1.5 block text-xs font-medium text-slate-700' : 'mt-2 block text-sm font-medium text-slate-700'
+          compact
+            ? 'mt-1 block text-[11px] font-medium text-slate-700'
+            : 'mt-2 block text-sm font-medium text-slate-700'
         }
       >
         Tình trạng tư vấn
@@ -5022,7 +5136,7 @@ function LeadCrmQuickBlock({
           onChange={(e) => setCrmCounselorStatus(e.target.value as LeadCounselorStatus)}
           className={
             compact
-              ? 'mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-[var(--color-primary)]/20'
+              ? 'mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] text-slate-900 outline-none focus:ring-1 focus:ring-[var(--color-primary)]/20'
               : 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20'
           }
         >
@@ -5034,7 +5148,13 @@ function LeadCrmQuickBlock({
         </select>
       </label>
       {crmMsg ? (
-        <p className={compact ? 'mt-1.5 text-xs text-[var(--color-primary)]' : 'mt-2 text-sm text-[var(--color-primary)]'}>{crmMsg}</p>
+        <p
+          className={
+            compact ? 'mt-1 text-[11px] text-[var(--color-primary)]' : 'mt-2 text-sm text-[var(--color-primary)]'
+          }
+        >
+          {crmMsg}
+        </p>
       ) : null}
       <button
         type="button"
@@ -5042,7 +5162,7 @@ function LeadCrmQuickBlock({
         onClick={() => void save()}
         className={
           compact
-            ? 'mt-2 w-full rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50'
+            ? 'mt-1.5 w-full rounded border border-[var(--color-primary)] bg-[var(--color-primary)] py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50'
             : 'mt-3 w-full rounded-lg border border-[var(--color-primary)] bg-[var(--color-primary)] py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--color-primary-hover)] disabled:opacity-50'
         }
       >
@@ -6116,7 +6236,7 @@ function LeadDetailPanel({
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-7 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
+              <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
                 <nav
                   className="sticky top-0 z-10 grid shrink-0 grid-cols-2 gap-1 rounded-lg border border-slate-200/90 bg-slate-100/95 p-1 shadow-sm backdrop-blur-sm"
                   role="tablist"
@@ -6627,11 +6747,11 @@ function LeadDetailPanel({
                 </div>
               </div>
 
-              <aside className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-5 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
+              <aside className="flex min-h-0 flex-col gap-1.5 border-b border-slate-200/80 p-1.5 sm:p-2 lg:col-span-4 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
                 {crmQuickBlockVisible && db ? (
                   <>
                     <nav
-                      className="flex shrink-0 flex-wrap gap-2 rounded-xl border border-slate-200/90 bg-white p-2 shadow-sm"
+                      className="flex shrink-0 flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-white p-1 shadow-sm"
                       role="tablist"
                       aria-label="Phân công và lịch sử"
                     >
@@ -6641,13 +6761,13 @@ function LeadDetailPanel({
                         aria-selected={detailRightTab === 'assign'}
                         onClick={() => setDetailRightTab('assign')}
                         className={[
-                          'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                          'min-h-7 flex-1 rounded-md border px-2 py-1 text-left text-[11px] font-semibold tracking-tight transition sm:text-xs',
                           detailRightTab === 'assign'
-                            ? 'border-indigo-500/55 bg-gradient-to-r from-indigo-600 to-indigo-600 text-white shadow-md'
+                            ? 'border-indigo-500/55 bg-gradient-to-r from-indigo-600 to-indigo-600 text-white shadow-sm'
                             : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                         ].join(' ')}
                       >
-                        Phân công &amp; tình trạng
+                        Phân công
                       </button>
                       <button
                         type="button"
@@ -6655,13 +6775,13 @@ function LeadDetailPanel({
                         aria-selected={detailRightTab === 'history'}
                         onClick={() => setDetailRightTab('history')}
                         className={[
-                          'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
+                          'min-h-7 flex-1 rounded-md border px-2 py-1 text-left text-[11px] font-semibold tracking-tight transition sm:text-xs',
                           detailRightTab === 'history'
-                            ? 'border-sky-500/55 bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md'
+                            ? 'border-sky-500/55 bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-sm'
                             : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                         ].join(' ')}
                       >
-                        Dòng thời gian
+                        Lịch sử
                       </button>
                     </nav>
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
