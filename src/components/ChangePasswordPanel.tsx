@@ -52,8 +52,8 @@ export function ChangePasswordPanel({ compact }: { compact?: boolean }) {
 
   if (!open) {
     return (
-      <div className={compact ? 'mt-1.5' : 'mt-2 space-y-1'}>
-        {ok ? <p className="px-1 text-[11px] text-indigo-200">{ok}</p> : null}
+      <div className={compact ? 'mt-1' : 'mt-2 space-y-1'}>
+        {ok ? <p className="px-1 text-[10px] text-indigo-200">{ok}</p> : null}
         <button
           type="button"
           onClick={() => {
@@ -61,9 +61,13 @@ export function ChangePasswordPanel({ compact }: { compact?: boolean }) {
             setError(null)
             setOk(null)
           }}
-          className="flex w-full min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+          className={
+            compact
+              ? 'flex w-full min-h-7 cursor-pointer items-center justify-center gap-1 rounded-md border border-white/15 bg-white/5 px-1.5 py-1 text-[11px] font-medium text-slate-200 transition hover:bg-white/10 hover:text-white'
+              : 'flex w-full min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white'
+          }
         >
-          <KeyRound className="h-3.5 w-3.5" aria-hidden />
+          <KeyRound className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} aria-hidden />
           Đổi mật khẩu
         </button>
       </div>
@@ -71,58 +75,83 @@ export function ChangePasswordPanel({ compact }: { compact?: boolean }) {
   }
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} className="mt-1.5 space-y-1.5 rounded-lg border border-white/15 bg-white/5 p-2">
-      <p className="text-sm font-medium text-white">Đổi mật khẩu</p>
-      <label className="block text-[11px] text-slate-400">
+    <form
+      onSubmit={(e) => void onSubmit(e)}
+      className={
+        compact
+          ? 'mt-1 space-y-1 rounded-md border border-white/15 bg-white/5 p-1.5'
+          : 'mt-1.5 space-y-1.5 rounded-lg border border-white/15 bg-white/5 p-2'
+      }
+    >
+      <p className={compact ? 'text-[11px] font-medium text-white' : 'text-sm font-medium text-white'}>
+        Đổi mật khẩu
+      </p>
+      <label className={`block ${compact ? 'text-[10px]' : 'text-[11px]'} text-slate-400`}>
         Mật khẩu hiện tại
         <input
           type="password"
           autoComplete="current-password"
-          className="mt-0.5 w-full rounded-md border border-white/20 bg-slate-950/40 px-2 py-1 text-sm text-white"
+          className={`mt-0.5 w-full rounded-md border border-white/20 bg-slate-950/40 text-white ${
+            compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'
+          }`}
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           required
         />
       </label>
-      <label className="block text-[11px] text-slate-400">
+      <label className={`block ${compact ? 'text-[10px]' : 'text-[11px]'} text-slate-400`}>
         Mật khẩu mới
         <input
           type="password"
           autoComplete="new-password"
-          className="mt-0.5 w-full rounded-md border border-white/20 bg-slate-950/40 px-2 py-1 text-sm text-white"
+          className={`mt-0.5 w-full rounded-md border border-white/20 bg-slate-950/40 text-white ${
+            compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'
+          }`}
           value={nextPassword}
           onChange={(e) => setNextPassword(e.target.value)}
           minLength={6}
           required
         />
       </label>
-      <label className="block text-[11px] text-slate-400">
+      <label className={`block ${compact ? 'text-[10px]' : 'text-[11px]'} text-slate-400`}>
         Nhập lại mật khẩu mới
         <input
           type="password"
           autoComplete="new-password"
-          className="mt-0.5 w-full rounded-md border border-white/20 bg-slate-950/40 px-2 py-1 text-sm text-white"
+          className={`mt-0.5 w-full rounded-md border border-white/20 bg-slate-950/40 text-white ${
+            compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-sm'
+          }`}
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           minLength={6}
           required
         />
       </label>
-      {error ? <p className="text-[11px] text-rose-300">{error}</p> : null}
-      <div className="flex gap-1.5">
+      {error ? <p className={`text-rose-300 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>{error}</p> : null}
+      <div className="flex gap-1">
         <button
           type="submit"
           disabled={busy}
-          className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+          className={
+            compact
+              ? 'inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-indigo-600 px-1.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-60'
+              : 'inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-indigo-600 px-2 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60'
+          }
         >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+          {busy ? (
+            <Loader2 className={compact ? 'h-3 w-3 animate-spin' : 'h-3.5 w-3.5 animate-spin'} aria-hidden />
+          ) : null}
           Lưu
         </button>
         <button
           type="button"
           disabled={busy}
           onClick={() => setOpen(false)}
-          className="rounded-md border border-white/20 px-2 py-1.5 text-sm font-medium text-slate-300 hover:bg-white/10"
+          className={
+            compact
+              ? 'rounded-md border border-white/20 px-1.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-white/10'
+              : 'rounded-md border border-white/20 px-2 py-1.5 text-sm font-medium text-slate-300 hover:bg-white/10'
+          }
         >
           Hủy
         </button>

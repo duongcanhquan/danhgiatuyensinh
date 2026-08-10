@@ -429,7 +429,7 @@ function TwoColRow({ children }: { children: ReactNode }) {
 
 function PhoneFieldsRow({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-1.5 sm:col-span-2 lg:col-span-3 xl:grid-cols-2">{children}</div>
+    <div className="grid grid-cols-1 gap-1.5 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">{children}</div>
   )
 }
 
@@ -501,6 +501,7 @@ export function LeadProfileCoreForm({
   callContext,
   isNewLead = false,
   scrollContained = false,
+  fillHeight = false,
 }: {
   draft: LeadCoreDraft
   onChange: (next: LeadCoreDraft) => void
@@ -509,6 +510,8 @@ export function LeadProfileCoreForm({
   isNewLead?: boolean
   /** Modal tạo mới: vùng cha cuộn, tab dính trên; chi tiết hồ sơ: cuộn trong panel tab. */
   scrollContained?: boolean
+  /** Chi tiết hồ sơ: form lấp chiều cao còn lại, cuộn trong panel tab. */
+  fillHeight?: boolean
   leadSources?: readonly LeadSourceRecord[]
   scholarships?: readonly ScholarshipRecord[]
   catalogs?: LeadProfileCatalogBundle
@@ -627,10 +630,11 @@ export function LeadProfileCoreForm({
             />
           </Field>
           <Field label="CCCD">
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-700">
                 <input
                   type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-slate-300"
                   checked={draft.nationalIdNotAvailable}
                   disabled={disabled}
                   onChange={(e) =>
@@ -656,15 +660,27 @@ export function LeadProfileCoreForm({
               ) : null}
             </div>
           </Field>
-          <Field label="Email sinh viên">
-            <input
-              type="email"
-              className={INPUT_CLS}
-              value={draft.studentEmail}
-              disabled={disabled}
-              onChange={(e) => patch('studentEmail', e.target.value)}
-            />
-          </Field>
+          <TwoColRow>
+            <Field label="Email sinh viên">
+              <input
+                type="email"
+                className={INPUT_CLS}
+                value={draft.studentEmail}
+                disabled={disabled}
+                onChange={(e) => patch('studentEmail', e.target.value)}
+              />
+            </Field>
+            <Field label="Dân tộc">
+              <CatalogCombobox
+                value={draft.ethnicity}
+                options={DEFAULT_ETHNICITY_LABELS}
+                disabled={disabled}
+                onChange={(v) => patch('ethnicity', v)}
+                onEnsureOption={onEnsureCatalogEntry ? ensure('ethnicities') : undefined}
+                placeholder="Chọn hoặc gõ dân tộc…"
+              />
+            </Field>
+          </TwoColRow>
           <PhoneFieldsRow>
             <PhoneFieldWithCall
               label="Điện thoại sinh viên"
@@ -683,41 +699,39 @@ export function LeadProfileCoreForm({
               target="parent"
             />
           </PhoneFieldsRow>
-          <Field label="Dân tộc">
-            <CatalogCombobox
-              value={draft.ethnicity}
-              options={DEFAULT_ETHNICITY_LABELS}
-              disabled={disabled}
-              onChange={(v) => patch('ethnicity', v)}
-              onEnsureOption={onEnsureCatalogEntry ? ensure('ethnicities') : undefined}
-              placeholder="Chọn hoặc gõ dân tộc…"
-            />
-          </Field>
-          <Field label="Địa chỉ thường trú" span={noteSpan}>
-            <input
-              className={INPUT_CLS}
-              value={draft.permanentAddress}
-              disabled={disabled}
-              onChange={(e) => {
-                const v = e.target.value
-                onChange({ ...draft, permanentAddress: v, address: v })
-              }}
-            />
-          </Field>
-          <Field label="Nơi ở hiện tại" span={noteSpan}>
-            <input
-              className={INPUT_CLS}
-              value={draft.currentResidence}
-              disabled={disabled}
-              onChange={(e) => patch('currentResidence', e.target.value)}
-            />
-          </Field>
+          <TwoColRow>
+            <Field label="Địa chỉ thường trú">
+              <input
+                className={INPUT_CLS}
+                value={draft.permanentAddress}
+                disabled={disabled}
+                onChange={(e) => {
+                  const v = e.target.value
+                  onChange({ ...draft, permanentAddress: v, address: v })
+                }}
+              />
+            </Field>
+            <Field label="Nơi ở hiện tại">
+              <input
+                className={INPUT_CLS}
+                value={draft.currentResidence}
+                disabled={disabled}
+                onChange={(e) => patch('currentResidence', e.target.value)}
+              />
+            </Field>
+          </TwoColRow>
           <TwoColRow>
             <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
             <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
           </TwoColRow>
           <Field label="Nguồn tiếp nhận (ghi chú)" span={noteSpan}>
-            <input className={INPUT_CLS} value={draft.source} disabled={disabled} onChange={(e) => patch('source', e.target.value)} />
+            <input
+              className={INPUT_CLS}
+              value={draft.source}
+              disabled={disabled}
+              placeholder="Ghi chú nguồn / kênh tiếp nhận"
+              onChange={(e) => patch('source', e.target.value)}
+            />
           </Field>
         </div>
       </FormSection>
@@ -960,14 +974,25 @@ export function LeadProfileCoreForm({
       return body
     })()
 
-    const rootCls =
-      'lead-profile-form-dense flex flex-col gap-1.5 text-xs text-slate-800 ' +
-      '[&_.vm-input]:!min-h-8 [&_.vm-input]:!rounded-md [&_.vm-input]:!px-2 [&_.vm-input]:!py-1 [&_.vm-input]:!text-xs ' +
-      '[&_textarea.vm-input]:!min-h-[2.5rem] [&_select]:text-xs'
+    const rootCls = [
+      'lead-profile-form-dense flex flex-col gap-1.5 text-xs text-slate-800',
+      '[&_.vm-input]:!min-h-8 [&_.vm-input]:!rounded-md [&_.vm-input]:!px-2 [&_.vm-input]:!py-1 [&_.vm-input]:!text-xs',
+      '[&_textarea.vm-input]:!min-h-[2.5rem] [&_select]:text-xs',
+      fillHeight ? 'min-h-0 flex-1 overflow-hidden' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
 
-    const panelCls = scrollContained
-      ? 'rounded-lg border border-slate-200/90 bg-white p-2 sm:p-2.5'
-      : 'min-h-[14rem] overflow-y-auto overscroll-y-contain rounded-lg border border-slate-200/90 bg-white p-2 sm:p-2.5 [scrollbar-width:thin]'
+    const panelCls = [
+      'scroll-touch rounded-lg border border-slate-200/90 bg-white p-2 sm:p-2.5 [scrollbar-width:thin]',
+      scrollContained
+        ? ''
+        : fillHeight
+          ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain pb-10'
+          : 'min-h-[14rem] overflow-y-auto overscroll-y-contain',
+    ]
+      .filter(Boolean)
+      .join(' ')
 
     return (
       <div className={rootCls}>
@@ -976,7 +1001,7 @@ export function LeadProfileCoreForm({
           onChange={setActiveTab}
           compact
           tabs={visibleTabs}
-          sticky={scrollContained}
+          sticky={scrollContained || fillHeight}
         />
         <div
           ref={tabPanelRef}

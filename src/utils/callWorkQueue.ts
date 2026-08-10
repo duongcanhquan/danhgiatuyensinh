@@ -1,7 +1,13 @@
 import { Timestamp } from 'firebase/firestore'
-import type { Interaction, Lead, LeadScoringSignals, PriorityTag } from '../types'
+import type {
+  Interaction,
+  Lead,
+  LeadCounselorStatus,
+  LeadPipelineStatus,
+  LeadScoringSignals,
+  PriorityTag,
+} from '../types'
 import { buildLastCallLeadPatch, effectiveLastCallAt } from './leadCallSignals'
-import { maxPriorityTag } from './leadPriorityTag'
 
 export type CallWorkBucket = 'uncalled' | 'callback' | 'called'
 
@@ -192,13 +198,11 @@ export function buildCallWorkLeadPatch(input: {
     patch.callAttemptCount = Math.max(0, Math.floor(input.previousAttemptCount ?? 0)) + 1
   }
 
-  if (def.id === 'college_hot') {
-    patch.callEvalPriorityBoost = 'HOT'
-    patch.priorityTag = 'HOT'
-  }
+  const effects = getDispositionLeadEffects(def.id)
+  if (effects.priorityTag) patch.priorityTag = effects.priorityTag
+  if (effects.callEvalPriorityBoost) patch.callEvalPriorityBoost = effects.callEvalPriorityBoost
 
   if (def.id === 'enrolled_elsewhere') {
-    patch.priorityTag = 'LOSS'
     const prev = input.existingScoringSignals ?? {}
     patch.scoringSignals = { ...prev, enrolledElsewhere: true }
   }
@@ -251,25 +255,102 @@ export function buildConnectedClearSoftLeadPatch(input: {
 }
 
 /**
- * Sau khi chấm điểm / boost eval — ép lại nhãn theo disposition (tránh score đè LOSS/HOT).
+ * Map phản hồi nhanh → nhãn + tình trạng tư vấn + tình trạng hồ sơ (bảng cố định).
+ * Nút không có trong map → `{}` (không đổi).
+ */
+export type DispositionLeadEffects = {
+  priorityTag?: PriorityTag
+  callEvalPriorityBoost?: PriorityTag
+  clearCallEvalPriorityBoost?: boolean
+  status?: LeadCounselorStatus
+  pipelineStatus?: LeadPipelineStatus
+}
+
+export function getDispositionLeadEffects(dispositionId: CallDispositionId): DispositionLeadEffects {
+  switch (dispositionId) {
+    case 'high_interest':
+      return {
+        priorityTag: 'HOT',
+        callEvalPriorityBoost: 'HOT',
+        status: 'INTERESTED',
+        pipelineStatus: 'QUALIFIED',
+      }
+    case 'college_hot':
+      return {
+        priorityTag: 'HOT',
+        callEvalPriorityBoost: 'HOT',
+        status: 'INTERESTED',
+        pipelineStatus: 'QUALIFIED',
+      }
+    case 'positive':
+    case 'uni_top_high':
+    case 'uni_top_mid':
+      return {
+        priorityTag: 'WARM',
+        status: 'INTERESTED',
+        pipelineStatus: 'CONTACTED',
+      }
+    case 'undecided_school':
+    case 'undecided':
+    case 'financial_issue':
+    case 'unclear':
+    case 'callback_later':
+      return {
+        priorityTag: 'WARM',
+        status: 'INTERESTED',
+        pipelineStatus: 'CONTACTED',
+      }
+    case 'knm':
+    case 'wrong_number':
+    case 'working':
+      return {}
+    case 'not_interested':
+    case 'negative':
+      return {
+        priorityTag: 'COLD',
+        status: 'DEAD',
+        pipelineStatus: 'LOST',
+      }
+    case 'enrolled_elsewhere':
+      return {
+        priorityTag: 'LOSS',
+        clearCallEvalPriorityBoost: true,
+        status: 'DEAD',
+        pipelineStatus: 'LOST',
+      }
+    default:
+      return {}
+  }
+}
+
+/**
+ * Sau khi chấm điểm / boost eval — ép lại nhãn theo disposition (tránh score đè LOSS/HOT/WARM/COLD).
  * Trả về field cần ghi; `clearCallEvalPriorityBoost` → caller dùng deleteField().
+ * `currentPriorityTag` giữ để tương thích caller cũ (map cố định — không còn max với nhãn hiện tại).
  */
 export function dispositionPriorityOverridesAfterScoring(
   dispositionId: CallDispositionId,
-  currentPriorityTag: PriorityTag | undefined,
+  _currentPriorityTag?: PriorityTag,
 ): {
   priorityTag?: PriorityTag
   callEvalPriorityBoost?: PriorityTag
   clearCallEvalPriorityBoost?: boolean
 } {
-  if (dispositionId === 'enrolled_elsewhere') {
-    return { priorityTag: 'LOSS', clearCallEvalPriorityBoost: true }
+  const fx = getDispositionLeadEffects(dispositionId)
+  const out: {
+    priorityTag?: PriorityTag
+    callEvalPriorityBoost?: PriorityTag
+    clearCallEvalPriorityBoost?: boolean
+  } = {}
+  if (fx.priorityTag) out.priorityTag = fx.priorityTag
+  if (fx.callEvalPriorityBoost) {
+    out.callEvalPriorityBoost = fx.callEvalPriorityBoost
+  } else if (fx.priorityTag || fx.clearCallEvalPriorityBoost) {
+    // Tránh boost HOT cũ đè nhãn WARM/COLD/LOSS vừa gán.
+    out.clearCallEvalPriorityBoost = true
   }
-  if (dispositionId === 'college_hot') {
-    const tag = currentPriorityTag ? maxPriorityTag(currentPriorityTag, 'HOT') : 'HOT'
-    return { priorityTag: tag, callEvalPriorityBoost: 'HOT' }
-  }
-  return {}
+  if (fx.clearCallEvalPriorityBoost) out.clearCallEvalPriorityBoost = true
+  return out
 }
 
 export type CallWorkBucketFilter = 'all' | CallWorkBucket

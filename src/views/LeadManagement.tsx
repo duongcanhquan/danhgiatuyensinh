@@ -105,6 +105,7 @@ import {
   buildCallWorkLeadPatch,
   dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
+  getDispositionLeadEffects,
   isCallDispositionId,
   leadMatchesCallWorkBucket,
   leadMatchesDisposition,
@@ -3814,8 +3815,8 @@ export function LeadManagement() {
                   Ghi chú
                 </th>
                 <th
-                  className="w-[14%] max-w-[11rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Tương tác gần nhất: gọi điện, cập nhật hồ sơ…"
+                  className="w-[16%] max-w-[14rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Tương tác gần nhất: loại + nội dung ghi chú / phản hồi đầy đủ"
                 >
                   Tương tác gần nhất
                 </th>
@@ -3995,10 +3996,12 @@ export function LeadManagement() {
                     {notePreview.text}
                   </td>
                   <td
-                    className="truncate px-1.5 py-1.5 text-slate-600"
+                    className="px-1.5 py-1.5 text-slate-600"
                     title={latestInteraction !== '—' ? latestInteraction : undefined}
                   >
-                    {latestInteraction}
+                    <span className="line-clamp-3 whitespace-pre-wrap break-words text-[12px] leading-snug">
+                      {latestInteraction}
+                    </span>
                   </td>
                   <td className="px-1.5 py-1.5 font-medium tabular-nums text-[var(--color-primary)]">
                     {displayScore}
@@ -5830,11 +5833,11 @@ function LeadDetailPanel({
       setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này (cần Admin hoặc TVV được gán + quyền ghi hồ sơ).')
       return
     }
-    if (crmChanged && !canMutateLead) {
+    if (crmChanged && !canMutateLead && !dispChanged) {
       setMsg('Bạn không có quyền đổi tình trạng tư vấn trên hồ sơ này.')
       return
     }
-    if (pipeChanged && !noteDidChange && !canMutateLead) {
+    if (pipeChanged && !noteDidChange && !canMutateLead && !dispChanged) {
       setMsg(
         'Để chỉnh tình trạng hồ sơ không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc sửa ghi chú TVV rồi bấm «Lưu cập nhật»).',
       )
@@ -5894,21 +5897,17 @@ function LeadDetailPanel({
         ...corePatch,
         ...callWorkFields,
       }
-      if (dispChanged && nextDispositionId === 'enrolled_elsewhere') {
-        const overrides = dispositionPriorityOverridesAfterScoring('enrolled_elsewhere', lead.priorityTag)
-        leadFirestorePatch.priorityTag = 'LOSS'
-        if (overrides.clearCallEvalPriorityBoost) {
-          leadFirestorePatch.callEvalPriorityBoost = deleteField()
-          leadFirestorePatch.callEvalPriorityBoostAt = deleteField()
-        }
-      } else if (dispChanged && nextDispositionId === 'college_hot') {
+      if (dispChanged && nextDispositionId) {
         const scored =
           typeof scoreFields.priorityTag === 'string'
             ? (scoreFields.priorityTag as PriorityTag)
             : lead.priorityTag
-        const ov = dispositionPriorityOverridesAfterScoring('college_hot', scored)
+        const ov = dispositionPriorityOverridesAfterScoring(nextDispositionId, scored)
         if (ov.priorityTag) leadFirestorePatch.priorityTag = ov.priorityTag
-        if (ov.callEvalPriorityBoost) {
+        if (ov.clearCallEvalPriorityBoost) {
+          leadFirestorePatch.callEvalPriorityBoost = deleteField()
+          leadFirestorePatch.callEvalPriorityBoostAt = deleteField()
+        } else if (ov.callEvalPriorityBoost) {
           leadFirestorePatch.callEvalPriorityBoost = ov.callEvalPriorityBoost
           leadFirestorePatch.callEvalPriorityBoostAt = Timestamp.now()
         }
@@ -5918,15 +5917,22 @@ function LeadDetailPanel({
         if (pipeChanged) leadFirestorePatch.pipelineStatus = statusForForm
         else if (crmChanged) leadFirestorePatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
       }
-      const activityFromNote =
-        noteDidChange && noteTrim
+      const dispDefForActivity = nextDispositionId ? getCallDisposition(nextDispositionId) : undefined
+      const activityFromInteraction =
+        dispChanged && dispDefForActivity
           ? leadListActivityPatch({
-              kind: 'note',
-              summary: 'Ghi chú TVV',
-              counselorNote: noteTrim,
+              kind: 'call',
+              summary: dispDefForActivity.label,
+              counselorNote: noteTrim || null,
             })
-          : null
-      if (activityFromNote) Object.assign(leadFirestorePatch, activityFromNote)
+          : noteDidChange && noteTrim
+            ? leadListActivityPatch({
+                kind: 'note',
+                summary: noteTrim,
+                counselorNote: noteTrim,
+              })
+            : null
+      if (activityFromInteraction) Object.assign(leadFirestorePatch, activityFromInteraction)
 
       await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadFirestorePatch)
 
@@ -6002,7 +6008,7 @@ function LeadDetailPanel({
         }
       }
 
-      const dispDef = nextDispositionId ? getCallDisposition(nextDispositionId) : undefined
+      const dispDef = dispDefForActivity
       if ((noteDidChange && noteTrim) || dispChanged) {
         const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
         const counselorNote =
@@ -6037,6 +6043,20 @@ function LeadDetailPanel({
         })
       }
 
+      const clearedBoost =
+        dispChanged &&
+        nextDispositionId &&
+        Boolean(dispositionPriorityOverridesAfterScoring(nextDispositionId).clearCallEvalPriorityBoost)
+
+      const activityLocal = activityFromInteraction
+        ? {
+            lastCounselorNote: activityFromInteraction.lastCounselorNote,
+            lastInteractionAt: activityFromInteraction.lastInteractionAt,
+            lastInteractionKind: activityFromInteraction.lastInteractionKind,
+            lastInteractionSummary: activityFromInteraction.lastInteractionSummary,
+          }
+        : {}
+
       const nextLead: Lead = {
         ...lead,
         ...dataPatch,
@@ -6045,14 +6065,12 @@ function LeadDetailPanel({
         ...(typeof leadFirestorePatch.priorityTag === 'string'
           ? { priorityTag: leadFirestorePatch.priorityTag as PriorityTag }
           : {}),
-        ...(activityFromNote
-          ? {
-              lastCounselorNote: activityFromNote.lastCounselorNote,
-              lastInteractionAt: activityFromNote.lastInteractionAt,
-              lastInteractionKind: activityFromNote.lastInteractionKind,
-              lastInteractionSummary: activityFromNote.lastInteractionSummary,
-            }
-          : {}),
+        ...activityLocal,
+        ...(clearedBoost
+          ? { callEvalPriorityBoost: undefined, callEvalPriorityBoostAt: undefined }
+          : typeof leadFirestorePatch.callEvalPriorityBoost === 'string'
+            ? { callEvalPriorityBoost: leadFirestorePatch.callEvalPriorityBoost as PriorityTag }
+            : {}),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       }
@@ -6065,14 +6083,12 @@ function LeadDetailPanel({
         ...(typeof leadFirestorePatch.priorityTag === 'string'
           ? { priorityTag: leadFirestorePatch.priorityTag as PriorityTag }
           : {}),
-        ...(activityFromNote
-          ? {
-              lastCounselorNote: activityFromNote.lastCounselorNote,
-              lastInteractionAt: activityFromNote.lastInteractionAt,
-              lastInteractionKind: activityFromNote.lastInteractionKind,
-              lastInteractionSummary: activityFromNote.lastInteractionSummary,
-            }
-          : {}),
+        ...activityLocal,
+        ...(clearedBoost
+          ? { callEvalPriorityBoost: undefined, callEvalPriorityBoostAt: undefined }
+          : typeof leadFirestorePatch.callEvalPriorityBoost === 'string'
+            ? { callEvalPriorityBoost: leadFirestorePatch.callEvalPriorityBoost as PriorityTag }
+            : {}),
         updatedAt: touch.updatedAt,
         lastTouchedAt: touch.lastTouchedAt,
       })
@@ -6302,7 +6318,7 @@ function LeadDetailPanel({
       <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
+              <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:h-full lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
                 <nav
                   className="sticky top-0 z-10 flex shrink-0 items-stretch gap-1 rounded-lg border border-slate-200/90 bg-slate-100/95 p-0.5 shadow-sm backdrop-blur-sm"
                   role="tablist"
@@ -6480,11 +6496,17 @@ function LeadDetailPanel({
                   </div>
                   </section>
                 </details>
-                <div className="scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                <div
+                  className={
+                    detailLeftTab === 'profile'
+                      ? 'flex min-h-0 flex-1 flex-col max-lg:min-h-[min(70dvh,36rem)] lg:overflow-hidden'
+                      : 'scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain'
+                  }
+                >
                   {detailLeftTab === 'profile' ? (
-                    <aside className="flex min-h-0 flex-1 flex-col space-y-1.5 text-xs leading-snug text-slate-800">
-                      <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200/90 bg-white p-1.5 shadow-sm sm:p-2">
-                        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-100 pb-1.5">
+                    <aside className="flex min-h-0 flex-1 flex-col text-xs leading-snug text-slate-800 lg:overflow-hidden">
+                      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/90 bg-white p-1.5 shadow-sm sm:p-2">
+                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-slate-100 pb-1.5">
                           <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-600">
                             <span className="tabular-nums">
                               Điểm: {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
@@ -6518,7 +6540,7 @@ function LeadDetailPanel({
                         {msg && detailLeftTab === 'profile' ? (
                           <p className="mt-1 shrink-0 text-[11px] font-medium text-amber-900">{msg}</p>
                         ) : null}
-                        <div className="mt-1.5 flex flex-col">
+                        <div className="mt-1.5 flex min-h-0 flex-1 flex-col overflow-hidden">
                           <LeadProfileCoreForm
                             draft={coreDraft}
                             onChange={setCoreDraft}
@@ -6529,6 +6551,7 @@ function LeadDetailPanel({
                             onEnsureCatalogEntry={onEnsureCatalogEntry}
                             layout="tabs"
                             wideGrid
+                            fillHeight
                             callContext={{
                               leadId: lead.id,
                               leadName: lead.fullName || lead.customerId || 'Hồ sơ',
@@ -6553,7 +6576,7 @@ function LeadDetailPanel({
                           />
                         </div>
                         {!showCounselorProgressForm ? (
-                          <p className="mt-2 shrink-0 text-[10px] text-amber-800">
+                          <p className="mt-1 shrink-0 text-[10px] text-amber-800">
                             Chỉ xem — không có quyền sửa thông tin hồ sơ (Admin hoặc TVV được gán).
                           </p>
                         ) : null}
@@ -6635,6 +6658,9 @@ function LeadDetailPanel({
                                       </button>
                                     ) : null}
                                   </div>
+                                  <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                                    Chọn nút sẽ điền sẵn tình trạng tư vấn / hồ sơ; bấm «Lưu cập nhật» để ghi nhãn HOT/WARM…
+                                  </p>
                                   <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
                                     {CALL_DISPOSITIONS.map((d) => {
                                       const selected = dispositionDraft === d.id
@@ -6644,7 +6670,17 @@ function LeadDetailPanel({
                                           type="button"
                                           aria-pressed={selected}
                                           title={d.label}
-                                          onClick={() => setDispositionDraft(selected ? '' : d.id)}
+                                          onClick={() => {
+                                            if (selected) {
+                                              setDispositionDraft('')
+                                              return
+                                            }
+                                            setDispositionDraft(d.id)
+                                            const fx = getDispositionLeadEffects(d.id)
+                                            // Có map → điền sẵn; không map (KNM…) → trả form về giá trị đang lưu trên hồ sơ.
+                                            setCrmDirty(fx.status ?? null)
+                                            setStatusDirty(fx.pipelineStatus ?? null)
+                                          }}
                                           className={[
                                             'min-h-9 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold leading-snug transition sm:text-xs',
                                             selected

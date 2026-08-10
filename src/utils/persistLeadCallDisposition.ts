@@ -6,6 +6,7 @@ import {
   buildCallWorkLeadPatch,
   dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
+  getDispositionLeadEffects,
   isCallDispositionId,
   type CallDispositionId,
 } from './callWorkQueue'
@@ -62,6 +63,7 @@ export async function persistLeadCallDisposition(
   })
 
   const overrides = dispositionPriorityOverridesAfterScoring(def.id, lead.priorityTag)
+  const effects = getDispositionLeadEffects(def.id)
 
   const note =
     input.counselorNote?.trim() ||
@@ -84,6 +86,8 @@ export async function persistLeadCallDisposition(
     leadPatch.callEvalPriorityBoost = overrides.callEvalPriorityBoost
     leadPatch.callEvalPriorityBoostAt = Timestamp.now()
   }
+  if (effects.status) leadPatch.status = effects.status
+  if (effects.pipelineStatus) leadPatch.pipelineStatus = effects.pipelineStatus
 
   await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), leadPatch)
 
@@ -97,8 +101,9 @@ export async function persistLeadCallDisposition(
     callOutcome: workPatch.lastCallOutcome,
     callDispositionId: def.id,
     callDispositionLabel: def.label,
-    snapshotCrmStatus: lead.status,
-    snapshotPipelineStatus: lead.pipelineStatus,
+    snapshotCrmStatus: (leadPatch.status as Lead['status'] | undefined) ?? lead.status,
+    snapshotPipelineStatus:
+      (leadPatch.pipelineStatus as Lead['pipelineStatus'] | undefined) ?? lead.pipelineStatus,
     snapshotPriorityTag: (leadPatch.priorityTag as PriorityTag | undefined) ?? lead.priorityTag,
   })
 

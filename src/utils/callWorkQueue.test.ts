@@ -8,6 +8,7 @@ import {
   buildNoAnswerSoftCallWorkPatch,
   dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
+  getDispositionLeadEffects,
   isSoftOverwritableDisposition,
   callWorkQueueRank,
   compareCallWorkQueueOrder,
@@ -237,14 +238,52 @@ describe('dispositionPriorityOverridesAfterScoring', () => {
     })
   })
 
-  it('keeps at least HOT for college_hot', () => {
+  it('forces HOT for college_hot and high_interest', () => {
     expect(dispositionPriorityOverridesAfterScoring('college_hot', 'WARM')).toEqual({
       priorityTag: 'HOT',
       callEvalPriorityBoost: 'HOT',
     })
-    expect(dispositionPriorityOverridesAfterScoring('college_hot', 'HOT')).toEqual({
+    expect(dispositionPriorityOverridesAfterScoring('high_interest', 'COLD')).toEqual({
       priorityTag: 'HOT',
       callEvalPriorityBoost: 'HOT',
+    })
+  })
+
+  it('forces WARM / COLD for positive and not_interested', () => {
+    expect(dispositionPriorityOverridesAfterScoring('positive')).toEqual({
+      priorityTag: 'WARM',
+      clearCallEvalPriorityBoost: true,
+    })
+    expect(dispositionPriorityOverridesAfterScoring('not_interested')).toEqual({
+      priorityTag: 'COLD',
+      clearCallEvalPriorityBoost: true,
+    })
+  })
+
+  it('does not clear boost for knm (no tag map)', () => {
+    expect(dispositionPriorityOverridesAfterScoring('knm')).toEqual({})
+  })
+})
+
+describe('getDispositionLeadEffects', () => {
+  it('maps high_interest to HOT + INTERESTED + QUALIFIED', () => {
+    expect(getDispositionLeadEffects('high_interest')).toEqual({
+      priorityTag: 'HOT',
+      callEvalPriorityBoost: 'HOT',
+      status: 'INTERESTED',
+      pipelineStatus: 'QUALIFIED',
+    })
+  })
+
+  it('leaves knm unchanged', () => {
+    expect(getDispositionLeadEffects('knm')).toEqual({})
+  })
+
+  it('maps negative to COLD + DEAD + LOST', () => {
+    expect(getDispositionLeadEffects('negative')).toEqual({
+      priorityTag: 'COLD',
+      status: 'DEAD',
+      pipelineStatus: 'LOST',
     })
   })
 })

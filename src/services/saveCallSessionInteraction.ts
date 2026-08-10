@@ -42,6 +42,7 @@ import {
   buildCallWorkLeadPatch,
   dispositionPriorityOverridesAfterScoring,
   getCallDisposition,
+  getDispositionLeadEffects,
   isCallDispositionId,
   type CallDispositionId,
 } from '../utils/callWorkQueue'
@@ -296,7 +297,7 @@ export async function saveCallSessionInteraction(
     Object.assign(leadPatch, scoreFields)
   }
 
-  // Disposition thắng score/boost: LOSS / HOT không bị chấm điểm đè.
+  // Disposition thắng score/boost: LOSS / HOT / WARM / COLD + tình trạng theo bảng cố định.
   if (dispositionId) {
     const scoredTag =
       typeof leadPatch.priorityTag === 'string'
@@ -311,6 +312,9 @@ export async function saveCallSessionInteraction(
       leadPatch.callEvalPriorityBoost = overrides.callEvalPriorityBoost
       leadPatch.callEvalPriorityBoostAt = Timestamp.now()
     }
+    const effects = getDispositionLeadEffects(dispositionId)
+    if (effects.status) leadPatch.status = effects.status
+    if (effects.pipelineStatus) leadPatch.pipelineStatus = effects.pipelineStatus
   }
 
   Object.assign(

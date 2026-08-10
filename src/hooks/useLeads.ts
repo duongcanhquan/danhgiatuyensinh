@@ -387,7 +387,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       })(),
       lastInteractionSummary:
         data.lastInteractionSummary !== undefined && data.lastInteractionSummary !== null
-          ? String(data.lastInteractionSummary).slice(0, 160)
+          ? String(data.lastInteractionSummary).slice(0, 500)
           : undefined,
       lastCalledByLabel:
         data.lastCalledByLabel !== undefined && data.lastCalledByLabel !== null

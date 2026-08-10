@@ -11,6 +11,12 @@ const KIND_LABEL: Record<LeadListActivityKind, string> = {
   system: 'Hệ thống',
 }
 
+/** Nhãn kỹ thuật / outcome ngắn — không đủ làm nội dung cột «Tương tác gần nhất». */
+const GENERIC_SUMMARY_RE =
+  /^(Ghi chú TVV|Ghi chú nhanh|Ghi chú|Gọi điện|Cập nhật hồ sơ|Hệ thống|Đánh giá cuộc gọi|Cuộc gọi|Đã bắt máy|Không bắt máy|Cần gọi lại)$/i
+
+const SUMMARY_MAX = 500
+
 function isTs(v: unknown): v is Timestamp {
   return Boolean(v && typeof v === 'object' && typeof (v as Timestamp).toMillis === 'function')
 }
@@ -24,10 +30,36 @@ function formatShortWhen(at: Timestamp): string {
   })
 }
 
+/**
+ * Ghép nhãn loại tương tác + nội dung ghi chú thành tóm tắt đầy đủ cho bảng.
+ * Ưu tiên nội dung ghi chú khi summary chỉ là nhãn chung.
+ */
+export function composeInteractionSummary(
+  summary: string,
+  counselorNote?: string | null,
+  max = SUMMARY_MAX,
+): string {
+  const base = summary.replace(/\s+/g, ' ').trim()
+  const note = (counselorNote ?? '').replace(/\s+/g, ' ').trim()
+  let out: string
+  if (note && (!base || GENERIC_SUMMARY_RE.test(base))) {
+    out = note
+  } else if (note && base && note !== base) {
+    if (base.includes(note) || note.includes(base)) {
+      out = note.length >= base.length ? note : base
+    } else {
+      out = `${base} — ${note}`
+    }
+  } else {
+    out = base || note
+  }
+  return out.slice(0, max)
+}
+
 /** Ghi denormalize lên lead để cột bảng không cần đọc subcollection. */
 export function leadListActivityPatch(input: {
   kind: LeadListActivityKind
-  /** Mô tả ngắn (vd. «Gọi lại sau», «Sửa SĐT»). */
+  /** Nhãn ngắn (vd. «Gọi lại sau») — sẽ ghép với ghi chú nếu có. */
   summary: string
   counselorNote?: string | null
   at?: Timestamp
@@ -38,7 +70,9 @@ export function leadListActivityPatch(input: {
   lastCounselorNote?: string
 } {
   const at = input.at ?? Timestamp.now()
-  const summary = input.summary.trim().slice(0, 160) || KIND_LABEL[input.kind]
+  const note = input.counselorNote?.trim()
+  const summary =
+    composeInteractionSummary(input.summary, note ?? null, SUMMARY_MAX) || KIND_LABEL[input.kind]
   const out: {
     lastInteractionAt: Timestamp
     lastInteractionKind: LeadListActivityKind
@@ -49,8 +83,7 @@ export function leadListActivityPatch(input: {
     lastInteractionKind: input.kind,
     lastInteractionSummary: summary,
   }
-  const note = input.counselorNote?.trim()
-  if (note) out.lastCounselorNote = note.slice(0, 500)
+  if (note) out.lastCounselorNote = note.slice(0, SUMMARY_MAX)
   return out
 }
 
@@ -67,13 +100,14 @@ export function formatLeadCounselorNotePreview(
   }
 }
 
-/** Cột «Tương tác gần nhất». */
+/** Cột «Tương tác gần nhất» — đủ nội dung ghi chú / phản hồi, kèm thời điểm. */
 export function formatLeadLatestInteractionLine(
   lead: Pick<
     Lead,
     | 'lastInteractionAt'
     | 'lastInteractionKind'
     | 'lastInteractionSummary'
+    | 'lastCounselorNote'
     | 'lastCallAt'
     | 'lastCallAiAt'
     | 'lastCalledByLabel'
@@ -83,14 +117,19 @@ export function formatLeadLatestInteractionLine(
     | 'updatedAt'
   >,
 ): string {
-  if (isTs(lead.lastInteractionAt) && (lead.lastInteractionSummary || lead.lastInteractionKind)) {
+  if (isTs(lead.lastInteractionAt) && (lead.lastInteractionSummary || lead.lastInteractionKind || lead.lastCounselorNote)) {
     const kind =
       lead.lastInteractionKind && KIND_LABEL[lead.lastInteractionKind]
         ? KIND_LABEL[lead.lastInteractionKind]
         : null
-    const summary = (lead.lastInteractionSummary ?? '').trim()
+    const summary = composeInteractionSummary(
+      lead.lastInteractionSummary ?? '',
+      lead.lastCounselorNote,
+      SUMMARY_MAX,
+    )
     const when = formatShortWhen(lead.lastInteractionAt)
-    const head = kind && summary && !summary.startsWith(kind) ? `${kind} · ${summary}` : summary || kind || 'Tương tác'
+    const head =
+      kind && summary && !summary.startsWith(kind) ? `${kind} · ${summary}` : summary || kind || 'Tương tác'
     return `${head} · ${when}`
   }
 

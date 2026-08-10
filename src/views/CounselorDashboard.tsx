@@ -222,7 +222,7 @@ function CounselorLeadListRow({
         ...leadTouchPatch(),
         ...leadListActivityPatch({
           kind: 'note',
-          summary: 'Ghi chú nhanh',
+          summary: text.trim(),
           counselorNote: text.trim(),
         }),
       }
