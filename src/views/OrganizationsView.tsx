@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
-import { Building2, ChevronDown, Download, Loader2, Plus, Settings2, Pencil, Trash2, UserCog } from 'lucide-react'
+import { Building2, Download, Loader2, Plus, Settings2, Pencil, Trash2, UserCog } from 'lucide-react'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
+import { TabStrip } from '../components/TabStrip'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { FS_COLLECTIONS, type Organization } from '../types'
@@ -34,6 +35,9 @@ import {
 } from '../utils/roleCapabilitiesConfig'
 
 type OrgRow = Organization & { id: string }
+
+type MainTab = 'list' | 'edit' | 'create' | 'audit'
+type EditSection = 'info' | 'caps' | 'admins'
 
 type AuditRow = {
   id: string
@@ -87,9 +91,32 @@ export function OrganizationsView() {
   const [pwdDraftByUid, setPwdDraftByUid] = useState<Record<string, string>>({})
   const [capsDraft, setCapsDraft] = useState<OrgRoleCapabilities>(defaultRoleCapabilities())
   const [capsLoaded, setCapsLoaded] = useState(false)
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [mainTab, setMainTab] = useState<MainTab>('list')
+  const [editSection, setEditSection] = useState<EditSection>('info')
 
   const detailOrg = useMemo(() => rows.find((r) => r.id === detailId) ?? null, [rows, detailId])
+
+  const mainTabItems = useMemo(() => {
+    const items: { id: MainTab; label: string }[] = [{ id: 'list', label: 'Danh sách' }]
+    if (detailOrg) items.push({ id: 'edit', label: 'Sửa trường' })
+    items.push({ id: 'create', label: 'Tạo trường' }, { id: 'audit', label: 'Nhật ký' })
+    return items
+  }, [detailOrg])
+
+  const openEdit = useCallback((orgId: string) => {
+    setDetailId(orgId)
+    setEditSection('info')
+    setMainTab('edit')
+  }, [])
+
+  const closeEdit = useCallback(() => {
+    setDetailId(null)
+    setMainTab('list')
+  }, [])
+
+  useEffect(() => {
+    if (mainTab === 'edit' && !detailOrg) setMainTab('list')
+  }, [mainTab, detailOrg])
 
   useEffect(() => {
     if (!isPlatform || !isFirebaseConfigured()) {
@@ -144,9 +171,7 @@ export function OrganizationsView() {
         setError(null)
         setDetailId((prev) => {
           if (prev && list.some((r) => r.id === prev && r.status !== 'deleted')) return prev
-          const visible = list.filter((r) => r.status !== 'deleted')
-          const vietmy = visible.find((r) => r.id === DEFAULT_ORG_ID)
-          return vietmy?.id ?? visible[0]?.id ?? null
+          return null
         })
       },
       (e) => {
@@ -352,6 +377,8 @@ export function OrganizationsView() {
       setAdminDisplayName('')
       setActiveOrgId(result.orgId)
       setDetailId(result.orgId)
+      setEditSection('info')
+      setMainTab('edit')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không tạo được trường.')
     } finally {
@@ -391,7 +418,10 @@ export function OrganizationsView() {
     try {
       await softDeleteOrganization(db, actor, org.id, org.name)
       if (effectiveOrgId === org.id) setActiveOrgId(DEFAULT_ORG_ID)
-      if (detailId === org.id) setDetailId(null)
+      if (detailId === org.id) {
+        setDetailId(null)
+        setMainTab('list')
+      }
       setBanner(`Đã xóa «${org.name}» khỏi danh sách trường.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không xóa được trường.')
@@ -693,12 +723,6 @@ export function OrganizationsView() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
-        <BentoStat label="Đang hoạt động" value={loading ? '…' : String(activeCount)} tone="accent" />
-        <BentoStat label="Tạm ngưng" value={loading ? '…' : String(suspendedCount)} tone="ink" />
-        <BentoStat label="Đang chọn" value={effectiveOrgId} hint="Trong CRM" />
-      </BentoGrid>
-
       {banner ? (
         <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">{banner}</div>
       ) : null}
@@ -706,396 +730,434 @@ export function OrganizationsView() {
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
       ) : null}
 
-      <BentoCell colSpan={4} className="!p-0 overflow-hidden">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Danh sách trường</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Bấm <strong>Sửa</strong> để đổi thông tin trường và quản lý (admin). <strong>Xóa</strong> ẩn trường khỏi
-            CRM (giữ dữ liệu hồ sơ). Trường Việt Mỹ (dữ liệu cũ) luôn nằm đầu danh sách — không xóa được.
-          </p>
-        </div>
-        {loading ? (
-          <p className="px-4 py-6 text-sm text-slate-600">Đang tải…</p>
-        ) : visibleRows.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-slate-600">
-            Chưa có trường nào trong danh sách — tạo trường đầu tiên bên trên, hoặc nhờ kỹ thuật chạy đồng bộ dữ liệu Phase 0.
-          </p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {visibleRows.map((org) => {
-              const health = healthByOrg[org.id]
-              const open = detailId === org.id
-              return (
-                <li key={org.id} className="px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-900">
-                        {org.name}
-                        {org.id === DEFAULT_ORG_ID ? (
-                          <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-800">
-                            Mặc định · dữ liệu cũ
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="truncate text-xs text-slate-500">
-                        {org.id} · /dang-ky/{org.slug} ·{' '}
-                        <span className={org.status === 'active' ? 'text-indigo-700' : 'text-amber-700'}>
-                          {org.status === 'active' ? 'Đang hoạt động' : 'Tạm ngưng'}
-                        </span>
-                        {health ? (
-                          <>
-                            {' '}
-                            · {health.bandLabel} ({health.leadCount7d} hồ sơ/7 ngày)
-                          </>
-                        ) : (
-                          ' · Đang đo…'
-                        )}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
-                      disabled={busy}
-                      onClick={() => setDetailId(open ? null : org.id)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden />
-                      {open ? 'Đóng' : 'Sửa'}
-                    </button>
-                    <button
-                      type="button"
-                      className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
-                      disabled={busy || org.id === DEFAULT_ORG_ID}
-                      title={org.id === DEFAULT_ORG_ID ? 'Không xóa trường mặc định Việt Mỹ' : 'Xóa khỏi danh sách'}
-                      onClick={() => void onSoftDelete(org)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                      Xóa
-                    </button>
-                    <button
-                      type="button"
-                      className="vm-btn vm-btn-secondary text-xs"
-                      disabled={busy || org.status !== 'active'}
-                      onClick={() => setActiveOrgId(org.id)}
-                    >
-                      Làm việc tại đây
-                    </button>
-                    <button
-                      type="button"
-                      className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
-                      disabled={busy || org.status !== 'active'}
-                      onClick={() => onOpenSettings(org)}
-                    >
-                      <Settings2 className="h-3.5 w-3.5" aria-hidden />
-                      Cài đặt
-                    </button>
-                    <button
-                      type="button"
-                      className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
-                      disabled={busy}
-                      onClick={() => void onExport(org)}
-                    >
-                      <Download className="h-3.5 w-3.5" aria-hidden />
-                      Tải cấu hình
-                    </button>
-                    <button
-                      type="button"
-                      className="vm-btn vm-btn-secondary text-xs"
-                      disabled={busy}
-                      onClick={() => void onToggleStatus(org)}
-                    >
-                      {org.status === 'active' ? 'Tạm ngưng' : 'Mở lại'}
-                    </button>
-                  </div>
+      <BentoCell className="!p-2 sm:!p-2.5">
+        <TabStrip
+          tabs={mainTabItems}
+          active={mainTab}
+          onChange={(id) => setMainTab(id)}
+          ariaLabel="Phần quản lý trường"
+          panelId="org-main-panel"
+        />
+      </BentoCell>
 
-                  {open && detailOrg?.id === org.id ? (
-                    <div className="mt-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-900">Thông tin trường</h3>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Mã trường ({org.id}) cố định. Đổi đường dẫn cổng đăng ký ảnh hưởng URL công khai.
-                        </p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <label className="block text-xs font-semibold text-slate-600">
-                            Tên trường
-                            <input
-                              className="vm-input mt-1 w-full"
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                            />
-                          </label>
-                          <label className="block text-xs font-semibold text-slate-600">
-                            Đường dẫn cổng đăng ký
-                            <input
-                              className="vm-input mt-1 w-full font-mono text-sm"
-                              value={editSlug}
-                              onChange={(e) => setEditSlug(e.target.value)}
-                              disabled={org.id === DEFAULT_ORG_ID}
-                            />
-                            <span className="mt-1 block font-normal text-slate-500">
-                              /dang-ky/{normalizeOrgSlug(editSlug) || detailOrg.slug}
-                              {org.id === DEFAULT_ORG_ID ? ' · trường mặc định giữ nguyên đường dẫn' : ''}
-                            </span>
-                          </label>
-                          <label className="block text-xs font-semibold text-slate-600 sm:col-span-2">
-                            Ghi chú nội bộ
-                            <textarea
-                              className="vm-input mt-1 min-h-[72px] w-full"
-                              value={editNotes}
-                              onChange={(e) => setEditNotes(e.target.value)}
-                              placeholder="Ghi chú cho Siêu quản trị (không hiện nhân sự vận hành)"
-                            />
-                          </label>
+      <div id="org-main-panel" role="tabpanel" aria-labelledby={`tab-${mainTab}`}>
+        {mainTab === 'list' ? (
+          <div className="space-y-4">
+            <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">
+              <BentoStat label="Đang hoạt động" value={loading ? '…' : String(activeCount)} tone="accent" />
+              <BentoStat label="Tạm ngưng" value={loading ? '…' : String(suspendedCount)} tone="ink" />
+              <BentoStat label="Đang chọn" value={effectiveOrgId} hint="Trong CRM" />
+            </BentoGrid>
+
+            <BentoCell colSpan={4} className="!p-0 overflow-hidden">
+              <div className="border-b border-slate-200 px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-900">Danh sách trường</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Bấm <strong>Sửa</strong> để mở tab Thông tin / Phân quyền / Quản lý. <strong>Xóa</strong> ẩn trường
+                  khỏi CRM (giữ dữ liệu hồ sơ). Trường Việt Mỹ không xóa được.
+                </p>
+              </div>
+              {loading ? (
+                <p className="px-4 py-6 text-sm text-slate-600">Đang tải…</p>
+              ) : visibleRows.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-slate-600">
+                  Chưa có trường nào — sang tab <strong>Tạo trường</strong> để thêm mới.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {visibleRows.map((org) => {
+                    const health = healthByOrg[org.id]
+                    return (
+                      <li key={org.id} className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-900">
+                              {org.name}
+                              {org.id === DEFAULT_ORG_ID ? (
+                                <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-800">
+                                  Mặc định · dữ liệu cũ
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="truncate text-xs text-slate-500">
+                              {org.id} · /dang-ky/{org.slug} ·{' '}
+                              <span className={org.status === 'active' ? 'text-indigo-700' : 'text-amber-700'}>
+                                {org.status === 'active' ? 'Đang hoạt động' : 'Tạm ngưng'}
+                              </span>
+                              {health ? (
+                                <>
+                                  {' '}
+                                  · {health.bandLabel} ({health.leadCount7d} hồ sơ/7 ngày)
+                                </>
+                              ) : (
+                                ' · Đang đo…'
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                            disabled={busy}
+                            onClick={() => openEdit(org.id)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
+                            disabled={busy || org.id === DEFAULT_ORG_ID}
+                            title={org.id === DEFAULT_ORG_ID ? 'Không xóa trường mặc định Việt Mỹ' : 'Xóa khỏi danh sách'}
+                            onClick={() => void onSoftDelete(org)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            Xóa
+                          </button>
+                          <button
+                            type="button"
+                            className="vm-btn vm-btn-secondary text-xs"
+                            disabled={busy || org.status !== 'active'}
+                            onClick={() => setActiveOrgId(org.id)}
+                          >
+                            Làm việc tại đây
+                          </button>
+                          <button
+                            type="button"
+                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                            disabled={busy || org.status !== 'active'}
+                            onClick={() => onOpenSettings(org)}
+                          >
+                            <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                            Cài đặt
+                          </button>
+                          <button
+                            type="button"
+                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                            disabled={busy}
+                            onClick={() => void onExport(org)}
+                          >
+                            <Download className="h-3.5 w-3.5" aria-hidden />
+                            Tải cấu hình
+                          </button>
+                          <button
+                            type="button"
+                            className="vm-btn vm-btn-secondary text-xs"
+                            disabled={busy}
+                            onClick={() => void onToggleStatus(org)}
+                          >
+                            {org.status === 'active' ? 'Tạm ngưng' : 'Mở lại'}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="vm-btn vm-btn-primary mt-3 text-xs"
-                          disabled={busy}
-                          onClick={() => void onSaveDetail()}
-                        >
-                          Lưu thông tin trường
-                        </button>
-                      </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </BentoCell>
+          </div>
+        ) : null}
 
-                      <div className="border-t border-slate-200 pt-4">
-                        <h3 className="text-sm font-semibold text-slate-900">Phân quyền Admin trường</h3>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Siêu quản trị giao module nào Admin trường được dùng. Admin trường sẽ tự phân quyền nhân sự
-                          vận hành và setup cài đặt trong phạm vi này.
-                        </p>
-                        {!capsLoaded ? (
-                          <p className="mt-2 text-xs text-slate-600">Đang tải phân quyền…</p>
-                        ) : (
-                          <ul className="mt-3 space-y-2">
-                            {SCHOOL_ADMIN_CAPABILITY_MODULES.map((m) => {
-                              const on = capsDraft.adminEnabledModuleIds.includes(m.id)
-                              return (
-                                <li key={m.id}>
-                                  <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-                                    <input
-                                      type="checkbox"
-                                      className="mt-1"
-                                      checked={on}
-                                      disabled={busy || m.required}
-                                      onChange={(e) => toggleCapModule(m.id, e.target.checked)}
-                                    />
-                                    <span>
-                                      <span className="font-semibold text-slate-900">{m.label}</span>
-                                      {m.required ? (
-                                        <span className="ml-1 text-[10px] font-bold uppercase text-indigo-700">
-                                          Bắt buộc
-                                        </span>
-                                      ) : null}
-                                      <span className="mt-0.5 block text-xs text-slate-500">{m.hint}</span>
-                                    </span>
-                                  </label>
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        )}
-                        <button
-                          type="button"
-                          className="vm-btn vm-btn-primary mt-3 text-xs"
-                          disabled={busy || !capsLoaded}
-                          onClick={() => void onSaveCaps()}
-                        >
-                          Lưu phân quyền Admin
-                        </button>
-                      </div>
+        {mainTab === 'edit' && detailOrg ? (
+          <BentoCell colSpan={4} className="space-y-3 !p-4 sm:!p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">
+                  Đang sửa: <span className="text-indigo-800">{detailOrg.name}</span>
+                </p>
+                <p className="text-xs text-slate-500">
+                  {detailOrg.id} · /dang-ky/{detailOrg.slug}
+                </p>
+              </div>
+              <button type="button" className="vm-btn vm-btn-secondary text-xs" disabled={busy} onClick={closeEdit}>
+                Đóng · về danh sách
+              </button>
+            </div>
 
-                      <div className="border-t border-slate-200 pt-4">
-                        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                          <UserCog className="h-4 w-4 text-indigo-700" aria-hidden />
-                          Quản lý của trường
-                        </h3>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Tài khoản vai trò Quản lý gắn với trường này — chịu trách nhiệm cài đặt trong trường.
-                          {org.id === DEFAULT_ORG_ID
-                            ? ' Việt Mỹ: hiện cả quản lý cũ chưa gắn mã trường.'
-                            : ''}
-                        </p>
-                        {adminsLoading ? (
-                          <p className="mt-2 text-xs text-slate-600">Đang tải danh sách quản lý…</p>
-                        ) : admins.length === 0 ? (
-                          <p className="mt-2 text-xs text-slate-600">Chưa có quản lý — thêm hoặc gắn tài khoản bên dưới.</p>
-                        ) : (
-                          <ul className="mt-2 space-y-2">
-                            {admins.map((a) => (
-                              <li
-                                key={a.id}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                              >
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-medium text-slate-900">{a.displayName}</p>
-                                    <p className="truncate text-xs text-slate-500">
-                                      {a.email} ·{' '}
-                                      <span className={a.isActive ? 'text-indigo-700' : 'text-amber-700'}>
-                                        {a.isActive ? 'Đang hoạt động' : 'Đã vô hiệu'}
-                                      </span>
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="vm-btn vm-btn-secondary text-xs"
-                                    disabled={busy}
-                                    onClick={() => void onToggleAdminActive(a)}
-                                  >
-                                    {a.isActive ? 'Vô hiệu' : 'Bật lại'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
-                                    disabled={busy || a.id === firebaseUser?.uid}
-                                    title={
-                                      a.id === firebaseUser?.uid
-                                        ? 'Không xóa tài khoản đang đăng nhập'
-                                        : 'Xóa vĩnh viễn'
-                                    }
-                                    onClick={() => void onDeleteAdmin(a)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                                    Xóa
-                                  </button>
-                                </div>
-                                <div className="mt-2 flex flex-wrap items-end gap-2">
-                                  <label className="block min-w-[10rem] flex-1 text-xs font-semibold text-slate-600">
-                                    Tên hiển thị
-                                    <input
-                                      className="vm-input mt-1 w-full"
-                                      value={nameDraftByUid[a.id] ?? a.displayName}
-                                      onChange={(e) =>
-                                        setNameDraftByUid((prev) => ({ ...prev, [a.id]: e.target.value }))
-                                      }
-                                    />
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="vm-btn vm-btn-secondary text-xs"
-                                    disabled={busy}
-                                    onClick={() => void onSaveAdminName(a)}
-                                  >
-                                    Lưu tên
-                                  </button>
-                                  <label className="block min-w-[10rem] flex-1 text-xs font-semibold text-slate-600">
-                                    Mật khẩu mới
-                                    <input
-                                      type="password"
-                                      className="vm-input mt-1 w-full"
-                                      value={pwdDraftByUid[a.id] ?? ''}
-                                      onChange={(e) =>
-                                        setPwdDraftByUid((prev) => ({ ...prev, [a.id]: e.target.value }))
-                                      }
-                                      placeholder="Tối thiểu 6 ký tự"
-                                    />
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="vm-btn vm-btn-secondary text-xs"
-                                    disabled={busy}
-                                    onClick={() => void onSetAdminPassword(a)}
-                                  >
-                                    Đặt mật khẩu
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+            <TabStrip
+              tabs={[
+                { id: 'info', label: 'Thông tin' },
+                { id: 'caps', label: 'Phân quyền' },
+                { id: 'admins', label: 'Quản lý' },
+              ]}
+              active={editSection}
+              onChange={(id) => setEditSection(id)}
+              ariaLabel="Phần sửa trường"
+              panelId="org-edit-panel"
+            />
 
-                        <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white/70 p-3">
-                          <p className="text-xs font-semibold text-slate-800">Gắn tài khoản đã có thành quản lý</p>
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            Dùng khi người đó đã có tài khoản CRM (TVV / CTV / …) — đổi thành Quản lý của trường này.
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-end gap-2">
-                            <label className="block min-w-[14rem] flex-1 text-xs font-semibold text-slate-600">
-                              Email tài khoản
+            <div id="org-edit-panel" role="tabpanel" aria-labelledby={`tab-${editSection}`}>
+              {editSection === 'info' ? (
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Mã trường ({detailOrg.id}) cố định. Đổi đường dẫn cổng đăng ký ảnh hưởng URL công khai.
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Tên trường
+                      <input
+                        className="vm-input mt-1 w-full"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Đường dẫn cổng đăng ký
+                      <input
+                        className="vm-input mt-1 w-full font-mono text-sm"
+                        value={editSlug}
+                        onChange={(e) => setEditSlug(e.target.value)}
+                        disabled={detailOrg.id === DEFAULT_ORG_ID}
+                      />
+                      <span className="mt-1 block font-normal text-slate-500">
+                        /dang-ky/{normalizeOrgSlug(editSlug) || detailOrg.slug}
+                        {detailOrg.id === DEFAULT_ORG_ID ? ' · trường mặc định giữ nguyên đường dẫn' : ''}
+                      </span>
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-600 sm:col-span-2">
+                      Ghi chú nội bộ
+                      <textarea
+                        className="vm-input mt-1 min-h-[72px] w-full"
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        placeholder="Ghi chú cho Siêu quản trị (không hiện nhân sự vận hành)"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="vm-btn vm-btn-primary mt-3 text-xs"
+                    disabled={busy}
+                    onClick={() => void onSaveDetail()}
+                  >
+                    Lưu thông tin trường
+                  </button>
+                </div>
+              ) : null}
+
+              {editSection === 'caps' ? (
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Siêu quản trị giao module nào Admin trường được dùng. Admin trường sẽ tự phân quyền nhân sự vận
+                    hành trong phạm vi này.
+                  </p>
+                  {!capsLoaded ? (
+                    <p className="mt-2 text-xs text-slate-600">Đang tải phân quyền…</p>
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      {SCHOOL_ADMIN_CAPABILITY_MODULES.map((m) => {
+                        const on = capsDraft.adminEnabledModuleIds.includes(m.id)
+                        return (
+                          <li key={m.id}>
+                            <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
                               <input
-                                type="email"
+                                type="checkbox"
+                                className="mt-1"
+                                checked={on}
+                                disabled={busy || m.required}
+                                onChange={(e) => toggleCapModule(m.id, e.target.checked)}
+                              />
+                              <span>
+                                <span className="font-semibold text-slate-900">{m.label}</span>
+                                {m.required ? (
+                                  <span className="ml-1 text-[10px] font-bold uppercase text-indigo-700">Bắt buộc</span>
+                                ) : null}
+                                <span className="mt-0.5 block text-xs text-slate-500">{m.hint}</span>
+                              </span>
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                  <button
+                    type="button"
+                    className="vm-btn vm-btn-primary mt-3 text-xs"
+                    disabled={busy || !capsLoaded}
+                    onClick={() => void onSaveCaps()}
+                  >
+                    Lưu phân quyền Admin
+                  </button>
+                </div>
+              ) : null}
+
+              {editSection === 'admins' ? (
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <UserCog className="h-4 w-4 text-indigo-700" aria-hidden />
+                    Quản lý của trường
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Tài khoản vai trò Quản lý gắn với trường này — chịu trách nhiệm cài đặt trong trường.
+                    {detailOrg.id === DEFAULT_ORG_ID
+                      ? ' Việt Mỹ: hiện cả quản lý cũ chưa gắn mã trường.'
+                      : ''}
+                  </p>
+                  {adminsLoading ? (
+                    <p className="mt-2 text-xs text-slate-600">Đang tải danh sách quản lý…</p>
+                  ) : admins.length === 0 ? (
+                    <p className="mt-2 text-xs text-slate-600">Chưa có quản lý — thêm hoặc gắn tài khoản bên dưới.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {admins.map((a) => (
+                        <li key={a.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-slate-900">{a.displayName}</p>
+                              <p className="truncate text-xs text-slate-500">
+                                {a.email} ·{' '}
+                                <span className={a.isActive ? 'text-indigo-700' : 'text-amber-700'}>
+                                  {a.isActive ? 'Đang hoạt động' : 'Đã vô hiệu'}
+                                </span>
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              className="vm-btn vm-btn-secondary text-xs"
+                              disabled={busy}
+                              onClick={() => void onToggleAdminActive(a)}
+                            >
+                              {a.isActive ? 'Vô hiệu' : 'Bật lại'}
+                            </button>
+                            <button
+                              type="button"
+                              className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
+                              disabled={busy || a.id === firebaseUser?.uid}
+                              title={
+                                a.id === firebaseUser?.uid
+                                  ? 'Không xóa tài khoản đang đăng nhập'
+                                  : 'Xóa vĩnh viễn'
+                              }
+                              onClick={() => void onDeleteAdmin(a)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                              Xóa
+                            </button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-end gap-2">
+                            <label className="block min-w-[10rem] flex-1 text-xs font-semibold text-slate-600">
+                              Tên hiển thị
+                              <input
                                 className="vm-input mt-1 w-full"
-                                value={assignEmail}
-                                onChange={(e) => setAssignEmail(e.target.value)}
-                                placeholder="nguoi@truong.edu.vn"
+                                value={nameDraftByUid[a.id] ?? a.displayName}
+                                onChange={(e) =>
+                                  setNameDraftByUid((prev) => ({ ...prev, [a.id]: e.target.value }))
+                                }
                               />
                             </label>
                             <button
                               type="button"
                               className="vm-btn vm-btn-secondary text-xs"
                               disabled={busy}
-                              onClick={() => void onAssignExistingAdmin()}
+                              onClick={() => void onSaveAdminName(a)}
                             >
-                              Gắn làm quản lý
+                              Lưu tên
+                            </button>
+                            <label className="block min-w-[10rem] flex-1 text-xs font-semibold text-slate-600">
+                              Mật khẩu mới
+                              <input
+                                type="password"
+                                className="vm-input mt-1 w-full"
+                                value={pwdDraftByUid[a.id] ?? ''}
+                                onChange={(e) =>
+                                  setPwdDraftByUid((prev) => ({ ...prev, [a.id]: e.target.value }))
+                                }
+                                placeholder="Tối thiểu 6 ký tự"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              className="vm-btn vm-btn-secondary text-xs"
+                              disabled={busy}
+                              onClick={() => void onSetAdminPassword(a)}
+                            >
+                              Đặt mật khẩu
                             </button>
                           </div>
-                        </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                          <label className="block text-xs font-semibold text-slate-600">
-                            Email quản lý mới
-                            <input
-                              type="email"
-                              className="vm-input mt-1 w-full"
-                              value={newAdminEmail}
-                              onChange={(e) => setNewAdminEmail(e.target.value)}
-                            />
-                          </label>
-                          <label className="block text-xs font-semibold text-slate-600">
-                            Mật khẩu tạm
-                            <input
-                              type="password"
-                              className="vm-input mt-1 w-full"
-                              value={newAdminPassword}
-                              onChange={(e) => setNewAdminPassword(e.target.value)}
-                            />
-                          </label>
-                          <label className="block text-xs font-semibold text-slate-600">
-                            Tên hiển thị
-                            <input
-                              className="vm-input mt-1 w-full"
-                              value={newAdminName}
-                              onChange={(e) => setNewAdminName(e.target.value)}
-                            />
-                          </label>
-                        </div>
-                        <button
-                          type="button"
-                          className="vm-btn vm-btn-primary mt-2 text-xs"
-                          disabled={busy}
-                          onClick={() => void onAddAdmin()}
-                        >
-                          Tạo quản lý trường mới
-                        </button>
-                      </div>
+                  <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white/70 p-3">
+                    <p className="text-xs font-semibold text-slate-800">Gắn tài khoản đã có thành quản lý</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Dùng khi người đó đã có tài khoản CRM — đổi thành Quản lý của trường này.
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-end gap-2">
+                      <label className="block min-w-[14rem] flex-1 text-xs font-semibold text-slate-600">
+                        Email tài khoản
+                        <input
+                          type="email"
+                          className="vm-input mt-1 w-full"
+                          value={assignEmail}
+                          onChange={(e) => setAssignEmail(e.target.value)}
+                          placeholder="nguoi@truong.edu.vn"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="vm-btn vm-btn-secondary text-xs"
+                        disabled={busy}
+                        onClick={() => void onAssignExistingAdmin()}
+                      >
+                        Gắn làm quản lý
+                      </button>
                     </div>
-                  ) : null}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </BentoCell>
+                  </div>
 
-      <BentoCell colSpan={4} className="!p-4 sm:!p-5">
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 text-left"
-          onClick={() => setShowCreateForm((v) => !v)}
-        >
-          <Plus className="h-4 w-4 text-indigo-700" aria-hidden />
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-900">Tạo trường mới</span>
-            <span className="block text-xs font-normal text-slate-600">
-              Không gian riêng + tài khoản Quản lý đầu tiên (copy cấu hình mẫu từ Việt Mỹ).
-            </span>
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-slate-500 transition ${showCreateForm ? 'rotate-180' : ''}`}
-            aria-hidden
-          />
-        </button>
-        {showCreateForm ? (
-          <>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Email quản lý mới
+                      <input
+                        type="email"
+                        className="vm-input mt-1 w-full"
+                        value={newAdminEmail}
+                        onChange={(e) => setNewAdminEmail(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Mật khẩu tạm
+                      <input
+                        type="password"
+                        className="vm-input mt-1 w-full"
+                        value={newAdminPassword}
+                        onChange={(e) => setNewAdminPassword(e.target.value)}
+                      />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Tên hiển thị
+                      <input
+                        className="vm-input mt-1 w-full"
+                        value={newAdminName}
+                        onChange={(e) => setNewAdminName(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="vm-btn vm-btn-primary mt-2 text-xs"
+                    disabled={busy}
+                    onClick={() => void onAddAdmin()}
+                  >
+                    Tạo quản lý trường mới
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </BentoCell>
+        ) : null}
+
+        {mainTab === 'create' ? (
+          <BentoCell colSpan={4} className="!p-4 sm:!p-5">
+            <div className="flex items-start gap-2">
+              <Plus className="mt-0.5 h-4 w-4 shrink-0 text-indigo-700" aria-hidden />
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Tạo trường mới</h2>
+                <p className="mt-0.5 text-xs text-slate-600">
+                  Không gian riêng + tài khoản Quản lý đầu tiên (copy cấu hình mẫu từ Việt Mỹ).
+                </p>
+              </div>
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-semibold text-slate-600">
                 Tên trường
@@ -1157,36 +1219,38 @@ export function OrganizationsView() {
               {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Building2 className="h-4 w-4" aria-hidden />}
               Tạo trường + quản lý
             </button>
-          </>
+          </BentoCell>
         ) : null}
-      </BentoCell>
 
-      <BentoCell colSpan={4} className="!p-0 overflow-hidden">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Nhật ký nền tảng</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Thao tác gần đây: tạo/sửa trường, tạm ngưng, quản lý, tải cấu hình.
-          </p>
-        </div>
-        {audits.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-slate-600">Chưa có nhật ký — thao tác tạo/sửa sẽ hiện ở đây.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {audits.map((a) => (
-              <li key={a.id} className="px-4 py-3 text-sm">
-                <p className="font-medium text-slate-900">
-                  {platformAuditActionLabel(a.action)} · {a.orgName || a.orgId}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {a.performedByName}
-                  {a.detail ? ` · ${a.detail}` : ''}
-                  {a.atMs ? ` · ${new Date(a.atMs).toLocaleString('vi-VN')}` : ''}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </BentoCell>
+        {mainTab === 'audit' ? (
+          <BentoCell colSpan={4} className="!p-0 overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">Nhật ký nền tảng</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Thao tác gần đây: tạo/sửa/xóa trường, tạm ngưng, quản lý, tải cấu hình.
+              </p>
+            </div>
+            {audits.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-600">Chưa có nhật ký — thao tác tạo/sửa sẽ hiện ở đây.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {audits.map((a) => (
+                  <li key={a.id} className="px-4 py-3 text-sm">
+                    <p className="font-medium text-slate-900">
+                      {platformAuditActionLabel(a.action)} · {a.orgName || a.orgId}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {a.performedByName}
+                      {a.detail ? ` · ${a.detail}` : ''}
+                      {a.atMs ? ` · ${new Date(a.atMs).toLocaleString('vi-VN')}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </BentoCell>
+        ) : null}
+      </div>
 
       <p className="text-center text-xs text-slate-500">
         Đang cấu hình CRM cho trường đang chọn? Vào{' '}
