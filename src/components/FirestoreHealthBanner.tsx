@@ -24,6 +24,25 @@ type Probe = {
   sampleOrgIds: string[]
   defaultDbSample: number | null
   error: string | null
+  note: string | null
+}
+
+const PROBE_MS = 10_000
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error(`Hết giờ ${label} (${ms / 1000}s)`)), ms)
+    p.then(
+      (v) => {
+        window.clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(t)
+        reject(e)
+      },
+    )
+  })
 }
 
 async function countScoped(db: Firestore, org: string): Promise<number> {
@@ -57,7 +76,8 @@ async function sampleDefaultDb(): Promise<number | null> {
 }
 
 /**
- * Banner khi hồ sơ/KPI về 0 — phân biệt DB trống, thiếu orgId, hay dữ liệu nằm (default).
+ * Banner khi hồ sơ/KPI về 0 — từng bước có timeout, không treo «…» mãi.
+ * Push/deploy code không xóa được Firestore; chỉ Admin SDK / Console mới xóa.
  */
 export function FirestoreHealthBanner() {
   const { profile } = useAuth()
@@ -73,6 +93,15 @@ export function FirestoreHealthBanner() {
     if (!db) return
     let cancelled = false
     setBusy(true)
+    setProbe({
+      scopedCount: null,
+      unscopedSample: null,
+      sampleOrgIds: [],
+      defaultDbSample: null,
+      error: null,
+      note: 'Đang kiểm tra…',
+    })
+
     void (async () => {
       const next: Probe = {
         scopedCount: null,
@@ -80,30 +109,46 @@ export function FirestoreHealthBanner() {
         sampleOrgIds: [],
         defaultDbSample: null,
         error: null,
+        note: null,
       }
       const org = effectiveOrgId.trim() || DEFAULT_ORG_ID
+
       try {
-        next.scopedCount = await countScoped(db, org)
+        next.scopedCount = await withTimeout(countScoped(db, org), PROBE_MS, 'đếm orgId')
       } catch (e) {
-        next.error = firestoreReadErrorMessage(e, 'Không đếm được hồ sơ theo trường.')
+        next.error = firestoreReadErrorMessage(e, e instanceof Error ? e.message : 'Không đếm được theo trường.')
       }
+      if (!cancelled) setProbe({ ...next })
+
       try {
-        const sample = await sampleUnscoped(db)
+        const sample = await withTimeout(sampleUnscoped(db), PROBE_MS, 'mẫu không lọc')
         next.unscopedSample = sample.n
         next.sampleOrgIds = sample.orgIds
       } catch (e) {
         if (!next.error) {
           next.error = isPlatform
-            ? firestoreReadErrorMessage(e, 'Không lấy mẫu leads (không lọc org).')
-            : null
+            ? firestoreReadErrorMessage(e, e instanceof Error ? e.message : 'Không lấy mẫu leads.')
+            : e instanceof Error && /Hết giờ|permission/i.test(e.message)
+              ? e.message
+              : null
         }
       }
-      next.defaultDbSample = await sampleDefaultDb()
+      if (!cancelled) setProbe({ ...next })
+
+      try {
+        next.defaultDbSample = await withTimeout(sampleDefaultDb(), PROBE_MS, 'mẫu (default)')
+      } catch {
+        next.defaultDbSample = null
+      }
+
+      next.note =
+        'Lưu ý: push code / deploy GitHub-Vercel không xóa được Firestore. Chỉ xóa khi chạy script wipe, xóa tay trên Console, hoặc tài khoản có quyền Admin SDK.'
       if (!cancelled) {
-        setProbe(next)
+        setProbe({ ...next })
         setBusy(false)
       }
     })()
+
     return () => {
       cancelled = true
     }
@@ -117,23 +162,24 @@ export function FirestoreHealthBanner() {
   const looksBroken =
     Boolean(probe?.error) ||
     dbId === '(default)' ||
+    busy ||
     (scoped === 0 && !busy) ||
     (typeof onDefault === 'number' && onDefault > 0)
   if (!looksBroken && scoped != null && scoped > 0) return null
 
   const legacyHint =
     scoped === 0 && typeof unscoped === 'number' && unscoped > 0
-      ? `Có ít nhất ${unscoped} hồ sơ trong warmlist nhưng không khớp orgId=«${effectiveOrgId}» (mẫu orgId: ${probe?.sampleOrgIds.join(', ') || '—'}). Cần backfill orgId hoặc chọn đúng trường.`
+      ? `Có ít nhất ${unscoped} hồ sơ trong warmlist nhưng không khớp orgId=«${effectiveOrgId}» (mẫu: ${probe?.sampleOrgIds.join(', ') || '—'}).`
       : null
 
   const wipedHint =
-    scoped === 0 && (unscoped === 0 || unscoped == null) && !probe?.error
-      ? 'Không thấy hồ sơ nào (kể cả mẫu không lọc org). Kiểm tra Firebase Console → warmlist → leads; nếu cũng trống thì dữ liệu đã bị xóa khỏi DB (không phải lỗi giao diện).'
+    !busy && scoped === 0 && unscoped === 0 && !probe?.error
+      ? 'Mẫu không lọc cũng = 0 → collection leads trên warmlist đang trống với quyền tài khoản này. Mở Firebase Console (warmlist → leads) để xác nhận; nếu Console cũng trống thì dữ liệu đã bị gỡ khỏi DB.'
       : null
 
   const defaultHint =
     typeof onDefault === 'number' && onDefault > 0
-      ? `Phát hiện ~${onDefault}+ hồ sơ trên database «(default)» — có thể dữ liệu nằm nhầm DB. App đang đọc «${dbId}».`
+      ? `Phát hiện hồ sơ trên database «(default)» (mẫu ${onDefault}). App đang đọc «${dbId}».`
       : null
 
   return (
@@ -152,27 +198,17 @@ export function FirestoreHealthBanner() {
         {' · '}
         Trường: <code className="rounded bg-white/80 px-1">{effectiveOrgId || '—'}</code>
         {' · '}
-        Đếm orgId: {busy ? '…' : scoped != null ? scoped.toLocaleString('vi-VN') : '—'}
-        {unscoped != null ? (
-          <>
-            {' · '}
-            Mẫu không lọc: {unscoped}
-          </>
-        ) : null}
-        {onDefault != null ? (
-          <>
-            {' · '}
-            Mẫu (default): {onDefault}
-          </>
-        ) : null}
+        Đếm orgId: {scoped != null ? scoped.toLocaleString('vi-VN') : busy ? '…' : 'lỗi/timeout'}
+        {' · '}
+        Mẫu không lọc: {unscoped != null ? unscoped : busy ? '…' : '—'}
+        {' · '}
+        Mẫu (default): {onDefault != null ? onDefault : busy ? '…' : '—'}
       </p>
       {probe?.error ? <p className="mt-1 font-medium">{probe.error}</p> : null}
       {legacyHint ? <p className="mt-1 font-medium">{legacyHint}</p> : null}
       {defaultHint ? <p className="mt-1 font-medium">{defaultHint}</p> : null}
       {wipedHint ? <p className="mt-1 font-medium">{wipedHint}</p> : null}
-      <p className="mt-1 text-[11px] opacity-90">
-        Gửi giúp ảnh/chữ đủ dòng trên (Đếm orgId / Mẫu không lọc / Mẫu default) để xử lý tiếp.
-      </p>
+      {probe?.note ? <p className="mt-1 opacity-90">{probe.note}</p> : null}
     </div>
   )
 }
