@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Wallet } from 'lucide-react'
-import { LoggedInPortalGate, AuthSessionExitBar } from '../components/AuthSessionControls'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
 import { defaultSuperAdminEmailFromEnv } from '../tenancy/superAdminBootstrap'
+
+const BRAND_LOGO_SRC = `${import.meta.env.BASE_URL}brand/logo-vietmy-trang.png`
 
 const VIDEO_SRC =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260429_114316_1c7889ad-2885-410e-b493-98119fee0ddb.mp4'
@@ -124,18 +125,8 @@ export function LoginView() {
     )
   }
 
-  if (
-    firebaseUser &&
-    (status === 'authenticated' || status === 'authenticating')
-  ) {
-    return (
-      <LoggedInPortalGate
-        continueTo={from}
-        portalTitle="VietMy Admissions"
-        continueLabel="Vào CRM tuyển sinh"
-        tone="onDark"
-      />
-    )
+  if (firebaseUser && (status === 'authenticated' || status === 'authenticating')) {
+    return <Navigate to={from} replace />
   }
 
   const submit = async (e: FormEvent) => {
@@ -170,16 +161,13 @@ export function LoginView() {
       />
 
       <div className="relative z-10 flex min-h-[100dvh] w-full flex-col items-center justify-center px-4 py-8 md:px-8">
-        <div className="mb-4 w-full max-w-4xl">
-          <AuthSessionExitBar tone="onDark" />
-        </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: 'easeOut' }}
           className="bento-login-board"
         >
-          <section className="bento-cell bento-cell--hero flex flex-col justify-between !p-7 sm:!p-9">
+          <section className="bento-cell bento-cell--hero flex flex-col !p-7 sm:!p-9">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-100/80">
                 VietMy Admissions
@@ -187,11 +175,14 @@ export function LoginView() {
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
                 CRM tuyển sinh
               </h1>
-              <p className="mt-3 max-w-sm text-sm leading-relaxed text-teal-50/90">
-                Hồ sơ · gọi điện · KPI · thu phí — mỗi trường một không gian riêng, dễ nhìn và thao tác nhanh.
-              </p>
             </div>
-            <p className="mt-8 text-xs text-teal-100/55">Siêu quản trị điều hành nhiều trường · Admin setup trong trường mình</p>
+            <div className="mt-8 flex flex-1 items-center justify-center">
+              <img
+                src={BRAND_LOGO_SRC}
+                alt="Cao đẳng Việt Mỹ - Hà Nội"
+                className="h-auto w-full max-w-[18rem] object-contain sm:max-w-[22rem]"
+              />
+            </div>
           </section>
 
           <section className="bento-cell !bg-white !p-6 text-[var(--vm-text)] shadow-lg sm:!p-8">
@@ -234,12 +225,6 @@ export function LoginView() {
               <button type="submit" disabled={busy} className="vm-btn vm-btn-primary w-full py-3 text-base">
                 {busy ? 'Đang đăng nhập…' : 'Đăng nhập CRM'}
               </button>
-              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
-                Siêu quản trị: dùng email <span className="font-mono text-[11px] text-slate-800">{superEmailHint}</span>.
-                Lần đầu hệ thống có thể tạo tài khoản với mật khẩu bạn nhập (vd. <span className="font-mono">123456</span>),
-                rồi vào menu bên trái chọn <strong>Đổi mật khẩu</strong>. Sau khi vào: <strong>Quản lý trường</strong> và{' '}
-                <strong>Cài đặt</strong> (nhân sự, KPI…).
-              </p>
               <Link
                 to="/ke-toan/login"
                 className="vm-btn vm-btn-secondary w-full border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
@@ -247,9 +232,6 @@ export function LoginView() {
                 <Wallet className="h-4 w-4" aria-hidden />
                 Cổng kế toán — truy cập nhanh
               </Link>
-              <p className="text-center text-xs text-slate-500">
-                Chỉ dành tài khoản có quyền kế toán. TVV dùng nút đăng nhập CRM phía trên.
-              </p>
             </form>
           </section>
         </motion.div>
