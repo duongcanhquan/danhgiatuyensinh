@@ -2716,12 +2716,9 @@ export function LeadManagement() {
       <BentoCell variant="hero" className="!p-4 sm:!p-5">
         <AppPageHeader
           title="Hồ sơ"
-          meta={
-            <span className="text-indigo-100/90">
-              Tìm · lọc · gọi · cập nhật — xếp Gọi lại → Chưa gọi → Đã xử lý
-            </span>
-          }
-          className="!mb-0 [&_h1]:text-2xl [&_h1]:text-white sm:[&_h1]:text-3xl [&_.text-slate-500]:text-indigo-100/85"
+          meta="Tìm · lọc · gọi · cập nhật — xếp Gọi lại → Chưa gọi → Đã xử lý"
+          tone="onDark"
+          className="!mb-0 [&_h1]:text-2xl sm:[&_h1]:text-3xl"
         />
       </BentoCell>
 

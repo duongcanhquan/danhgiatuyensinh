@@ -726,13 +726,12 @@ export function SettingsView() {
         <AppPageHeader
           title="Cài đặt"
           meta={
-            <span className="text-indigo-100/85">
-              {isPlatformSuperAdmin
-                ? `Đang cấu hình · ${currentOrgLabel}`
-                : 'Dữ liệu · chấm điểm · nhân sự · kết nối'}
-            </span>
+            isPlatformSuperAdmin
+              ? `Đang cấu hình · ${currentOrgLabel}`
+              : 'Dữ liệu · chấm điểm · nhân sự · kết nối'
           }
-          className="!mb-0 [&_h1]:text-white [&_.text-slate-500]:text-indigo-100/80"
+          tone="onDark"
+          className="!mb-0"
         />
       </BentoCell>
 

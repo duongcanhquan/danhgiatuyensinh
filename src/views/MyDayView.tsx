@@ -191,11 +191,7 @@ export function MyDayView() {
   return (
     <div className="bento-board mx-auto max-w-4xl">
       <BentoCell variant="hero" className="!p-3 sm:!p-4">
-        <AppPageHeader
-          title="Ngày của tôi"
-          meta={today}
-          className="[&_h1]:text-white [&_.text-slate-500]:text-indigo-100/80"
-        />
+        <AppPageHeader title="Ngày của tôi" meta={today} tone="onDark" />
       </BentoCell>
 
       <BentoGrid className="sm:!grid-cols-3 lg:!grid-cols-3">

@@ -507,6 +507,14 @@ a {
   margin-bottom: 0.75rem;
 }
 
+/* Hero tối: bảo đảm tiêu đề/mô tả sáng (tránh chữ slate đè lên nền indigo). */
+.bento-cell--hero .app-page-header[data-tone='onDark'] h1 {
+  color: #ffffff !important;
+}
+.bento-cell--hero .app-page-header[data-tone='onDark'] > div > div > div {
+  color: rgb(224 231 255 / 0.92) !important;
+}
+
 .app-bottom-nav {
   position: fixed;
   inset-inline: 0;
