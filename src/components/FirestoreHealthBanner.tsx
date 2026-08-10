@@ -1,23 +1,71 @@
 import { useEffect, useState } from 'react'
-import { collection, getCountFromServer, query, where } from 'firebase/firestore'
+import {
+  collection,
+  getCountFromServer,
+  getDocs,
+  getFirestore,
+  limit,
+  query,
+  where,
+  type Firestore,
+} from 'firebase/firestore'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
-import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { getFirebaseApp, getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { getConfiguredFirestoreDatabaseId } from '../utils/firestoreDatabaseHint'
 import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
 import { FS_COLLECTIONS } from '../types'
+import { isPlatformSuperAdminRole } from '../tenancy/orgId'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+
+type Probe = {
+  scopedCount: number | null
+  unscopedSample: number | null
+  sampleOrgIds: string[]
+  defaultDbSample: number | null
+  error: string | null
+}
+
+async function countScoped(db: Firestore, org: string): Promise<number> {
+  const qy = query(collection(db, FS_COLLECTIONS.leads), where('orgId', '==', org))
+  return (await getCountFromServer(qy)).data().count
+}
+
+async function sampleUnscoped(db: Firestore): Promise<{ n: number; orgIds: string[] }> {
+  const snap = await getDocs(query(collection(db, FS_COLLECTIONS.leads), limit(8)))
+  const orgIds = [
+    ...new Set(
+      snap.docs.map((d) => {
+        const v = d.data()?.orgId
+        return v != null && String(v).trim() ? String(v).trim() : '(thiếu orgId)'
+      }),
+    ),
+  ]
+  return { n: snap.size, orgIds }
+}
+
+async function sampleDefaultDb(): Promise<number | null> {
+  const app = getFirebaseApp()
+  if (!app) return null
+  try {
+    const def = getFirestore(app)
+    const snap = await getDocs(query(collection(def, FS_COLLECTIONS.leads), limit(5)))
+    return snap.size
+  } catch {
+    return null
+  }
+}
 
 /**
- * Banner tạm — khi danh sách/KPI về 0, hiện database + org + kết quả đếm leads
- * để phân biệt: sai DB, permission-denied, hay DB thật sự trống.
+ * Banner khi hồ sơ/KPI về 0 — phân biệt DB trống, thiếu orgId, hay dữ liệu nằm (default).
  */
 export function FirestoreHealthBanner() {
   const { profile } = useAuth()
   const { effectiveOrgId } = useOrg()
-  const [leadCount, setLeadCount] = useState<number | null>(null)
-  const [probeError, setProbeError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [probe, setProbe] = useState<Probe | null>(null)
   const dbId = getConfiguredFirestoreDatabaseId()
+  const isPlatform = isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)
 
   useEffect(() => {
     if (!profile || !isFirebaseConfigured()) return
@@ -25,40 +73,75 @@ export function FirestoreHealthBanner() {
     if (!db) return
     let cancelled = false
     setBusy(true)
-    setProbeError(null)
     void (async () => {
+      const next: Probe = {
+        scopedCount: null,
+        unscopedSample: null,
+        sampleOrgIds: [],
+        defaultDbSample: null,
+        error: null,
+      }
+      const org = effectiveOrgId.trim() || DEFAULT_ORG_ID
       try {
-        const org = effectiveOrgId.trim()
-        const base = org
-          ? query(collection(db, FS_COLLECTIONS.leads), where('orgId', '==', org))
-          : collection(db, FS_COLLECTIONS.leads)
-        const n = (await getCountFromServer(base)).data().count
-        if (!cancelled) setLeadCount(n)
+        next.scopedCount = await countScoped(db, org)
       } catch (e) {
-        if (!cancelled) {
-          setLeadCount(null)
-          setProbeError(firestoreReadErrorMessage(e, 'Không đếm được hồ sơ.'))
+        next.error = firestoreReadErrorMessage(e, 'Không đếm được hồ sơ theo trường.')
+      }
+      try {
+        const sample = await sampleUnscoped(db)
+        next.unscopedSample = sample.n
+        next.sampleOrgIds = sample.orgIds
+      } catch (e) {
+        if (!next.error) {
+          next.error = isPlatform
+            ? firestoreReadErrorMessage(e, 'Không lấy mẫu leads (không lọc org).')
+            : null
         }
-      } finally {
-        if (!cancelled) setBusy(false)
+      }
+      next.defaultDbSample = await sampleDefaultDb()
+      if (!cancelled) {
+        setProbe(next)
+        setBusy(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [profile?.id, effectiveOrgId])
+  }, [profile?.id, profile?.role, profile?.orgId, effectiveOrgId, isPlatform])
 
   if (!profile) return null
 
-  const looksBroken = Boolean(probeError) || (leadCount === 0 && !busy) || dbId === '(default)'
-  if (!looksBroken && leadCount != null && leadCount > 0) return null
+  const scoped = probe?.scopedCount
+  const unscoped = probe?.unscopedSample
+  const onDefault = probe?.defaultDbSample
+  const looksBroken =
+    Boolean(probe?.error) ||
+    dbId === '(default)' ||
+    (scoped === 0 && !busy) ||
+    (typeof onDefault === 'number' && onDefault > 0)
+  if (!looksBroken && scoped != null && scoped > 0) return null
+
+  const legacyHint =
+    scoped === 0 && typeof unscoped === 'number' && unscoped > 0
+      ? `Có ít nhất ${unscoped} hồ sơ trong warmlist nhưng không khớp orgId=«${effectiveOrgId}» (mẫu orgId: ${probe?.sampleOrgIds.join(', ') || '—'}). Cần backfill orgId hoặc chọn đúng trường.`
+      : null
+
+  const wipedHint =
+    scoped === 0 && (unscoped === 0 || unscoped == null) && !probe?.error
+      ? 'Không thấy hồ sơ nào (kể cả mẫu không lọc org). Kiểm tra Firebase Console → warmlist → leads; nếu cũng trống thì dữ liệu đã bị xóa khỏi DB (không phải lỗi giao diện).'
+      : null
+
+  const defaultHint =
+    typeof onDefault === 'number' && onDefault > 0
+      ? `Phát hiện ~${onDefault}+ hồ sơ trên database «(default)» — có thể dữ liệu nằm nhầm DB. App đang đọc «${dbId}».`
+      : null
 
   return (
     <div
       role="status"
       className={[
         'mx-3 mt-2 rounded-lg border px-3 py-2 text-xs leading-snug sm:mx-4 md:mx-6 lg:mx-8',
-        probeError || dbId === '(default)'
+        probe?.error || wipedHint || defaultHint
           ? 'border-rose-300 bg-rose-50 text-rose-950'
           : 'border-amber-300 bg-amber-50 text-amber-950',
       ].join(' ')}
@@ -69,22 +152,27 @@ export function FirestoreHealthBanner() {
         {' · '}
         Trường: <code className="rounded bg-white/80 px-1">{effectiveOrgId || '—'}</code>
         {' · '}
-        Hồ sơ (đếm server):{' '}
-        {busy ? 'đang đếm…' : leadCount != null ? leadCount.toLocaleString('vi-VN') : '—'}
+        Đếm orgId: {busy ? '…' : scoped != null ? scoped.toLocaleString('vi-VN') : '—'}
+        {unscoped != null ? (
+          <>
+            {' · '}
+            Mẫu không lọc: {unscoped}
+          </>
+        ) : null}
+        {onDefault != null ? (
+          <>
+            {' · '}
+            Mẫu (default): {onDefault}
+          </>
+        ) : null}
       </p>
-      {probeError ? <p className="mt-1 font-medium">{probeError}</p> : null}
-      {!probeError && leadCount === 0 ? (
-        <p className="mt-1">
-          Đếm được 0 hồ sơ trên database/trường này. Vào Firebase Console → Firestore → chọn database{' '}
-          <strong>warmlist</strong> để kiểm tra collection <code className="rounded bg-white/80 px-1">leads</code> còn
-          không. Thử đăng xuất/đăng nhập lại, hoặc xóa dữ liệu trang (Site data) rồi tải lại.
-        </p>
-      ) : null}
-      {dbId === '(default)' ? (
-        <p className="mt-1 font-medium">
-          App đang đọc «(default)» — cần build với VITE_FIREBASE_FIRESTORE_DATABASE_ID=warmlist.
-        </p>
-      ) : null}
+      {probe?.error ? <p className="mt-1 font-medium">{probe.error}</p> : null}
+      {legacyHint ? <p className="mt-1 font-medium">{legacyHint}</p> : null}
+      {defaultHint ? <p className="mt-1 font-medium">{defaultHint}</p> : null}
+      {wipedHint ? <p className="mt-1 font-medium">{wipedHint}</p> : null}
+      <p className="mt-1 text-[11px] opacity-90">
+        Gửi giúp ảnh/chữ đủ dòng trên (Đếm orgId / Mẫu không lọc / Mẫu default) để xử lý tiếp.
+      </p>
     </div>
   )
 }
