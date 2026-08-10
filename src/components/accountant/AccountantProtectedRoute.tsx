@@ -17,7 +17,7 @@ export function AccountantProtectedRoute() {
 
   if (status === 'unknown') {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-emerald-50 text-slate-600">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 text-slate-600">
         <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang xác thực…</div>
       </div>
     )
@@ -29,7 +29,7 @@ export function AccountantProtectedRoute() {
 
   if (status === 'authenticating') {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-emerald-50 text-slate-600">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 text-slate-600">
         <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang tải hồ sơ kế toán…</div>
       </div>
     )
@@ -65,7 +65,7 @@ export function AccountantProtectedRoute() {
 
   if (orgGate.state === 'loading') {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-emerald-50 text-slate-600">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 text-slate-600">
         <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang kiểm tra quyền truy cập…</div>
       </div>
     )

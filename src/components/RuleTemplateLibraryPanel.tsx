@@ -236,7 +236,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                     type="button"
                     disabled={busy}
                     onClick={startNew}
-                    className="rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    className="rounded-lg border border-emerald-600 bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                   >
                     + Thêm mẫu
                   </button>
@@ -562,7 +562,7 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
                   type="button"
                   disabled={busy}
                   onClick={() => void saveSession()}
-                  className="rounded-lg border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-lg border border-emerald-600 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {busy ? 'Đang lưu…' : 'Lưu mẫu'}
                 </button>

@@ -2717,11 +2717,11 @@ export function LeadManagement() {
         <AppPageHeader
           title="Hồ sơ"
           meta={
-            <span className="text-teal-100/90">
+            <span className="text-indigo-100/90">
               Tìm · lọc · gọi · cập nhật — xếp Gọi lại → Chưa gọi → Đã xử lý
             </span>
           }
-          className="!mb-0 [&_h1]:text-2xl [&_h1]:text-white sm:[&_h1]:text-3xl [&_.text-slate-500]:text-teal-100/85"
+          className="!mb-0 [&_h1]:text-2xl [&_h1]:text-white sm:[&_h1]:text-3xl [&_.text-slate-500]:text-indigo-100/85"
         />
       </BentoCell>
 
@@ -2867,7 +2867,7 @@ export function LeadManagement() {
               <button
                 type="button"
                 onClick={() => setCreateLeadOpen(true)}
-                className={`${LEAD_BTN} border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700`}
+                className={`${LEAD_BTN} border-emerald-500 bg-indigo-600 text-white hover:bg-indigo-700`}
                 title="Tạo hồ sơ ứng viên mới"
               >
                 <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
@@ -3426,7 +3426,7 @@ export function LeadManagement() {
                   type="button"
                   disabled={!sortedFiltered.length}
                   onClick={handleExportEvaluated}
-                  className={`${LEAD_BTN} border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-40`}
+                  className={`${LEAD_BTN} border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-400 hover:bg-indigo-100 disabled:opacity-40`}
                 >
                   <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Xuất Excel
@@ -3752,7 +3752,7 @@ export function LeadManagement() {
                     title={(l.intakeProgram ?? '').trim() || undefined}
                   >
                     {(l.intakeProgram ?? '').trim() ? (
-                      <span className="rounded bg-teal-50 px-1 py-0.5 text-[12px] font-medium text-teal-900">
+                      <span className="rounded bg-indigo-50 px-1 py-0.5 text-[12px] font-medium text-indigo-900">
                         {formatDescPreview(l.intakeProgram ?? '', 28)}
                       </span>
                     ) : (
@@ -4119,7 +4119,7 @@ export function LeadManagement() {
                 onChange={(e) => setBulkIntakeProgram(e.target.value)}
                 disabled={bulkBusy}
                 placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-teal-200"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-indigo-200"
               />
             </label>
             <datalist id="bulk-intake-program-suggestions">
@@ -4148,7 +4148,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={bulkBusy || !normalizeIntakeProgramLabel(bulkIntakeProgram)}
                 onClick={() => void applyBulkIntakeProgram('set')}
-                className="rounded-xl border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
+                className="rounded-xl border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
                 {bulkBusy ? 'Đang xử lý…' : 'Gán chương trình'}
               </button>
@@ -4297,7 +4297,7 @@ export function LeadManagement() {
               />
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute -left-1/4 top-0 h-[120%] w-[70%] rounded-full bg-gradient-to-br from-violet-500/25 via-fuchsia-500/20 to-transparent blur-3xl" />
-                <div className="absolute -right-1/4 bottom-0 h-[110%] w-[65%] rounded-full bg-gradient-to-tl from-cyan-400/20 via-teal-400/15 to-transparent blur-3xl" />
+                <div className="absolute -right-1/4 bottom-0 h-[110%] w-[65%] rounded-full bg-gradient-to-tl from-cyan-400/20 via-indigo-400/15 to-transparent blur-3xl" />
                 <div className="absolute left-1/3 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300/10 blur-3xl" />
               </div>
               <div
@@ -4401,7 +4401,7 @@ export function LeadManagement() {
             >
               <div className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(167,139,250,0.35),transparent_50%),radial-gradient(ellipse_at_70%_80%,rgba(45,212,191,0.25),transparent_45%),radial-gradient(ellipse_at_50%_50%,rgba(251,191,36,0.2),transparent_55%)]" />
-              <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/40 bg-gradient-to-br from-white/30 via-violet-100/25 to-teal-100/20 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-2xl">
+              <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/40 bg-gradient-to-br from-white/30 via-violet-100/25 to-indigo-100/20 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-2xl">
                 <p className="text-center text-xs font-bold uppercase tracking-wider text-slate-600">
                   Đang phân tích AI theo lô
                 </p>
@@ -4413,7 +4413,7 @@ export function LeadManagement() {
                 </p>
                 <div className="relative mt-5 h-2.5 overflow-hidden rounded-full border border-white/50 bg-white/20 shadow-inner">
                   <div
-                    className="ai-skeleton-shimmer absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-violet-500/90 via-teal-400/90 to-amber-400/90 transition-[width] duration-500 ease-out"
+                    className="ai-skeleton-shimmer absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-violet-500/90 via-indigo-400/90 to-amber-400/90 transition-[width] duration-500 ease-out"
                     style={{
                       width: `${Math.max(6, (100 * aiMinerProgress.done) / Math.max(1, aiMinerProgress.total))}%`,
                     }}
@@ -6113,7 +6113,7 @@ function LeadDetailPanel({
                         type="button"
                         disabled={saving || financeSaving}
                         onClick={() => void saveCoreProfile()}
-                        className="rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-lg border border-emerald-600 bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {saving ? 'Đang lưu…' : 'Lưu số'}
                       </button>
@@ -6192,7 +6192,7 @@ function LeadDetailPanel({
                                 type="button"
                                 disabled={saving || financeSaving || !coreDirty}
                                 onClick={() => void saveCoreProfile()}
-                                className="rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-lg border border-emerald-600 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 {saving ? 'Đang lưu…' : 'Lưu thông tin hồ sơ'}
                               </button>
@@ -6429,14 +6429,14 @@ function LeadDetailPanel({
                             </div>
                           ) : null}
 
-                          <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
+                          <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-indigo-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
                             <div className="flex items-start gap-1.5">
                               <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
                                 Tín hiệu &amp; đánh giá tiềm năng
                               </h3>
                               <button
                                 type="button"
-                                className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
+                                className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-indigo-100"
                                 aria-label="Giải thích khối tín hiệu đánh giá"
                                 title="Giải thích"
                                 onClick={() => signalsHelpRef.current?.showModal()}
@@ -6523,7 +6523,7 @@ function LeadDetailPanel({
                         className={[
                           'min-h-9 rounded-lg border px-3 py-2 text-left text-xs font-semibold tracking-tight transition sm:px-4 sm:text-sm',
                           detailRightTab === 'assign'
-                            ? 'border-teal-500/55 bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md'
+                            ? 'border-indigo-500/55 bg-gradient-to-r from-indigo-600 to-indigo-600 text-white shadow-md'
                             : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
                         ].join(' ')}
                       >

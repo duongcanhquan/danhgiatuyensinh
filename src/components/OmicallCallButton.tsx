@@ -121,7 +121,7 @@ export function OmicallCallButton({
   const primaryClass = [
     PRIMARY_BTN,
     primaryReady
-      ? 'border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700'
+      ? 'border border-emerald-600 bg-indigo-600 text-white hover:bg-indigo-700'
       : dialable && omicallEnabled
         ? 'border border-amber-300 bg-amber-50 text-amber-900'
         : 'border border-slate-200 bg-slate-100 text-slate-400',

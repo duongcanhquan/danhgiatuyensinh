@@ -204,7 +204,7 @@ export function CreateLeadModal({
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
           <div className="min-w-0">
             <p id="create-lead-title" className="flex items-center gap-2 text-lg font-bold text-slate-900">
-              <UserPlus className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+              <UserPlus className="h-5 w-5 shrink-0 text-indigo-600" aria-hidden />
               Tạo hồ sơ mới
             </p>
             <p className="mt-0.5 text-sm text-slate-600">
@@ -253,7 +253,7 @@ export function CreateLeadModal({
               value={assigneeUid}
               disabled={busy || isFieldStaffRole(profile?.role)}
               onChange={(e) => setAssigneeUid(e.target.value)}
-              className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50"
+              className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/25 disabled:bg-slate-50"
             >
               {pickList.map((u) => (
                 <option key={u.id} value={u.id}>

@@ -47,7 +47,7 @@ function formatSignedPoints(n: number): string {
 /** Nền sáng trong thẻ rule (xanh / đỏ / trung tính). */
 function signedPointsOnLight(n: number): string {
   if (!Number.isFinite(n)) return 'text-slate-700'
-  if (n > 0) return 'font-semibold text-emerald-600'
+  if (n > 0) return 'font-semibold text-indigo-600'
   if (n < 0) return 'font-semibold text-rose-600'
   return 'text-slate-700'
 }

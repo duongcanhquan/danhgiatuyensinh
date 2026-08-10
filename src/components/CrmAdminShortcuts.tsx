@@ -6,7 +6,7 @@ import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 import { BentoCell } from './bento'
 
 const TILE =
-  'flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3 py-3 text-center shadow-sm transition duration-200 hover:border-teal-200 hover:bg-teal-50/50'
+  'flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3 py-3 text-center shadow-sm transition duration-200 hover:border-indigo-200 hover:bg-indigo-50/50'
 
 /** Lối tắt quản lý — lưới icon, ít chữ. */
 export function CrmAdminShortcuts() {
@@ -37,13 +37,13 @@ export function CrmAdminShortcuts() {
               to={to}
               className={[
                 TILE,
-                primary ? 'border-teal-300 bg-teal-50/80 text-teal-950' : 'text-slate-800',
+                primary ? 'border-indigo-300 bg-indigo-50/80 text-indigo-950' : 'text-slate-800',
               ].join(' ')}
             >
               <span
                 className={[
                   'flex h-10 w-10 items-center justify-center rounded-xl',
-                  primary ? 'bg-teal-700 text-white' : 'bg-slate-100 text-teal-800',
+                  primary ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-indigo-800',
                 ].join(' ')}
               >
                 <Icon className="h-5 w-5" aria-hidden />

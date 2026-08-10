@@ -99,7 +99,7 @@ export function CatalogCombobox({
               role="option"
               aria-selected={norm(o) === norm(value)}
               className={[
-                'block w-full px-3 py-2 text-left text-slate-800 hover:bg-emerald-50',
+                'block w-full px-3 py-2 text-left text-slate-800 hover:bg-indigo-50',
                 norm(o) === norm(value) ? 'bg-sky-50 font-semibold text-sky-950' : '',
               ].join(' ')}
               onMouseDown={(e) => e.preventDefault()}
@@ -113,7 +113,7 @@ export function CatalogCombobox({
           <li className="border-t border-slate-100">
             <button
               type="button"
-              className="block w-full px-3 py-2 text-left text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
+              className="block w-full px-3 py-2 text-left text-xs font-semibold text-emerald-800 hover:bg-indigo-50"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => void commit(trimmed)}
             >
@@ -131,7 +131,7 @@ export function CatalogCombobox({
     <div ref={rootRef} className="relative min-w-0">
       <div className="flex min-w-0 items-stretch gap-0.5">
         <input
-          className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50 disabled:text-slate-500"
+          className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/25 disabled:bg-slate-50 disabled:text-slate-500"
           value={query}
           disabled={disabled || busy}
           autoComplete="new-password"

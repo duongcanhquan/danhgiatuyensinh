@@ -726,23 +726,23 @@ export function SettingsView() {
         <AppPageHeader
           title="Cài đặt"
           meta={
-            <span className="text-teal-100/85">
+            <span className="text-indigo-100/85">
               {isPlatformSuperAdmin
                 ? `Đang cấu hình · ${currentOrgLabel}`
                 : 'Dữ liệu · chấm điểm · nhân sự · kết nối'}
             </span>
           }
-          className="!mb-0 [&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+          className="!mb-0 [&_h1]:text-white [&_.text-slate-500]:text-indigo-100/80"
         />
       </BentoCell>
 
       {isPlatformSuperAdmin ? (
-        <BentoCell variant="muted" className="!p-3 text-sm text-teal-950">
+        <BentoCell variant="muted" className="!p-3 text-sm text-indigo-950">
           <p className="font-semibold">
-            Đang cấu hình: <span className="text-teal-900">{currentOrgLabel}</span>
-            <span className="ml-1 font-mono text-xs font-normal text-teal-800/80">({effectiveOrgId})</span>
+            Đang cấu hình: <span className="text-indigo-900">{currentOrgLabel}</span>
+            <span className="ml-1 font-mono text-xs font-normal text-indigo-800/80">({effectiveOrgId})</span>
           </p>
-          <p className="mt-0.5 text-xs text-teal-900/80">
+          <p className="mt-0.5 text-xs text-indigo-900/80">
             Đổi trường trên thanh bên, hoặc vào{' '}
             <Link to="/organizations" className="font-medium underline-offset-2 hover:underline">
               Quản lý trường
@@ -1148,7 +1148,7 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={runDemo}
-                className={`min-h-11 cursor-pointer rounded-xl border border-emerald-500/50 bg-emerald-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-emerald-700 ${settingsCopy}`}
+                className={`min-h-11 cursor-pointer rounded-xl border border-emerald-500/50 bg-indigo-600 px-5 py-3 font-semibold text-white shadow-md transition hover:bg-indigo-700 ${settingsCopy}`}
               >
                 Chạy thử chấm điểm
               </button>

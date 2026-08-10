@@ -17,7 +17,7 @@ import {
 } from '../utils/commsAutomationConfig'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 const LABEL = 'block text-xs font-semibold text-slate-600'
 
 function newId(prefix: string): string {
@@ -148,7 +148,7 @@ export function CommsAutomationSettingsPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <Mail className="h-4 w-4 text-teal-800" aria-hidden />
+          <Mail className="h-4 w-4 text-indigo-800" aria-hidden />
           Email &amp; tin nhắn tự động
         </h2>
         <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
@@ -164,7 +164,7 @@ export function CommsAutomationSettingsPanel() {
             key={t.id}
             type="button"
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-              section === t.id ? 'bg-teal-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              section === t.id ? 'bg-indigo-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
             onClick={() => setSection(t.id)}
           >
@@ -273,7 +273,7 @@ export function CommsAutomationSettingsPanel() {
                 <label className="flex items-center gap-2 self-end text-sm text-slate-800">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-teal-700"
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-700"
                     checked={draft.email.smtpSecure}
                     disabled={!canEdit}
                     onChange={(e) => patchEmail({ smtpSecure: e.target.checked })}
@@ -501,7 +501,7 @@ export function CommsAutomationSettingsPanel() {
                     />
                     Bật
                   </label>
-                  <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-900">
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-900">
                     {COMMS_CHANNEL_LABELS[t.channel]}
                   </span>
                   <select
@@ -691,13 +691,13 @@ export function CommsAutomationSettingsPanel() {
       {section === 'policy' ? (
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <MessageSquare className="h-4 w-4 text-teal-800" aria-hidden />
+            <MessageSquare className="h-4 w-4 text-indigo-800" aria-hidden />
             Đồng ý liên hệ &amp; giờ im lặng
           </h3>
           <label className="flex items-start gap-2 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-700"
               checked={draft.consent.requireOptInBeforeMarketing}
               disabled={!canEdit}
               onChange={(e) =>
@@ -712,7 +712,7 @@ export function CommsAutomationSettingsPanel() {
           <label className="flex items-start gap-2 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-700"
               checked={draft.consent.honorDoNotContact}
               disabled={!canEdit}
               onChange={(e) =>
@@ -727,7 +727,7 @@ export function CommsAutomationSettingsPanel() {
           <label className="flex items-start gap-2 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-700"
               checked={draft.consent.allowTransactionalByDefault}
               disabled={!canEdit}
               onChange={(e) =>
@@ -743,7 +743,7 @@ export function CommsAutomationSettingsPanel() {
           <label className="flex items-start gap-2 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-700"
               checked={draft.quietHours.enabled}
               disabled={!canEdit}
               onChange={(e) =>
@@ -822,7 +822,7 @@ export function CommsAutomationSettingsPanel() {
           type="button"
           disabled={!canEdit || busy}
           onClick={() => void onSave()}
-          className="inline-flex items-center gap-2 rounded-xl bg-teal-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-900 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-indigo-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-900 disabled:opacity-50"
         >
           <Save className="h-4 w-4" aria-hidden />
           {busy ? 'Đang lưu…' : 'Lưu'}
@@ -860,7 +860,7 @@ function ChannelCard({
         <label className="flex items-center gap-2 text-sm text-slate-800">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-teal-700"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-700"
             checked={enabled}
             disabled={!canEdit}
             onChange={(e) => onEnabled(e.target.checked)}

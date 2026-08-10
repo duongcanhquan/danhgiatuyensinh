@@ -53,7 +53,7 @@ export function ChangePasswordPanel({ compact }: { compact?: boolean }) {
   if (!open) {
     return (
       <div className={compact ? 'mt-2' : 'mt-2 space-y-1'}>
-        {ok ? <p className="px-1 text-xs text-teal-200">{ok}</p> : null}
+        {ok ? <p className="px-1 text-xs text-indigo-200">{ok}</p> : null}
         <button
           type="button"
           onClick={() => {
@@ -113,7 +113,7 @@ export function ChangePasswordPanel({ compact }: { compact?: boolean }) {
         <button
           type="submit"
           disabled={busy}
-          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-teal-600 px-2 py-2 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-indigo-600 px-2 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
           Lưu

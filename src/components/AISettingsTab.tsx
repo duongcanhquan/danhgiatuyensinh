@@ -693,7 +693,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   <button
                     type="button"
                     onClick={persistGatekeeper}
-                    className="rounded-xl border border-cyan-400/45 bg-gradient-to-r from-cyan-600/35 to-teal-800/40 px-4 py-2 text-sm font-semibold text-cyan-50 transition hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+                    className="rounded-xl border border-cyan-400/45 bg-gradient-to-r from-cyan-600/35 to-indigo-800/40 px-4 py-2 text-sm font-semibold text-cyan-50 transition hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
                   >
                     Lưu quy tắc lọc
                   </button>

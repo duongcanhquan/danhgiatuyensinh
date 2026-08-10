@@ -297,7 +297,7 @@ function ProfileEditorPanel({
                   type="button"
                   disabled={busy}
                   onClick={onCreateProfile}
-                  className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-xs font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-md border border-emerald-600 bg-indigo-600 px-1.5 py-0.5 text-xs font-semibold leading-none text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
                   title="Tạo profile mới"
                 >
                   + Tạo
@@ -454,7 +454,7 @@ function ProfileEditorPanel({
                       type="button"
                       disabled={busy}
                       onClick={onCreateProfile}
-                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-xs font-semibold leading-none text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      className="rounded-md border border-emerald-600 bg-indigo-600 px-1.5 py-1 text-xs font-semibold leading-none text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
                       title="Tạo profile mới"
                     >
                       + Tạo
@@ -543,7 +543,7 @@ function ProfileEditorPanel({
             type="button"
             disabled={busy}
             onClick={() => void saveProfile()}
-            className="rounded-md border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+            className="rounded-md border border-emerald-600 bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
             title={undefined}
           >
             {busy ? 'Đang lưu…' : 'Lưu profile'}
@@ -744,7 +744,7 @@ export function ProfileManagerTab({ db }: { db: Firestore }) {
                       type="button"
                       disabled={busy}
                       onClick={() => void createProfile()}
-                      className="rounded-md border border-emerald-600 bg-emerald-600 px-1.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                      className="rounded-md border border-emerald-600 bg-indigo-600 px-1.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
                       title="Tạo profile mới"
                     >
                       + Tạo profile

@@ -127,7 +127,7 @@ function PaymentSlotActions({
             type="button"
             disabled={disabled || busy}
             onClick={() => void run('ĐỒNG Ý')}
-            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
             Duyệt

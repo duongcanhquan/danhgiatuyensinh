@@ -3,7 +3,7 @@ import { PAYMENT_SLOT_DEFS, formatAmountInput, sumFinanceDraft } from '../utils/
 import type { LeadPaymentApprovalStatus, LeadPaymentSlotKey } from '../types'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/25 disabled:bg-slate-50'
+  'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/25 disabled:bg-slate-50'
 
 function ApprovalBadge({ status, note }: { status: LeadPaymentApprovalStatus; note?: string }) {
   if (!status) return <span className="text-xs text-slate-400">Chờ duyệt kế toán</span>
@@ -121,7 +121,7 @@ export function LeadProfileFinanceSection({
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
             checked={draft.reqFullNe}
             disabled={disabled}
             onChange={(e) => onChange({ ...draft, reqFullNe: e.target.checked })}

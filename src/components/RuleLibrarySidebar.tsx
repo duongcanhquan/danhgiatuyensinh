@@ -7,7 +7,7 @@ import { CUSTOM_RULE_TEMPLATE_PREFIX, getRuleLibraryTemplates, RULE_TEMPLATE_DRA
 const CATEGORY_BAND: Record<RuleCategory, string> = {
   demographics: 'border-l-4 border-l-amber-500 bg-amber-50/70',
   academic: 'border-l-4 border-l-sky-500 bg-sky-50/70',
-  source_engagement: 'border-l-4 border-l-teal-500 bg-teal-50/60',
+  source_engagement: 'border-l-4 border-l-indigo-500 bg-indigo-50/60',
   psychographics: 'border-l-4 border-l-violet-500 bg-violet-50/60',
   behavior: 'border-l-4 border-l-emerald-600 bg-emerald-50/65',
   risk: 'border-l-4 border-l-rose-600 bg-rose-50/65',

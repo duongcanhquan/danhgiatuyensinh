@@ -260,7 +260,7 @@ export function AnalyticsAdvancedView() {
           <button
             type="button"
             onClick={exportSummary}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
             Tải CSV
@@ -269,7 +269,7 @@ export function AnalyticsAdvancedView() {
       />
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-3 py-2.5 shadow-sm">
-        <Filter className="h-4 w-4 shrink-0 text-teal-700" aria-hidden />
+        <Filter className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden />
         <select
           value={teamLeadUid}
           aria-label="Nhóm"
@@ -312,7 +312,7 @@ export function AnalyticsAdvancedView() {
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <Users className="h-4 w-4 text-teal-700" aria-hidden />
+          <Users className="h-4 w-4 text-indigo-700" aria-hidden />
           <p className="mt-1 text-[11px] font-semibold uppercase text-slate-500">Hồ sơ</p>
           <p className="text-xl font-bold tabular-nums text-slate-900">
             {loading && !scopeActive && totalLeadCount === null
@@ -418,7 +418,7 @@ export function AnalyticsAdvancedView() {
                 <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" width={88} tick={{ fill: '#475569', fontSize: 11 }} />
                 <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0' }} />
-                <Bar dataKey="hồ_sơ" fill="#0d9488" radius={[0, 6, 6, 0]} />
+                <Bar dataKey="hồ_sơ" fill="#4f46e5" radius={[0, 6, 6, 0]} />
                 <Bar dataKey="HOT" fill="#ea580c" radius={[0, 6, 6, 0]} />
                 <Bar dataKey="NE" fill="#059669" radius={[0, 6, 6, 0]} />
               </BarChart>

@@ -638,7 +638,7 @@ export function StaffManagementView({
           <button
             type="submit"
             disabled={busy}
-            className="mt-4 w-full rounded-xl border border-emerald-300/60 bg-emerald-600 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-emerald-700 disabled:opacity-50"
+            className="mt-4 w-full rounded-xl border border-emerald-300/60 bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-indigo-700 disabled:opacity-50"
           >
             {busy ? 'Đang tạo…' : 'Tạo tài khoản'}
           </button>
@@ -728,7 +728,7 @@ export function StaffManagementView({
                               <button
                                 type="button"
                                 onClick={() => void toggleActive(u, true)}
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-900 hover:bg-indigo-100"
                               >
                                 Kích hoạt
                               </button>
@@ -999,7 +999,7 @@ export function StaffManagementView({
                 <button
                   type="submit"
                   disabled={editBusy || resetPwdBusy}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {editBusy ? 'Đang lưu…' : 'Lưu'}
                 </button>

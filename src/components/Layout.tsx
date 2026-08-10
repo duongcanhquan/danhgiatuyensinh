@@ -83,10 +83,10 @@ const mainNav: NavDef[] = [
 function sidebarLinkClass(isActive: boolean) {
   return [
     'flex w-full min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition duration-150',
-    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400',
     isActive
       ? 'bg-[var(--vm-accent)] text-white shadow-sm'
       : 'text-slate-300 hover:bg-white/10 hover:text-white',
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400',
   ].join(' ')
 }
 

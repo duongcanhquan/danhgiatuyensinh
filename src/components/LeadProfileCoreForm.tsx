@@ -130,7 +130,7 @@ function ProfileTabBar({
               'min-h-10 shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition duration-150 sm:text-sm',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-600',
               selected
-                ? 'border-emerald-600/40 bg-emerald-600 text-white shadow-sm'
+                ? 'border-emerald-600/40 bg-indigo-600 text-white shadow-sm'
                 : 'border-transparent bg-white text-slate-700 hover:border-slate-200 hover:bg-slate-50/80',
             ].join(' ')}
           >
@@ -210,7 +210,7 @@ function SourceSelect({
             role="option"
             aria-selected={!value.trim()}
             className={[
-              'block w-full px-3 py-2 text-left text-slate-600 hover:bg-emerald-50',
+              'block w-full px-3 py-2 text-left text-slate-600 hover:bg-indigo-50',
               !value.trim() ? 'bg-sky-50 font-semibold text-sky-950' : '',
             ].join(' ')}
             onMouseDown={(e) => e.preventDefault()}
@@ -229,7 +229,7 @@ function SourceSelect({
               role="option"
               aria-selected={s.label === value}
               className={[
-                'block w-full px-3 py-2 text-left text-slate-800 hover:bg-emerald-50',
+                'block w-full px-3 py-2 text-left text-slate-800 hover:bg-indigo-50',
                 s.label === value ? 'bg-sky-50 font-semibold text-sky-950' : '',
               ].join(' ')}
               onMouseDown={(e) => e.preventDefault()}
@@ -314,7 +314,7 @@ function ScholarshipSelect({
             role="option"
             aria-selected={!value}
             className={[
-              'block w-full px-3 py-2 text-left text-slate-600 hover:bg-emerald-50',
+              'block w-full px-3 py-2 text-left text-slate-600 hover:bg-indigo-50',
               !value ? 'bg-sky-50 font-semibold text-sky-950' : '',
             ].join(' ')}
             onMouseDown={(e) => e.preventDefault()}
@@ -342,7 +342,7 @@ function ScholarshipSelect({
                   aria-selected={s.id === value}
                   title={[s.targetAudience, s.applicationMethod].filter(Boolean).join(' · ')}
                   className={[
-                    'block w-full px-3 py-2 text-left text-slate-800 hover:bg-emerald-50',
+                    'block w-full px-3 py-2 text-left text-slate-800 hover:bg-indigo-50',
                     s.id === value ? 'bg-sky-50 font-semibold text-sky-950' : '',
                   ].join(' ')}
                   onMouseDown={(e) => e.preventDefault()}

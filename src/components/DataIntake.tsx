@@ -781,7 +781,7 @@ export function DataIntake() {
                       ? 'Nhập tên chương trình / đợt trước'
                       : undefined
                 }
-                className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
+                className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
               >
                 <Upload className="h-4 w-4 shrink-0" aria-hidden />
                 Xác nhận nhập ({previewStats.acceptedNew})
@@ -889,7 +889,7 @@ export function DataIntake() {
                 onClick={onPickFile}
                 disabled={!db || busy || !canIntake}
                 aria-label="Chọn file Excel .xlsx để tải lên"
-                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-40"
+                className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500 bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-40"
               >
                 <Upload className="h-4 w-4 shrink-0" aria-hidden />
                 {busy ? 'Đang xử lý…' : 'Tải lên file .xlsx'}

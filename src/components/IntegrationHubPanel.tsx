@@ -36,7 +36,7 @@ import {
 } from '../integrations/inboundApiKey'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 function maturityDot(m: ConnectorMaturity): string {
   switch (m) {
@@ -245,7 +245,7 @@ export function IntegrationHubPanel() {
         return (
           <section key={g.group}>
             <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-              <GroupIcon className="h-3.5 w-3.5 text-teal-700" aria-hidden />
+              <GroupIcon className="h-3.5 w-3.5 text-indigo-700" aria-hidden />
               {g.label}
             </h3>
             <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -268,12 +268,12 @@ export function IntegrationHubPanel() {
                       className={[
                         'group flex h-full w-full cursor-pointer flex-col items-center gap-2 rounded-2xl border px-2 py-3 text-center transition duration-200',
                         active
-                          ? 'border-teal-400 bg-teal-50 shadow-sm ring-2 ring-teal-200/60'
-                          : 'border-slate-200/90 bg-white hover:border-teal-200 hover:bg-slate-50',
-                        c.settingsHref ? 'hover:ring-2 hover:ring-teal-200/50' : '',
+                          ? 'border-indigo-400 bg-indigo-50 shadow-sm ring-2 ring-indigo-200/60'
+                          : 'border-slate-200/90 bg-white hover:border-indigo-200 hover:bg-slate-50',
+                        c.settingsHref ? 'hover:ring-2 hover:ring-indigo-200/50' : '',
                       ].join(' ')}
                     >
-                      <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-800 ring-1 ring-teal-100">
+                      <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-cyan-50 text-indigo-800 ring-1 ring-indigo-100">
                         <Icon className="h-5 w-5" aria-hidden />
                         <span
                           className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white ${maturityDot(c.maturity)}`}
@@ -281,7 +281,7 @@ export function IntegrationHubPanel() {
                         />
                         {configured ? (
                           <CheckCircle2
-                            className="absolute -bottom-1 -left-1 h-4 w-4 text-emerald-600"
+                            className="absolute -bottom-1 -left-1 h-4 w-4 text-indigo-600"
                             aria-label="Đã cấu hình"
                           />
                         ) : null}
@@ -301,14 +301,14 @@ export function IntegrationHubPanel() {
       {activeDef ? (
         <div
           id="hub-connector-detail"
-          className="scroll-mt-4 rounded-2xl border border-teal-200/80 bg-white p-4 shadow-sm"
+          className="scroll-mt-4 rounded-2xl border border-indigo-200/80 bg-white p-4 shadow-sm"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-3">
               {(() => {
                 const Icon = connectorIcon(activeDef.id)
                 return (
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-800">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-800">
                     <Icon className="h-5 w-5" aria-hidden />
                   </span>
                 )
@@ -322,7 +322,7 @@ export function IntegrationHubPanel() {
             {activeDef.settingsHref ? (
               <Link
                 to={activeDef.settingsHref}
-                className="inline-flex items-center gap-1 rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"
+                className="inline-flex items-center gap-1 rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800"
               >
                 Mở cấu hình
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -344,7 +344,7 @@ export function IntegrationHubPanel() {
                     <label key={f.key} className="flex items-center gap-2 sm:col-span-2">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300 text-teal-700"
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-700"
                         checked={fields[f.key] === 'true'}
                         disabled={!canEdit}
                         onChange={(e) =>
@@ -456,7 +456,7 @@ export function IntegrationHubPanel() {
                   <button
                     type="button"
                     onClick={() => void createApiKey()}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800"
                   >
                     <KeyRound className="h-3.5 w-3.5" aria-hidden />
                     Tạo key
@@ -518,7 +518,7 @@ export function IntegrationHubPanel() {
             type="button"
             disabled={busy}
             onClick={() => void onSave()}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-60"
           >
             <Save className="h-4 w-4" aria-hidden />
             {busy ? '…' : 'Lưu'}

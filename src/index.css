@@ -22,36 +22,39 @@
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Fira Code', ui-monospace, monospace;
   --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  /* High-contrast VietMy bento — ink / canvas / teal CTA (not purple, not cream) */
-  --color-primary: #0d9488;
-  --color-primary-hover: #0f766e;
-  --color-primary-soft: #ccfbf1;
-  --color-accent: #0284c7;
-  --color-accent-hover: #0369a1;
+  /* Light indigo CRM — canvas thoáng, CTA indigo, sidebar ink tối */
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-soft: #eef2ff;
+  --color-accent: #6366f1;
+  --color-accent-hover: #4f46e5;
   --color-surface: #ffffff;
-  --color-background: #e8eef5;
-  --color-foreground: #020617;
-  --color-muted: #475569;
-  --color-border: #cbd5e1;
-  --color-destructive: #dc2626;
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-destructive: #ef4444;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
   --color-ink: #0b1220;
   --color-ink-muted: #94a3b8;
   --color-parchment: #f1f5f9;
-  --color-brass: #0d9488;
-  --color-brass-soft: #ccfbf1;
+  --color-brass: #4f46e5;
+  --color-brass-soft: #eef2ff;
   --vm-ink: #0b1220;
   --vm-ink-elevated: #111827;
-  --vm-canvas: #e8eef5;
+  --vm-canvas: #f8fafc;
   --vm-cell: #ffffff;
-  --vm-cell-border: #0f172a1a;
-  --vm-text: #020617;
-  --vm-text-muted: #334155;
+  --vm-cell-border: #0f172a14;
+  --vm-text: #0f172a;
+  --vm-text-muted: #64748b;
   --vm-on-ink: #f8fafc;
-  --vm-accent: #0d9488;
-  --vm-accent-contrast: #042f2e;
-  --shadow-sm: 0 1px 2px rgb(2 6 23 / 0.06);
-  --shadow-md: 0 4px 14px rgb(2 6 23 / 0.08);
-  --shadow-lg: 0 16px 40px rgb(2 6 23 / 0.12);
+  --vm-accent: #4f46e5;
+  --vm-accent-contrast: #312e81;
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 12px 28px rgb(15 23 42 / 0.07);
   --nav-bottom-height: 4rem;
   --motion-fast: 150ms;
   --motion-base: 220ms;
@@ -113,8 +116,8 @@ body {
   font-size: 1rem;
   background: var(--vm-canvas);
   background-image:
-    radial-gradient(ellipse 100% 70% at 0% 0%, rgba(13, 148, 136, 0.09), transparent 55%),
-    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(2, 132, 199, 0.07), transparent 50%);
+    radial-gradient(ellipse 100% 70% at 0% 0%, rgba(79, 70, 229, 0.06), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(99, 102, 241, 0.05), transparent 50%);
   background-attachment: scroll;
   color: var(--vm-text);
   line-height: 1.6;
@@ -130,7 +133,7 @@ main h1 {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  color: rgb(15 23 42);
+  color: var(--vm-text);
 }
 
 main h2 {
@@ -139,7 +142,7 @@ main h2 {
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.25;
-  color: rgb(30 41 59);
+  color: var(--vm-text);
 }
 
 .font-display {
@@ -155,8 +158,8 @@ main h2 {
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
-  color: rgb(30 64 175);
-  background-image: linear-gradient(92deg, rgb(37 99 235) 0%, rgb(5 150 105) 55%, rgb(15 23 42) 100%);
+  color: rgb(67 56 202);
+  background-image: linear-gradient(92deg, #4f46e5 0%, #6366f1 55%, #0f172a 100%);
   background-size: 100% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -173,8 +176,8 @@ main h2 {
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
-  color: rgb(219 234 254);
-  background-image: linear-gradient(92deg, rgb(191 219 254) 0%, rgb(52 211 153) 50%, rgb(255 255 255) 100%);
+  color: rgb(224 231 255);
+  background-image: linear-gradient(92deg, #c7d2fe 0%, #a5b4fc 45%, #ffffff 100%);
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -193,7 +196,7 @@ main h2 {
   line-height: 1.35;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(71 85 105);
+  color: var(--vm-text-muted);
 }
 
 .app-page-kicker {
@@ -202,7 +205,7 @@ main h2 {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgb(71 85 105);
+  color: var(--vm-text-muted);
 }
 
 /* Khung kính — viền ánh đồng, bóng sâu */
@@ -314,7 +317,7 @@ main h2 {
 }
 
 * {
-  scrollbar-color: rgba(37, 99, 235, 0.28) rgba(15, 23, 42, 0.06);
+  scrollbar-color: rgba(79, 70, 229, 0.28) rgba(15, 23, 42, 0.06);
   scrollbar-width: thin;
 }
 
@@ -338,22 +341,22 @@ main h2 {
     box-shadow 0.15s ease;
 }
 .vm-input::placeholder {
-  color: rgb(148 163 184);
+  color: var(--vm-text-muted);
 }
 .vm-input:hover:not(:disabled),
 .vm-select:hover:not(:disabled) {
-  border-color: rgb(203 213 225);
+  border-color: #cbd5e1;
 }
 .vm-input:focus,
 .vm-select:focus {
-  border-color: rgb(37 99 235);
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.18);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgb(79 70 229 / 0.18);
 }
 .vm-input:disabled,
 .vm-select:disabled {
   cursor: not-allowed;
-  background: rgb(248 250 252);
-  color: rgb(100 116 139);
+  background: #f1f5f9;
+  color: var(--vm-text-muted);
 }
 
 .vm-btn {
@@ -375,7 +378,7 @@ main h2 {
     opacity 0.15s ease;
 }
 .vm-btn:focus-visible {
-  outline: 2px solid rgb(37 99 235);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 .vm-btn:disabled {
@@ -384,32 +387,33 @@ main h2 {
 }
 
 .vm-btn-primary {
-  border: 1px solid rgb(29 78 216);
+  border: 1px solid var(--color-primary-hover);
   background: var(--color-primary);
   color: white;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+  box-shadow: var(--shadow-sm);
 }
 .vm-btn-primary:hover:not(:disabled) {
   background: var(--color-primary-hover);
+  box-shadow: 0 0 0 3px rgb(79 70 229 / 0.2);
 }
 
 .vm-btn-secondary {
   border: 1px solid var(--color-border);
-  background: white;
-  color: rgb(51 65 85);
+  background: #f1f5f9;
+  color: #0f172a;
 }
 .vm-btn-secondary:hover:not(:disabled) {
-  background: rgb(248 250 252);
-  border-color: rgb(203 213 225);
+  background: #e2e8f0;
+  border-color: #cbd5e1;
 }
 
 .vm-btn-accent {
-  border: 1px solid rgb(4 120 87);
-  background: var(--color-accent);
+  border: 1px solid #059669;
+  background: var(--color-success);
   color: white;
 }
 .vm-btn-accent:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  background: #059669;
 }
 
 .vm-page-kicker {
@@ -730,7 +734,7 @@ a {
 }
 
 .bento-cell--hero {
-  background: linear-gradient(145deg, #0b1220 0%, #134e4a 55%, #0f766e 100%);
+  background: linear-gradient(145deg, #0b1220 0%, #1e1b4b 55%, #312e81 100%);
   color: var(--vm-on-ink);
   border-color: transparent;
 }
@@ -910,7 +914,7 @@ a {
 
 .app-focus-ring:focus,
 .app-focus-ring:focus-visible {
-  box-shadow: 0 0 0 3px rgb(13 148 136 / 0.28);
+  box-shadow: 0 0 0 3px rgb(79 70 229 / 0.28);
 }
 
 /* OMICall SDK toastify — ẩn toast đỏ «Có lỗi xảy ra» khi SIP/mạng lỗi nền; trạng thái nằm ở dải tổng đài. */

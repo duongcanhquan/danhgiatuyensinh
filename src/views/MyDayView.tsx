@@ -194,7 +194,7 @@ export function MyDayView() {
         <AppPageHeader
           title="Ngày của tôi"
           meta={today}
-          className="[&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+          className="[&_h1]:text-white [&_.text-slate-500]:text-indigo-100/80"
         />
       </BentoCell>
 

@@ -411,13 +411,13 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                   background={{ fill: '#e2e8f0' }}
                   dataKey="value"
                   cornerRadius={8}
-                  fill="#0d9488"
+                  fill="#4f46e5"
                   className="drop-shadow-[0_2px_8px_rgba(13,148,136,0.35)]"
                 />
               </RadialBarChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-8 text-center">
-              <p className="text-3xl font-bold tabular-nums text-teal-800">
+              <p className="text-3xl font-bold tabular-nums text-indigo-800">
                 {chartsBusy ? '…' : `${yieldGauge[0]?.value ?? 0}%`}
               </p>
               <p className="text-xs uppercase tracking-wide text-slate-600">trên nhóm đã cam kết</p>
@@ -450,7 +450,7 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                 type="monotone"
                 name="Hủy phút chót"
                 dataKey="melt"
-                stroke="#0d9488"
+                stroke="#4f46e5"
                 strokeWidth={2}
                 fill="url(#meltFill)"
                 dot={{ r: 3, fill: '#99f6e4', strokeWidth: 0 }}

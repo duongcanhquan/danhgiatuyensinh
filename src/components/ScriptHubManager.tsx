@@ -310,7 +310,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                     }
                   })()
                 }}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 shadow-sm hover:bg-emerald-100 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 shadow-sm hover:bg-indigo-100 disabled:opacity-50"
               >
                 {seedBusy ? 'Đang nạp…' : 'Nạp 20 snippet mẫu'}
               </button>

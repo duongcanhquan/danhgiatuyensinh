@@ -199,8 +199,8 @@ export function LeadScoringSignalsPanel({
   const ulSp = compact ? 'mt-1 space-y-1' : 'mt-1.5 space-y-1.5'
   const rowGap = compact ? 'gap-1.5' : 'gap-2'
   const chkB = compact
-    ? 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50'
-    : 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50'
+    ? 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50'
+    : 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50'
   const chkR = compact
     ? 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:opacity-50'
     : 'mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:opacity-50'

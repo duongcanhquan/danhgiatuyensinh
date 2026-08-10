@@ -15,7 +15,7 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrationConfig {
   const base = defaultPublicRegistrationConfig()
@@ -206,7 +206,7 @@ export function PublicRegistrationSettingsPanel() {
             href={portalPath}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-indigo-100"
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             Mở thử
@@ -217,7 +217,7 @@ export function PublicRegistrationSettingsPanel() {
       <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <input
           type="checkbox"
-          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+          className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
           checked={draft.enabled}
           disabled={!canEdit}
           onChange={(e) => patch({ enabled: e.target.checked })}
@@ -291,7 +291,7 @@ export function PublicRegistrationSettingsPanel() {
       <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <input
           type="checkbox"
-          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+          className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
           checked={draft.autoAssignCounselor}
           disabled={!canEdit}
           onChange={(e) => patch({ autoAssignCounselor: e.target.checked })}
@@ -306,7 +306,7 @@ export function PublicRegistrationSettingsPanel() {
         <label className="flex items-start gap-3">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
             checked={draft.n8nEnabled}
             disabled={!canEdit}
             onChange={(e) => patch({ n8nEnabled: e.target.checked })}
@@ -334,7 +334,7 @@ export function PublicRegistrationSettingsPanel() {
           type="button"
           disabled={!canEdit || busy}
           onClick={() => void onSave()}
-          className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-800 disabled:opacity-50"
         >
           <Save className="h-4 w-4" aria-hidden />
           {busy ? 'Đang lưu…' : 'Lưu'}

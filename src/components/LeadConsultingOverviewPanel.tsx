@@ -69,7 +69,7 @@ export function LeadConsultingOverviewPanel({
           ) : null}
         </section>
 
-        <section className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-white p-3 sm:p-4">
+        <section className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-indigo-50/80 to-white p-3 sm:p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900">Chấm điểm lead</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {insights.priorityTag ? <TagBadge tag={insights.priorityTag} /> : null}

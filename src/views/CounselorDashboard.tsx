@@ -344,7 +344,7 @@ function CounselorLeadListRow({
             disabled={!canInteract}
             onClick={(e) => void logCall(e)}
             title="Ghi cuộc gọi"
-            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-30"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-emerald-300 hover:bg-indigo-50 hover:text-emerald-800 disabled:opacity-30"
           >
             <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
@@ -368,7 +368,7 @@ function CounselorLeadListRow({
           </button>
           <Link
             to={`/leads?open=${encodeURIComponent(lead.id)}`}
-            className="inline-flex min-h-10 items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
+            className="inline-flex min-h-10 items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-900"
             title="Mở đầy đủ thông tin trên màn Hồ sơ"
           >
             <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
@@ -1151,7 +1151,7 @@ export function CounselorDashboard() {
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             Làm việc trên <strong>danh sách hồ sơ</strong> có bộ lọc — đổi <strong>tình trạng CRM</strong>, ghi chú / gọi /
             follow-up nhanh, rồi mở{' '}
-            <Link to="/leads" className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950">
+            <Link to="/leads" className="font-semibold text-indigo-800 underline underline-offset-2 hover:text-indigo-950">
               Hồ sơ đầy đủ
             </Link>{' '}
           </p>

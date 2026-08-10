@@ -334,7 +334,7 @@ export function OmicallSettingsTab() {
             }`}
           >
             <span className="font-bold text-slate-400">{i + 1}.</span>
-            {s.done ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden /> : null}
+            {s.done ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" aria-hidden /> : null}
             <span>{s.label}</span>
           </li>
         ))}
@@ -493,7 +493,7 @@ export function OmicallSettingsTab() {
               type="button"
               disabled={mySipBusy || busy || !draft.apiKey?.trim()}
               onClick={() => void runSyncMySip()}
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-indigo-100 disabled:opacity-50"
             >
               {mySipBusy ? 'Đang đồng bộ…' : 'Đồng bộ số theo email tôi'}
             </button>

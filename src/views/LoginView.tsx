@@ -146,7 +146,7 @@ export function LoginView() {
   return (
     <main className="relative flex min-h-[100dvh] w-full flex-col items-center overflow-x-hidden bg-[var(--vm-canvas)] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] font-sans">
       <video
-        className="fixed inset-0 z-[0] h-full w-full object-cover opacity-40"
+        className="fixed inset-0 z-[0] h-full w-full object-cover opacity-30"
         src={VIDEO_SRC}
         autoPlay
         loop
@@ -156,7 +156,7 @@ export function LoginView() {
         aria-hidden
       />
       <div
-        className="pointer-events-none fixed inset-0 z-[1] bg-[radial-gradient(ellipse_at_20%_0%,rgba(13,148,136,0.35),transparent_50%),linear-gradient(180deg,#0b1220f2_0%,#0b1220cc_45%,#e8eef5_100%)]"
+        className="pointer-events-none fixed inset-0 z-[1] bg-[radial-gradient(ellipse_at_20%_0%,rgba(79,70,229,0.22),transparent_50%),linear-gradient(180deg,#0b1220f2_0%,#0b1220b8_42%,#f8fafc_100%)]"
         aria-hidden
       />
 
@@ -167,32 +167,26 @@ export function LoginView() {
           transition={{ duration: 0.55, ease: 'easeOut' }}
           className="bento-login-board"
         >
-          <section className="bento-cell bento-cell--hero flex flex-col !p-7 sm:!p-9">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-100/80">
-                VietMy Admissions
-              </p>
-              <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                CRM tuyển sinh
-              </h1>
-            </div>
-            <div className="mt-8 flex flex-1 items-center justify-center">
-              <img
-                src={BRAND_LOGO_SRC}
-                alt="Cao đẳng Việt Mỹ - Hà Nội"
-                className="h-auto w-full max-w-[18rem] object-contain sm:max-w-[22rem]"
-              />
-            </div>
+          <section className="bento-cell bento-cell--hero flex flex-col items-center justify-center !p-7 sm:!p-9">
+            <h1 className="sr-only">Smart AI CRM — Cao đẳng Việt Mỹ - Hà Nội</h1>
+            <img
+              src={BRAND_LOGO_SRC}
+              alt="Cao đẳng Việt Mỹ - Hà Nội"
+              className="h-auto w-full max-w-[18rem] object-contain sm:max-w-[22rem]"
+            />
+            <VietMyAccentHeading
+              as="p"
+              tone="onDark"
+              size="md"
+              className="mt-7 text-center !tracking-[0.32em] sm:!text-base sm:!tracking-[0.38em]"
+            >
+              Smart AI CRM
+            </VietMyAccentHeading>
           </section>
 
-          <section className="bento-cell !bg-white !p-6 text-[var(--vm-text)] shadow-lg sm:!p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Đăng nhập</p>
-            <VietMyAccentHeading as="h2" tone="onLight" size="lg" className="mt-1 block text-slate-900">
-              Vào làm việc
-            </VietMyAccentHeading>
-
-            <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-4">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <section className="bento-cell !bg-white !p-6 text-[var(--vm-text)] shadow-[var(--shadow-md)] sm:!p-8">
+            <form onSubmit={(e) => void submit(e)} className="space-y-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--vm-text-muted)]">
                 Email
                 <input
                   type="email"
@@ -200,11 +194,11 @@ export function LoginView() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="vm-input mt-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:ring-teal-600/20"
+                  className="vm-input mt-2"
                   placeholder={superEmailHint || 'ten@caodangvietmy.edu.vn'}
                 />
               </label>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--vm-text-muted)]">
                 Mật khẩu
                 <input
                   type="password"
@@ -213,22 +207,19 @@ export function LoginView() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="vm-input mt-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:ring-teal-600/20"
+                  className="vm-input mt-2"
                   placeholder="Tối thiểu 6 ký tự"
                 />
               </label>
               {error ? (
-                <p className="whitespace-pre-line rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-900">
+                <p className="whitespace-pre-line rounded-xl border border-[color:var(--color-danger)]/30 bg-red-50 px-3 py-2 text-sm leading-relaxed text-red-700">
                   {error}
                 </p>
               ) : null}
               <button type="submit" disabled={busy} className="vm-btn vm-btn-primary w-full py-3 text-base">
                 {busy ? 'Đang đăng nhập…' : 'Đăng nhập CRM'}
               </button>
-              <Link
-                to="/ke-toan/login"
-                className="vm-btn vm-btn-secondary w-full border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
-              >
+              <Link to="/ke-toan/login" className="vm-btn vm-btn-secondary w-full">
                 <Wallet className="h-4 w-4" aria-hidden />
                 Cổng kế toán — truy cập nhanh
               </Link>

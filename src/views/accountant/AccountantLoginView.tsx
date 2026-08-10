@@ -25,7 +25,7 @@ export function AccountantLoginView() {
   if (!hasAuth) {
     const missing = getFirebaseMissingKeys()
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-emerald-50 px-4">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 px-4">
         <div className="max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-lg">
           <h1 className="text-lg font-bold text-slate-900">Chưa cấu hình Firebase</h1>
           <p className="mt-2 text-sm text-slate-600">Cần đủ biến VITE_FIREBASE_* trên Vercel / .env.</p>
@@ -47,7 +47,7 @@ export function AccountantLoginView() {
         continueTo={from}
         portalTitle="Cổng kế toán"
         continueLabel="Vào cổng kế toán"
-        tone="emerald"
+        tone="indigo"
       />
     )
   }
@@ -69,25 +69,25 @@ export function AccountantLoginView() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-950 px-4 py-10">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-emerald-400/25 bg-white shadow-2xl shadow-emerald-950/40">
-        <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-700 to-emerald-600 px-6 py-5 text-white">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-950 px-4 py-10">
+      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-indigo-400/25 bg-white shadow-2xl shadow-indigo-950/40">
+        <div className="border-b border-indigo-100 bg-gradient-to-r from-indigo-700 to-indigo-600 px-6 py-5 text-white">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
               <Wallet className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-100/90">VietMy Admissions</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-100/90">VietMy Admissions</p>
               <h1 className="text-xl font-extrabold tracking-tight">Cổng kế toán</h1>
             </div>
           </div>
-          <p className="mt-3 text-sm leading-relaxed text-emerald-50/90">
+          <p className="mt-3 text-sm leading-relaxed text-indigo-50/90">
             Khu vực riêng — duyệt thu, Full NE, thông báo n8n → Google Chat.
           </p>
         </div>
 
         <div className="space-y-4 px-6 py-6">
-          <AuthSessionExitBar tone="emerald" />
+          <AuthSessionExitBar tone="indigo" />
           <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden />
             <p>
@@ -106,7 +106,7 @@ export function AccountantLoginView() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="quan.duong@caodangvietmy.edu.vn"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
               />
             </label>
             <label className="block text-sm font-medium text-slate-700">
@@ -119,7 +119,7 @@ export function AccountantLoginView() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-10 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-10 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                 />
                 <button
                   type="button"
@@ -157,7 +157,7 @@ export function AccountantLoginView() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 disabled:opacity-50"
+              className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-900/20 hover:bg-indigo-700 disabled:opacity-50"
             >
               {busy ? 'Đang xác thực…' : 'Đăng nhập an toàn'}
             </button>
@@ -165,7 +165,7 @@ export function AccountantLoginView() {
 
           <p className="text-center text-xs text-slate-500">
             TVV / quản trị?{' '}
-            <Link to="/login" className="font-semibold text-emerald-800 underline">
+            <Link to="/login" className="font-semibold text-indigo-800 underline">
               Quay lại đăng nhập CRM
             </Link>
           </p>

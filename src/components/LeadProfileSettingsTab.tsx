@@ -24,7 +24,7 @@ import { ScholarshipSettingsTab } from './ScholarshipSettingsTab'
 
 const INPUT =
 
-  'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30 disabled:bg-slate-50'
+  'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 disabled:bg-slate-50'
 
 
 
@@ -119,7 +119,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
     <div className="min-w-0 space-y-4">
 
-      <header className="rounded-xl border border-slate-200/90 bg-gradient-to-br from-emerald-50/80 via-white to-violet-50/50 p-4 shadow-sm">
+      <header className="rounded-xl border border-slate-200/90 bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/50 p-4 shadow-sm">
 
         <h2 className="text-base font-bold text-slate-900">Hồ sơ &amp; danh mục tuyển sinh</h2>
 
@@ -159,7 +159,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
                   selected
 
-                    ? 'bg-emerald-700 text-white shadow-sm'
+                    ? 'bg-indigo-700 text-white shadow-sm'
 
                     : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
 
@@ -611,7 +611,7 @@ function SourcesPanel({
 
               }}
 
-              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
 
             >
 

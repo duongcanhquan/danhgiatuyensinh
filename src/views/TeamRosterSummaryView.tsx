@@ -339,7 +339,7 @@ export function TeamRosterSummaryView() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
-              <Users className="h-4 w-4 shrink-0 text-teal-700" aria-hidden />
+              <Users className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden />
               Nhóm của tôi
             </h2>
             <p className="mt-1 text-sm text-slate-600 md:hidden">

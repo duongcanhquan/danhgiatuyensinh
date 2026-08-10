@@ -105,12 +105,12 @@ export function StudentRegistrationView() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-slate-50">
+    <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-slate-50">
       <header className="border-b border-emerald-100/80 bg-white/90 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6">
           <AuthSessionExitBar tone="onLight" />
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
               <GraduationCap className="h-6 w-6" aria-hidden />
             </div>
             <div className="min-w-0">
@@ -296,7 +296,7 @@ export function StudentRegistrationView() {
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" />}
                   {busy ? 'Đang gửi…' : 'Gửi đăng ký'}

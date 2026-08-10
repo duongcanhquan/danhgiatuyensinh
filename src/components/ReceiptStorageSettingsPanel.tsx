@@ -12,7 +12,7 @@ import {
 } from '../utils/receiptStorageConfig'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 const PROVIDERS: { value: ReceiptStorageProvider; label: string; hint: string }[] = [
   { value: 'auto', label: 'Tự động', hint: 'R2 nếu có URL → Drive → Firebase Storage' },
@@ -76,7 +76,7 @@ export function ReceiptStorageSettingsPanel() {
     <div className="space-y-4">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <HardDrive className="h-4 w-4 text-teal-800" aria-hidden />
+          <HardDrive className="h-4 w-4 text-indigo-800" aria-hidden />
           Chứng từ &amp; lưu trữ
         </h2>
         <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
@@ -93,7 +93,7 @@ export function ReceiptStorageSettingsPanel() {
               key={p.value}
               className={`flex cursor-pointer gap-2 rounded-xl border px-3 py-2 text-sm ${
                 draft.provider === p.value
-                  ? 'border-teal-400 bg-teal-50 text-teal-950'
+                  ? 'border-indigo-400 bg-indigo-50 text-indigo-950'
                   : 'border-slate-200 bg-white text-slate-800'
               }`}
             >
@@ -173,7 +173,7 @@ export function ReceiptStorageSettingsPanel() {
             type="button"
             disabled={busy}
             onClick={() => void onSave()}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-60"
           >
             <Save className="h-4 w-4" aria-hidden />
             {busy ? '…' : 'Lưu'}

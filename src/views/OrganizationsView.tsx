@@ -636,7 +636,7 @@ export function OrganizationsView() {
       </BentoGrid>
 
       {banner ? (
-        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-950">{banner}</div>
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">{banner}</div>
       ) : null}
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{error}</div>
@@ -668,14 +668,14 @@ export function OrganizationsView() {
                       <p className="truncate text-sm font-semibold text-slate-900">
                         {org.name}
                         {org.id === DEFAULT_ORG_ID ? (
-                          <span className="ml-2 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-800">
+                          <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-800">
                             Mặc định · dữ liệu cũ
                           </span>
                         ) : null}
                       </p>
                       <p className="truncate text-xs text-slate-500">
                         {org.id} · /dang-ky/{org.slug} ·{' '}
-                        <span className={org.status === 'active' ? 'text-teal-700' : 'text-amber-700'}>
+                        <span className={org.status === 'active' ? 'text-indigo-700' : 'text-amber-700'}>
                           {org.status === 'active' ? 'Đang hoạt động' : 'Tạm ngưng'}
                         </span>
                         {health ? (
@@ -807,7 +807,7 @@ export function OrganizationsView() {
                                     <span>
                                       <span className="font-semibold text-slate-900">{m.label}</span>
                                       {m.required ? (
-                                        <span className="ml-1 text-[10px] font-bold uppercase text-teal-700">
+                                        <span className="ml-1 text-[10px] font-bold uppercase text-indigo-700">
                                           Bắt buộc
                                         </span>
                                       ) : null}
@@ -831,7 +831,7 @@ export function OrganizationsView() {
 
                       <div className="border-t border-slate-200 pt-4">
                         <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                          <UserCog className="h-4 w-4 text-teal-700" aria-hidden />
+                          <UserCog className="h-4 w-4 text-indigo-700" aria-hidden />
                           Quản lý của trường
                         </h3>
                         <p className="mt-0.5 text-xs text-slate-500">
@@ -856,7 +856,7 @@ export function OrganizationsView() {
                                     <p className="font-medium text-slate-900">{a.displayName}</p>
                                     <p className="truncate text-xs text-slate-500">
                                       {a.email} ·{' '}
-                                      <span className={a.isActive ? 'text-teal-700' : 'text-amber-700'}>
+                                      <span className={a.isActive ? 'text-indigo-700' : 'text-amber-700'}>
                                         {a.isActive ? 'Đang hoạt động' : 'Đã vô hiệu'}
                                       </span>
                                     </p>
@@ -994,7 +994,7 @@ export function OrganizationsView() {
           className="flex w-full items-center gap-2 text-left"
           onClick={() => setShowCreateForm((v) => !v)}
         >
-          <Plus className="h-4 w-4 text-teal-700" aria-hidden />
+          <Plus className="h-4 w-4 text-indigo-700" aria-hidden />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-slate-900">Tạo trường mới</span>
             <span className="block text-xs font-normal text-slate-600">
@@ -1102,7 +1102,7 @@ export function OrganizationsView() {
 
       <p className="text-center text-xs text-slate-500">
         Đang cấu hình CRM cho trường đang chọn? Vào{' '}
-        <Link to="/settings" className="font-medium text-teal-800 underline-offset-2 hover:underline">
+        <Link to="/settings" className="font-medium text-indigo-800 underline-offset-2 hover:underline">
           Cài đặt
         </Link>
         .

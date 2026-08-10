@@ -750,7 +750,7 @@ export function ConsultingPlaybookSection({
                       }
                     })()
                   }}
-                  className="mt-3 rounded-lg border border-emerald-600/60 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                  className="mt-3 rounded-lg border border-emerald-600/60 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {seedBusy ? 'Đang nạp…' : 'Nạp 50 playbook mẫu (public/seed)'}
                 </button>

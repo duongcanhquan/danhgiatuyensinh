@@ -6,7 +6,7 @@ import { canManageAccountantStaff } from '../../auth/accountantPortal'
 function linkClass(isActive: boolean) {
   return [
     'flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
-    isActive ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-900',
+    isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-900',
   ].join(' ')
 }
 
@@ -15,12 +15,12 @@ export function AccountantLayout() {
   const canStaff = canManageAccountantStaff(can)
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-br from-emerald-50 via-white to-slate-100">
-      <header className="border-b border-emerald-200/80 bg-white/90 backdrop-blur">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-indigo-50 via-white to-slate-100">
+      <header className="border-b border-indigo-200/80 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">VietMy Admissions</p>
-            <h1 className="text-lg font-extrabold text-emerald-900 md:text-xl">Cổng kế toán</h1>
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">VietMy Admissions</p>
+            <h1 className="text-lg font-extrabold text-indigo-900 md:text-xl">Cổng kế toán</h1>
             <p className="text-xs text-slate-600">
               {profile?.displayName || profile?.email || '—'} · Duyệt thu → n8n → Google Chat
             </p>

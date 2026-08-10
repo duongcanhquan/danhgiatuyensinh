@@ -36,13 +36,13 @@ export function StudentRegistrationSuccessView() {
         <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6">
           <AuthSessionExitBar tone="onLight" />
           <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-            <GraduationCap className="h-6 w-6" aria-hidden />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
-            <h1 className="text-lg font-extrabold text-slate-900">Đăng ký thành công</h1>
-          </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+              <GraduationCap className="h-6 w-6" aria-hidden />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
+              <h1 className="text-lg font-extrabold text-slate-900">Đăng ký thành công</h1>
+            </div>
           </div>
         </div>
       </header>

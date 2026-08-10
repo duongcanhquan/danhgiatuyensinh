@@ -43,7 +43,7 @@ function StepIcon({ category }: { category: ScriptCategory }) {
     case 'OBJECTION_HANDLING':
       return <Shield className="h-4 w-4 text-amber-700" strokeWidth={1.75} />
     case 'CLOSING':
-      return <Target className="h-4 w-4 text-emerald-600" strokeWidth={1.75} />
+      return <Target className="h-4 w-4 text-indigo-600" strokeWidth={1.75} />
     default:
       return <Sparkles className="h-4 w-4 text-slate-500" />
   }
@@ -212,7 +212,7 @@ export function ConsultingAssistantPanel({
           {totalSteps ? (
             <div className={`relative ${embeddedInDialog ? 'pl-9 sm:pl-11' : 'pl-7'}`}>
               <div
-                className={`absolute w-px bg-gradient-to-b from-amber-400/60 via-fuchsia-400/40 to-emerald-400/60 opacity-90 ${embeddedInDialog ? 'bottom-2 left-[15px] top-2 sm:left-[17px]' : 'bottom-2 left-[13px] top-2'}`}
+                className={`absolute w-px bg-gradient-to-b from-amber-400/60 via-fuchsia-400/40 to-indigo-400/60 opacity-90 ${embeddedInDialog ? 'bottom-2 left-[15px] top-2 sm:left-[17px]' : 'bottom-2 left-[13px] top-2'}`}
                 aria-hidden
               />
               <ol className={embeddedInDialog ? 'space-y-6 sm:space-y-8' : 'space-y-5'}>

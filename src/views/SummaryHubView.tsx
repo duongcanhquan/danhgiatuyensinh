@@ -52,7 +52,7 @@ export function SummaryHubView() {
           <AppPageHeader
             title="Tổng kết"
             meta={<span className="hidden sm:inline">Nhóm · KPI · bảng điểm · lịch gọi</span>}
-            className="[&_h1]:text-white [&_.text-slate-500]:text-teal-100/80"
+            className="[&_h1]:text-white [&_.text-slate-500]:text-indigo-100/80"
           >
             <TabStrip
               tabs={tabItems}

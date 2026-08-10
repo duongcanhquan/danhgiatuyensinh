@@ -162,7 +162,7 @@ export function AccountantStaffView() {
           <button
             type="submit"
             disabled={busy}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
           >
             {busy ? 'Đang tạo…' : 'Thêm kế toán viên'}
           </button>
@@ -290,7 +290,7 @@ export function AccountantStaffView() {
                 <button
                   type="submit"
                   disabled={editBusy}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   {editBusy ? 'Đang lưu…' : 'Lưu'}
                 </button>

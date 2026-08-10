@@ -92,7 +92,7 @@ export function BulkLeadActionBar({
                 <button
                   type="button"
                   onClick={onBulkIntakeProgram}
-                  className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-3 py-2.5 text-sm font-semibold text-teal-950 transition hover:border-teal-400 hover:bg-teal-100 sm:flex-initial sm:min-h-10"
+                  className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2.5 text-sm font-semibold text-indigo-950 transition hover:border-indigo-400 hover:bg-indigo-100 sm:flex-initial sm:min-h-10"
                 >
                   <Layers className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="sm:hidden">Chương trình</span>
@@ -122,7 +122,7 @@ export function BulkLeadActionBar({
               <button
                 type="button"
                 onClick={onExport}
-                className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-900 transition hover:border-emerald-400 hover:bg-emerald-100 sm:flex-initial sm:min-h-10"
+                className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-900 transition hover:border-emerald-400 hover:bg-indigo-100 sm:flex-initial sm:min-h-10"
               >
                 <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                 <span className="sm:hidden">Xuất</span>

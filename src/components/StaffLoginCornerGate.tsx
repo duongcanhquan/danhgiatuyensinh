@@ -42,7 +42,7 @@ export function StaffLoginCornerGate() {
   return (
     <Link
       to="/login"
-      className="group fixed bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-50 flex h-11 w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2"
+      className="group fixed bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-50 flex h-11 w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 focus-visible:ring-offset-2"
       aria-label="Đăng nhập quản trị"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}

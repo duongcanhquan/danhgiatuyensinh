@@ -6,7 +6,7 @@ import { FS_COLLECTIONS } from '../types'
 import { masterDataEntriesForFirestore } from '../utils/masterDataRegistry'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30 disabled:bg-slate-50'
+  'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 disabled:bg-slate-50'
 
 export function MasterCatalogEditor({
   catalogId,
@@ -116,7 +116,7 @@ export function MasterCatalogEditor({
             type="button"
             disabled={busy || !input.trim()}
             onClick={() => void addItem()}
-            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" /> Thêm
           </button>

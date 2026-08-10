@@ -11,7 +11,7 @@ import {
 } from '../utils/inviteDocumentsConfig'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 /** Cài đặt giấy mời / mẫu Docs / thư mục Drive — theo từng trường. */
 export function InviteDocumentsSettingsPanel() {
@@ -88,7 +88,7 @@ export function InviteDocumentsSettingsPanel() {
     <div className="space-y-4">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <FileStack className="h-4 w-4 text-teal-800" aria-hidden />
+          <FileStack className="h-4 w-4 text-indigo-800" aria-hidden />
           Giấy mời &amp; mẫu
         </h2>
         <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
@@ -113,7 +113,7 @@ export function InviteDocumentsSettingsPanel() {
         <label className="flex items-center gap-2 self-end rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-teal-700"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-700"
             checked={draft.autoCreateFolder}
             disabled={!canEdit}
             onChange={(e) => patchRoot({ autoCreateFolder: e.target.checked })}
@@ -183,7 +183,7 @@ export function InviteDocumentsSettingsPanel() {
             type="button"
             disabled={busy}
             onClick={() => void onSave()}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-60"
           >
             <Save className="h-4 w-4" aria-hidden />
             {busy ? '…' : 'Lưu'}

@@ -11,7 +11,7 @@ import {
 } from '../utils/n8nWebhooksConfig'
 
 const INPUT =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 const FIELDS: Array<{
   key: keyof Pick<OrgN8nWebhooks, 'giayMoi' | 'ctsv' | 'daily' | 'monthly'>
@@ -91,7 +91,7 @@ export function N8nWebhooksSettingsPanel() {
           return (
             <label key={f.key} className="block rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
               <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-800">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-800">
                   <Icon className="h-4 w-4" aria-hidden />
                 </span>
                 {f.label}
@@ -121,7 +121,7 @@ export function N8nWebhooksSettingsPanel() {
             type="button"
             disabled={busy}
             onClick={() => void onSave()}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-60"
           >
             <Save className="h-4 w-4" aria-hidden />
             {busy ? '…' : 'Lưu'}

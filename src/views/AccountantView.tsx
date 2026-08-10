@@ -229,7 +229,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
               onClick={() => setQueueFilter(id)}
               className={[
                 'rounded-md px-3 py-1.5 text-xs font-bold',
-                queueFilter === id ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50',
+                queueFilter === id ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
               {label}

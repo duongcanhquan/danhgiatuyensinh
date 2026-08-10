@@ -226,7 +226,7 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
                 <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                <Bar dataKey="HL" fill="#0d9488" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="HL" fill="#4f46e5" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="Cọc" fill="#0284c7" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="Điểm" fill="#d97706" radius={[6, 6, 0, 0]} />
               </BarChart>

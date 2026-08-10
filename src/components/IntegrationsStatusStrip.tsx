@@ -140,7 +140,7 @@ export function IntegrationsStatusStrip() {
         <h2 className="text-sm font-semibold text-slate-900">Kết nối</h2>
         <Link
           to="/settings?tab=connect&sub=hub"
-          className="inline-flex items-center gap-0.5 text-xs font-semibold text-teal-800 hover:underline"
+          className="inline-flex items-center gap-0.5 text-xs font-semibold text-indigo-800 hover:underline"
         >
           Hub
           <ChevronRight className="h-3.5 w-3.5" aria-hidden />
