@@ -125,6 +125,7 @@ import {
 import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
 import {
   LEAD_WORK_MODES,
+  findLeadSourceByLabel,
   leadMatchesWorkModeFilter,
   leadWorkModeLabel,
   parseLeadWorkMode,
@@ -383,6 +384,7 @@ export function LeadManagement() {
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { users: directoryUsers, fieldStaff: fieldStaffUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
+  const { items: leadSources } = useLeadSources()
   const institutionalRagBlock = useMemo(
     () => buildInstitutionalRagBlock(knowledgeDocuments),
     [knowledgeDocuments],
@@ -685,6 +687,12 @@ export function LeadManagement() {
     scoreByLeadId,
     schoolTvvSignalDefs,
   } = useLeadScoring(leads, { masterBuckets: scoringMasterBuckets, infoScoreRuntime })
+
+  const listProfileSwitchLocked = useMemo(() => {
+    if (sourceFilter === 'ALL') return false
+    const source = findLeadSourceByLabel(leadSources, sourceFilter)
+    return source?.allowProfileSwitchOnList === false
+  }, [sourceFilter, leadSources])
 
   const profileScoringActive = Boolean(activeScoringProfile)
 
@@ -3900,7 +3908,7 @@ export function LeadManagement() {
                 <span>Profile</span>
                 <select
                   value={resolvedScoringProfileId ?? ''}
-                  disabled={!scoringProfiles.length || profilesLoading}
+                  disabled={!scoringProfiles.length || profilesLoading || listProfileSwitchLocked}
                   onChange={(e) => setScoringProfileId(e.target.value || null)}
                   className={LEAD_FILTER_CONTROL}
                 >
@@ -3914,6 +3922,11 @@ export function LeadManagement() {
                     </option>
                   ))}
                 </select>
+                {listProfileSwitchLocked ? (
+                  <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-amber-800">
+                    Nguồn này khóa đổi bộ chấm
+                  </span>
+                ) : null}
               </label>
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                 <button

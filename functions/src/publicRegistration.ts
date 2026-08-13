@@ -93,6 +93,33 @@ function parseLeadWorkMode(raw: unknown): LeadWorkMode | undefined {
   return (LEAD_WORK_MODES as readonly string[]).includes(raw) ? (raw as LeadWorkMode) : undefined
 }
 
+function normalizeSourceLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Config.defaultWorkMode thắng; nếu trống thì lấy defaultWorkMode trên danh mục nguồn trùng defaultSource1. */
+async function resolvePortalWorkMode(
+  db: Firestore,
+  orgId: string,
+  config: PublicRegistrationConfig,
+): Promise<LeadWorkMode | undefined> {
+  if (config.defaultWorkMode) return config.defaultWorkMode
+  const needle = normalizeSourceLabel(config.defaultSource1)
+  if (!needle) return undefined
+  try {
+    const snap = await db.collection('leadSources').where('orgId', '==', orgId).limit(200).get()
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data()
+      if (data?.isActive === false) continue
+      if (normalizeSourceLabel(String(data?.label ?? '')) !== needle) continue
+      return parseLeadWorkMode(data?.defaultWorkMode)
+    }
+  } catch (e) {
+    console.warn('[publicRegistration] leadSources playbook lookup failed', e)
+  }
+  return undefined
+}
+
 function normIdentity(s: string): string {
   return s
     .trim()
@@ -719,6 +746,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     const systemCode = await allocateSystemCode(db)
     const now = Timestamp.now()
     const ref = db.collection('leads').doc()
+    const portalWorkMode = await resolvePortalWorkMode(db, config.orgId, config)
     const leadDoc = buildLeadDoc(input, {
       systemCode,
       source1: config.defaultSource1,
@@ -727,7 +755,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       assignedCounselorId: counselor?.id ?? null,
       orgId: config.orgId,
       now,
-      ...(config.defaultWorkMode ? { workMode: config.defaultWorkMode } : {}),
+      ...(portalWorkMode ? { workMode: portalWorkMode } : {}),
     })
     await ref.set(leadDoc)
 

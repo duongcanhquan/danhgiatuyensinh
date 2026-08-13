@@ -14,6 +14,8 @@ import { useLeadSources } from '../hooks/useLeadSources'
 
 import { useMasterData } from '../hooks/useMasterData'
 
+import { useScoringProfiles } from '../hooks/useScoringProfiles'
+
 import { saveLeadSourceRow, seedDefaultLeadSources } from '../utils/leadProfileCatalogSeed'
 
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
@@ -539,13 +541,31 @@ function SourcesPanel({
 
   onSeed: () => void
 
-  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean; defaultWorkMode?: LeadWorkMode | null }) => void
+  onSave: (row: {
+
+    id: string | null
+
+    label: string
+
+    sortOrder: number
+
+    isActive: boolean
+
+    defaultWorkMode?: LeadWorkMode | null
+
+    defaultScoringProfileId?: string | null
+
+    allowProfileSwitchOnList?: boolean
+
+  }) => void
 
   onDelete: (id: string) => void
 
 }) {
 
   const [label, setLabel] = useState('')
+
+  const { profiles: scoringProfiles } = useScoringProfiles()
 
   const sorted = useMemo(
 
@@ -635,11 +655,27 @@ function SourcesPanel({
 
         busy={busy}
 
-        columns={['Nguồn', 'TT', 'Bật', 'Chế độ']}
+        columns={['Nguồn', 'TT', 'Bật', 'Chế độ', 'Đổi bộ chấm', 'Bộ chấm mặc định']}
 
         renderRow={(row) => (
 
-          <SourceRow key={row.id} row={row} canEdit={canEdit} busy={busy} onSave={onSave} onDelete={onDelete} />
+          <SourceRow
+
+            key={row.id}
+
+            row={row}
+
+            canEdit={canEdit}
+
+            busy={busy}
+
+            scoringProfiles={scoringProfiles}
+
+            onSave={onSave}
+
+            onDelete={onDelete}
+
+          />
 
         )}
 
@@ -665,6 +701,8 @@ function SourceRow({
 
   busy,
 
+  scoringProfiles,
+
   onSave,
 
   onDelete,
@@ -677,7 +715,25 @@ function SourceRow({
 
   busy: boolean
 
-  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean; defaultWorkMode?: LeadWorkMode | null }) => void
+  scoringProfiles: { id: string; profileName: string }[]
+
+  onSave: (row: {
+
+    id: string | null
+
+    label: string
+
+    sortOrder: number
+
+    isActive: boolean
+
+    defaultWorkMode?: LeadWorkMode | null
+
+    defaultScoringProfileId?: string | null
+
+    allowProfileSwitchOnList?: boolean
+
+  }) => void
 
   onDelete: (id: string) => void
 
@@ -691,11 +747,17 @@ function SourceRow({
 
   const [defaultWorkMode, setDefaultWorkMode] = useState<LeadWorkMode | ''>(row.defaultWorkMode ?? '')
 
+  const [defaultScoringProfileId, setDefaultScoringProfileId] = useState(row.defaultScoringProfileId ?? '')
+
+  const [allowProfileSwitchOnList, setAllowProfileSwitchOnList] = useState(row.allowProfileSwitchOnList ?? true)
+
   const dirty =
     label !== row.label ||
     sortOrder !== row.sortOrder ||
     isActive !== row.isActive ||
-    (defaultWorkMode || undefined) !== (row.defaultWorkMode || undefined)
+    (defaultWorkMode || undefined) !== (row.defaultWorkMode || undefined) ||
+    (defaultScoringProfileId || null) !== (row.defaultScoringProfileId || null) ||
+    allowProfileSwitchOnList !== (row.allowProfileSwitchOnList ?? true)
 
 
 
@@ -763,6 +825,60 @@ function SourceRow({
 
       </td>
 
+      <td className="p-2">
+
+        <label className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+
+          <input
+
+            type="checkbox"
+
+            checked={allowProfileSwitchOnList}
+
+            disabled={!canEdit || busy}
+
+            onChange={(e) => setAllowProfileSwitchOnList(e.target.checked)}
+
+          />
+
+          Cho đổi bộ chấm trên danh sách
+
+        </label>
+
+      </td>
+
+      <td className="p-2">
+
+        <select
+
+          className={INPUT}
+
+          value={defaultScoringProfileId}
+
+          disabled={!canEdit || busy}
+
+          onChange={(e) => setDefaultScoringProfileId(e.target.value)}
+
+          aria-label="Bộ chấm mặc định"
+
+        >
+
+          <option value="">— Trống —</option>
+
+          {scoringProfiles.map((p) => (
+
+            <option key={p.id} value={p.id}>
+
+              {p.profileName}
+
+            </option>
+
+          ))}
+
+        </select>
+
+      </td>
+
       {canEdit ? (
 
         <td className="p-2">
@@ -780,6 +896,8 @@ function SourceRow({
                 sortOrder,
                 isActive,
                 defaultWorkMode: defaultWorkMode ? defaultWorkMode : null,
+                defaultScoringProfileId: defaultScoringProfileId ? defaultScoringProfileId : null,
+                allowProfileSwitchOnList,
               })
             }
 

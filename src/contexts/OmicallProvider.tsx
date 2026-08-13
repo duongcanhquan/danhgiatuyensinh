@@ -9,10 +9,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { deleteDoc, doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
+import { deleteDoc, doc, getDoc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
 import type { LeadWorkMode, OmicallCallTarget, OmicallCallUserData, OmicallIntegrationConfig } from '../types'
 import { FS_COLLECTIONS, SCORING_AUX_OMICALL_DOC_ID } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { parseLeadWorkMode } from '../utils/leadWorkMode'
 import { useAuth } from '../hooks/useAuth'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
@@ -216,6 +217,32 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     activeCallRef.current = activeCall
   }, [activeCall])
+
+  /** Inbound / SDK paths may have leadId without workMode — hydrate from lead doc once. */
+  useEffect(() => {
+    const leadId = activeCall?.leadId?.trim()
+    if (!leadId || activeCall?.workMode) return
+    const db = getFirestoreDb()
+    if (!db) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, leadId))
+        if (cancelled || !snap.exists()) return
+        const mode = parseLeadWorkMode(snap.data()?.workMode)
+        if (!mode) return
+        setActiveCall((prev) => {
+          if (!prev || prev.leadId !== leadId || prev.workMode) return prev
+          return { ...prev, workMode: mode }
+        })
+      } catch {
+        /* ignore — form falls back to full variant */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeCall?.leadId, activeCall?.workMode])
 
   useEffect(() => {
     sipReadyRef.current = sipReady
