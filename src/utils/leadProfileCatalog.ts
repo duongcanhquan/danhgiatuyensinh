@@ -1,5 +1,6 @@
 import type { LeadSourceRecord, ScholarshipRecord } from '../types'
 import { formatScholarshipOptionLabel } from './leadProfileCatalogDefaults'
+import { parseLeadWorkMode } from './leadWorkMode'
 import {
   isScholarshipCurrentlyValid,
   normalizeApplySlots,
@@ -8,11 +9,22 @@ import {
 } from './scholarshipEligibility'
 
 export function mapLeadSourceDoc(id: string, data: Record<string, unknown>): LeadSourceRecord {
+  const defaultScoringProfileId =
+    data.defaultScoringProfileId === null
+      ? null
+      : data.defaultScoringProfileId !== undefined
+        ? String(data.defaultScoringProfileId).trim() || null
+        : undefined
   return {
     id,
     label: String(data.label ?? '').trim(),
     sortOrder: Number(data.sortOrder ?? 0),
     isActive: data.isActive !== false,
+    defaultWorkMode: parseLeadWorkMode(data.defaultWorkMode),
+    ...(defaultScoringProfileId !== undefined ? { defaultScoringProfileId } : {}),
+    ...(typeof data.allowProfileSwitchOnList === 'boolean'
+      ? { allowProfileSwitchOnList: data.allowProfileSwitchOnList }
+      : {}),
     createdAt: data.createdAt as LeadSourceRecord['createdAt'],
     updatedAt: data.updatedAt as LeadSourceRecord['updatedAt'],
   }

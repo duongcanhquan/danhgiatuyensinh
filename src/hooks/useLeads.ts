@@ -20,6 +20,7 @@ import {
   type QuerySnapshot,
 } from 'firebase/firestore'
 import { asFirestoreTimestamp } from '../utils/firestoreTimestamp'
+import { parseLeadWorkMode } from '../utils/leadWorkMode'
 import type {
   Lead,
   LeadCounselorStatus,
@@ -417,6 +418,7 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         const b = data.callWorkBucket
         return b === 'uncalled' || b === 'callback' || b === 'called' ? b : undefined
       })(),
+      workMode: parseLeadWorkMode(data.workMode),
       callAttemptCount:
         data.callAttemptCount !== undefined && data.callAttemptCount !== null
           ? Math.max(0, Math.floor(Number(data.callAttemptCount)))

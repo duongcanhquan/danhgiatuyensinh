@@ -1,5 +1,6 @@
 import { collection, doc, setDoc, Timestamp, writeBatch, type Firestore } from 'firebase/firestore'
 import type {
+  LeadWorkMode,
   ScholarshipApplySlot,
   ScholarshipAudienceTag,
   ScholarshipCategoryId,
@@ -104,24 +105,37 @@ export async function syncDefaultScholarships(db: Firestore): Promise<number> {
   return n
 }
 
+export type LeadSourceSavePayload = {
+  label: string
+  sortOrder: number
+  isActive: boolean
+  defaultWorkMode?: LeadWorkMode
+  defaultScoringProfileId?: string | null
+  allowProfileSwitchOnList?: boolean
+}
+
 export async function saveLeadSourceRow(
   db: Firestore,
   id: string | null,
-  payload: { label: string; sortOrder: number; isActive: boolean },
+  payload: LeadSourceSavePayload,
 ): Promise<string> {
   const ref = id ? doc(db, FS_COLLECTIONS.leadSources, id) : doc(collection(db, FS_COLLECTIONS.leadSources))
   const now = Timestamp.now()
-  await setDoc(
-    ref,
-    {
-      label: payload.label.trim(),
-      sortOrder: payload.sortOrder,
-      isActive: payload.isActive,
-      updatedAt: now,
-      ...(id ? {} : { createdAt: now }),
-    },
-    { merge: true },
-  )
+  const body: Record<string, unknown> = {
+    label: payload.label.trim(),
+    sortOrder: payload.sortOrder,
+    isActive: payload.isActive,
+    updatedAt: now,
+    ...(id ? {} : { createdAt: now }),
+  }
+  if (payload.defaultWorkMode !== undefined) body.defaultWorkMode = payload.defaultWorkMode
+  if (payload.defaultScoringProfileId !== undefined) {
+    body.defaultScoringProfileId = payload.defaultScoringProfileId
+  }
+  if (payload.allowProfileSwitchOnList !== undefined) {
+    body.allowProfileSwitchOnList = payload.allowProfileSwitchOnList
+  }
+  await setDoc(ref, body, { merge: true })
   return ref.id
 }
 

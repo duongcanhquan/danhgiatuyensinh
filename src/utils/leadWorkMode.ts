@@ -1,4 +1,6 @@
-export type LeadWorkMode = 'score_queue' | 'volume_filter' | 'care_close'
+import type { LeadWorkMode } from '../types'
+
+export type { LeadWorkMode }
 
 export const LEAD_WORK_MODES: readonly LeadWorkMode[] = [
   'score_queue',

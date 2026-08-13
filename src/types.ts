@@ -308,6 +308,9 @@ export type InviteDocumentType =
   | 'THU_MOI_CD_CO_DAU'
   | 'THU_MOI_CD_KHONG_DAU'
 
+/** Chế độ xử lý hồ sơ trên workspace TVV (DES-WORKMODE). */
+export type LeadWorkMode = 'score_queue' | 'volume_filter' | 'care_close'
+
 /**
  * Canonical Lead — collection `leads/{leadId}`
  * Schema aligned to VietMy Excel intake columns + persistence / analytics system fields.
@@ -474,6 +477,8 @@ export interface Lead {
    * `uncalled` | `callback` (KNM / gọi lại) | `called` (đã xử lý xong vòng gọi).
    */
   callWorkBucket?: 'uncalled' | 'callback' | 'called'
+  /** Chế độ xử lý hồ sơ (sàng data / lọc gọi nhanh / chăm & chốt). */
+  workMode?: LeadWorkMode
   /** Số lần đã ghi nhận cuộc gọi (tăng khi lưu đánh giá / soft KNM). */
   callAttemptCount?: number
   /** Mã note kết quả sau gọi (catalog TVV). */
@@ -1335,6 +1340,12 @@ export interface LeadSourceRecord {
   label: string
   sortOrder: number
   isActive: boolean
+  /** Playbook: chế độ xử lý mặc định khi tạo hồ sơ từ nguồn này. */
+  defaultWorkMode?: LeadWorkMode
+  /** Playbook: bộ chấm điểm mặc định (null = dùng mặc định hệ thống). */
+  defaultScoringProfileId?: string | null
+  /** Playbook: cho phép đổi bộ chấm điểm khi nhập danh sách. */
+  allowProfileSwitchOnList?: boolean
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -1846,6 +1857,8 @@ export type PublicRegistrationConfig = {
   successMessage: string
   /** Gán vào `source1` khi sinh viên gửi form — dùng cho KPI OFF/MKT. */
   defaultSource1: string
+  /** Chế độ xử lý mặc định khi tạo hồ sơ từ cổng công khai. */
+  defaultWorkMode?: LeadWorkMode
   /** Tự gán TVV theo tải hồ sơ (counselor active). */
   autoAssignCounselor: boolean
   /** Gửi webhook n8n sau khi tạo hồ sơ (email SV + TVV do workflow n8n xử lý). */
