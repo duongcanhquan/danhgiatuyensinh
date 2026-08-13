@@ -6330,6 +6330,7 @@ function LeadDetailPanel({
           previousAttemptCount: lead.callAttemptCount,
           bumpAttempt: true,
           existingScoringSignals: lead.scoringSignals,
+          currentWorkMode: lead.workMode,
         })
         const overrides = dispositionPriorityOverridesAfterScoring(nextDispositionId, lead.priorityTag)
         callWorkFields = { ...work }

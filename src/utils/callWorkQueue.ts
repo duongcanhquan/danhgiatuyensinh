@@ -5,9 +5,11 @@ import type {
   LeadCounselorStatus,
   LeadPipelineStatus,
   LeadScoringSignals,
+  LeadWorkMode,
   PriorityTag,
 } from '../types'
 import { buildLastCallLeadPatch, effectiveLastCallAt } from './leadCallSignals'
+import { workModeAfterDisposition } from './leadWorkMode'
 
 export type CallWorkBucket = 'uncalled' | 'callback' | 'called'
 
@@ -161,6 +163,8 @@ export type CallWorkLeadPatch = {
   callEvalPriorityBoost?: PriorityTag
   priorityTag?: PriorityTag
   scoringSignals?: LeadScoringSignals
+  /** §7 / §14.4 — auto Chăm & chốt sau disposition quan tâm. */
+  workMode?: LeadWorkMode
   status?: never
   pipelineStatus?: never
 }
@@ -174,6 +178,8 @@ export function buildCallWorkLeadPatch(input: {
   bumpAttempt?: boolean
   at?: Timestamp
   existingScoringSignals?: LeadScoringSignals | null
+  /** Current lead workMode — used to decide care_close after disposition. */
+  currentWorkMode?: LeadWorkMode
 }): CallWorkLeadPatch {
   const def = BY_ID.get(input.dispositionId)
   if (!def) throw new Error(`Kết quả gọi không hợp lệ: ${input.dispositionId}`)
@@ -206,6 +212,9 @@ export function buildCallWorkLeadPatch(input: {
     const prev = input.existingScoringSignals ?? {}
     patch.scoringSignals = { ...prev, enrolledElsewhere: true }
   }
+
+  const nextWorkMode = workModeAfterDisposition(def.id, input.currentWorkMode)
+  if (nextWorkMode) patch.workMode = nextWorkMode
 
   return patch
 }

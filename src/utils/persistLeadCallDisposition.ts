@@ -35,6 +35,7 @@ export async function persistLeadCallDisposition(
     | 'callEvalPriorityBoost'
     | 'status'
     | 'pipelineStatus'
+    | 'workMode'
   >,
   input: {
     dispositionId: CallDispositionId
@@ -60,6 +61,7 @@ export async function persistLeadCallDisposition(
     previousAttemptCount: prevAttempts,
     bumpAttempt: input.bumpAttempt !== false,
     existingScoringSignals: lead.scoringSignals,
+    currentWorkMode: lead.workMode,
   })
 
   const overrides = dispositionPriorityOverridesAfterScoring(def.id, lead.priorityTag)

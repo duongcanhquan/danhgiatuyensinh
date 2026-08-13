@@ -234,6 +234,7 @@ export async function saveCallSessionInteraction(
           previousAttemptCount: prevAttempts,
           bumpAttempt: true,
           existingScoringSignals: rawSignals,
+          currentWorkMode: lead.workMode,
         })
       : buildLastCallLeadPatch({
           calledByLabel: callerLabel,
