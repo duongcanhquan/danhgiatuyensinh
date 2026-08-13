@@ -3,13 +3,17 @@ import {
   CARE_CLOSE_DISPOSITION_IDS,
   LEAD_WORK_MODES,
   findLeadSourceByLabel,
+  leadMatchesWorkContext,
   leadMatchesWorkModeFilter,
+  leadWorkModeHint,
   leadWorkModeLabel,
+  leadWorkModePrimaryFocus,
   parseLeadWorkMode,
   parseLeadWorkModeFromUrl,
   resolveWorkModeForLeadIntake,
   resolveWorkModeFromSourcePlaybook,
   shouldSuggestCareClose,
+  summarizeLeadWorkModes,
   workModeAfterDisposition,
   type LeadWorkMode,
 } from './leadWorkMode'
@@ -185,5 +189,88 @@ describe('workModeAfterDisposition', () => {
   it('suggests care_close when current mode is missing', () => {
     expect(workModeAfterDisposition('college_hot')).toBe('care_close')
     expect(workModeAfterDisposition('positive', undefined)).toBe('care_close')
+  })
+})
+
+describe('leadWorkModeHint + primaryFocus + summarize', () => {
+  it('exposes Vietnamese hints and focus per mode', () => {
+    expect(leadWorkModeHint('score_queue')).toMatch(/HOT|WARM|data/i)
+    expect(leadWorkModeHint('volume_filter')).toMatch(/Quan tâm|Gọi/i)
+    expect(leadWorkModeHint('care_close')).toMatch(/hồ sơ|chốt/i)
+    expect(leadWorkModePrimaryFocus('score_queue')).toBe('scoring')
+    expect(leadWorkModePrimaryFocus('volume_filter')).toBe('call_filter')
+    expect(leadWorkModePrimaryFocus('care_close')).toBe('care_dossier')
+    expect(leadWorkModePrimaryFocus(undefined)).toBe('call_filter')
+  })
+
+  it('summarizes counts including unset', () => {
+    expect(
+      summarizeLeadWorkModes([
+        { workMode: 'score_queue' },
+        { workMode: 'score_queue' },
+        { workMode: 'volume_filter' },
+        { workMode: 'care_close' },
+        {},
+      ]),
+    ).toEqual({
+      score_queue: 2,
+      volume_filter: 1,
+      care_close: 1,
+      unset: 1,
+      total: 5,
+    })
+  })
+})
+
+describe('leadMatchesWorkContext (AND filters)', () => {
+  const matchCallQueue = (
+    lead: { callWorkBucket?: 'uncalled' | 'callback' | 'called' },
+    filter: 'all' | 'uncalled' | 'callback' | 'called',
+  ) => {
+    if (filter === 'all') return true
+    const b = lead.callWorkBucket ?? 'uncalled'
+    return b === filter
+  }
+  const matchDisposition = (lead: { lastCallDispositionId?: string }, filter: 'all' | string) => {
+    if (filter === 'all') return true
+    return lead.lastCallDispositionId === filter
+  }
+
+  it('requires all active axes to match', () => {
+    const lead = {
+      workMode: 'volume_filter' as const,
+      callWorkBucket: 'uncalled' as const,
+      lastCallDispositionId: undefined,
+    }
+    expect(
+      leadMatchesWorkContext({
+        lead,
+        workModeFilter: 'volume_filter',
+        callQueueFilter: 'uncalled',
+        dispositionFilter: 'all',
+        matchCallQueue,
+        matchDisposition,
+      }),
+    ).toBe(true)
+    expect(
+      leadMatchesWorkContext({
+        lead,
+        workModeFilter: 'care_close',
+        callQueueFilter: 'uncalled',
+        dispositionFilter: 'all',
+        matchCallQueue,
+        matchDisposition,
+      }),
+    ).toBe(false)
+    expect(
+      leadMatchesWorkContext({
+        lead,
+        workModeFilter: 'volume_filter',
+        callQueueFilter: 'callback',
+        dispositionFilter: 'all',
+        matchCallQueue,
+        matchDisposition,
+      }),
+    ).toBe(false)
   })
 })

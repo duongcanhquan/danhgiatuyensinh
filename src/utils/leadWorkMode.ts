@@ -18,6 +18,80 @@ export function leadWorkModeLabel(mode: LeadWorkMode): string {
   return LABELS[mode]
 }
 
+/** Một câu — việc chính TVV làm ở chế độ này (UI bento / chi tiết). */
+export function leadWorkModeHint(mode: LeadWorkMode): string {
+  switch (mode) {
+    case 'score_queue':
+      return 'Chấm data → gọi HOT/WARM trước'
+    case 'volume_filter':
+      return 'Gọi số lớn → Quan tâm / Không'
+    case 'care_close':
+      return 'Làm hồ sơ, đóng tiền, chốt'
+  }
+}
+
+/** Trọng tâm thao tác trên chi tiết hồ sơ theo chế độ. */
+export type LeadWorkModePrimaryFocus = 'scoring' | 'call_filter' | 'care_dossier'
+
+export function leadWorkModePrimaryFocus(mode: LeadWorkMode | undefined): LeadWorkModePrimaryFocus {
+  switch (mode) {
+    case 'score_queue':
+      return 'scoring'
+    case 'volume_filter':
+      return 'call_filter'
+    case 'care_close':
+      return 'care_dossier'
+    default:
+      return 'call_filter'
+  }
+}
+
+export type LeadWorkModeSummary = Record<LeadWorkMode | 'unset', number> & { total: number }
+
+/** Đếm hồ sơ theo chế độ trên tập đã tải (lọc client / ô bento). */
+export function summarizeLeadWorkModes(
+  leads: readonly { workMode?: LeadWorkMode }[],
+): LeadWorkModeSummary {
+  const out: LeadWorkModeSummary = {
+    score_queue: 0,
+    volume_filter: 0,
+    care_close: 0,
+    unset: 0,
+    total: leads.length,
+  }
+  for (const lead of leads) {
+    const mode = lead.workMode
+    if (mode === 'score_queue' || mode === 'volume_filter' || mode === 'care_close') {
+      out[mode] += 1
+    } else {
+      out.unset += 1
+    }
+  }
+  return out
+}
+
+/**
+ * Lọc AND: chế độ × hàng chờ gọi × disposition.
+ * `workModeFilter === 'all'` / `callQueue === 'all'` / `disposition === 'all'` = không siết trục đó.
+ */
+export function leadMatchesWorkContext(opts: {
+  lead: {
+    workMode?: LeadWorkMode
+    callWorkBucket?: 'uncalled' | 'callback' | 'called'
+    lastCallDispositionId?: string
+  }
+  workModeFilter: 'all' | LeadWorkMode
+  callQueueFilter: 'all' | 'uncalled' | 'callback' | 'called'
+  dispositionFilter: 'all' | string
+  matchCallQueue: (lead: { callWorkBucket?: 'uncalled' | 'callback' | 'called' }, filter: 'all' | 'uncalled' | 'callback' | 'called') => boolean
+  matchDisposition: (lead: { lastCallDispositionId?: string }, filter: 'all' | string) => boolean
+}): boolean {
+  if (!leadMatchesWorkModeFilter(opts.lead, opts.workModeFilter)) return false
+  if (!opts.matchCallQueue(opts.lead, opts.callQueueFilter)) return false
+  if (!opts.matchDisposition(opts.lead, opts.dispositionFilter)) return false
+  return true
+}
+
 export function parseLeadWorkMode(raw: unknown): LeadWorkMode | undefined {
   if (typeof raw !== 'string') return undefined
   return (LEAD_WORK_MODES as readonly string[]).includes(raw)

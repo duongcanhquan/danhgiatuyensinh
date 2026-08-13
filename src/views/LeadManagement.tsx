@@ -62,6 +62,8 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
+import { LeadWorkModeBentoBoard } from '../components/LeadWorkModeBentoBoard'
+import { LeadWorkModeContextCard } from '../components/LeadWorkModeContextCard'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import { LlmAccessHelpPanel } from '../components/LlmAccessHelpPanel'
 import { LeadKnowledgePanel } from '../components/LeadKnowledgePanel'
@@ -124,11 +126,11 @@ import {
 } from '../utils/bulkLeadWorkMode'
 import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
 import {
-  LEAD_WORK_MODES,
   findLeadSourceByLabel,
   leadMatchesWorkModeFilter,
   leadWorkModeLabel,
   parseLeadWorkMode,
+  summarizeLeadWorkModes,
 } from '../utils/leadWorkMode'
 import {
   pickLeadIdsForAssign,
@@ -1263,6 +1265,9 @@ export function LeadManagement() {
       : []
     return summarizeCallWorkQueue(mine)
   }, [leads, profile?.id])
+
+  /** Đếm chế độ xử lý trên tập đã tải — ô bento lọc ngữ cảnh. */
+  const workModeSummary = useMemo(() => summarizeLeadWorkModes(leads), [leads])
 
   /**
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
@@ -3514,6 +3519,12 @@ export function LeadManagement() {
               />
             </BentoGrid>
           ) : null}
+          <LeadWorkModeBentoBoard
+            active={workModeFilter}
+            summary={workModeSummary}
+            onSelect={(next) => applyWorkModeQuick(next)}
+            className="w-full"
+          />
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
           <div className="min-w-0">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hàng chờ gọi</p>
@@ -3570,27 +3581,6 @@ export function LeadManagement() {
               {CALL_DISPOSITIONS.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label
-            className={`${LEAD_FILTER_LABEL} w-[11rem] shrink-0`}
-            title="Lọc theo cách đang xử lý hồ sơ"
-          >
-            <span>Chế độ xử lý</span>
-            <select
-              value={draftFilters.workMode === 'all' ? 'all' : draftFilters.workMode}
-              onChange={(e) => {
-                const next = parseLeadWorkMode(e.target.value) ?? 'all'
-                applyWorkModeQuick(next)
-              }}
-              className={`${LEAD_FILTER_CONTROL} cursor-pointer normal-case tracking-normal`}
-            >
-              <option value="all">Tất cả</option>
-              {LEAD_WORK_MODES.map((m) => (
-                <option key={m} value={m}>
-                  {leadWorkModeLabel(m)}
                 </option>
               ))}
             </select>
@@ -7089,29 +7079,16 @@ function LeadDetailPanel({
                                     </>
                                   ) : null}
                                 </p>
-                                <label className="mt-2 block text-xs font-medium text-slate-800">
-                                  Chế độ xử lý
-                                  <select
-                                    value={lead.workMode ?? ''}
-                                    disabled={!showCounselorProgressForm || saving || financeSaving}
-                                    onChange={(e) => {
-                                      const next = parseLeadWorkMode(e.target.value)
+                                <div className="mt-2">
+                                  <LeadWorkModeContextCard
+                                    workMode={lead.workMode}
+                                    canEdit={showCounselorProgressForm}
+                                    disabled={saving || financeSaving}
+                                    onChange={(next) => {
                                       void saveWorkMode(next)
                                     }}
-                                    className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    <option value="">Chưa chọn</option>
-                                    {LEAD_WORK_MODES.map((m) => (
-                                      <option key={m} value={m}>
-                                        {leadWorkModeLabel(m)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <span className="mt-0.5 block text-[10px] font-normal text-slate-500">
-                                    Hiện tại:{' '}
-                                    {lead.workMode ? leadWorkModeLabel(lead.workMode) : 'Chưa chọn'}
-                                  </span>
-                                </label>
+                                  />
+                                </div>
                                 <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                                   {showCounselorProgressForm ? (
                                     <label className="block text-xs font-medium text-slate-800">
