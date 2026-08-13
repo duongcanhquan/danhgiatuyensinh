@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   CARE_CLOSE_DISPOSITION_IDS,
   LEAD_WORK_MODES,
+  findLeadSourceByLabel,
   leadMatchesWorkModeFilter,
   leadWorkModeLabel,
   parseLeadWorkMode,
   parseLeadWorkModeFromUrl,
+  resolveWorkModeForLeadIntake,
   resolveWorkModeFromSourcePlaybook,
   shouldSuggestCareClose,
   workModeAfterDisposition,
@@ -86,6 +88,57 @@ describe('resolveWorkModeFromSourcePlaybook', () => {
     expect(resolveWorkModeFromSourcePlaybook(undefined)).toBeUndefined()
     expect(resolveWorkModeFromSourcePlaybook({})).toBeUndefined()
     expect(resolveWorkModeFromSourcePlaybook({ defaultWorkMode: null })).toBeUndefined()
+  })
+})
+
+describe('findLeadSourceByLabel', () => {
+  const sources = [
+    { label: 'Facebook Ads', defaultWorkMode: 'volume_filter' as const },
+    { label: '  Zalo OA  ', defaultWorkMode: 'score_queue' as const },
+  ]
+
+  it('matches by trimmed case-insensitive label', () => {
+    expect(findLeadSourceByLabel(sources, 'facebook ads')?.defaultWorkMode).toBe('volume_filter')
+    expect(findLeadSourceByLabel(sources, 'Zalo OA')?.label).toBe('  Zalo OA  ')
+  })
+
+  it('returns undefined when label missing or unmatched', () => {
+    expect(findLeadSourceByLabel(sources, '')).toBeUndefined()
+    expect(findLeadSourceByLabel(sources, 'TikTok')).toBeUndefined()
+    expect(findLeadSourceByLabel([], 'Facebook Ads')).toBeUndefined()
+  })
+})
+
+describe('resolveWorkModeForLeadIntake', () => {
+  const sources = [
+    { label: 'OFF — Hội thảo', defaultWorkMode: 'care_close' as const },
+    { label: 'MKT — Form', defaultWorkMode: 'score_queue' as const },
+    { label: 'Không cấu hình' },
+  ]
+
+  it('prefers explicit workMode over source playbook', () => {
+    expect(
+      resolveWorkModeForLeadIntake({
+        workMode: 'volume_filter',
+        source1: 'OFF — Hội thảo',
+        sources,
+      }),
+    ).toBe('volume_filter')
+  })
+
+  it('resolves from matching source playbook when workMode omitted', () => {
+    expect(
+      resolveWorkModeForLeadIntake({ source1: 'mkt — form', sources }),
+    ).toBe('score_queue')
+  })
+
+  it('omits workMode when neither explicit nor playbook is set', () => {
+    expect(resolveWorkModeForLeadIntake({ source1: 'Không cấu hình', sources })).toBeUndefined()
+    expect(resolveWorkModeForLeadIntake({ source1: 'Lạ', sources })).toBeUndefined()
+    expect(resolveWorkModeForLeadIntake({})).toBeUndefined()
+    expect(resolveWorkModeForLeadIntake({ workMode: 'bogus', source1: 'OFF — Hội thảo', sources })).toBe(
+      'care_close',
+    )
   })
 })
 

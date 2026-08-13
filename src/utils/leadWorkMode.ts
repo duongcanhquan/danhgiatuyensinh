@@ -47,6 +47,36 @@ export function resolveWorkModeFromSourcePlaybook(source: {
   return parseLeadWorkMode(mode)
 }
 
+function normalizeSourceLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Match catalog row by source1 / Excel «Nguồn» label (trim + case-insensitive). */
+export function findLeadSourceByLabel<T extends { label: string }>(
+  sources: readonly T[],
+  source1Label: string | null | undefined,
+): T | undefined {
+  const needle = normalizeSourceLabel(source1Label ?? '')
+  if (!needle) return undefined
+  return sources.find((s) => normalizeSourceLabel(s.label) === needle)
+}
+
+/**
+ * Intake: set workMode only when playbook / explicit value provides it.
+ * Prefer explicit `workMode`; else resolve from matching LeadSourceRecord by source1 label.
+ * Never invent a default for all leads.
+ */
+export function resolveWorkModeForLeadIntake(opts: {
+  workMode?: unknown
+  source1?: string | null
+  sources?: readonly { label: string; defaultWorkMode?: LeadWorkMode | null }[] | null
+}): LeadWorkMode | undefined {
+  const explicit = parseLeadWorkMode(opts.workMode)
+  if (explicit) return explicit
+  const source = findLeadSourceByLabel(opts.sources ?? [], opts.source1)
+  return resolveWorkModeFromSourcePlaybook(source)
+}
+
 /** Disposition ids that suggest / auto-switch to care_close (§7, §14.4). */
 export const CARE_CLOSE_DISPOSITION_IDS: readonly string[] = [
   'high_interest',

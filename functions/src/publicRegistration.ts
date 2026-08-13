@@ -32,6 +32,8 @@ type PublicRegistrationConfig = {
   introText: string
   successMessage: string
   defaultSource1: string
+  /** Optional playbook mode for portal-created leads. */
+  defaultWorkMode?: 'score_queue' | 'volume_filter' | 'care_close'
   autoAssignCounselor: boolean
   n8nEnabled: boolean
   n8nWebhookUrl: string
@@ -81,6 +83,14 @@ type CatalogOption = { id: string; label: string; departmentId?: string }
 
 function str(v: unknown): string {
   return String(v ?? '').trim()
+}
+
+const LEAD_WORK_MODES = ['score_queue', 'volume_filter', 'care_close'] as const
+type LeadWorkMode = (typeof LEAD_WORK_MODES)[number]
+
+function parseLeadWorkMode(raw: unknown): LeadWorkMode | undefined {
+  if (typeof raw !== 'string') return undefined
+  return (LEAD_WORK_MODES as readonly string[]).includes(raw) ? (raw as LeadWorkMode) : undefined
 }
 
 function normIdentity(s: string): string {
@@ -184,6 +194,10 @@ function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrat
       str(data?.successMessage) ||
       'Cảm ơn bạn đã đăng ký. Vui lòng ghi nhớ mã hồ sơ bên dưới — tư vấn viên sẽ liên hệ trong thời gian sớm nhất.',
     defaultSource1: str(data?.defaultSource1) || 'Web đăng ký',
+    ...((): { defaultWorkMode?: LeadWorkMode } => {
+      const mode = parseLeadWorkMode(data?.defaultWorkMode)
+      return mode ? { defaultWorkMode: mode } : {}
+    })(),
     autoAssignCounselor: data?.autoAssignCounselor !== false,
     n8nEnabled: data?.n8nEnabled !== false,
     n8nWebhookUrl: str(data?.n8nWebhookUrl),
@@ -503,6 +517,7 @@ function buildLeadDoc(
     assignedCounselorId: string | null
     orgId: string
     now: Timestamp
+    workMode?: LeadWorkMode
   },
 ) {
   const studyFormat = str(input.studyIntention) || str(input.educationLevel)
@@ -543,6 +558,7 @@ function buildLeadDoc(
     priorityTag: 'COLD' as const,
     uniqueHash: opts.uniqueHash,
     ...(opts.nationalIdHash ? { nationalIdHash: opts.nationalIdHash } : {}),
+    ...(opts.workMode ? { workMode: opts.workMode } : {}),
     registrationChannel: 'public_portal',
     uploadedBy: 'public_portal',
     uploaderName: 'Cổng đăng ký sinh viên',
@@ -711,6 +727,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       assignedCounselorId: counselor?.id ?? null,
       orgId: config.orgId,
       now,
+      ...(config.defaultWorkMode ? { workMode: config.defaultWorkMode } : {}),
     })
     await ref.set(leadDoc)
 

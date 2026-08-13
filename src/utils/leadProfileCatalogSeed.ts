@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, Timestamp, writeBatch, type Firestore } from 'firebase/firestore'
+import { collection, deleteField, doc, setDoc, Timestamp, writeBatch, type Firestore } from 'firebase/firestore'
 import type {
   LeadWorkMode,
   ScholarshipApplySlot,
@@ -109,7 +109,8 @@ export type LeadSourceSavePayload = {
   label: string
   sortOrder: number
   isActive: boolean
-  defaultWorkMode?: LeadWorkMode
+  /** Pass null to clear playbook mode. */
+  defaultWorkMode?: LeadWorkMode | null
   defaultScoringProfileId?: string | null
   allowProfileSwitchOnList?: boolean
 }
@@ -128,7 +129,9 @@ export async function saveLeadSourceRow(
     updatedAt: now,
     ...(id ? {} : { createdAt: now }),
   }
-  if (payload.defaultWorkMode !== undefined) body.defaultWorkMode = payload.defaultWorkMode
+  if (payload.defaultWorkMode !== undefined) {
+    body.defaultWorkMode = payload.defaultWorkMode ?? deleteField()
+  }
   if (payload.defaultScoringProfileId !== undefined) {
     body.defaultScoringProfileId = payload.defaultScoringProfileId
   }

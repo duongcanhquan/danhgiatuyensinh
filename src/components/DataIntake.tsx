@@ -51,6 +51,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
+import { useLeadSources } from '../hooks/useLeadSources'
+import { resolveWorkModeForLeadIntake } from '../utils/leadWorkMode'
 /** Giới hạn Firestore mỗi batch commit. */
 const BATCH_SIZE = 500
 /** Mẫu lead gần đây để cân bằng tải TVV khi import (tránh phụ thuộc listener paginated). */
@@ -196,6 +198,7 @@ export function DataIntake() {
   const { users: directoryUsers } = useCounselorDirectory()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
+  const { items: leadSources } = useLeadSources()
 
   const matchStaffForImport = useMemo(
     () => activeStaffForExcelAssignMatch(directoryUsers),
@@ -568,6 +571,11 @@ export function DataIntake() {
         }
 
         const ref = doc(collection(db, FS_COLLECTIONS.leads))
+        const source1 = (pr.row.source ?? '').trim()
+        const workMode = resolveWorkModeForLeadIntake({
+          source1,
+          sources: leadSources,
+        })
         toCreate.push({
           ref,
           data: omitUndefined({
@@ -576,6 +584,7 @@ export function DataIntake() {
             calculatedScore,
             priorityTag,
             ...pillarPatch,
+            ...(workMode ? { workMode } : {}),
             uploadedAt: now,
             importedAt: now,
             createdAt: now,
@@ -623,6 +632,7 @@ export function DataIntake() {
     classificationRuntime,
     effectiveOrgId,
     intakeProgram,
+    leadSources,
   ])
 
   const onDrop = (e: DragEvent) => {

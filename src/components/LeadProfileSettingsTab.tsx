@@ -6,7 +6,7 @@ import { deleteDoc, doc, type Firestore } from 'firebase/firestore'
 
 import { Plus, Trash2 } from 'lucide-react'
 
-import type { LeadSourceRecord } from '../types'
+import type { LeadSourceRecord, LeadWorkMode } from '../types'
 
 import { FS_COLLECTIONS } from '../types'
 
@@ -15,6 +15,8 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useMasterData } from '../hooks/useMasterData'
 
 import { saveLeadSourceRow, seedDefaultLeadSources } from '../utils/leadProfileCatalogSeed'
+
+import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
 
 import { MasterCatalogEditor } from './MasterCatalogEditor'
 
@@ -537,7 +539,7 @@ function SourcesPanel({
 
   onSeed: () => void
 
-  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean }) => void
+  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean; defaultWorkMode?: LeadWorkMode | null }) => void
 
   onDelete: (id: string) => void
 
@@ -633,7 +635,7 @@ function SourcesPanel({
 
         busy={busy}
 
-        columns={['Nguồn', 'TT', 'Bật']}
+        columns={['Nguồn', 'TT', 'Bật', 'Chế độ']}
 
         renderRow={(row) => (
 
@@ -675,7 +677,7 @@ function SourceRow({
 
   busy: boolean
 
-  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean }) => void
+  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean; defaultWorkMode?: LeadWorkMode | null }) => void
 
   onDelete: (id: string) => void
 
@@ -687,7 +689,13 @@ function SourceRow({
 
   const [isActive, setIsActive] = useState(row.isActive)
 
-  const dirty = label !== row.label || sortOrder !== row.sortOrder || isActive !== row.isActive
+  const [defaultWorkMode, setDefaultWorkMode] = useState<LeadWorkMode | ''>(row.defaultWorkMode ?? '')
+
+  const dirty =
+    label !== row.label ||
+    sortOrder !== row.sortOrder ||
+    isActive !== row.isActive ||
+    (defaultWorkMode || undefined) !== (row.defaultWorkMode || undefined)
 
 
 
@@ -725,6 +733,36 @@ function SourceRow({
 
       </td>
 
+      <td className="p-2">
+
+        <select
+
+          className={INPUT}
+
+          value={defaultWorkMode}
+
+          disabled={!canEdit || busy}
+
+          onChange={(e) => setDefaultWorkMode(parseLeadWorkMode(e.target.value) ?? '')}
+
+        >
+
+          <option value="">— Trống —</option>
+
+          {LEAD_WORK_MODES.map((mode) => (
+
+            <option key={mode} value={mode}>
+
+              {leadWorkModeLabel(mode)}
+
+            </option>
+
+          ))}
+
+        </select>
+
+      </td>
+
       {canEdit ? (
 
         <td className="p-2">
@@ -735,7 +773,15 @@ function SourceRow({
 
             dirty={dirty && Boolean(label.trim())}
 
-            onSave={() => onSave({ id: row.id, label, sortOrder, isActive })}
+            onSave={() =>
+              onSave({
+                id: row.id,
+                label,
+                sortOrder,
+                isActive,
+                defaultWorkMode: defaultWorkMode ? defaultWorkMode : null,
+              })
+            }
 
             onDelete={() => {
 

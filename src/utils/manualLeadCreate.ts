@@ -5,7 +5,7 @@ import {
   Timestamp,
   type Firestore,
 } from 'firebase/firestore'
-import type { Lead, PriorityTag, ScoringProfile } from '../types'
+import type { Lead, LeadSourceRecord, LeadWorkMode, PriorityTag, ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { buildLeadFirestorePayload, type ExcelLeadRow } from './excelLeadMapper'
 import { computeLeadUniqueHash, nationalIdHashFromInput, normalizePhoneKey } from './leadIdentity'
@@ -24,6 +24,7 @@ import { studyFormatFromParts } from './studyFormatMerge'
 import { validateNationalIdInput } from './leadProfileCatalog'
 import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
+import { resolveWorkModeForLeadIntake } from './leadWorkMode'
 
 function norm(s: string): string {
   return s.trim()
@@ -102,6 +103,10 @@ export type CreateManualLeadInput = {
   createdByName: string
   /** School tenant — required Phase 1 */
   orgId: string
+  /** Explicit workMode, or omit to resolve from leadSources by source1. */
+  workMode?: LeadWorkMode
+  /** Catalog used when workMode is not passed explicitly. */
+  leadSources?: readonly Pick<LeadSourceRecord, 'label' | 'defaultWorkMode'>[]
 }
 
 async function findExistingLeadIdByHash(db: Firestore, hash: string, orgId: string): Promise<string | null> {
@@ -201,6 +206,12 @@ export async function createManualLead(
   }
 
   const ref = doc(collection(db, FS_COLLECTIONS.leads))
+  const source1 = norm(input.draft.source1) || norm(input.draft.source)
+  const workMode = resolveWorkModeForLeadIntake({
+    workMode: input.workMode,
+    source1,
+    sources: input.leadSources,
+  })
   await setDoc(ref, {
     ...base,
     ...leadCoreDraftToFirestoreFields({ ...input.draft, customerId, systemCode }),
@@ -208,6 +219,7 @@ export async function createManualLead(
     calculatedScore,
     priorityTag,
     ...pillarPatch,
+    ...(workMode ? { workMode } : {}),
     createdAt: now,
     updatedAt: now,
     uploadedAt: now,
