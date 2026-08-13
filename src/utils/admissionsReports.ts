@@ -168,7 +168,7 @@ export function leadToAdmissionsInput(lead: Lead): AdmissionsReportLeadInput {
     majorInterest: lead.majorInterest,
     source1: lead.source1,
     uploaderName: lead.uploaderName,
-    assignedTo: lead.assignedTo,
+    assignedTo: lead.assignedTo ?? undefined,
     createdAtMs: createdAt?.toMillis?.() ?? uploadedAt?.toMillis?.() ?? 0,
     finance: lead.finance,
   }
