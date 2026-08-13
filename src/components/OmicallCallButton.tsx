@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Headphones, Phone } from 'lucide-react'
-import type { OmicallCallTarget } from '../types'
+import type { LeadWorkMode, OmicallCallTarget } from '../types'
 import { useOmicallOptional } from '../contexts/OmicallProvider'
 import { normalizePhoneForDial } from '../utils/omicallConfig'
 
@@ -9,6 +9,8 @@ type Props = {
   leadName: string
   phone: string
   target: OmicallCallTarget
+  /** Chế độ xử lý hồ sơ — truyền sang panel đánh giá gọi. */
+  workMode?: LeadWorkMode
   disabled?: boolean
   className?: string
   /**
@@ -36,6 +38,7 @@ export function OmicallCallButton({
   leadName,
   phone,
   target,
+  workMode,
   disabled,
   className,
   placement = 'beside',
@@ -61,7 +64,7 @@ export function OmicallCallButton({
   const useTelFallback = Boolean(nativeHref && !disabled && !canUse && !canClick2)
   const showButton = dialable || Boolean(String(phone ?? '').trim())
 
-  const callInput = { leadId, leadName, phone, target }
+  const callInput = { leadId, leadName, phone, target, workMode }
 
   const titleSdk = omicall?.canCall
     ? 'Gọi qua micro trình duyệt'

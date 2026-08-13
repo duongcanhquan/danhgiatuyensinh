@@ -6879,6 +6879,7 @@ function LeadDetailPanel({
                           leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
                           phone={coreDraft.phone}
                           target="student"
+                          workMode={lead.workMode}
                           disabled={saving || financeSaving}
                           placement="beside"
                         />
@@ -6889,6 +6890,7 @@ function LeadDetailPanel({
                           leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
                           phone={coreDraft.parentPhone}
                           target="parent"
+                          workMode={lead.workMode}
                           disabled={saving || financeSaving}
                           placement="beside"
                         />
@@ -6926,6 +6928,7 @@ function LeadDetailPanel({
                           leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
                           phone={coreDraft.phone}
                           target="student"
+                          workMode={lead.workMode}
                           disabled={saving || financeSaving}
                           placement="beside"
                         />
@@ -6947,6 +6950,7 @@ function LeadDetailPanel({
                           leadName={lead.fullName || lead.customerId || 'Hồ sơ'}
                           phone={coreDraft.parentPhone}
                           target="parent"
+                          workMode={lead.workMode}
                           disabled={saving || financeSaving}
                           placement="beside"
                         />
@@ -7014,6 +7018,7 @@ function LeadDetailPanel({
                             callContext={{
                               leadId: lead.id,
                               leadName: lead.fullName || lead.customerId || 'Hồ sơ',
+                              workMode: lead.workMode,
                             }}
                             financePanel={
                               <LeadProfileFinanceSection

@@ -211,12 +211,12 @@ export function validateEvaluationSelections(
   dimensions: readonly CallEvalDimension[],
   selections: EvaluationSelections,
 ): EvaluationValidation {
-  const hasAny = dimensions.some((d) => (selections[d.id]?.length ?? 0) > 0)
-  if (!hasAny) {
-    return { ok: false, message: 'Chọn ít nhất một mục trên bảng đánh giá.' }
+  const requiredDims = dimensions.filter((d) => d.required)
+  // Bảng short / chỉ optional (đã ẩn enrollment_signal): cho phép trống — disposition check riêng.
+  if (requiredDims.length === 0) {
+    return { ok: true }
   }
-  for (const dim of dimensions) {
-    if (!dim.required) continue
+  for (const dim of requiredDims) {
     const n = selections[dim.id]?.length ?? 0
     if (n < 1) {
       return { ok: false, message: `Chưa chọn: ${dim.label}` }
