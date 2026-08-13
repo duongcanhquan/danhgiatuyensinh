@@ -4,7 +4,7 @@
 |------------|---------|
 | **Mã** | `DES-WORKMODE-2026-08` |
 | **Ngày** | 2026-08-13 (rà soát code: 2026-08-14) |
-| **Trạng thái** | Chờ duyệt triển khai — **không sửa code cho đến khi người dùng OK** |
+| **Trạng thái** | Đã triển khai trên nhánh `feature/lead-work-modes` — chờ merge / duyệt chạy production |
 | **Phụ thuộc** | Kim chỉ nam CRM (`2026-07-29-crm-platform-north-star.md`); hàng chờ gọi (`2026-08-06-call-work-queue-design.md`); bộ chấm / InfoScore hiện có |
 | **Nguyên tắc an toàn** | Triển khai theo pha; không phá lọc list, bộ chấm, OMICall, disposition, KPI; mọi thay đổi UI mặc định tương thích ngược |
 | **Rà soát** | §14 — đối chiếu cấu trúc hiện có (Lead, `useLeads`, `CALL_DISPOSITIONS`, intake, URL filters) |
