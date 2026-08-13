@@ -7210,24 +7210,32 @@ function LeadDetailPanel({
                             </div>
                           ) : null}
 
-                          <section className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-indigo-50/45 via-white to-slate-50/90 p-2 shadow-md ring-1 ring-emerald-900/10 sm:p-2.5">
-                            <div className="flex items-start gap-1.5">
-                              <h3 className="app-section-heading min-w-0 flex-1 leading-tight text-emerald-900">
-                                Tín hiệu &amp; đánh giá tiềm năng
-                              </h3>
+                          <details className="group rounded-xl border border-emerald-200/90 bg-gradient-to-br from-indigo-50/45 via-white to-slate-50/90 shadow-md ring-1 ring-emerald-900/10 open:p-2 sm:open:p-2.5">
+                            <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
+                              <ChevronDown
+                                className="h-3.5 w-3.5 shrink-0 text-emerald-800 transition group-open:rotate-180"
+                                aria-hidden
+                              />
+                              <span className="min-w-0 flex-1 text-xs font-semibold text-emerald-950">
+                                Nâng cao — tín hiệu cho bộ chấm
+                              </span>
                               <button
                                 type="button"
-                                className="mt-0.5 shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-indigo-100"
-                                aria-label="Giải thích khối tín hiệu đánh giá"
+                                className="shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-indigo-100"
+                                aria-label="Giải thích tín hiệu cho bộ chấm"
                                 title="Giải thích"
-                                onClick={() => signalsHelpRef.current?.showModal()}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  signalsHelpRef.current?.showModal()
+                                }}
                               >
                                 <CircleHelp className="h-3.5 w-3.5" aria-hidden />
                               </button>
-                            </div>
-                            <p className="mt-1 text-xs leading-snug text-slate-600">
-                              Cờ hành vi / rủi ro — mỗi thay đổi <strong>lưu ngay</strong> vào hồ sơ; điểm &amp; nhãn HOT/WARM/COLD
-                              theo profile chấm điểm đang chọn.
+                            </summary>
+                            <p className="px-2.5 pb-1 text-[11px] leading-snug text-slate-600 sm:px-0">
+                              Cờ hành vi / rủi ro cho bộ chấm điểm — mỗi thay đổi <strong>lưu ngay</strong>; không thay kết
+                              quả sau gọi. Điểm &amp; nhãn HOT/WARM/COLD theo profile đang chọn.
                             </p>
 
                             <dialog
@@ -7251,10 +7259,9 @@ function LeadDetailPanel({
                                 </div>
                                 <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
                                   <p>
-                                    Khối <strong>Tín hiệu &amp; đánh giá tiềm năng</strong> phục vụ chấm điểm profile, nhãn{' '}
+                                    Khối <strong>Nâng cao — tín hiệu cho bộ chấm</strong> phục vụ chấm điểm profile, nhãn{' '}
                                     <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
-                                    <strong>AI</strong> (bước kiểm tra trước khi gọi AI, rồi phân tích và tóm tắt ghi chú tương
-                                    tác).
+                                    <strong>AI</strong>. Không trùng với bảng đánh giá cuộc gọi (kết quả sau gọi / note).
                                   </p>
                                   <p className="mt-2">
                                     <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
@@ -7269,7 +7276,7 @@ function LeadDetailPanel({
                               </div>
                             </dialog>
 
-                            <div className="mt-2 min-h-0">
+                            <div className="mt-1 min-h-0 px-2.5 pb-2 sm:px-0 sm:pb-0">
                               <LeadScoringSignalsPanel
                                 key={`sig-${lead.id}`}
                                 lead={lead}
@@ -7280,7 +7287,7 @@ function LeadDetailPanel({
                                 compact
                               />
                             </div>
-                          </section>
+                          </details>
                         </div>
                       ) : null}
                     </aside>
