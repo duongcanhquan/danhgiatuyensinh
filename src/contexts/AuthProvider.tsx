@@ -162,7 +162,12 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
       createdAt: now,
       updatedAt: now,
     }
-    await setDoc(ref, profile)
+    try {
+      await setDoc(ref, profile)
+    } catch (e) {
+      console.error('[syncUserProfile] không tạo được users/{uid}', user.uid, e)
+      throw e instanceof Error ? e : new Error(String(e))
+    }
     return profile
   }
 
@@ -200,14 +205,24 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
     }
     data.role = 'super_admin'
   } else if (String(data.role) !== role && (data.role === 'head_of_profession' || data.role === 'head_of_department')) {
-    await updateDoc(ref, { role: 'team_lead', updatedAt: now })
+    // Rules cấm tự đổi role — migrate best-effort; vẫn đăng nhập với role đã normalize.
+    try {
+      await updateDoc(ref, { role: 'team_lead', updatedAt: now })
+    } catch (e) {
+      console.warn('[syncUserProfile] không migrate role legacy → team_lead (Rules)', e)
+    }
     data.role = 'team_lead'
   }
   // Phase 1: school users without orgId get vietmy backfill on login
   const existingOrg = typeof data.orgId === 'string' ? data.orgId.trim() : ''
   if (!isSuper && role !== 'super_admin' && !existingOrg) {
-    await updateDoc(ref, { orgId: DEFAULT_ORG_ID, updatedAt: now })
-    data.orgId = DEFAULT_ORG_ID
+    try {
+      await updateDoc(ref, { orgId: DEFAULT_ORG_ID, updatedAt: now })
+      data.orgId = DEFAULT_ORG_ID
+    } catch (e) {
+      console.warn('[syncUserProfile] không backfill orgId (Rules) — dùng mặc định trên client', e)
+      data.orgId = DEFAULT_ORG_ID
+    }
   }
   return mapProfileFromDoc(user.uid, user, { ...data, role })
 }

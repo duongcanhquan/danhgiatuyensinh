@@ -36,6 +36,10 @@ export function ProtectedRoute() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 text-slate-600">
         <div className="app-surface-elevated max-w-md rounded-2xl px-8 py-6 text-center text-sm">
           <p className="font-medium text-slate-800">Hệ thống đang đăng nhập…</p>
+          <p className="mt-2 text-xs text-slate-500">Đang đồng bộ hồ sơ và quyền truy cập.</p>
+          <button type="button" className="vm-btn vm-btn-secondary mt-4" onClick={() => void signOut()}>
+            Đăng xuất
+          </button>
         </div>
       </div>
     )

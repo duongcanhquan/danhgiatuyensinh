@@ -229,7 +229,19 @@ service cloud.firestore {
       allow create: if isPlatform()
         || (hasResolvedOrg()
           && schoolOrgActive()
-          && request.resource.data.orgId == resolvedOrgId());
+          && request.resource.data.orgId == resolvedOrgId())
+        // Bootstrap lần đầu: user tự tạo doc của chính mình (TVV / kế toán mặc định / org vietmy).
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role in ['counselor', 'accountant']
+          && request.resource.data.isActive == true
+          && request.resource.data.orgId == 'vietmy')
+        // Siêu quản trị seed từ client khi email đã Auth nhưng chưa có doc (không gắn orgId).
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == 'super_admin'
+          && request.resource.data.isActive == true
+          && (!('orgId' in request.resource.data) || request.resource.data.orgId == null));
 
       // Cho phép tự gắn orgId lần đầu khi doc thiếu (login backfill) — không đổi role/isActive.
       allow update: if isPlatform()

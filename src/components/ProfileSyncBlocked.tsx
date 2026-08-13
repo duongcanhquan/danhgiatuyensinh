@@ -2,7 +2,7 @@ import { useAuth } from '../hooks/useAuth'
 
 /** Khi Auth OK nhưng không tạo/ghi được Firestore users/{uid} (Rules / chưa bật Firestore). */
 export function ProfileSyncBlocked() {
-  const { firebaseUser } = useAuth()
+  const { firebaseUser, signOut } = useAuth()
   const uid = firebaseUser?.uid ?? '—'
 
   return (
@@ -40,9 +40,16 @@ export function ProfileSyncBlocked() {
             <strong>trùng</strong> tên đó — nếu thiếu hoặc sai, app có thể không đọc/ghi được{' '}
             <code className="text-slate-800">users/{'{'}uid{'}'}</code>.
           </li>
-          <li>Sau đó bấm «Tải lại trang» bên dưới.</li>
+          <li>Bấm «Đăng xuất» để quay lại form đăng nhập, hoặc «Tải lại trang» sau khi sửa Rules.</li>
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          >
+            Đăng xuất
+          </button>
           <button
             type="button"
             onClick={() => window.location.reload()}

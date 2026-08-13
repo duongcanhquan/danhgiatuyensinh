@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Wallet } from 'lucide-react'
+import { AuthSessionExitBar } from '../components/AuthSessionControls'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
@@ -54,7 +55,7 @@ function mapFirebaseLoginError(err: unknown): string {
  * Email khớp `VITE_SUPER_ADMIN_EMAIL` → role `super_admin` (orgId null). Lần đầu có thể tự tạo Auth user.
  */
 export function LoginView() {
-  const { status, firebaseUser, signInWithEmail } = useAuth()
+  const { status, firebaseUser, profile, signInWithEmail, signOut } = useAuth()
   const location = useLocation()
   const rawFrom = (location.state as { from?: string } | null)?.from
   const from =
@@ -125,8 +126,40 @@ export function LoginView() {
     )
   }
 
-  if (firebaseUser && (status === 'authenticated' || status === 'authenticating')) {
+  // Chỉ vào CRM khi đã có hồ sơ — tránh kẹt vòng redirect khi sync thất bại.
+  if (firebaseUser && status === 'authenticated' && profile) {
     return <Navigate to={from} replace />
+  }
+
+  if (firebaseUser && (status === 'authenticating' || (status === 'authenticated' && !profile))) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[var(--vm-canvas)] px-4 py-10">
+        <div className="app-surface-elevated w-full max-w-md rounded-2xl p-6 text-center sm:p-8">
+          <p className="text-sm font-semibold text-slate-900">
+            {status === 'authenticating' ? 'Đang đồng bộ hồ sơ…' : 'Chưa vào được CRM'}
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            {status === 'authenticating'
+              ? 'Đăng nhập Authentication thành công. Hệ thống đang đọc hồ sơ nhân sự.'
+              : 'Đã đăng nhập nhưng chưa đọc/ghi được hồ sơ Firestore. Đăng xuất rồi thử lại, hoặc liên hệ quản trị.'}
+          </p>
+          <div className="mt-5 flex flex-col gap-2">
+            <button type="button" className="vm-btn vm-btn-primary w-full" onClick={() => void signOut()}>
+              Đăng xuất để thử lại
+            </button>
+            {status === 'authenticated' && !profile ? (
+              <button
+                type="button"
+                className="vm-btn vm-btn-secondary w-full"
+                onClick={() => window.location.reload()}
+              >
+                Tải lại trang
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const submit = async (e: FormEvent) => {
@@ -161,6 +194,9 @@ export function LoginView() {
       />
 
       <div className="relative z-10 flex min-h-[100dvh] w-full flex-col items-center justify-center px-4 py-8 md:px-8">
+        <div className="mb-4 w-full max-w-4xl">
+          <AuthSessionExitBar tone="onDark" />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
