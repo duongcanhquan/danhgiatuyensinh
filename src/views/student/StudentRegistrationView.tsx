@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Loader2, MapPin, Phone, Send } from 'lucide-react'
+import { FirebaseError } from 'firebase/app'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { AuthSessionExitBar } from '../../components/AuthSessionControls'
-import { GraduationCap, Loader2, Send } from 'lucide-react'
-import { FirebaseError } from 'firebase/app'
 import { isFirebaseConfigured } from '../../services/firebase'
 import {
   fetchPublicRegistrationMeta,
@@ -12,22 +12,40 @@ import {
 } from '../../services/publicRegistration'
 import {
   emptyPublicRegistrationForm,
+  formatDobInput,
   PUBLIC_REG_INPUT_CLS,
+  resolveAcademicPerformance,
   validatePublicRegistrationForm,
 } from '../../utils/publicRegistrationForm'
+import {
+  APPLICANT_CATEGORIES,
+  publicRegText,
+  SCORE_PRESETS,
+  type PublicRegLang,
+} from '../../utils/publicRegistrationI18n'
 import { normalizeOrgSlug } from '../../tenancy/orgConstants'
 
-const ACADEMIC_OPTIONS = ['Yếu', 'Trung Bình', 'Khá', 'Giỏi'] as const
+function eduLabelHint(label: string, lang: PublicRegLang): string {
+  if (lang === 'en') {
+    if (label.includes('Cao đẳng chính quy')) return 'Regular College (2 years 4 months)'
+    if (label.includes('Phổ thông') || label.includes('9+')) return 'High School College (9+)'
+    if (label.includes('Liên thông')) return 'Inter-level College Transfer'
+  }
+  return label
+}
 
 export function StudentRegistrationView() {
   const navigate = useNavigate()
   const { orgSlug: orgSlugParam } = useParams<{ orgSlug?: string }>()
   const orgSlug = useMemo(() => normalizeOrgSlug(orgSlugParam), [orgSlugParam])
+  const [lang, setLang] = useState<PublicRegLang>('vn')
   const [meta, setMeta] = useState<PublicRegistrationMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState(emptyPublicRegistrationForm)
   const [busy, setBusy] = useState(false)
+
+  const t = useCallback((key: Parameters<typeof publicRegText>[1]) => publicRegText(lang, key), [lang])
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -41,7 +59,7 @@ export function StudentRegistrationView() {
         if (cancelled) return
         setMeta(m)
         if (!m.enabled) {
-          setError('Cổng đăng ký đang tạm đóng. Vui lòng liên hệ trường để được hỗ trợ.')
+          setError(publicRegText(lang, 'closed'))
         }
       })
       .catch((e) => {
@@ -54,15 +72,32 @@ export function StudentRegistrationView() {
     return () => {
       cancelled = true
     }
-  }, [orgSlug])
+  }, [orgSlug, lang])
 
   const patch = useCallback((partial: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...partial }))
   }, [])
 
+  const selectedProgram = useMemo(() => {
+    const label = (form.studyIntention || form.educationLevel).trim()
+    return meta?.trainingPrograms.find((p) => p.label === label || p.id === label) ?? null
+  }, [form.studyIntention, form.educationLevel, meta?.trainingPrograms])
+
+  const majorOptions = useMemo(() => {
+    const list = meta?.majors ?? []
+    if (!selectedProgram) return []
+    return list.filter(
+      (m) => !m.departmentId || m.departmentId === selectedProgram.id,
+    )
+  }, [meta?.majors, selectedProgram])
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const validationErr = validatePublicRegistrationForm(form)
+    const validationErr = validatePublicRegistrationForm(form, lang, {
+      trainingProgramLabels: (meta?.trainingPrograms ?? []).map((p) => p.label),
+      majorLabels: majorOptions.map((m) => m.label),
+      counselorIds: (meta?.counselors ?? []).map((c) => c.id),
+    })
     if (validationErr) {
       setError(validationErr)
       return
@@ -70,13 +105,36 @@ export function StudentRegistrationView() {
     setBusy(true)
     setError(null)
     try {
+      const academicPerformance = resolveAcademicPerformance(form)
+      const study = (form.studyIntention || form.educationLevel).trim()
       const result = await submitPublicRegistration({
-        ...form,
         orgSlug,
-        fullName: form.fullName.trim(),
+        fullName: form.fullName.trim().toUpperCase(),
         phone: form.phone.trim(),
         studentEmail: form.studentEmail.trim(),
-        studyIntention: (form.educationLevel ?? '').trim(),
+        dateOfBirth: form.dateOfBirth.trim(),
+        gender: form.gender,
+        placeOfBirth: form.placeOfBirth.trim(),
+        ethnicity: form.ethnicity.trim(),
+        nationalId: form.nationalIdNotAvailable ? 'CHƯA CÓ' : form.nationalId.trim().toUpperCase(),
+        nationalIdNotAvailable: form.nationalIdNotAvailable,
+        permanentAddress: form.permanentAddress.trim(),
+        address: form.permanentAddress.trim(),
+        fatherName: form.fatherName.trim().toUpperCase(),
+        fatherPhone: form.fatherPhone.trim(),
+        motherName: form.motherName.trim().toUpperCase(),
+        motherPhone: form.motherPhone.trim(),
+        parentPhone: form.motherPhone.trim(),
+        highSchool: form.highSchool.trim(),
+        schoolProvince: form.schoolProvince.trim(),
+        province: form.schoolProvince.trim(),
+        applicantCategory: form.applicantCategory,
+        educationLevel: study,
+        studyIntention: study,
+        majorInterest: form.majorInterest.trim(),
+        academicPerformance,
+        counselorId: form.counselorId,
+        description: form.description?.trim() || '',
       })
       navigate('/dang-ky/thanh-cong', {
         replace: true,
@@ -88,13 +146,18 @@ export function StudentRegistrationView() {
         },
       })
     } catch (err) {
-      let msg = 'Không gửi được đăng ký. Thử lại sau.'
-      if (err instanceof FirebaseError) {
-        if (err.code === 'functions/already-exists') {
-          msg = 'Đã có hồ sơ trùng số điện thoại trên hệ thống. Vui lòng liên hệ tư vấn viên.'
-        } else if (err.message) {
-          msg = err.message
-        }
+      let msg = lang === 'en' ? 'Could not submit. Please try again.' : 'Không gửi được đăng ký. Thử lại sau.'
+      const firebaseErr =
+        err instanceof FirebaseError
+          ? err
+          : err instanceof Error && err.cause instanceof FirebaseError
+            ? err.cause
+            : null
+      if (firebaseErr?.code === 'functions/already-exists') {
+        msg =
+          lang === 'en'
+            ? 'A profile with this phone already exists. Please contact a counselor.'
+            : 'Đã có hồ sơ trùng số điện thoại trên hệ thống. Vui lòng liên hệ tư vấn viên.'
       } else if (err instanceof Error && err.message) {
         msg = err.message
       }
@@ -104,212 +167,395 @@ export function StudentRegistrationView() {
     }
   }
 
+  const logoSrc = meta?.logoUrl || '/brand/logo-vietmy-trang.png'
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-slate-50">
-      <header className="border-b border-emerald-100/80 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6">
+    <div className="public-reg-portal min-h-screen bg-[length:400%_400%] px-3 py-6 text-slate-800 sm:px-4 sm:py-8 md:py-10"
+      style={{
+        backgroundImage: 'linear-gradient(-45deg, #f5f7fa, #c3cfe2, #e0c3fc, #8ec5fc)',
+        animation: 'publicRegGradient 15s ease infinite',
+      }}
+    >
+      <style>{`@keyframes publicRegGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}`}</style>
+
+      <div className="mx-auto w-full max-w-[900px]">
+        <div className="mb-3">
           <AuthSessionExitBar tone="onLight" />
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
-              <GraduationCap className="h-6 w-6" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
-              <h1 className="truncate text-lg font-extrabold text-slate-900 sm:text-xl">
-                {meta?.portalTitle ?? 'Đăng ký tuyển sinh'}
-              </h1>
-              <p className="mt-0.5 text-xs text-slate-500">Cổng trường · {orgSlug}</p>
-            </div>
-          </div>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-16 text-slate-600 shadow-sm">
-            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-            Đang tải…
-          </div>
-        ) : meta?.enabled ? (
-          <>
-            <p className="mb-6 text-sm leading-relaxed text-slate-700">{meta.introText}</p>
-
-            {error ? (
-              <div
-                className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
-                role="alert"
+        <div className="relative rounded-3xl border border-white/40 bg-white/85 p-5 shadow-[0_20px_40px_rgba(0,0,0,0.08)] backdrop-blur-md sm:p-8 md:p-10">
+          <div className="absolute right-3 top-3 z-10 sm:right-5 sm:top-5">
+            <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm" role="group" aria-label="Language">
+              <button
+                type="button"
+                onClick={() => setLang('vn')}
+                className={`cursor-pointer px-3 py-1.5 text-xs font-bold ${lang === 'vn' ? 'bg-[#0056b3] text-white' : 'text-slate-500'}`}
               >
-                {error}
-              </div>
-            ) : null}
+                VN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                className={`cursor-pointer px-3 py-1.5 text-xs font-bold ${lang === 'en' ? 'bg-[#0056b3] text-white' : 'text-slate-500'}`}
+              >
+                EN
+              </button>
+            </div>
+          </div>
 
-            <form
-              onSubmit={(e) => void onSubmit(e)}
-              className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm sm:p-6"
-            >
-              <section>
-                <h2 className="text-sm font-bold text-slate-900">Thông tin liên hệ</h2>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <label className="sm:col-span-2 block">
-                    <span className="text-sm font-semibold text-slate-800">Họ và tên *</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.fullName}
-                      onChange={(e) => patch({ fullName: e.target.value })}
-                      required
-                      autoComplete="name"
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Số điện thoại *</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.phone}
-                      onChange={(e) => patch({ phone: e.target.value })}
-                      inputMode="tel"
-                      required
-                      autoComplete="tel"
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Email *</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      type="email"
-                      value={form.studentEmail}
-                      onChange={(e) => patch({ studentEmail: e.target.value })}
-                      required
-                      autoComplete="email"
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Ngày sinh</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      placeholder="vd. 15/08/2008"
-                      value={form.dateOfBirth}
-                      onChange={(e) => patch({ dateOfBirth: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">SĐT phụ huynh</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.parentPhone}
-                      onChange={(e) => patch({ parentPhone: e.target.value })}
-                      inputMode="tel"
-                    />
-                  </label>
+          <header className="mb-6 pt-6 text-center sm:mb-8 sm:pt-2">
+            <img
+              src={logoSrc}
+              alt="VietMy College"
+              className="mx-auto mb-4 h-auto max-w-[180px] sm:max-w-[220px]"
+            />
+            <h1 className="text-xl font-extrabold uppercase tracking-tight text-[#0056b3] sm:text-2xl">
+              {meta?.portalTitle?.trim() || t('portalTitle')}
+            </h1>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
+              {meta?.introText?.trim() || t('portalSub')}
+            </p>
+            <div className="mt-4 inline-block rounded-xl border border-[#0056b3]/15 bg-white/60 px-4 py-3 text-left text-xs font-semibold text-slate-800 sm:text-sm">
+              <p className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
+                <span>{meta?.contactAddress || '168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội'}</span>
+              </p>
+              <p className="mt-1.5 flex items-center gap-2">
+                <Phone className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                <span>{meta?.contactPhone || '0982.856.648'}</span>
+              </p>
+            </div>
+          </header>
+
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-slate-600">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              {t('loading')}
+            </div>
+          ) : meta?.enabled ? (
+            <>
+              {error ? (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900" role="alert">
+                  {error}
                 </div>
-              </section>
+              ) : null}
 
-              <section>
-                <h2 className="text-sm font-bold text-slate-900">Học tập & nguyện vọng</h2>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Tỉnh / Thành phố</span>
-                    {meta.provinces.length ? (
+              <form onSubmit={(e) => void onSubmit(e)} className="space-y-5">
+                <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-[#0056b3]">
+                    {t('section1')}
+                  </h2>
+                  <div className="grid gap-3 sm:grid-cols-12 sm:gap-4">
+                    <label className="sm:col-span-6">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('fullName')}</span>
+                      <input
+                        className={`${PUBLIC_REG_INPUT_CLS} uppercase`}
+                        value={form.fullName}
+                        onChange={(e) => patch({ fullName: e.target.value.toUpperCase() })}
+                        placeholder={t('phName')}
+                        required
+                        autoComplete="name"
+                      />
+                    </label>
+                    <label className="sm:col-span-3">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('dob')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.dateOfBirth}
+                        onChange={(e) => patch({ dateOfBirth: formatDobInput(e.target.value) })}
+                        placeholder={t('phDob')}
+                        maxLength={10}
+                        required
+                        inputMode="numeric"
+                      />
+                    </label>
+                    <label className="sm:col-span-3">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('gender')}</span>
                       <select
-                        className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                        value={form.province}
-                        onChange={(e) => patch({ province: e.target.value })}
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.gender}
+                        onChange={(e) => patch({ gender: e.target.value })}
                       >
-                        <option value="">— Chọn —</option>
-                        {meta.provinces.map((p) => (
-                          <option key={p} value={p}>
-                            {p}
+                        <option value="Nam">{t('male')}</option>
+                        <option value="Nữ">{t('female')}</option>
+                      </select>
+                    </label>
+                    <label className="sm:col-span-4">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('pob')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.placeOfBirth}
+                        onChange={(e) => patch({ placeOfBirth: e.target.value })}
+                        placeholder={t('phPob')}
+                        required
+                      />
+                    </label>
+                    <label className="sm:col-span-4">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('ethnicity')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.ethnicity}
+                        onChange={(e) => patch({ ethnicity: e.target.value })}
+                        placeholder={t('phEthnicity')}
+                        required
+                      />
+                    </label>
+                    <div className="sm:col-span-4">
+                      <label>
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">{t('cccd')}</span>
+                        <input
+                          className={PUBLIC_REG_INPUT_CLS}
+                          value={form.nationalId}
+                          onChange={(e) => {
+                            if (form.nationalIdNotAvailable) return
+                            patch({
+                              nationalId: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase(),
+                            })
+                          }}
+                          placeholder={t('phCccd')}
+                          readOnly={form.nationalIdNotAvailable}
+                          required={!form.nationalIdNotAvailable}
+                        />
+                      </label>
+                      <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs font-semibold text-rose-700">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 cursor-pointer accent-rose-600"
+                          checked={form.nationalIdNotAvailable}
+                          onChange={(e) => {
+                            const on = e.target.checked
+                            patch({
+                              nationalIdNotAvailable: on,
+                              nationalId: on ? 'CHƯA CÓ' : '',
+                            })
+                          }}
+                        />
+                        {t('noCccd')}
+                      </label>
+                    </div>
+                    <label className="sm:col-span-6">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('phone')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.phone}
+                        onChange={(e) => patch({ phone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        placeholder={t('phPhone')}
+                        required
+                        inputMode="tel"
+                        autoComplete="tel"
+                      />
+                    </label>
+                    <label className="sm:col-span-6">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('email')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        type="email"
+                        value={form.studentEmail}
+                        onChange={(e) => patch({ studentEmail: e.target.value })}
+                        placeholder={t('phEmail')}
+                        required
+                        autoComplete="email"
+                      />
+                    </label>
+                    <label className="sm:col-span-12">
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('address')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.permanentAddress}
+                        onChange={(e) => patch({ permanentAddress: e.target.value })}
+                        required
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-4 text-base font-bold text-[#0056b3]">{t('section2')}</h2>
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('fatherName')}</span>
+                      <input
+                        className={`${PUBLIC_REG_INPUT_CLS} uppercase`}
+                        value={form.fatherName}
+                        onChange={(e) => patch({ fatherName: e.target.value.toUpperCase() })}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('fatherPhone')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.fatherPhone}
+                        onChange={(e) => patch({ fatherPhone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        inputMode="tel"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('motherName')}</span>
+                      <input
+                        className={`${PUBLIC_REG_INPUT_CLS} uppercase`}
+                        value={form.motherName}
+                        onChange={(e) => patch({ motherName: e.target.value.toUpperCase() })}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('motherPhone')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.motherPhone}
+                        onChange={(e) => patch({ motherPhone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        required
+                        inputMode="tel"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-4 text-base font-bold text-[#0056b3]">{t('section3')}</h2>
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('school')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.highSchool}
+                        onChange={(e) => patch({ highSchool: e.target.value })}
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('schoolProvince')}</span>
+                      <input
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.schoolProvince}
+                        onChange={(e) => patch({ schoolProvince: e.target.value })}
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('situation')}</span>
+                      <select
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.applicantCategory}
+                        onChange={(e) => patch({ applicantCategory: e.target.value })}
+                        required
+                      >
+                        {APPLICANT_CATEGORIES.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {lang === 'en' ? c.en : c.vn}
                           </option>
                         ))}
                       </select>
-                    ) : (
-                      <input
-                        className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                        value={form.province}
-                        onChange={(e) => patch({ province: e.target.value })}
-                      />
-                    )}
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Trường THPT</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.highSchool}
-                      onChange={(e) => patch({ highSchool: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Lớp</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.gradeClass}
-                      onChange={(e) => patch({ gradeClass: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Hệ / hình thức đào tạo</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      placeholder="vd. CĐ 9+, CĐ chính quy…"
-                      value={form.educationLevel}
-                      onChange={(e) => patch({ educationLevel: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Ngành quan tâm</span>
-                    <input
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.majorInterest}
-                      onChange={(e) => patch({ majorInterest: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-sm font-semibold text-slate-800">Học lực</span>
-                    <select
-                      className={`mt-1 ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.academicPerformance}
-                      onChange={(e) => patch({ academicPerformance: e.target.value })}
-                    >
-                      <option value="">— Chọn —</option>
-                      {ACADEMIC_OPTIONS.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('eduSystem')}</span>
+                      <select
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.studyIntention || form.educationLevel}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          patch({
+                            studyIntention: v,
+                            educationLevel: v,
+                            majorInterest: '',
+                          })
+                        }}
+                        required
+                      >
+                        <option value="">{t('pickEdu')}</option>
+                        {(meta?.trainingPrograms ?? []).map((p) => (
+                          <option key={p.id} value={p.label}>
+                            {eduLabelHint(p.label, lang)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('major')}</span>
+                      <select
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.majorInterest}
+                        onChange={(e) => patch({ majorInterest: e.target.value })}
+                        required
+                        disabled={!selectedProgram}
+                      >
+                        <option value="">
+                          {selectedProgram ? t('pickMajor') : t('pickEduFirst')}
                         </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="sm:col-span-2">
-                    <span className="text-sm font-semibold text-slate-800">Ghi chú thêm</span>
-                    <textarea
-                      className={`mt-1 min-h-[88px] ${PUBLIC_REG_INPUT_CLS}`}
-                      value={form.description}
-                      onChange={(e) => patch({ description: e.target.value })}
-                      rows={3}
-                    />
-                  </label>
-                </div>
-              </section>
+                        {majorOptions.map((m) => (
+                          <option key={m.id} value={m.label}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-2 block text-xs font-semibold text-slate-600">{t('counselor')}</span>
+                      <select
+                        className={PUBLIC_REG_INPUT_CLS}
+                        value={form.counselorId}
+                        onChange={(e) => patch({ counselorId: e.target.value })}
+                        required
+                      >
+                        <option value="">{t('pickCounselor')}</option>
+                        {(meta?.counselors ?? []).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.displayName}
+                          </option>
+                        ))}
+                      </select>
+                      {!meta?.counselors?.length ? (
+                        <span className="mt-1 block text-[11px] text-amber-800">{t('noCounselors')}</span>
+                      ) : null}
+                    </label>
+                    <div className="sm:col-span-2">
+                      <label>
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">{t('score')}</span>
+                        <select
+                          className={`${PUBLIC_REG_INPUT_CLS} mb-2`}
+                          value={form.scorePreset}
+                          onChange={(e) => patch({ scorePreset: e.target.value })}
+                        >
+                          {SCORE_PRESETS.map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {lang === 'en' ? s.en : s.vn}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {form.scorePreset === 'Khác' ? (
+                        <input
+                          className={PUBLIC_REG_INPUT_CLS}
+                          value={form.customScore}
+                          onChange={(e) => patch({ customScore: e.target.value })}
+                          placeholder={t('scorePh')}
+                          required
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
 
-              <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-slate-500">
-                  Sau khi gửi, bạn nhận <strong>mã hồ sơ</strong> — tư vấn viên liên hệ qua SĐT hoặc email đã khai báo.
-                </p>
                 <button
                   type="submit"
-                  disabled={busy}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
+                  disabled={busy || !(meta?.counselors?.length)}
+                  className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#0056b3] to-[#007bff] px-4 py-4 text-base font-bold uppercase tracking-wide text-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" />}
-                  {busy ? 'Đang gửi…' : 'Gửi đăng ký'}
+                  {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Send className="h-5 w-5" aria-hidden />}
+                  {busy ? t('submitting') : t('submit')}
                 </button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center text-sm text-amber-950">
-            <p>{error ?? 'Cổng đăng ký chưa mở.'}</p>
-          </div>
-        )}
-      </main>
+
+                <div className="rounded-xl border-l-4 border-[#ff4d4d] bg-[#fff5f5] px-4 py-3 text-xs leading-relaxed text-[#c0392b] sm:text-sm">
+                  <strong>{t('noteTitle')}</strong> {t('noteBody')}
+                </div>
+              </form>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center text-sm text-amber-950">
+              <p>{error ?? t('closed')}</p>
+            </div>
+          )}
+        </div>
+      </div>
       <StaffLoginCornerGate />
     </div>
   )

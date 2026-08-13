@@ -183,8 +183,9 @@ export function PublicRegistrationSettingsPanel() {
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
         <p className="font-semibold">Cổng đăng ký sinh viên (công khai)</p>
         <p className="mt-1 text-emerald-900/90">
-          Đang cấu hình cho <strong>{currentOrgLabel}</strong>. Sinh viên điền form → hồ sơ vào trường này → n8n gửi
-          email (nếu bật).
+          Đang cấu hình cho <strong>{currentOrgLabel}</strong>. Sinh viên điền form → hồ sơ vào danh sách trường này.
+          Danh sách thầy/cô trên cổng lấy từ Nhân sự (bật «Hiện trên cổng đăng ký»). Hệ đào tạo / chuyên ngành lấy từ
+          Hồ sơ & danh mục.
         </p>
       </div>
 
@@ -288,19 +289,13 @@ export function PublicRegistrationSettingsPanel() {
         </label>
       </div>
 
-      <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <input
-          type="checkbox"
-          className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
-          checked={draft.autoAssignCounselor}
-          disabled={!canEdit}
-          onChange={(e) => patch({ autoAssignCounselor: e.target.checked })}
-        />
-        <span>
-          <span className="block text-sm font-semibold text-slate-900">Tự gán tư vấn viên</span>
-          <span className="mt-0.5 block text-xs text-slate-600">Chọn TVV ít hồ sơ nhất trong trường.</span>
-        </span>
-      </label>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-sm text-slate-700">
+        <p className="font-semibold text-slate-900">Thầy/cô trên cổng đăng ký</p>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600">
+          Sinh viên tự chọn người hướng dẫn. Vào <strong>Nhân sự</strong> → sửa TVV/CTV → bật «Hiện trên cổng đăng ký».
+          Chỉ tài khoản đang hoạt động và đã bật mới hiện trên form.
+        </p>
+      </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
         <label className="flex items-start gap-3">

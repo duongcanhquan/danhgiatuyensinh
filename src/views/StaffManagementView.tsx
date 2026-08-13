@@ -89,6 +89,7 @@ export function StaffManagementView({
   const [editRole, setEditRole] = useState<UserRole>('counselor')
   const [editActive, setEditActive] = useState(true)
   const [editAllowLlm, setEditAllowLlm] = useState(false)
+  const [editShowOnPortal, setEditShowOnPortal] = useState(false)
   const [editExtraPerms, setEditExtraPerms] = useState<Permission[]>([])
   const [editDeniedPerms, setEditDeniedPerms] = useState<Permission[]>([])
   const [editOmicallUser, setEditOmicallUser] = useState('')
@@ -289,6 +290,7 @@ export function StaffManagementView({
     setEditRole(u.role)
     setEditActive(u.isActive !== false)
     setEditAllowLlm(u.allowLlmAndAiTasks === true)
+    setEditShowOnPortal(u.showOnPublicRegistrationPortal === true)
     setEditExtraPerms([...(u.extraPermissions ?? [])])
     setEditDeniedPerms([...(u.deniedPermissions ?? [])])
     setEditOmicallUser(u.omicallSipUser ?? '')
@@ -351,6 +353,11 @@ export function StaffManagementView({
           : canOwnFieldStaffTeam(editing.role) || (editing.managedCounselorIds?.length ?? 0) > 0
             ? { managedCounselorIds: [] }
             : {}),
+        ...(isFieldStaffRole(editRole) || isFieldStaffRole(editing.role)
+          ? {
+              showOnPublicRegistrationPortal: isFieldStaffRole(editRole) ? editShowOnPortal : false,
+            }
+          : {}),
       })
       if (
         canStaffAll &&
@@ -919,6 +926,22 @@ export function StaffManagementView({
                 />
                 Tài khoản đang hoạt động
               </label>
+              {isFieldStaffRole(editRole) ? (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-emerald-200/80 bg-emerald-50/60 px-3 py-2.5 text-sm text-slate-800">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                    checked={editShowOnPortal}
+                    onChange={(e) => setEditShowOnPortal(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-semibold text-slate-800">Hiện trên cổng đăng ký</span>
+                    <span className="mt-0.5 block text-xs text-slate-600">
+                      Sinh viên chọn thầy/cô này khi điền form công khai — hồ sơ gán đúng người đó.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
               {isSuperAdminRole(editing.role) ? (
                 <p className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-950">
                   <strong>Siêu quản trị</strong> luôn được dùng AI trên CRM.

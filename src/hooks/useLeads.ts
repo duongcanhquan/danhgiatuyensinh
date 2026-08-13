@@ -300,14 +300,23 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       ...(profileNote2Raw ? { profileNote2: profileNote2Raw } : {}),
       ...(otherAttentionRaw ? { otherAttentionNotes: otherAttentionRaw } : {}),
       ...(dateOfBirth ? { dateOfBirth } : {}),
+      ...(String(data.placeOfBirth ?? '').trim()
+        ? { placeOfBirth: String(data.placeOfBirth).trim().slice(0, 120) }
+        : {}),
+      ...(String(data.applicantCategory ?? '').trim()
+        ? { applicantCategory: String(data.applicantCategory).trim().slice(0, 120) }
+        : {}),
       ...(String(data.gender ?? '').trim()
         ? { gender: String(data.gender).trim().slice(0, 32) }
         : {}),
       ...(data.nationalIdNotAvailable === true
         ? { nationalIdNotAvailable: true }
         : (() => {
-            const nid = String(data.nationalId ?? '').replace(/\D/g, '')
-            return nid ? { nationalId: nid } : {}
+            const raw = String(data.nationalId ?? '').trim().toUpperCase()
+            if (!raw || raw === 'CHƯA CÓ') return {}
+            if (/^\d+$/.test(raw)) return { nationalId: raw.slice(0, 12) }
+            const passport = raw.replace(/[^A-Z0-9]/g, '').slice(0, 15)
+            return passport ? { nationalId: passport } : {}
           })()),
       ...(String(data.studentEmail ?? '').trim() ? { studentEmail: String(data.studentEmail).trim() } : {}),
       ...(sourcePrimary ? { source1: sourcePrimary } : {}),

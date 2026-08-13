@@ -629,7 +629,16 @@ export function LeadProfileCoreForm({
               onChange={(e) => patch('gender', e.target.value)}
             />
           </Field>
-          <Field label="CCCD">
+          <Field label="Nơi sinh">
+            <input
+              className={INPUT_CLS}
+              value={draft.placeOfBirth}
+              disabled={disabled}
+              placeholder="VD: Hà Nội"
+              onChange={(e) => patch('placeOfBirth', e.target.value)}
+            />
+          </Field>
+          <Field label="CCCD / Hộ chiếu">
             <div className="space-y-1">
               <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-700">
                 <input
@@ -650,12 +659,13 @@ export function LeadProfileCoreForm({
               {!draft.nationalIdNotAvailable ? (
                 <input
                   className={INPUT_CLS}
-                  inputMode="numeric"
-                  maxLength={10}
-                  placeholder="10 chữ số"
+                  maxLength={15}
+                  placeholder="9–12 số hoặc hộ chiếu"
                   value={draft.nationalId}
                   disabled={disabled}
-                  onChange={(e) => patch('nationalId', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  onChange={(e) =>
+                    patch('nationalId', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15))
+                  }
                 />
               ) : null}
             </div>
@@ -818,6 +828,15 @@ export function LeadProfileCoreForm({
           </Field>
           <Field label="Lớp hiện đang học">
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
+          </Field>
+          <Field label="Đối tượng dự tuyển">
+            <input
+              className={INPUT_CLS}
+              value={draft.applicantCategory}
+              disabled={disabled}
+              placeholder="VD: Học sinh lớp 12"
+              onChange={(e) => patch('applicantCategory', e.target.value)}
+            />
           </Field>
           <Field label="Loại hình trường">
             <CatalogCombobox

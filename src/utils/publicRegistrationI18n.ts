@@ -1,0 +1,143 @@
+export type PublicRegLang = 'vn' | 'en'
+
+type Dict = Record<string, string>
+
+const VN: Dict = {
+  portalTitle: 'Cổng Đăng Ký Trực Tuyến',
+  portalSub:
+    'Hệ thống xét tuyển chính quy vào Trường Cao Đẳng Việt Mỹ — Cam kết chất lượng và việc làm sau tốt nghiệp.',
+  section1: '1. Thông tin cá nhân',
+  section2: '2. Thông tin gia đình',
+  section3: '3. Học vấn & Nguyện vọng',
+  fullName: 'Họ và tên thí sinh *',
+  dob: 'Ngày sinh *',
+  gender: 'Giới tính *',
+  male: 'Nam',
+  female: 'Nữ',
+  pob: 'Nơi sinh *',
+  ethnicity: 'Dân tộc *',
+  cccd: 'Số CCCD/Mã định danh/Passport *',
+  noCccd: 'Tôi chưa có CCCD/Passport',
+  phone: 'Số điện thoại (Thêm + nếu SĐT Quốc tế) *',
+  email: 'Địa chỉ Email *',
+  address: 'Địa chỉ thường trú (Ghi rõ thôn/xóm, xã/phường, quận/huyện) *',
+  fatherName: 'Họ tên Cha',
+  fatherPhone: 'SĐT Cha',
+  motherName: 'Họ tên Mẹ',
+  motherPhone: 'SĐT Mẹ *',
+  school: 'Trường THPT/THCS đã theo học *',
+  schoolProvince: 'Tỉnh/Thành phố của trường *',
+  situation: 'Đối tượng dự tuyển *',
+  eduSystem: 'Hệ đào tạo đăng ký *',
+  major: 'Ngành học đăng ký *',
+  counselor: 'Thầy/Cô tư vấn hướng dẫn *',
+  score: 'Điểm trung bình học tập *',
+  scoreCustom: 'Nhập điểm cụ thể...',
+  scorePh: 'Nhập điểm trung bình cụ thể của bạn (VD: 7.8)',
+  submit: 'Gửi Hồ Sơ Đăng Ký',
+  submitting: 'Đang gửi hồ sơ...',
+  noteTitle: 'Lưu ý đặc biệt:',
+  noteBody:
+    'Thí sinh có học lực từ 8.0 trở lên sẽ được ưu tiên tuyển thẳng. Thông tin đăng ký là cơ sở để Nhà trường xét tuyển. Nếu có sai sót về điểm số, kết quả xét tuyển có thể bị hủy bỏ. Kết quả được bảo lưu đến hết 31/12/2026.',
+  loading: 'Đang tải…',
+  closed: 'Cổng đăng ký đang tạm đóng. Vui lòng liên hệ trường để được hỗ trợ.',
+  pickMajor: '-- Chọn ngành học --',
+  pickEdu: '-- Chọn hệ đào tạo --',
+  pickCounselor: '-- Chọn Thầy/Cô hướng dẫn --',
+  pickEduFirst: 'Chọn hệ đào tạo trước',
+  noCounselors: 'Chưa có tư vấn viên mở trên cổng — liên hệ nhà trường.',
+  phName: 'NGUYỄN VĂN A',
+  phDob: 'DD/MM/YYYY',
+  phPob: 'Ví dụ: Hà Nội',
+  phEthnicity: 'Kinh',
+  phCccd: '12 số (hoặc Passport)',
+  phPhone: '0xxx xxx xxx (hoặc +82...)',
+  phEmail: 'example@gmail.com',
+}
+
+const EN: Dict = {
+  portalTitle: 'Online Registration Portal',
+  portalSub:
+    'Official admission system of VietMy College — Commitment to quality and employment after graduation.',
+  section1: '1. Personal Information',
+  section2: '2. Family Information',
+  section3: '3. Education & Aspirations',
+  fullName: 'Full Name *',
+  dob: 'Date of Birth *',
+  gender: 'Gender *',
+  male: 'Male',
+  female: 'Female',
+  pob: 'Place of Birth *',
+  ethnicity: 'Ethnicity *',
+  cccd: 'ID Card / Passport No. *',
+  noCccd: "I don't have an ID/Passport yet",
+  phone: "Phone Number (Add + for Int'l) *",
+  email: 'Email Address *',
+  address: 'Permanent Address (Specific details) *',
+  fatherName: "Father's Name",
+  fatherPhone: "Father's Phone",
+  motherName: "Mother's Name",
+  motherPhone: "Mother's Phone *",
+  school: 'High/Middle School Attended *',
+  schoolProvince: "School's Province/City *",
+  situation: 'Applicant Category *',
+  eduSystem: 'Education System *',
+  major: 'Desired Major *',
+  counselor: 'Admission Counselor *',
+  score: 'Academic GPA *',
+  scoreCustom: 'Enter specific score...',
+  scorePh: 'Enter your specific GPA (e.g., 7.8)',
+  submit: 'Submit Registration',
+  submitting: 'Submitting...',
+  noteTitle: 'Special Note:',
+  noteBody:
+    'Students with a GPA of 8.0 or higher are prioritized for direct admission. Registration information is the basis for admission. Errors in score reporting may result in cancellation. Results are reserved until Dec 31, 2026.',
+  loading: 'Loading…',
+  closed: 'Registration portal is temporarily closed. Please contact the school.',
+  pickMajor: '-- Select Major --',
+  pickEdu: '-- Select Education System --',
+  pickCounselor: '-- Select Counselor --',
+  pickEduFirst: 'Select education system first',
+  noCounselors: 'No counselors listed on the portal — contact the school.',
+  phName: 'JOHN DOE',
+  phDob: 'DD/MM/YYYY',
+  phPob: 'e.g., Hanoi',
+  phEthnicity: 'Kinh / Other',
+  phCccd: '12 digits (or Passport)',
+  phPhone: '0xxx xxx xxx (or +82...)',
+  phEmail: 'example@gmail.com',
+}
+
+export function publicRegText(lang: PublicRegLang, key: keyof typeof VN): string {
+  return (lang === 'en' ? EN : VN)[key] ?? VN[key] ?? key
+}
+
+export const APPLICANT_CATEGORIES = [
+  {
+    value: 'Học sinh lớp 9',
+    vn: 'Học sinh lớp 9 (Xét học bạ)',
+    en: 'Grade 9 Student (Transcript-based)',
+  },
+  {
+    value: 'Học sinh lớp 12',
+    vn: 'Học sinh lớp 12 (Xét học bạ/Điểm thi)',
+    en: 'Grade 12 Student (Transcript/Exam)',
+  },
+  {
+    value: 'Đã tốt nghiệp PTTH',
+    vn: 'Đã tốt nghiệp THPT',
+    en: 'High School Graduate',
+  },
+  {
+    value: 'Đã tốt nghiệp TC, CĐ, ĐH khác',
+    vn: 'Đã tốt nghiệp TC, CĐ, ĐH khác',
+    en: 'College/University Graduate',
+  },
+] as const
+
+export const SCORE_PRESETS = [
+  { value: '8.0-9.0', vn: '8.0 - 9.0 (Ưu tiên tuyển thẳng)', en: '8.0 - 9.0 (Direct Admission Priority)' },
+  { value: '6.5-7.9', vn: '6.5 - 7.9', en: '6.5 - 7.9' },
+  { value: '5.0-6.4', vn: '5.0 - 6.4', en: '5.0 - 6.4' },
+  { value: 'Khác', vn: 'Nhập điểm cụ thể...', en: 'Enter specific score...' },
+] as const

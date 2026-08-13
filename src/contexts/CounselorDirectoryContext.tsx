@@ -61,6 +61,7 @@ function mapUser(id: string, data: Record<string, unknown>): VietMyUserProfile |
         data.maxConcurrentLeads !== undefined ? Number(data.maxConcurrentLeads) : undefined,
       isActive: data.isActive !== false,
       allowLlmAndAiTasks: data.allowLlmAndAiTasks === true ? true : undefined,
+      showOnPublicRegistrationPortal: data.showOnPublicRegistrationPortal === true ? true : undefined,
       omicallSipUser: data.omicallSipUser ? String(data.omicallSipUser) : undefined,
       omicallSipPassword: data.omicallSipPassword ? String(data.omicallSipPassword) : undefined,
       omicallAgentId: data.omicallAgentId ? String(data.omicallAgentId) : undefined,

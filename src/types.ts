@@ -96,6 +96,11 @@ export interface VietMyUserProfile {
   /** Lần đồng bộ số nội bộ từ API Tổng đài gần nhất. */
   omicallSyncedAt?: Timestamp
   /**
+   * Hiện tên trên cổng đăng ký công khai — thí sinh chọn thì hồ sơ gán cho người này.
+   * Chỉ áp dụng TVV / CTV đang hoạt động.
+   */
+  showOnPublicRegistrationPortal?: boolean
+  /**
    * Bổ sung quyền ngoài ma trận vai trò (gán trên Firestore `users/{uid}` — thường do Siêu quản trị).
    * Firestore Rules vẫn là nguồn chân lý; UI chỉ mở rộng tính năng khi Rules cho phép.
    */
@@ -363,6 +368,10 @@ export interface Lead {
   currentResidence?: string
   /** Ngày sinh (chuỗi theo Excel, vd. dd/MM/yyyy hoặc YYYY-MM-DD) */
   dateOfBirth?: string
+  /** Nơi sinh (cổng đăng ký công khai) */
+  placeOfBirth?: string
+  /** Đối tượng dự tuyển (vd. Học sinh lớp 12) — cổng đăng ký */
+  applicantCategory?: string
   /** Giới tính (chuỗi tự do từ Excel mẫu 2+) */
   gender?: string
   /** Ghi chú 1 — cột Excel quy chuẩn; `targetField` chấm điểm: profileNote1 */
@@ -372,7 +381,7 @@ export interface Lead {
   /** Nội dung lưu ý khác — targetField: otherAttentionNotes */
   otherAttentionNotes?: string
 
-  /** CCCD / CMND (10 chữ số) — bỏ qua khi `nationalIdNotAvailable` */
+  /** CCCD / CMND (9–12 số) hoặc hộ chiếu — bỏ qua khi `nationalIdNotAvailable` */
   nationalId?: string
   /** Tick «chưa có» trên form — không bắt buộc nhập CCCD */
   nationalIdNotAvailable?: boolean

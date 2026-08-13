@@ -8,6 +8,7 @@ export type LeadCoreDraft = {
   customerId: string
   dateOfBirth: string
   gender: string
+  placeOfBirth: string
   phone: string
   parentPhone: string
   source: string
@@ -23,6 +24,7 @@ export type LeadCoreDraft = {
   academicPerformance: string
   graduationScore: string
   studyIntention: string
+  applicantCategory: string
   schoolType: string
   financialStatus: string
   hanoiArea: string
@@ -54,6 +56,7 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
     customerId: '',
     dateOfBirth: '',
     gender: '',
+    placeOfBirth: '',
     phone: '',
     parentPhone: '',
     source: '',
@@ -69,6 +72,7 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
     academicPerformance: '',
     graduationScore: '',
     studyIntention: '',
+    applicantCategory: '',
     schoolType: '',
     financialStatus: '',
     hanoiArea: '',
@@ -101,6 +105,7 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     customerId: lead.customerId ?? '',
     dateOfBirth: lead.dateOfBirth ?? '',
     gender: lead.gender ?? '',
+    placeOfBirth: lead.placeOfBirth ?? '',
     phone: lead.phone ?? '',
     parentPhone: lead.parentPhone ?? '',
     source: lead.source1 ?? lead.source ?? '',
@@ -118,6 +123,7 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     majorInterest: lead.majorInterest ?? '',
     academicPerformance: lead.academicPerformance ?? '',
     graduationScore: lead.graduationScore ?? '',
+    applicantCategory: lead.applicantCategory ?? '',
     schoolType: lead.schoolType ?? '',
     financialStatus: lead.financialStatus ?? '',
     hanoiArea: lead.hanoiArea ?? '',
@@ -149,7 +155,10 @@ function norm(s: string): string {
 
 function normNationalId(draft: LeadCoreDraft): string {
   if (draft.nationalIdNotAvailable) return ''
-  return draft.nationalId.replace(/\D/g, '').slice(0, 10)
+  const v = draft.nationalId.trim().toUpperCase()
+  if (!v || v === 'CHƯA CÓ') return ''
+  if (/^\d+$/.test(v)) return v.slice(0, 12)
+  return v.replace(/[^A-Z0-9]/g, '').slice(0, 15)
 }
 
 /** Payload mở rộng cho tạo / cập nhật Firestore (gồm boolean). */
@@ -195,9 +204,11 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
     if (v) o[key] = v
   }
   opt('gender', 'gender')
+  opt('placeOfBirth', 'placeOfBirth')
   opt('majorInterest', 'majorInterest')
   opt('academicPerformance', 'academicPerformance')
   opt('graduationScore', 'graduationScore')
+  opt('applicantCategory', 'applicantCategory')
   opt('ethnicity', 'ethnicity')
   opt('permanentAddress', 'permanentAddress')
   opt('currentResidence', 'currentResidence')
@@ -224,7 +235,7 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
     const nv = next[k]
     let bv: unknown = (before as unknown as Record<string, unknown>)[k]
     if (k === 'nationalId') {
-      bv = before.nationalIdNotAvailable ? '' : (before.nationalId ?? '').replace(/\D/g, '')
+      bv = before.nationalIdNotAvailable ? '' : String(before.nationalId ?? '').trim().toUpperCase()
       const nn = draft.nationalIdNotAvailable ? '' : normNationalId(draft)
       if (nn !== bv || Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable) {
         patch.nationalId = nn
@@ -291,6 +302,8 @@ export function mergeCoreDraftIntoLead(lead: Lead, draft: LeadCoreDraft): Lead {
     otherAttentionNotes: norm(draft.otherAttentionNotes) || undefined,
     studentEmail: norm(draft.studentEmail) || undefined,
     gender: norm(draft.gender) || undefined,
+    placeOfBirth: norm(draft.placeOfBirth) || undefined,
+    applicantCategory: norm(draft.applicantCategory) || undefined,
     source1: norm(draft.source1) || undefined,
     source2: norm(draft.source2) || undefined,
     source: norm(draft.source1) || norm(draft.source) || lead.source,

@@ -64,10 +64,20 @@ export function scholarshipSelectLabel(s: Pick<ScholarshipRecord, 'label' | 'amo
   return formatScholarshipOptionLabel(s.label, s.amountVnd)
 }
 
+export function normalizeNationalIdInput(nationalId: string, notAvailable: boolean): string {
+  if (notAvailable) return ''
+  const v = nationalId.trim().toUpperCase()
+  if (!v || v === 'CHƯA CÓ') return ''
+  if (/^\d+$/.test(v)) return v
+  return v.replace(/[^A-Z0-9]/g, '')
+}
+
+/** CCCD/CMND 9–12 số; hộ chiếu 7–15 chữ+số. Rỗng được phép trên form CRM (không bắt buộc). */
 export function validateNationalIdInput(nationalId: string, notAvailable: boolean): string | null {
   if (notAvailable) return null
-  const digits = nationalId.replace(/\D/g, '')
-  if (!digits) return null
-  if (digits.length !== 10) return 'CCCD phải đủ 10 chữ số (hoặc tick «Chưa có CCCD»).'
-  return null
+  const v = normalizeNationalIdInput(nationalId, false)
+  if (!v) return null
+  if (/^\d+$/.test(v) && (v.length === 9 || v.length === 10 || v.length === 12)) return null
+  if (/^[A-Z0-9]{7,15}$/.test(v) && !/^\d+$/.test(v)) return null
+  return 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu: 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
 }

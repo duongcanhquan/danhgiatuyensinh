@@ -130,12 +130,18 @@ import {
   bulkSetLeadIntakeProgram,
 } from '../utils/bulkLeadIntakeProgram'
 import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDeleteLeads'
-import { collectLeadIdsByIntakeProgram, PURGE_PROGRAM_HARD_CAP } from '../utils/purgeLeadsByIntakeProgram'
+import { collectLeadIdsByClientMatch, collectLeadIdsByIntakeProgram, PURGE_PROGRAM_HARD_CAP } from '../utils/purgeLeadsByIntakeProgram'
 import {
   confirmDangerousLeadBatchDelete,
   confirmDangerousSelectedLeadsDelete,
   confirmDangerousSingleLeadDelete,
 } from '../utils/dangerousDeleteConfirm'
+import {
+  formatUploadedDateRangeChip,
+  leadMatchesUploadedDateRange,
+  leadUploadedAtMs,
+  sanitizeUploadedYmd,
+} from '../utils/leadUploadedDateRange'
 import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
@@ -250,6 +256,9 @@ type LeadUiFilters = {
   scoreMin: string
   scoreMax: string
   aiShortlistOnly: boolean
+  /** YYYY-MM-DD — ngày tải lên hệ thống (uploadedAt) */
+  uploadedFrom: string
+  uploadedTo: string
 }
 
 function emptyLeadUiFilters(): LeadUiFilters {
@@ -268,6 +277,8 @@ function emptyLeadUiFilters(): LeadUiFilters {
     scoreMin: '',
     scoreMax: '',
     aiShortlistOnly: false,
+    uploadedFrom: '',
+    uploadedTo: '',
   }
 }
 
@@ -286,7 +297,9 @@ function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
     a.assignee === b.assignee &&
     a.scoreMin === b.scoreMin &&
     a.scoreMax === b.scoreMax &&
-    a.aiShortlistOnly === b.aiShortlistOnly
+    a.aiShortlistOnly === b.aiShortlistOnly &&
+    a.uploadedFrom === b.uploadedFrom &&
+    a.uploadedTo === b.uploadedTo
   )
 }
 
@@ -311,7 +324,25 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
-const LEAD_TABLE_COL_COUNT = 11
+const LEAD_TABLE_COL_COUNT = 12
+
+/** Ngày nhập hồ sơ — ưu tiên uploadedAt (cổng / import), fallback createdAt. */
+function leadRegisteredAtMs(l: Lead): number {
+  return leadUploadedAtMs(l)
+}
+
+function formatLeadRegisteredAt(l: Lead): string {
+  const ms = leadRegisteredAtMs(l)
+  if (!ms) return '—'
+  return new Date(ms).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 export function LeadManagement() {
   const db = getFirestoreDb()
@@ -340,6 +371,7 @@ export function LeadManagement() {
 
   const [sortKey, setSortKey] = useState<
     | 'none'
+    | 'registeredAt'
     | 'fullName'
     | 'phone'
     | 'educationLevel'
@@ -347,8 +379,8 @@ export function LeadManagement() {
     | 'score'
     | 'mlWin'
     | 'priorityTag'
-  >('none')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  >('registeredAt')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const showAdminGlobalFilters = can('leads:read:global')
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
@@ -372,6 +404,8 @@ export function LeadManagement() {
   const [scoreMinInput, setScoreMinInput] = useState('')
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
+  const [uploadedFromFilter, setUploadedFromFilter] = useState('')
+  const [uploadedToFilter, setUploadedToFilter] = useState('')
   const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
 
   /** Lựa chọn trên UI — chưa chạy cho đến khi «Áp dụng lọc». */
@@ -393,6 +427,8 @@ export function LeadManagement() {
       scoreMin: scoreMinInput,
       scoreMax: scoreMaxInput,
       aiShortlistOnly,
+      uploadedFrom: uploadedFromFilter,
+      uploadedTo: uploadedToFilter,
     }),
     [
       tagFilter,
@@ -409,6 +445,8 @@ export function LeadManagement() {
       scoreMinInput,
       scoreMaxInput,
       aiShortlistOnly,
+      uploadedFromFilter,
+      uploadedToFilter,
     ],
   )
 
@@ -435,6 +473,9 @@ export function LeadManagement() {
    * Chương trình có nhãn → lọc server `intakeProgram` + phân trang (nhanh).
    */
   const programNeedsScope = programFilter === '__UNSET__'
+  /** Lọc ngày tải lên — chỉ có trên client → cần quét fullScope để chọn/xóa đủ. */
+  const uploadedDateNeedsScope = Boolean(uploadedFromFilter.trim() || uploadedToFilter.trim())
+  const uploadedDateFilterActive = uploadedDateNeedsScope
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -501,13 +542,19 @@ export function LeadManagement() {
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
 
   const listNeedsFullScope =
-    tagClientEval || callQueueNeedsScope || assigneeUnsetNeedsScope || programNeedsScope
+    tagClientEval || callQueueNeedsScope || assigneeUnsetNeedsScope || programNeedsScope || uploadedDateNeedsScope
 
-  /** «Chưa gắn»: quét theo id + chỉ giữ hồ sơ không có intakeProgram. */
+  /** «Chưa gắn» / lọc ngày tải: quét theo id + chỉ giữ hồ sơ khớp predicate. */
   const unsetProgramKeepMatch = useMemo(() => {
-    if (!programNeedsScope) return undefined
+    if (!programNeedsScope && !uploadedDateNeedsScope) return undefined
     return (l: Lead) => {
-      if ((l.intakeProgram ?? '').trim()) return false
+      if (programNeedsScope && (l.intakeProgram ?? '').trim()) return false
+      if (
+        uploadedDateNeedsScope &&
+        !leadMatchesUploadedDateRange(l, uploadedFromFilter, uploadedToFilter)
+      ) {
+        return false
+      }
       if (callWorkBucketFilter !== 'all' && !leadMatchesCallWorkBucket(l, callWorkBucketFilter)) {
         return false
       }
@@ -519,7 +566,15 @@ export function LeadManagement() {
       }
       return true
     }
-  }, [programNeedsScope, callWorkBucketFilter, dispositionFilter, assigneeFilter])
+  }, [
+    programNeedsScope,
+    uploadedDateNeedsScope,
+    uploadedFromFilter,
+    uploadedToFilter,
+    callWorkBucketFilter,
+    dispositionFilter,
+    assigneeFilter,
+  ])
 
   const {
     leads,
@@ -546,12 +601,14 @@ export function LeadManagement() {
     directoryLabels: counselorDirectoryLabelById,
     dataMode: listNeedsFullScope ? 'fullScope' : 'paged',
     maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
-    fullScopeOrderMode: programNeedsScope ? 'docId' : undefined,
-    maxFullScopeScanDocs: programNeedsScope ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
+    fullScopeOrderMode: programNeedsScope || uploadedDateNeedsScope ? 'docId' : undefined,
+    maxFullScopeScanDocs:
+      programNeedsScope || uploadedDateNeedsScope ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
     fullScopeKeepMatch: unsetProgramKeepMatch,
-    fullScopeMatchKey: programNeedsScope
-      ? `unset|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|as:${assigneeFilter}`
-      : undefined,
+    fullScopeMatchKey:
+      programNeedsScope || uploadedDateNeedsScope
+        ? `keep|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|as:${assigneeFilter}`
+        : undefined,
     // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
     includeScopeTagCounts: false,
     includeScopeSourceOptions: sourceCatalogRequested,
@@ -1004,6 +1061,11 @@ export function LeadManagement() {
     } else if (assigneeFilter) {
       rows = rows.filter((l) => effectiveLeadAssigneeUid(l) === assigneeFilter)
     }
+    if (uploadedFromFilter.trim() || uploadedToFilter.trim()) {
+      rows = rows.filter((l) =>
+        leadMatchesUploadedDateRange(l, uploadedFromFilter, uploadedToFilter),
+      )
+    }
     return rows
   }, [
     leads,
@@ -1018,7 +1080,80 @@ export function LeadManagement() {
     dispositionFilter,
     programFilter,
     assigneeFilter,
+    uploadedFromFilter,
+    uploadedToFilter,
   ])
+
+  /** Predicate client cho quét sâu chọn/xóa theo lọc (ngày tải, hàng chờ, …). */
+  const matchActiveClientFilters = useCallback(
+    (l: Lead): boolean => {
+      if (
+        (uploadedFromFilter.trim() || uploadedToFilter.trim()) &&
+        !leadMatchesUploadedDateRange(l, uploadedFromFilter, uploadedToFilter)
+      ) {
+        return false
+      }
+      if (programFilter === '__UNSET__') {
+        if ((l.intakeProgram ?? '').trim()) return false
+      } else if (programFilter !== 'ALL') {
+        if (!intakeProgramsMatch(l.intakeProgram, programFilter)) return false
+      }
+      if (assigneeFilter === '__UNASSIGNED__') {
+        if (effectiveLeadAssigneeUid(l)) return false
+      } else if (assigneeFilter) {
+        if (effectiveLeadAssigneeUid(l) !== assigneeFilter) return false
+      }
+      if (callWorkBucketFilter !== 'all' && !leadMatchesCallWorkBucket(l, callWorkBucketFilter)) {
+        return false
+      }
+      if (dispositionFilter !== 'all' && !leadMatchesDisposition(l, dispositionFilter)) {
+        return false
+      }
+      if (tagClientEval && tagFilter !== 'ALL' && effectiveLeadTag(l) !== tagFilter) {
+        return false
+      }
+      const minScore =
+        scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput))
+          ? null
+          : Number(scoreMinInput)
+      const maxScore =
+        scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput))
+          ? null
+          : Number(scoreMaxInput)
+      if (minScore != null || maxScore != null) {
+        const displayScore = profileScoringActive
+          ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
+          : l.calculatedScore
+        if (minScore != null && displayScore < minScore) return false
+        if (maxScore != null && displayScore > maxScore) return false
+      }
+      if (aiShortlistOnly && !l.isAiShortlisted) return false
+      if (urlQuery.trim()) {
+        if (!leadMatchesClientSearch(l, urlQuery.trim().toLowerCase(), counselorDirectoryLabelById)) {
+          return false
+        }
+      }
+      return true
+    },
+    [
+      uploadedFromFilter,
+      uploadedToFilter,
+      programFilter,
+      assigneeFilter,
+      callWorkBucketFilter,
+      dispositionFilter,
+      tagClientEval,
+      tagFilter,
+      effectiveLeadTag,
+      scoreMinInput,
+      scoreMaxInput,
+      profileScoringActive,
+      scoreByLeadId,
+      aiShortlistOnly,
+      urlQuery,
+      counselorDirectoryLabelById,
+    ],
+  )
 
   const sortedFiltered = useMemo(() => {
     const rows = [...filtered]
@@ -1035,6 +1170,11 @@ export function LeadManagement() {
     const mlOf = (l: Lead) => resolveMlWinDisplay(l, infoScoreRuntime).mlWinProbability
     rows.sort((a, b) => {
       switch (sortKey) {
+        case 'registeredAt': {
+          const diff = (leadRegisteredAtMs(a) - leadRegisteredAtMs(b)) * dir
+          if (diff !== 0) return diff
+          return (a.fullName || '').localeCompare(b.fullName || '', 'vi') * dir
+        }
         case 'fullName':
           return (a.fullName || '').localeCompare(b.fullName || '', 'vi') * dir
         case 'phone':
@@ -1155,7 +1295,8 @@ export function LeadManagement() {
     if (k === 'none') return
     if (sortKey !== k) {
       setSortKey(k)
-      setSortDir('asc')
+      // Ngày đăng ký: mặc định mới nhất trước; cột chữ/điểm: A→Z / thấp→cao
+      setSortDir(k === 'registeredAt' ? 'desc' : 'asc')
     } else {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     }
@@ -1201,6 +1342,8 @@ export function LeadManagement() {
       scoreMin: scoreMinInput,
       scoreMax: scoreMaxInput,
       aiShortlistOnly,
+      uploadedFrom: sp.has(LWF.DATE_FROM) ? sanitizeUploadedYmd(sp.get(LWF.DATE_FROM)!) : '',
+      uploadedTo: sp.has(LWF.DATE_TO) ? sanitizeUploadedYmd(sp.get(LWF.DATE_TO)!) : '',
     }
     setTagFilter(next.tag)
     setRegionFilter(next.region)
@@ -1213,6 +1356,8 @@ export function LeadManagement() {
     setAssigneeFilter(next.assignee)
     setCallWorkBucketFilter(next.callQueue)
     setDispositionFilter(next.disposition)
+    setUploadedFromFilter(next.uploadedFrom)
+    setUploadedToFilter(next.uploadedTo)
     setDraftFilters((prev) => ({
       ...next,
       scoreMin: prev.scoreMin,
@@ -1239,6 +1384,11 @@ export function LeadManagement() {
     setScoreMinInput(d.scoreMin)
     setScoreMaxInput(d.scoreMax)
     setAiShortlistOnly(d.aiShortlistOnly)
+    const from = sanitizeUploadedYmd(d.uploadedFrom)
+    const to = sanitizeUploadedYmd(d.uploadedTo)
+    setUploadedFromFilter(from)
+    setUploadedToFilter(to)
+    setDraftFilters((prev) => ({ ...prev, uploadedFrom: from, uploadedTo: to }))
     mergeListFilterUrl({
       [LWF.TAG]: d.tag === 'ALL' ? null : d.tag,
       [LWF.CQ]: d.callQueue === 'all' ? null : d.callQueue,
@@ -1251,6 +1401,8 @@ export function LeadManagement() {
       [LWF.PROG]: d.program === 'ALL' ? null : d.program,
       [LWF.SCHOOL]: d.school === 'ALL' ? null : d.school,
       [LWF.ASSIGN]: d.assignee ? d.assignee : null,
+      [LWF.DATE_FROM]: from || null,
+      [LWF.DATE_TO]: to || null,
     })
     setWorkspaceToolsOpen(true)
     setFilterPanelOpen(true)
@@ -1331,6 +1483,8 @@ export function LeadManagement() {
     setScoreMinInput(empty.scoreMin)
     setScoreMaxInput(empty.scoreMax)
     setAiShortlistOnly(empty.aiShortlistOnly)
+    setUploadedFromFilter(empty.uploadedFrom)
+    setUploadedToFilter(empty.uploadedTo)
     setDraftFilters(empty)
     setSearchParams((prev) => stripListFiltersKeepOpenView(prev), { replace: true })
     setPage(1)
@@ -1530,6 +1684,19 @@ export function LeadManagement() {
         },
       })
     }
+    if (uploadedFromFilter.trim() || uploadedToFilter.trim()) {
+      out.push({
+        id: 'uploadedDate',
+        label: formatUploadedDateRangeChip(uploadedFromFilter, uploadedToFilter),
+        onClear: () => {
+          setUploadedFromFilter('')
+          setUploadedToFilter('')
+          patchDraftFilters({ uploadedFrom: '', uploadedTo: '' })
+          setPage(1)
+          mergeListFilterUrl({ [LWF.DATE_FROM]: null, [LWF.DATE_TO]: null })
+        },
+      })
+    }
     return out
   }, [
     searchParams,
@@ -1547,6 +1714,8 @@ export function LeadManagement() {
     scoreMinInput,
     scoreMaxInput,
     aiShortlistOnly,
+    uploadedFromFilter,
+    uploadedToFilter,
     mergeListFilterUrl,
     patchDraftFilters,
     counselorDisplayNameById,
@@ -1779,59 +1948,54 @@ export function LeadManagement() {
     setSelectScopeBusy(true)
     setRescoreMsg(null)
     try {
-      let rows = filtered
-      let truncated = Boolean(listNeedsFullScope && scopeFetchTruncated)
-      if (!listNeedsFullScope) {
-        const { leads: scopeLeads, truncated: t } = await fetchLeadsInScopeForRescore(
+      /** Ngày tải / lọc client-only: quét sâu theo docId — không tin buffer UI ~1500. */
+      if (uploadedDateFilterActive || listNeedsFullScope) {
+        const collected = await collectLeadIdsByClientMatch(
           db,
           profile,
           hoDQueryLabels,
           leadServerFilters,
+          matchActiveClientFilters,
           {
-            maxLeads: LEADS_UI_FULL_SCOPE_MAX,
             canReadGlobal: can('leads:read:global'),
             orgId: effectiveOrgId,
+            onProgress: (scanned, matched) =>
+              setRescoreMsg(
+                `Đang chọn… đã xem ${scanned.toLocaleString('vi-VN')} · khớp ${matched.toLocaleString('vi-VN')}`,
+              ),
           },
         )
-        truncated = t
-        rows = scopeLeads
-        // Khớp cùng predicate với `filtered` (điểm live / nhãn client / hàng chờ / TVV).
-        const minScore =
-          scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
-        const maxScore =
-          scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput)) ? null : Number(scoreMaxInput)
-        if (minScore != null || maxScore != null) {
-          rows = rows.filter((l) => {
-            const displayScore = profileScoringActive
-              ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
-              : l.calculatedScore
-            if (minScore != null && displayScore < minScore) return false
-            if (maxScore != null && displayScore > maxScore) return false
-            return true
-          })
+        const map = new Map<string, Lead>()
+        for (const id of collected.ids) {
+          const hit = leads.find((x) => x.id === id) ?? filtered.find((x) => x.id === id)
+          map.set(id, hit ?? ({ id } as Lead))
         }
-        if (tagClientEval && tagFilter !== 'ALL') {
-          rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
-        }
-        if (assigneeFilter === '__UNASSIGNED__') {
-          rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
-        } else if (assigneeFilter) {
-          rows = rows.filter((l) => effectiveLeadAssigneeUid(l) === assigneeFilter)
-        }
-        if (callWorkBucketFilter !== 'all') {
-          rows = rows.filter((l) => leadMatchesCallWorkBucket(l, callWorkBucketFilter))
-        }
-        if (dispositionFilter !== 'all') {
-          rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
-        }
-        if (urlQuery.trim()) {
-          rows = rows.filter((l) =>
-            leadMatchesClientSearch(l, urlQuery.trim().toLowerCase(), counselorDirectoryLabelById),
-          )
-        }
-        // Khi !listNeedsFullScope thì programNeedsScope = false → programFilter luôn 'ALL'
-        // (lọc chương trình đã đi nhánh fullScope + `filtered`). Không lọc lại ở đây.
+        selectScopeLeadsRef.current = map
+        setSelectedIds(new Set(collected.ids))
+        const truncNote = collected.mayHaveMore
+          ? ` (đã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — chạy lại nếu còn)`
+          : ''
+        setRescoreMsg(
+          `Đã chọn ${collected.ids.length.toLocaleString('vi-VN')} hồ sơ theo bộ lọc hiện tại${truncNote}.`,
+        )
+        return collected.ids.length
       }
+
+      let rows = filtered
+      let truncated = false
+      const { leads: scopeLeads, truncated: t } = await fetchLeadsInScopeForRescore(
+        db,
+        profile,
+        hoDQueryLabels,
+        leadServerFilters,
+        {
+          maxLeads: LEADS_UI_FULL_SCOPE_MAX,
+          canReadGlobal: can('leads:read:global'),
+          orgId: effectiveOrgId,
+        },
+      )
+      truncated = t
+      rows = scopeLeads.filter(matchActiveClientFilters)
       const map = new Map<string, Lead>()
       for (const l of rows) map.set(l.id, l)
       selectScopeLeadsRef.current = map
@@ -1854,24 +2018,14 @@ export function LeadManagement() {
     db,
     profile,
     filtered,
+    leads,
     listNeedsFullScope,
-    scopeFetchTruncated,
+    uploadedDateFilterActive,
+    matchActiveClientFilters,
     hoDQueryLabels,
     leadServerFilters,
     can,
     effectiveOrgId,
-    scoreMinInput,
-    scoreMaxInput,
-    profileScoringActive,
-    scoreByLeadId,
-    tagClientEval,
-    tagFilter,
-    effectiveLeadTag,
-    assigneeFilter,
-    callWorkBucketFilter,
-    dispositionFilter,
-    urlQuery,
-    counselorDirectoryLabelById,
   ])
 
   const applyBulkReassign = useCallback(async () => {
@@ -2346,7 +2500,11 @@ export function LeadManagement() {
           ? prog === '__UNSET__'
             ? 'chưa gắn chương trình'
             : `chương trình «${prog}»`
-          : `bộ lọc hiện tại (${activeFilterChips.length} điều kiện)`
+          : uploadedDateFilterActive
+            ? `ngày tải lên (${formatUploadedDateRangeChip(uploadedFromFilter, uploadedToFilter).replace(/^Ngày tải:\s*/i, '')})${
+                activeFilterChips.length > 1 ? ' + lọc khác đang bật' : ''
+              }`
+            : `bộ lọc hiện tại (${activeFilterChips.length} điều kiện)`
 
       const estimatedCount =
         mode === 'filters'
@@ -2481,144 +2639,114 @@ export function LeadManagement() {
         return
       }
 
-      let rows: Lead[] = []
-      let truncated = false
+      /** Xóa theo lọc / ngày tải: quét sâu docId + predicate — không dùng buffer UI ~1500. */
       try {
-        if (listNeedsFullScope) {
-          rows = filtered
-          truncated = Boolean(scopeFetchTruncated)
-        } else {
-          const fetched = await fetchLeadsInScopeForRescore(
+        let totalDeleted = 0
+        let round = 0
+        while (round < 50) {
+          round += 1
+          const collected = await collectLeadIdsByClientMatch(
             db,
             profile,
             hoDQueryLabels,
             leadServerFilters,
+            matchActiveClientFilters,
             {
-              maxLeads: PURGE_PROGRAM_HARD_CAP,
               canReadGlobal: can('leads:read:global'),
               orgId: effectiveOrgId,
+              onProgress: (scanned, matched) =>
+                setRescoreMsg(
+                  `Đang quét… đã xem ${scanned.toLocaleString('vi-VN')} · khớp ${matched.toLocaleString('vi-VN')}`,
+                ),
             },
           )
-          truncated = fetched.truncated
-          rows = fetched.leads
-          const minScore =
-            scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput))
-              ? null
-              : Number(scoreMinInput)
-          const maxScore =
-            scoreMaxInput.trim() === '' || Number.isNaN(Number(scoreMaxInput))
-              ? null
-              : Number(scoreMaxInput)
-          if (minScore != null || maxScore != null) {
-            rows = rows.filter((l) => {
-              const displayScore = profileScoringActive
-                ? (scoreByLeadId.get(l.id)?.calculatedScore ?? l.calculatedScore)
-                : l.calculatedScore
-              if (minScore != null && displayScore < minScore) return false
-              if (maxScore != null && displayScore > maxScore) return false
-              return true
+          if (!collected.ids.length) {
+            if (round === 1) {
+              setRescoreMsg(
+                `Không có hồ sơ nào thuộc ${scopeLabel} (đã quét ${collected.scanned.toLocaleString('vi-VN')} bản ghi).`,
+              )
+            } else {
+              setRescoreMsg(
+                `Đã xóa hết ${totalDeleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
+              )
+              void refetchLeads()
+            }
+            return
+          }
+
+          if (round === 1) {
+            const moreHint = collected.mayHaveMore
+              ? '\n\nCó thể còn thêm hồ sơ ngoài lô này — hệ thống sẽ quét tiếp sau khi xóa lô đầu.'
+              : ''
+            if (
+              !window.confirm(
+                [
+                  'Xác nhận lần cuối trước khi xóa',
+                  '',
+                  `Đã tìm thấy ${collected.ids.length.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.${moreHint}`,
+                  '',
+                  'Bấm OK để bắt đầu xóa vĩnh viễn. Hủy để dừng.',
+                ].join('\n'),
+              )
+            ) {
+              setRescoreMsg('Đã hủy — chưa xóa hồ sơ nào.')
+              return
+            }
+          }
+
+          setRescoreMsg(`Đang xóa ${totalDeleted.toLocaleString('vi-VN')}… (+${collected.ids.length})`)
+          try {
+            const { deleted, deletedIds } = await bulkDeleteLeads(db, collected.ids, {
+              onProgress: (done, total) =>
+                setRescoreMsg(
+                  `Đang xóa ${(totalDeleted + done).toLocaleString('vi-VN')} (lô ${done}/${total})…`,
+                ),
             })
+            totalDeleted += deleted
+            removeLocalLeads(deletedIds)
+            const deletedSet = new Set(deletedIds)
+            if (selected && deletedSet.has(selected.id)) {
+              setSelected(null)
+              leadDetailUnsavedRef.current = false
+            }
+          } catch (e) {
+            if (e instanceof BulkDeleteLeadsPartialError) {
+              totalDeleted += e.deletedIds.length
+              removeLocalLeads(e.deletedIds)
+              setRescoreMsg(
+                `${e.message}\nĐã xóa cộng dồn ${totalDeleted.toLocaleString('vi-VN')} hồ sơ.`,
+              )
+              void refetchLeads()
+              return
+            }
+            throw e
           }
-          if (tagClientEval && tagFilter !== 'ALL') {
-            rows = rows.filter((l) => effectiveLeadTag(l) === tagFilter)
-          }
-          if (assigneeFilter === '__UNASSIGNED__') {
-            rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
-          } else if (assigneeFilter) {
-            rows = rows.filter((l) => effectiveLeadAssigneeUid(l) === assigneeFilter)
-          }
-          if (callWorkBucketFilter !== 'all') {
-            rows = rows.filter((l) => leadMatchesCallWorkBucket(l, callWorkBucketFilter))
-          }
-          if (dispositionFilter !== 'all') {
-            rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
-          }
-          if (urlQuery.trim()) {
-            rows = rows.filter((l) =>
-              leadMatchesClientSearch(l, urlQuery.trim().toLowerCase(), counselorDirectoryLabelById),
-            )
-          }
+
+          if (!collected.mayHaveMore) break
+          setRescoreMsg(
+            `Đã xóa ${totalDeleted.toLocaleString('vi-VN')} — đang quét tiếp phần còn lại…`,
+          )
         }
-      } catch (e) {
-        console.error(e)
-        setRescoreMsg(e instanceof Error ? e.message : 'Không quét được hồ sơ để xóa.')
-        setSelectScopeBusy(false)
-        setBulkBusy(false)
-        return
-      } finally {
-        setSelectScopeBusy(false)
-      }
 
-      if (!rows.length) {
-        setRescoreMsg(`Không có hồ sơ nào thuộc ${scopeLabel}.`)
-        setBulkBusy(false)
-        return
-      }
-
-      const n = rows.length
-      const ids = rows.map((l) => l.id)
-      if (
-        !window.confirm(
-          [
-            'Xác nhận lần cuối trước khi xóa',
-            '',
-            `Đã quét được ${n.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
-            truncated
-              ? `(Đã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ ngoài danh sách này.)`
-              : '',
-            '',
-            'Bấm OK để xóa vĩnh viễn. Hủy để dừng.',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        )
-      ) {
-        setBulkBusy(false)
-        setRescoreMsg('Đã hủy — chưa xóa hồ sơ nào.')
-        return
-      }
-      setRescoreMsg(
-        truncated
-          ? `Đang xóa 0/${n}… (đã chạm trần ${PURGE_PROGRAM_HARD_CAP.toLocaleString('vi-VN')} — có thể còn hồ sơ; chạy lại nếu cần)`
-          : `Đang xóa 0/${n}…`,
-      )
-      try {
-        const { deleted, deletedIds } = await bulkDeleteLeads(db, ids, {
-          onProgress: (done, total) => setRescoreMsg(`Đang xóa ${done}/${total}…`),
-        })
-        const deletedSet = new Set(deletedIds)
-        removeLocalLeads(deletedIds)
         setSelectedIds(new Set())
         selectScopeLeadsRef.current = new Map()
-        if (selected && deletedSet.has(selected.id)) {
-          setSelected(null)
-          leadDetailUnsavedRef.current = false
-        }
         const performer = profile.displayName?.trim() || profile.email || profile.id
         await commitAuditLog(db, {
-          leadId: deletedIds[0] ?? 'batch',
+          leadId: 'batch',
           actionType: 'SYSTEM_UPDATE',
-          description: `Xóa cả lô (${deleted} hồ sơ) — ${scopeLabel}`,
+          description: `Xóa cả lô (${totalDeleted} hồ sơ) — ${scopeLabel}`,
           performedBy: profile.id,
           performedByName: performer,
         }).catch(() => {})
-        setRescoreMsg(`Đã xóa ${deleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`)
+        setRescoreMsg(
+          `Đã xóa hết ${totalDeleted.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.`,
+        )
         void refetchLeads()
       } catch (e) {
-        if (e instanceof BulkDeleteLeadsPartialError) {
-          removeLocalLeads(e.deletedIds)
-          setSelectedIds(new Set(e.remainingIds))
-          if (selected && e.deletedIds.includes(selected.id)) {
-            setSelected(null)
-            leadDetailUnsavedRef.current = false
-          }
-          setRescoreMsg(e.message)
-          void refetchLeads()
-        } else {
-          console.error(e)
-          setRescoreMsg(e instanceof Error ? e.message : 'Không xóa được cả lô.')
-        }
+        console.error(e)
+        setRescoreMsg(e instanceof Error ? e.message : 'Không xóa được cả lô.')
       } finally {
+        setSelectScopeBusy(false)
         setBulkBusy(false)
       }
     },
@@ -2632,25 +2760,14 @@ export function LeadManagement() {
       programFilter,
       draftFilters.program,
       activeFilterChips.length,
+      uploadedDateFilterActive,
+      uploadedFromFilter,
+      uploadedToFilter,
+      matchActiveClientFilters,
       hoDQueryLabels,
+      leadServerFilters,
       can,
       effectiveOrgId,
-      listNeedsFullScope,
-      filtered,
-      scopeFetchTruncated,
-      leadServerFilters,
-      scoreMinInput,
-      scoreMaxInput,
-      profileScoringActive,
-      scoreByLeadId,
-      tagClientEval,
-      tagFilter,
-      effectiveLeadTag,
-      assigneeFilter,
-      callWorkBucketFilter,
-      dispositionFilter,
-      urlQuery,
-      counselorDirectoryLabelById,
       selected,
       removeLocalLeads,
       refetchLeads,
@@ -3161,6 +3278,18 @@ export function LeadManagement() {
             >
               Xóa lọc
             </button>
+            {canDeleteLeads && uploadedDateFilterActive ? (
+              <button
+                type="button"
+                disabled={bulkBusy || selectScopeBusy || loading}
+                onClick={() => void deleteEntireBatch('filters')}
+                className={`${LEAD_BTN} border-rose-400 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40`}
+                title="Xóa hồ sơ khớp ngày tải lên và mọi lọc đang bật — hỏi xác nhận 2 lần"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa theo ngày'}
+              </button>
+            ) : null}
             {canDeleteLeads &&
             (programFilterActive || draftFilters.program !== 'ALL') ? (
               <button
@@ -3183,7 +3312,10 @@ export function LeadManagement() {
                 {bulkBusy || selectScopeBusy ? 'Đang xóa…' : 'Xóa hết lô'}
               </button>
             ) : null}
-            {canDeleteLeads && !programFilterActive && activeFilterChips.length > 0 ? (
+            {canDeleteLeads &&
+            !programFilterActive &&
+            !uploadedDateFilterActive &&
+            activeFilterChips.length > 0 ? (
               <button
                 type="button"
                 disabled={bulkBusy || selectScopeBusy || loading}
@@ -3505,6 +3637,24 @@ export function LeadManagement() {
                   t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
                 }))}
               />
+              <label className={LEAD_FILTER_LABEL} title="Ngày tải hồ sơ lên hệ thống (cổng / Excel / tạo mới).">
+                <span>Từ ngày tải</span>
+                <input
+                  type="date"
+                  value={draftFilters.uploadedFrom}
+                  onChange={(e) => patchDraftFilters({ uploadedFrom: e.target.value })}
+                  className={`${LEAD_FILTER_CONTROL} tabular-nums`}
+                />
+              </label>
+              <label className={LEAD_FILTER_LABEL} title="Ngày tải hồ sơ lên hệ thống (cổng / Excel / tạo mới).">
+                <span>Đến ngày tải</span>
+                <input
+                  type="date"
+                  value={draftFilters.uploadedTo}
+                  onChange={(e) => patchDraftFilters({ uploadedTo: e.target.value })}
+                  className={`${LEAD_FILTER_CONTROL} tabular-nums`}
+                />
+              </label>
               <FilterSelect
                 compact
                 label="Nhân viên"
@@ -3753,7 +3903,7 @@ export function LeadManagement() {
               : ''
           }`}
         >
-          <table className="w-full min-w-[980px] border-collapse text-left text-[13px] leading-snug xl:min-w-0">
+          <table className="w-full min-w-[1080px] border-collapse text-left text-[13px] leading-snug xl:min-w-0">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/95 backdrop-blur-xl">
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                 <th className="sticky left-0 z-[3] w-9 bg-white/95 px-0.5 py-2 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]">
@@ -3781,7 +3931,22 @@ export function LeadManagement() {
                   </button>
                 </th>
                 <th
-                  className="w-[11%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  className="w-[9%] min-w-[6.5rem] px-1.5 py-2 font-semibold"
+                  title="Ngày hồ sơ vào hệ thống (cổng đăng ký / nhập liệu)"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('registeredAt')}
+                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
+                  >
+                    Ngày đăng ký
+                    {sortKey === 'registeredAt' ? (
+                      <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                    ) : null}
+                  </button>
+                </th>
+                <th
+                  className="w-[10%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
                   title="Chương trình / đợt gắn khi nhập hoặc gán hàng loạt"
                 >
                   Chương trình
@@ -3970,6 +4135,12 @@ export function LeadManagement() {
                         {callAiLine}
                       </p>
                     ) : null}
+                  </td>
+                  <td
+                    className="whitespace-nowrap px-1.5 py-1.5 tabular-nums text-slate-700"
+                    title={formatLeadRegisteredAt(l)}
+                  >
+                    {formatLeadRegisteredAt(l)}
                   </td>
                   <td
                     className="truncate px-1.5 py-1.5 text-slate-700"

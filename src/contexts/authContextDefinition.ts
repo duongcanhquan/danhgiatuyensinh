@@ -37,6 +37,8 @@ export type AuthContextValue = AuthState & {
     orgId?: string | null
     /** Quản lý bật quyền dùng LLM / tác vụ AI trên CRM (Firestore `users`). */
     allowLlmAndAiTasks?: boolean
+    /** TVV/CTV: hiện tên trên cổng đăng ký công khai để sinh viên chọn. */
+    showOnPublicRegistrationPortal?: boolean
     extraPermissions?: Permission[]
     deniedPermissions?: Permission[]
     managedCounselorIds?: string[]

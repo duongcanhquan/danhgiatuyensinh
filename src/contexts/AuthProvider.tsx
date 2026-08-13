@@ -15,7 +15,7 @@ import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
 import { type OrgRoleCapabilities } from '../utils/roleCapabilitiesConfig'
 import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
-import { canOwnFieldStaffTeam, normalizeUserRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, isFieldStaffRole, normalizeUserRole } from '../auth/roleUtils'
 import { isUserInExplicitTeamRoster } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
@@ -81,6 +81,7 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
     maxConcurrentLeads: d.maxConcurrentLeads as number | undefined,
     isActive: d.isActive !== false,
     allowLlmAndAiTasks: d.allowLlmAndAiTasks === true ? true : undefined,
+    showOnPublicRegistrationPortal: d.showOnPublicRegistrationPortal === true ? true : undefined,
     omicallSipUser: d.omicallSipUser ? String(d.omicallSipUser) : undefined,
     omicallSipPassword: d.omicallSipPassword ? String(d.omicallSipPassword) : undefined,
     omicallAgentId: d.omicallAgentId ? String(d.omicallAgentId) : undefined,
@@ -495,6 +496,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isActive?: boolean
       orgId?: string | null
       allowLlmAndAiTasks?: boolean
+      showOnPublicRegistrationPortal?: boolean
       extraPermissions?: Permission[]
       deniedPermissions?: Permission[]
       managedCounselorIds?: string[]
@@ -580,6 +582,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       if (input.allowLlmAndAiTasks !== undefined) patch.allowLlmAndAiTasks = input.allowLlmAndAiTasks
+      if (input.showOnPublicRegistrationPortal !== undefined) {
+        const nextRoleForPortal =
+          input.role !== undefined ? normalizeUserRole(input.role) : normalizeUserRole(String(currentRole))
+        patch.showOnPublicRegistrationPortal =
+          isFieldStaffRole(nextRoleForPortal) && input.showOnPublicRegistrationPortal === true
+      }
       if (input.extraPermissions !== undefined) {
         if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới phân quyền chi tiết.')
         patch.extraPermissions = input.extraPermissions

@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import { pickCounselorByLoadInTransaction } from './firestoreReads.js'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 const COUNTERS_DOC_ID = 'systemLeadCodeCounters'
@@ -25,15 +24,29 @@ type PublicLeadInput = {
   phone?: string
   studentEmail?: string
   dateOfBirth?: string
+  gender?: string
+  placeOfBirth?: string
+  ethnicity?: string
+  nationalId?: string
+  nationalIdNotAvailable?: boolean
+  permanentAddress?: string
+  address?: string
+  fatherName?: string
+  fatherPhone?: string
+  motherName?: string
+  motherPhone?: string
   parentPhone?: string
   province?: string
   highSchool?: string
+  schoolProvince?: string
   gradeClass?: string
+  applicantCategory?: string
   educationLevel?: string
   studyIntention?: string
   majorInterest?: string
   academicPerformance?: string
   description?: string
+  counselorId?: string
 }
 
 type CounselorLite = {
@@ -42,7 +55,10 @@ type CounselorLite = {
   displayName: string
   role: string
   isActive: boolean
+  showOnPublicRegistrationPortal: boolean
 }
+
+type CatalogOption = { id: string; label: string; departmentId?: string }
 
 function str(v: unknown): string {
   return String(v ?? '').trim()
@@ -171,7 +187,6 @@ async function loadPublicRegistrationConfig(
     }
   }
 
-  // Có doc orgSettings → org thắng (tắt/mở đúng sau Lưu). Chỉ fallback scoringAux khi chưa có bản org.
   if (orgCfg) {
     return {
       ...(legacyCfg ?? {}),
@@ -182,6 +197,14 @@ async function loadPublicRegistrationConfig(
   }
   if (legacyCfg) return { ...legacyCfg, orgId: resolvedOrg }
   return { ...parseConfig(undefined), orgId: resolvedOrg, enabled: false }
+}
+
+function normalizeOrgSlugParam(raw: unknown): string {
+  const s = str(raw)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return s || 'vietmy'
 }
 
 async function resolveActiveOrgId(db: Firestore, slugOrId: string): Promise<string> {
@@ -208,53 +231,212 @@ async function resolveActiveOrgId(db: Firestore, slugOrId: string): Promise<stri
     if (e instanceof HttpsError) throw e
     console.warn('[publicRegistration] slug query', key, e)
   }
-  // Bootstrap VietMy trước khi có doc organizations
   if (key === 'vietmy') return 'vietmy'
   throw new HttpsError('not-found', 'Không tìm thấy trường tương ứng với đường dẫn đăng ký.')
 }
 
-async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLite[]> {
-  let snap
-  try {
-    snap = await db.collection('users').where('role', '==', 'counselor').where('orgId', '==', orgId).get()
-  } catch {
-    snap = await db.collection('users').where('role', '==', 'counselor').get()
+function parseCatalogEntries(data: Record<string, unknown> | undefined): CatalogOption[] {
+  const raw = data?.entries
+  if (!Array.isArray(raw)) return []
+  const out: CatalogOption[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    if (o.isActive === false) continue
+    const label = str(o.label)
+    if (!label) continue
+    const id = str(o.id) || label
+    const departmentId = str(o.departmentId) || undefined
+    out.push({ id, label, ...(departmentId ? { departmentId } : {}) })
   }
-  const out: CounselorLite[] = []
-  snap.forEach((d) => {
-    const data = d.data() as Record<string, unknown>
-    const userOrg = str(data.orgId) || 'vietmy'
-    if (userOrg !== orgId && str(data.orgId)) return
-    out.push({
-      id: d.id,
-      email: str(data.email),
-      displayName: str(data.displayName) || str(data.email),
-      role: str(data.role),
-      isActive: data.isActive !== false,
-    })
-  })
   return out
 }
 
-async function pickCounselorByLoad(db: Firestore, orgId: string): Promise<CounselorLite | null> {
-  const counselors = (await loadCounselors(db, orgId)).filter((c) => c.isActive)
-  if (!counselors.length) return null
-  const picked = await pickCounselorByLoadInTransaction(db, counselors)
-  if (!picked) return null
-  return counselors.find((c) => c.id === picked.id) ?? null
+async function loadMasterCatalog(db: Firestore, catalogId: string, orgId: string): Promise<CatalogOption[]> {
+  try {
+    const byOrg = await db
+      .collection('masterData')
+      .where('orgId', '==', orgId)
+      .where('id', '==', catalogId)
+      .limit(5)
+      .get()
+    if (!byOrg.empty) {
+      const merged: CatalogOption[] = []
+      byOrg.forEach((d) => merged.push(...parseCatalogEntries(d.data() as Record<string, unknown>)))
+      if (merged.length) return merged
+    }
+  } catch {
+    /* optional index / field */
+  }
+  try {
+    const snap = await db.collection('masterData').doc(catalogId).get()
+    if (snap.exists) {
+      const data = snap.data() as Record<string, unknown>
+      const docOrg = str(data.orgId)
+      if (!docOrg || docOrg === orgId || orgId === 'vietmy') {
+        return parseCatalogEntries(data)
+      }
+    }
+  } catch (e) {
+    console.warn('[publicRegistration] masterData', catalogId, e)
+  }
+  return []
 }
 
-function validatePublicLeadInput(input: PublicLeadInput, source1: string): string | null {
+async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLite[]> {
+  const out: CounselorLite[] = []
+  const pushDoc = (id: string, data: Record<string, unknown>) => {
+    const userOrg = str(data.orgId) || 'vietmy'
+    if (userOrg !== orgId) return
+    const role = str(data.role)
+    if (role !== 'counselor' && role !== 'ctv') return
+    out.push({
+      id,
+      email: str(data.email),
+      displayName: str(data.displayName) || str(data.email),
+      role,
+      isActive: data.isActive !== false,
+      showOnPublicRegistrationPortal: data.showOnPublicRegistrationPortal === true,
+    })
+  }
+
+  for (const role of ['counselor', 'ctv'] as const) {
+    try {
+      const snap = await db.collection('users').where('role', '==', role).where('orgId', '==', orgId).get()
+      snap.forEach((d) => pushDoc(d.id, d.data() as Record<string, unknown>))
+    } catch {
+      try {
+        const snap = await db.collection('users').where('role', '==', role).get()
+        snap.forEach((d) => pushDoc(d.id, d.data() as Record<string, unknown>))
+      } catch (e) {
+        console.warn('[publicRegistration] users', role, e)
+      }
+    }
+  }
+
+  const seen = new Set<string>()
+  return out.filter((c) => {
+    if (seen.has(c.id)) return false
+    seen.add(c.id)
+    return true
+  })
+}
+
+function isValidDob(dob: string, now = new Date()): boolean {
+  const m = dob.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!m) return false
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  const dim = [31, year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  if (year < 1950 || month < 1 || month > 12 || day < 1 || day > dim[month - 1]!) return false
+  const birth = new Date(year, month - 1, day)
+  if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) return false
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  if (birth > today) return false
+  const ageYears =
+    today.getFullYear() -
+    year -
+    (today.getMonth() < month - 1 || (today.getMonth() === month - 1 && today.getDate() < day) ? 1 : 0)
+  return ageYears >= 12 && ageYears <= 70
+}
+
+function isValidPhone(phone: string): boolean {
+  return /^(0\d{9}|\+\d{9,15})$/.test(phone)
+}
+
+function isValidNationalId(raw: string, notAvailable: boolean): boolean {
+  if (notAvailable || raw === 'CHƯA CÓ') return true
+  if (/^\d+$/.test(raw) && (raw.length === 9 || raw.length === 10 || raw.length === 12)) return true
+  if (/^[A-Z0-9]{7,15}$/.test(raw) && !/^\d+$/.test(raw)) return true
+  return false
+}
+
+function isValidCustomScore(raw: string): boolean {
+  const v = raw.trim().replace(',', '.')
+  if (!/^\d{1,2}(\.\d{1,2})?$/.test(v)) return false
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 && n <= 10
+}
+
+const ALLOWED_GENDERS = new Set(['Nam', 'Nữ'])
+const ALLOWED_CATEGORIES = new Set([
+  'Học sinh lớp 9',
+  'Học sinh lớp 12',
+  'Đã tốt nghiệp PTTH',
+  'Đã tốt nghiệp TC, CĐ, ĐH khác',
+])
+
+function validatePublicLeadInput(
+  input: PublicLeadInput,
+  source1: string,
+  catalogs: {
+    trainingPrograms: CatalogOption[]
+    majors: CatalogOption[]
+  },
+): string | null {
   const fullName = str(input.fullName)
   const phone = str(input.phone)
   const studentEmail = str(input.studentEmail)
-  const phoneKey = normalizePhoneKey(phone, str(input.parentPhone))
+  const dob = str(input.dateOfBirth)
+  const motherPhone = str(input.motherPhone)
+  const nationalId = str(input.nationalId).toUpperCase()
+  const notAvailable = input.nationalIdNotAvailable === true || nationalId === 'CHƯA CÓ'
+  const study = str(input.studyIntention) || str(input.educationLevel)
+  const major = str(input.majorInterest)
+  const score = str(input.academicPerformance)
 
   if (!fullName) return 'Vui lòng nhập họ và tên.'
-  if (phoneKey.length < 9) return 'Số điện thoại cần ít nhất 9 chữ số.'
+  if (!dob || !isValidDob(dob)) return 'Ngày sinh cần đúng DD/MM/YYYY và tuổi hợp lý (12–70).'
+  if (!ALLOWED_GENDERS.has(str(input.gender))) return 'Vui lòng chọn giới tính.'
+  if (!str(input.placeOfBirth)) return 'Vui lòng nhập nơi sinh.'
+  if (!str(input.ethnicity)) return 'Vui lòng nhập dân tộc.'
+  if (!isValidNationalId(nationalId, notAvailable)) {
+    return 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số.'
+  }
+  if (!isValidPhone(phone)) {
+    return 'SĐT Việt Nam 10 số (bắt đầu 0) hoặc quốc tế bắt đầu bằng +.'
+  }
   if (!studentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) {
     return 'Email không hợp lệ — cần email để nhận thông báo.'
   }
+  if (!str(input.permanentAddress) && !str(input.address)) {
+    return 'Vui lòng nhập địa chỉ thường trú.'
+  }
+  if (!motherPhone || !isValidPhone(motherPhone)) {
+    return 'SĐT mẹ bắt buộc (10 số VN hoặc + quốc tế).'
+  }
+  if (str(input.fatherPhone) && !isValidPhone(str(input.fatherPhone))) {
+    return 'SĐT cha không hợp lệ.'
+  }
+  if (!str(input.highSchool)) return 'Vui lòng nhập trường đã theo học.'
+  if (!str(input.schoolProvince) && !str(input.province)) {
+    return 'Vui lòng nhập tỉnh/thành của trường.'
+  }
+  if (!ALLOWED_CATEGORIES.has(str(input.applicantCategory))) {
+    return 'Vui lòng chọn đối tượng dự tuyển.'
+  }
+  if (!study) return 'Vui lòng chọn hệ đào tạo.'
+  const program =
+    catalogs.trainingPrograms.find((p) => p.label === study || p.id === study) ?? null
+  if (catalogs.trainingPrograms.length > 0 && !program) {
+    return 'Hệ đào tạo không nằm trong danh mục hiện tại.'
+  }
+  if (!major) return 'Vui lòng chọn ngành học.'
+  if (catalogs.majors.length > 0) {
+    const majorOk = catalogs.majors.some((m) => {
+      if (m.label !== major && m.id !== major) return false
+      if (!program?.id) return true
+      return !m.departmentId || m.departmentId === program.id
+    })
+    if (!majorOk) return 'Ngành học không khớp hệ đào tạo đã chọn.'
+  }
+  if (!score) return 'Vui lòng chọn hoặc nhập điểm trung bình.'
+  const scoreRanges = new Set(['8.0-9.0', '6.5-7.9', '5.0-6.4'])
+  if (!scoreRanges.has(score) && !isValidCustomScore(score)) {
+    return 'Điểm trung bình cần trong khoảng 0–10 (vd: 7.8) hoặc chọn mức có sẵn.'
+  }
+  if (!str(input.counselorId)) return 'Vui lòng chọn thầy/cô tư vấn hướng dẫn.'
   if (!source1) return 'Hệ thống chưa cấu hình nguồn đăng ký (source1).'
   return null
 }
@@ -275,23 +457,35 @@ async function triggerRegistrationN8n(
   }
 }
 
-function buildLeadDoc(input: PublicLeadInput, opts: {
-  systemCode: string
-  source1: string
-  uniqueHash: string
-  assignedCounselorId: string | null
-  orgId: string
-  now: Timestamp
-}) {
+function buildLeadDoc(
+  input: PublicLeadInput,
+  opts: {
+    systemCode: string
+    source1: string
+    uniqueHash: string
+    assignedCounselorId: string | null
+    orgId: string
+    now: Timestamp
+  },
+) {
   const studyFormat = str(input.studyIntention) || str(input.educationLevel)
   const assignee = opts.assignedCounselorId
+  const address = str(input.permanentAddress) || str(input.address)
+  const province = str(input.schoolProvince) || str(input.province)
+  const motherPhone = str(input.motherPhone)
+  const fatherPhone = str(input.fatherPhone)
+  const parentPhone = motherPhone || fatherPhone || str(input.parentPhone)
+  const nationalIdRaw = str(input.nationalId).toUpperCase()
+  const nationalIdNotAvailable =
+    input.nationalIdNotAvailable === true || nationalIdRaw === 'CHƯA CÓ'
+
   return {
     orgId: opts.orgId,
     customerId: '',
     systemCode: opts.systemCode,
-    fullName: str(input.fullName),
+    fullName: str(input.fullName).toUpperCase(),
     phone: str(input.phone),
-    parentPhone: str(input.parentPhone),
+    parentPhone,
     studentEmail: str(input.studentEmail),
     source: opts.source1,
     source1: opts.source1,
@@ -305,18 +499,32 @@ function buildLeadDoc(input: PublicLeadInput, opts: {
     description: str(input.description),
     highSchool: str(input.highSchool),
     gradeClass: str(input.gradeClass),
-    province: str(input.province),
-    address: '',
+    province,
+    address,
+    permanentAddress: address,
     calculatedScore: 0,
-    priorityTag: 'COLD',
+    priorityTag: 'COLD' as const,
     uniqueHash: opts.uniqueHash,
     registrationChannel: 'public_portal',
     uploadedBy: 'public_portal',
     uploaderName: 'Cổng đăng ký sinh viên',
     uploadBatchId: `public-${Date.now()}`,
     ...(str(input.dateOfBirth) ? { dateOfBirth: str(input.dateOfBirth) } : {}),
+    ...(str(input.gender) ? { gender: str(input.gender) } : {}),
+    ...(str(input.placeOfBirth) ? { placeOfBirth: str(input.placeOfBirth) } : {}),
+    ...(str(input.ethnicity) ? { ethnicity: str(input.ethnicity) } : {}),
+    ...(str(input.applicantCategory) ? { applicantCategory: str(input.applicantCategory) } : {}),
     ...(str(input.majorInterest) ? { majorInterest: str(input.majorInterest) } : {}),
     ...(str(input.academicPerformance) ? { academicPerformance: str(input.academicPerformance) } : {}),
+    ...(str(input.fatherName) ? { fatherName: str(input.fatherName).toUpperCase() } : {}),
+    ...(fatherPhone ? { fatherPhone } : {}),
+    ...(str(input.motherName) ? { motherName: str(input.motherName).toUpperCase() } : {}),
+    ...(motherPhone ? { motherPhone } : {}),
+    ...(nationalIdNotAvailable
+      ? { nationalIdNotAvailable: true, nationalId: '' }
+      : nationalIdRaw
+        ? { nationalId: nationalIdRaw, nationalIdNotAvailable: false }
+        : {}),
     createdAt: opts.now,
     updatedAt: opts.now,
     uploadedAt: opts.now,
@@ -324,39 +532,35 @@ function buildLeadDoc(input: PublicLeadInput, opts: {
   }
 }
 
-function normalizeOrgSlugParam(raw: unknown): string {
-  const s = str(raw)
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return s || 'vietmy'
-}
-
 export function registerPublicRegistrationFunctions(db: Firestore) {
   const getPublicRegistrationMeta = onCall({ invoker: 'public' }, async (request) => {
     const slug = normalizeOrgSlugParam((request.data as { orgSlug?: string } | undefined)?.orgSlug)
     const orgId = await resolveActiveOrgId(db, slug)
     const config = await loadPublicRegistrationConfig(db, orgId)
-    let provinces: string[] = []
-    try {
-      const masterSnap = await db.collection('masterData').doc('provinces').get()
-      const entries = masterSnap.get('entries')
-      if (Array.isArray(entries)) {
-        provinces = entries
-          .map((e) => str((e as Record<string, unknown>)?.label))
-          .filter(Boolean)
-          .slice(0, 100)
-      }
-    } catch {
-      /* optional catalogs */
-    }
+
+    const [trainingPrograms, majors, counselors] = await Promise.all([
+      loadMasterCatalog(db, 'training_programs', orgId),
+      loadMasterCatalog(db, 'majors', orgId),
+      loadCounselors(db, orgId),
+    ])
+
+    const portalCounselors = counselors
+      .filter((c) => c.isActive && c.showOnPublicRegistrationPortal)
+      .map((c) => ({ id: c.id, displayName: c.displayName, role: c.role }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'vi'))
+
     return {
       enabled: config.enabled,
       portalTitle: config.portalTitle,
       introText: config.introText,
       successMessage: config.successMessage,
-      provinces,
       orgId: config.orgId,
+      trainingPrograms,
+      majors,
+      counselors: portalCounselors,
+      contactAddress: '168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội',
+      contactPhone: '0982.856.648',
+      logoUrl: '/brand/logo-vietmy-trang.png',
     }
   })
 
@@ -369,10 +573,44 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       throw new HttpsError('failed-precondition', 'Cổng đăng ký đang tắt. Vui lòng liên hệ trường.')
     }
 
-    const input = data as PublicLeadInput
-    const validation = validatePublicLeadInput(input, config.defaultSource1)
+    const input: PublicLeadInput = {
+      ...data,
+      fullName: str(data.fullName).toUpperCase(),
+      nationalId: str(data.nationalId).toUpperCase(),
+      studyIntention: str(data.studyIntention) || str(data.educationLevel),
+      educationLevel: str(data.educationLevel) || str(data.studyIntention),
+      province: str(data.schoolProvince) || str(data.province),
+      schoolProvince: str(data.schoolProvince) || str(data.province),
+      permanentAddress: str(data.permanentAddress) || str(data.address),
+      parentPhone: str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
+    }
+
+    const [trainingPrograms, majors, allCounselors] = await Promise.all([
+      loadMasterCatalog(db, 'training_programs', config.orgId),
+      loadMasterCatalog(db, 'majors', config.orgId),
+      loadCounselors(db, config.orgId),
+    ])
+
+    const validation = validatePublicLeadInput(input, config.defaultSource1, {
+      trainingPrograms,
+      majors,
+    })
     if (validation) {
       throw new HttpsError('invalid-argument', validation)
+    }
+
+    const counselorId = str(input.counselorId)
+    let counselor =
+      allCounselors.find(
+        (c) =>
+          c.id === counselorId && c.isActive && c.showOnPublicRegistrationPortal,
+      ) ?? null
+
+    if (!counselor) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Thầy/cô tư vấn không hợp lệ hoặc chưa được mở trên cổng đăng ký.',
+      )
     }
 
     const row = {
@@ -399,11 +637,6 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     }
 
     const systemCode = await allocateSystemCode(db)
-    let counselor: CounselorLite | null = null
-    if (config.autoAssignCounselor) {
-      counselor = await pickCounselorByLoad(db, config.orgId)
-    }
-
     const now = Timestamp.now()
     const ref = db.collection('leads').doc()
     const leadDoc = buildLeadDoc(input, {
@@ -431,11 +664,18 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
             fullName: str(input.fullName),
             phone: str(input.phone),
             parentPhone: str(input.parentPhone),
+            motherPhone: str(input.motherPhone),
+            fatherPhone: str(input.fatherPhone),
             email: str(input.studentEmail),
             dateOfBirth: str(input.dateOfBirth),
-            province: str(input.province),
+            gender: str(input.gender),
+            placeOfBirth: str(input.placeOfBirth),
+            ethnicity: str(input.ethnicity),
+            nationalId: str(input.nationalId),
+            address: str(input.permanentAddress) || str(input.address),
+            province: str(input.schoolProvince) || str(input.province),
             highSchool: str(input.highSchool),
-            gradeClass: str(input.gradeClass),
+            applicantCategory: str(input.applicantCategory),
             educationLevel: str(input.studyIntention) || str(input.educationLevel),
             majorInterest: str(input.majorInterest),
             academicPerformance: str(input.academicPerformance),
