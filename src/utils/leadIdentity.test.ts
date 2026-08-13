@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeLeadUniqueHash,
+  computeNationalIdHash,
   leadDedupeStrength,
+  normalizeNationalIdKey,
   shouldQueryExistingByUniqueHash,
 } from './leadIdentity'
 
@@ -26,5 +28,27 @@ describe('computeLeadUniqueHash', () => {
     expect(leadDedupeStrength({})).toBe('weak')
     expect(shouldQueryExistingByUniqueHash({})).toBe(false)
     expect(computeLeadUniqueHash({}, 0)).not.toBe(computeLeadUniqueHash({}, 1))
+  })
+})
+
+describe('normalizeNationalIdKey / computeNationalIdHash (Apps Script parity)', () => {
+  it('returns empty for CHƯA CÓ / notAvailable / blank — không dùng để chặn trùng', () => {
+    expect(normalizeNationalIdKey('CHƯA CÓ', false)).toBe('')
+    expect(normalizeNationalIdKey('001234567890', true)).toBe('')
+    expect(normalizeNationalIdKey('  ', false)).toBe('')
+    expect(computeNationalIdHash('')).toBeNull()
+  })
+
+  it('normalizes digits and passport alphanumeric uppercase', () => {
+    expect(normalizeNationalIdKey('001-234-567-890', false)).toBe('001234567890')
+    expect(normalizeNationalIdKey('ab1234567', false)).toBe('AB1234567')
+  })
+
+  it('hashes stable nationalId key (separate from phone uniqueHash)', () => {
+    const a = computeNationalIdHash(normalizeNationalIdKey('001234567890', false))
+    const b = computeNationalIdHash(normalizeNationalIdKey('001234567890', false))
+    expect(a).toBeTruthy()
+    expect(a).toBe(b)
+    expect(a).not.toBe(computeLeadUniqueHash({ phone: '0912345678' }))
   })
 })

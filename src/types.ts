@@ -287,6 +287,11 @@ export interface LeadFinanceRecord {
   /** TVV tick «đã thu đủ FULL NE» — map cột 65: YÊU CẦU FULL NE / ĐÃ FULL NE */
   reqFullNe?: boolean
   fullNeStatus?: string
+  /**
+   * Ngày kế toán xác nhận Full NE (`dd/MM/yyyy` hoặc ISO date) — cột 66 hệ App Script.
+   * Dùng báo cáo ngày đếm «đã NE trong ngày».
+   */
+  fullNeAt?: string
   n8nStatus?: string
 }
 
@@ -414,8 +419,13 @@ export interface Lead {
   updatedAt: Timestamp
   /** Phễu tuyển sinh — suy ra từ `status` + dữ liệu legacy khi đọc Firestore */
   pipelineStatus: LeadPipelineStatus
-  /** Dedupe fingerprint */
+  /** Dedupe fingerprint (chủ yếu theo SĐT) */
   uniqueHash: string
+  /**
+   * Hash CCCD/Passport riêng (`nationalId:…`) — chống trùng như App Script.
+   * Không set khi «CHƯA CÓ» / chưa có CCCD.
+   */
+  nationalIdHash?: string
   createdAt: Timestamp
   /** @deprecated Ghi song song khi import để tương thích query cũ; ưu tiên `assignedTo` */
   assignedCounselorId?: UserId | null

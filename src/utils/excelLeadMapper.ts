@@ -511,6 +511,8 @@ export type LeadIntakeOwnershipMeta = {
 
 export type LeadIntakeIdentityMeta = {
   uniqueHash: string
+  /** Hash CCCD riêng — tùy chọn (Apps Script chống trùng CCCD). */
+  nationalIdHash?: string
   counselorStatus?: LeadCounselorStatus
 }
 
@@ -581,6 +583,7 @@ export function buildLeadFirestorePayload(
     calculatedScore,
     priorityTag,
     uniqueHash: identity?.uniqueHash ?? '',
+    ...(identity?.nationalIdHash ? { nationalIdHash: identity.nationalIdHash } : {}),
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
     ...(row.studentEmail?.trim() ? { studentEmail: row.studentEmail.trim() } : {}),
     ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),

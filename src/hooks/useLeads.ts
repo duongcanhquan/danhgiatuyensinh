@@ -96,6 +96,7 @@ function parseFinanceFromFirestore(data: DocumentData): LeadFinanceRecord | unde
     declaredTotalVnd: declaredTotalVnd && !Number.isNaN(declaredTotalVnd) ? declaredTotalVnd : undefined,
     reqFullNe: o.reqFullNe === true,
     fullNeStatus: String(o.fullNeStatus ?? '').trim() || undefined,
+    fullNeAt: String(o.fullNeAt ?? '').trim() || undefined,
     n8nStatus: String(o.n8nStatus ?? '').trim() || undefined,
     enrollmentStatus: String(o.enrollmentStatus ?? '').trim() || undefined,
   }
@@ -318,6 +319,9 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
             const passport = raw.replace(/[^A-Z0-9]/g, '').slice(0, 15)
             return passport ? { nationalId: passport } : {}
           })()),
+      ...(String(data.nationalIdHash ?? '').trim()
+        ? { nationalIdHash: String(data.nationalIdHash).trim() }
+        : {}),
       ...(String(data.studentEmail ?? '').trim() ? { studentEmail: String(data.studentEmail).trim() } : {}),
       ...(sourcePrimary ? { source1: sourcePrimary } : {}),
       ...(source2Raw ? { source2: source2Raw } : {}),

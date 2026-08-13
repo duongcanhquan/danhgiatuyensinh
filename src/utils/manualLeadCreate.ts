@@ -1,18 +1,18 @@
 import {
   collection,
   doc,
-  getDocs,
-  limit,
-  query,
   setDoc,
   Timestamp,
-  where,
   type Firestore,
 } from 'firebase/firestore'
 import type { Lead, PriorityTag, ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { buildLeadFirestorePayload, type ExcelLeadRow } from './excelLeadMapper'
-import { computeLeadUniqueHash, normalizePhoneKey } from './leadIdentity'
+import { computeLeadUniqueHash, nationalIdHashFromInput, normalizePhoneKey } from './leadIdentity'
+import {
+  findExistingLeadIdByNationalIdHash,
+  findExistingLeadIdByUniqueHash,
+} from './leadDedupeLookup'
 import { allocateSystemCodeForNewLead } from './systemLeadCode'
 import type { InfoScoreRuntime } from './infoScoreRules'
 import type { LeadClassificationRuntime } from './leadClassificationConfig'
@@ -24,7 +24,6 @@ import { studyFormatFromParts } from './studyFormatMerge'
 import { validateNationalIdInput } from './leadProfileCatalog'
 import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
-import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
 
 function norm(s: string): string {
   return s.trim()
@@ -80,11 +79,19 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
 
 export class DuplicateLeadError extends Error {
   readonly existingId: string
+  readonly reason: 'phone' | 'nationalId' | 'fingerprint'
 
-  constructor(existingId: string) {
-    super('Đã có hồ sơ trùng trên hệ thống (cùng SĐT hoặc fingerprint).')
+  constructor(existingId: string, reason: 'phone' | 'nationalId' | 'fingerprint' = 'fingerprint') {
+    const msg =
+      reason === 'nationalId'
+        ? 'Đã có hồ sơ trùng trên hệ thống (cùng CCCD/Passport).'
+        : reason === 'phone'
+          ? 'Đã có hồ sơ trùng trên hệ thống (cùng số điện thoại).'
+          : 'Đã có hồ sơ trùng trên hệ thống (cùng SĐT hoặc fingerprint).'
+    super(msg)
     this.name = 'DuplicateLeadError'
     this.existingId = existingId
+    this.reason = reason
   }
 }
 
@@ -98,19 +105,7 @@ export type CreateManualLeadInput = {
 }
 
 async function findExistingLeadIdByHash(db: Firestore, hash: string, orgId: string): Promise<string | null> {
-  const col = collection(db, FS_COLLECTIONS.leads)
-  const snap = await getDocs(
-    query(col, where('orgId', '==', orgId), where('uniqueHash', '==', hash), limit(1)),
-  )
-  if (!snap.empty) return snap.docs[0]!.id
-  // VietMy: hồ sơ cũ có thể thiếu orgId
-  if (shouldUseLegacyMissingOrgIdRead(orgId)) {
-    const legacy = await getDocs(query(col, where('uniqueHash', '==', hash), limit(10)))
-    for (const d of legacy.docs) {
-      if (leadBelongsToOrg(d.data() as { orgId?: string | null }, orgId)) return d.id
-    }
-  }
-  return null
+  return findExistingLeadIdByUniqueHash(db, hash, orgId)
 }
 
 export async function createManualLead(
@@ -133,7 +128,16 @@ export async function createManualLead(
   const rowWithCode = { ...row, customerId }
   const hash = computeLeadUniqueHash(rowWithCode)
   const existingId = await findExistingLeadIdByHash(db, hash, input.orgId)
-  if (existingId) throw new DuplicateLeadError(existingId)
+  if (existingId) {
+    const phoneKey = normalizePhoneKey(input.draft.phone, input.draft.parentPhone)
+    throw new DuplicateLeadError(existingId, phoneKey.length >= 9 ? 'phone' : 'fingerprint')
+  }
+
+  const nidHash = nationalIdHashFromInput(input.draft.nationalId, input.draft.nationalIdNotAvailable)
+  if (nidHash) {
+    const existingById = await findExistingLeadIdByNationalIdHash(db, nidHash, input.orgId)
+    if (existingById) throw new DuplicateLeadError(existingById, 'nationalId')
+  }
 
   const record = evaluationRecordFromLeadLike({
     ...partialLeadFromExcelRow(rowWithCode),
@@ -161,7 +165,7 @@ export async function createManualLead(
     'COLD',
     input.assignedCounselorId,
     ownership,
-    { uniqueHash: hash },
+    { uniqueHash: hash, ...(nidHash ? { nationalIdHash: nidHash } : {}) },
   )
   const provisionalLead = {
     id: '',

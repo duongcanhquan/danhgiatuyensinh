@@ -1,5 +1,7 @@
 import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from '../types'
+import { deleteField } from 'firebase/firestore'
 import { studyFormatFromParts } from './studyFormatMerge'
+import { computeLeadUniqueHash, nationalIdHashFromInput } from './leadIdentity'
 
 /** Trường chỉnh trên panel chi tiết — đồng bộ Firestore + chấm điểm qua `leadToEvaluationRecord`. */
 export type LeadCoreDraft = {
@@ -254,6 +256,28 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
   ) {
     patch.nationalIdNotAvailable = draft.nationalIdNotAvailable
   }
+
+  // Apps Script parity: cập nhật fingerprint SĐT + hash CCCD khi đổi
+  const fmt = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
+  const nextPhoneHash = computeLeadUniqueHash({
+    phone: draft.phone,
+    parentPhone: draft.parentPhone,
+    fullName: draft.fullName,
+    customerId: draft.customerId,
+    educationLevel: fmt,
+    gradeClass: draft.gradeClass,
+    dateOfBirth: draft.dateOfBirth,
+  })
+  if (nextPhoneHash && nextPhoneHash !== before.uniqueHash) {
+    patch.uniqueHash = nextPhoneHash
+  }
+
+  const nextNidHash = nationalIdHashFromInput(draft.nationalId, draft.nationalIdNotAvailable)
+  const prevNidHash = String(before.nationalIdHash ?? '').trim() || null
+  if (nextNidHash !== prevNidHash) {
+    patch.nationalIdHash = nextNidHash ?? deleteField()
+  }
+
   return patch
 }
 

@@ -166,6 +166,11 @@ import { LeadProfileFinanceSection } from '../components/LeadProfileFinanceSecti
 import { LeadProfileInviteSection } from '../components/LeadProfileInviteSection'
 import { OmicallCallButton } from '../components/OmicallCallButton'
 import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft, mergeCoreDraftIntoLead } from '../utils/leadProfileEdit'
+import {
+  findExistingLeadIdByNationalIdHash,
+  findExistingLeadIdByUniqueHash,
+} from '../utils/leadDedupeLookup'
+import { nationalIdHashFromInput } from '../utils/leadIdentity'
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
@@ -5444,6 +5449,7 @@ function LeadDetailPanel({
   dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can, canRunLlmAnalysis } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const detailScoringOpts = useMemo(
@@ -5896,6 +5902,33 @@ function LeadDetailPanel({
     }
   }
 
+  const assertCoreIdentityUnique = async (corePatch: Record<string, unknown>): Promise<string | null> => {
+    const orgId = String(lead.orgId ?? effectiveOrgId ?? '').trim()
+    if (!db || !orgId) return null
+    if (typeof corePatch.uniqueHash === 'string' && corePatch.uniqueHash) {
+      const hit = await findExistingLeadIdByUniqueHash(db, corePatch.uniqueHash, orgId, lead.id)
+      if (hit) return 'Số điện thoại này đã thuộc hồ sơ khác trên hệ thống. Không lưu trùng.'
+    }
+    if (typeof corePatch.nationalIdHash === 'string' && corePatch.nationalIdHash) {
+      const hit = await findExistingLeadIdByNationalIdHash(db, corePatch.nationalIdHash, orgId, lead.id)
+      if (hit) return 'CCCD/Passport này đã thuộc hồ sơ khác trên hệ thống. Không lưu trùng.'
+    }
+    // Khi patch có đổi CCCD sang giá trị mới nhưng hash nằm trong field deleteField — không check.
+    // Khi draft có CCCD nhưng patch chưa có nationalIdHash (không đổi) — vẫn nên check nếu trước đó thiếu hash.
+    if (corePatch.nationalId !== undefined && !('nationalIdHash' in corePatch)) {
+      const h = nationalIdHashFromInput(
+        String(corePatch.nationalId ?? ''),
+        corePatch.nationalIdNotAvailable === true ||
+          (corePatch.nationalIdNotAvailable === undefined && lead.nationalIdNotAvailable === true),
+      )
+      if (h) {
+        const hit = await findExistingLeadIdByNationalIdHash(db, h, orgId, lead.id)
+        if (hit) return 'CCCD/Passport này đã thuộc hồ sơ khác trên hệ thống. Không lưu trùng.'
+      }
+    }
+    return null
+  }
+
   const saveCoreProfile = async () => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
@@ -5913,6 +5946,12 @@ function LeadDetailPanel({
     setSaving(true)
     setMsg(null)
     try {
+      const dupMsg = await assertCoreIdentityUnique(corePatch)
+      if (dupMsg) {
+        setMsg(dupMsg)
+        setSaving(false)
+        return
+      }
       const coreAsPartial = corePatch as unknown as Partial<Lead>
       const mergedForScore: Partial<Lead> = { ...coreAsPartial }
       const scoreFields = persistedLeadScoringFields(
@@ -6022,6 +6061,14 @@ function LeadDetailPanel({
     setSaving(true)
     setMsg(null)
     try {
+      if (coreChanged) {
+        const dupMsg = await assertCoreIdentityUnique(corePatch)
+        if (dupMsg) {
+          setMsg(dupMsg)
+          setSaving(false)
+          return
+        }
+      }
       const nextCrm = crmChanged ? crmForForm : lead.status
       let nextPipeFinal = lead.pipelineStatus
       if (pipeChanged) nextPipeFinal = statusForForm

@@ -100,6 +100,23 @@ function computeLeadUniqueHash(row: {
   return createHash('sha256').update(basis).digest('hex')
 }
 
+/** Đồng bộ client `normalizeNationalIdKey` / `computeNationalIdHash`. */
+function normalizeNationalIdKey(nationalId: string, notAvailable = false): string {
+  if (notAvailable) return ''
+  const raw = String(nationalId ?? '')
+    .trim()
+    .toUpperCase()
+  if (!raw || raw === 'CHƯA CÓ') return ''
+  if (/^\d+$/.test(raw)) return raw
+  return raw.replace(/[^A-Z0-9]/g, '')
+}
+
+function computeNationalIdHash(normalizedKey: string): string | null {
+  const key = String(normalizedKey ?? '').trim().toUpperCase()
+  if (!key || key === 'CHƯA CÓ') return null
+  return createHash('sha256').update(`nationalId:${key}`).digest('hex')
+}
+
 function formatSystemLeadCodeDayPrefix(at: Date): string {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: VN_TZ,
@@ -463,6 +480,7 @@ function buildLeadDoc(
     systemCode: string
     source1: string
     uniqueHash: string
+    nationalIdHash?: string | null
     assignedCounselorId: string | null
     orgId: string
     now: Timestamp
@@ -505,6 +523,7 @@ function buildLeadDoc(
     calculatedScore: 0,
     priorityTag: 'COLD' as const,
     uniqueHash: opts.uniqueHash,
+    ...(opts.nationalIdHash ? { nationalIdHash: opts.nationalIdHash } : {}),
     registrationChannel: 'public_portal',
     uploadedBy: 'public_portal',
     uploaderName: 'Cổng đăng ký sinh viên',
@@ -560,7 +579,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       counselors: portalCounselors,
       contactAddress: '168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội',
       contactPhone: '0982.856.648',
-      logoUrl: '/brand/logo-vietmy-trang.png',
+      logoUrl: '/brand/logo-vietmy-xanh.png',
     }
   })
 
@@ -636,6 +655,26 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       )
     }
 
+    const nationalIdNotAvailable =
+      input.nationalIdNotAvailable === true || str(input.nationalId).toUpperCase() === 'CHƯA CÓ'
+    const nationalIdHash = computeNationalIdHash(
+      normalizeNationalIdKey(str(input.nationalId), nationalIdNotAvailable),
+    )
+    if (nationalIdHash) {
+      const nidDup = await db
+        .collection('leads')
+        .where('orgId', '==', config.orgId)
+        .where('nationalIdHash', '==', nationalIdHash)
+        .limit(1)
+        .get()
+      if (!nidDup.empty) {
+        throw new HttpsError(
+          'already-exists',
+          'Đã có hồ sơ trùng trên hệ thống (cùng CCCD/Passport). Vui lòng liên hệ tư vấn viên.',
+        )
+      }
+    }
+
     const systemCode = await allocateSystemCode(db)
     const now = Timestamp.now()
     const ref = db.collection('leads').doc()
@@ -643,6 +682,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       systemCode,
       source1: config.defaultSource1,
       uniqueHash,
+      nationalIdHash,
       assignedCounselorId: counselor?.id ?? null,
       orgId: config.orgId,
       now,

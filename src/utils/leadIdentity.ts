@@ -91,6 +91,37 @@ export function shouldQueryExistingByUniqueHash(row: Partial<ExcelLeadRow>): boo
   return leadDedupeStrength(row) !== 'weak'
 }
 
+/**
+ * Chuẩn hóa CCCD/Passport để chống trùng (Apps Script `formatCCCD`).
+ * `CHƯA CÓ` / tick «chưa có» / rỗng → '' (không dùng làm khóa trùng).
+ */
+export function normalizeNationalIdKey(
+  nationalId: string | undefined | null,
+  notAvailable = false,
+): string {
+  if (notAvailable) return ''
+  const raw = String(nationalId ?? '')
+    .trim()
+    .toUpperCase()
+  if (!raw || raw === 'CHƯA CÓ') return ''
+  if (/^\d+$/.test(raw)) return raw
+  return raw.replace(/[^A-Z0-9]/g, '')
+}
+
+/** Hash Firestore riêng cho CCCD — không gộp vào `uniqueHash` (SĐT) để giữ ổn định dữ liệu cũ. */
+export function computeNationalIdHash(normalizedKey: string): string | null {
+  const key = String(normalizedKey ?? '').trim().toUpperCase()
+  if (!key || key === 'CHƯA CÓ') return null
+  return sha256HexSync(`nationalId:${key}`)
+}
+
+export function nationalIdHashFromInput(
+  nationalId: string | undefined | null,
+  notAvailable = false,
+): string | null {
+  return computeNationalIdHash(normalizeNationalIdKey(nationalId, notAvailable))
+}
+
 /** Map admission funnel stage to counselor Kanban when `status` is absent on legacy docs. */
 export function pipelineToCounselorStatus(p: Lead['pipelineStatus']): LeadCounselorStatus {
   switch (p) {

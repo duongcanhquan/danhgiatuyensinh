@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Loader2, MapPin, Phone, Send } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
-import { AuthSessionExitBar } from '../../components/AuthSessionControls'
 import { isFirebaseConfigured } from '../../services/firebase'
 import {
   fetchPublicRegistrationMeta,
@@ -167,10 +166,13 @@ export function StudentRegistrationView() {
     }
   }
 
-  const logoSrc = meta?.logoUrl || '/brand/logo-vietmy-trang.png'
+  const rawLogo = meta?.logoUrl || '/brand/logo-vietmy-xanh.png'
+  const logoSrc = rawLogo.includes('logo-vietmy-trang') ? '/brand/logo-vietmy-xanh.png' : rawLogo
+  const contactPhoneDisplay = meta?.contactPhone || '0982.856.648'
+  const contactPhoneTel = contactPhoneDisplay.replace(/\D/g, '')
 
   return (
-    <div className="public-reg-portal min-h-screen bg-[length:400%_400%] px-3 py-6 text-slate-800 sm:px-4 sm:py-8 md:py-10"
+    <div className="public-reg-portal min-h-screen bg-[length:400%_400%] px-3 py-4 text-slate-800 sm:px-4 sm:py-6 md:py-8"
       style={{
         backgroundImage: 'linear-gradient(-45deg, #f5f7fa, #c3cfe2, #e0c3fc, #8ec5fc)',
         animation: 'publicRegGradient 15s ease infinite',
@@ -179,10 +181,6 @@ export function StudentRegistrationView() {
       <style>{`@keyframes publicRegGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}`}</style>
 
       <div className="mx-auto w-full max-w-[900px]">
-        <div className="mb-3">
-          <AuthSessionExitBar tone="onLight" />
-        </div>
-
         <div className="relative rounded-3xl border border-white/40 bg-white/85 p-5 shadow-[0_20px_40px_rgba(0,0,0,0.08)] backdrop-blur-md sm:p-8 md:p-10">
           <div className="absolute right-3 top-3 z-10 sm:right-5 sm:top-5">
             <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm" role="group" aria-label="Language">
@@ -203,26 +201,35 @@ export function StudentRegistrationView() {
             </div>
           </div>
 
-          <header className="mb-6 pt-6 text-center sm:mb-8 sm:pt-2">
+          <header className="mb-4 pt-5 text-center sm:mb-5 sm:pt-1">
             <img
               src={logoSrc}
-              alt="VietMy College"
-              className="mx-auto mb-4 h-auto max-w-[180px] sm:max-w-[220px]"
+              alt="Cao đẳng Việt Mỹ - Hà Nội"
+              className="mx-auto mb-2 h-auto max-w-[110px] sm:max-w-[130px]"
             />
-            <h1 className="text-xl font-extrabold uppercase tracking-tight text-[#0056b3] sm:text-2xl">
+            <h1 className="text-lg font-extrabold uppercase tracking-tight text-[#0056b3] sm:text-xl">
               {meta?.portalTitle?.trim() || t('portalTitle')}
             </h1>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
+            <p className="mx-auto mt-1.5 max-w-xl text-sm leading-relaxed text-slate-600">
               {meta?.introText?.trim() || t('portalSub')}
             </p>
-            <div className="mt-4 inline-block rounded-xl border border-[#0056b3]/15 bg-white/60 px-4 py-3 text-left text-xs font-semibold text-slate-800 sm:text-sm">
+            <div className="mt-3 inline-block rounded-xl border border-[#0056b3]/15 bg-white/60 px-3.5 py-2.5 text-left text-xs font-semibold text-slate-800 sm:text-sm">
               <p className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
                 <span>{meta?.contactAddress || '168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội'}</span>
               </p>
               <p className="mt-1.5 flex items-center gap-2">
                 <Phone className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
-                <span>{meta?.contactPhone || '0982.856.648'}</span>
+                {contactPhoneTel ? (
+                  <a
+                    href={`tel:${contactPhoneTel}`}
+                    className="text-[#0056b3] underline-offset-2 hover:underline"
+                  >
+                    {contactPhoneDisplay}
+                  </a>
+                ) : (
+                  <span>{contactPhoneDisplay}</span>
+                )}
               </p>
             </div>
           </header>
