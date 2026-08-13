@@ -4,7 +4,7 @@ import { isChunkLoadError, tryReloadOnceForStaleChunk } from './chunkLoadRecover
 /**
  * `React.lazy` kèm retry ngắn — lỗi chunk sau deploy thì reload tab một lần.
  */
-export function lazyWithRetry<T extends ComponentType<any>>(
+export function lazyWithRetry<T extends ComponentType<object>>(
   importer: () => Promise<{ default: T }>,
 ): LazyExoticComponent<T> {
   return lazy(async () => {

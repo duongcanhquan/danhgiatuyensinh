@@ -47,12 +47,15 @@ function seedToPayload(row: DefaultScholarshipSeed, sortOrder: number): Scholars
   }
 }
 
-export async function seedDefaultLeadSources(db: Firestore): Promise<number> {
+export async function seedDefaultLeadSources(db: Firestore, orgId: string): Promise<number> {
+  const org = orgId.trim()
+  if (!org) throw new Error('Thiếu orgId khi nạp nguồn lead.')
   const batch = writeBatch(db)
   let n = 0
   DEFAULT_LEAD_SOURCE_LABELS.forEach((label, i) => {
     const ref = doc(collection(db, FS_COLLECTIONS.leadSources))
     batch.set(ref, {
+      orgId: org,
       label,
       sortOrder: (i + 1) * 10,
       isActive: true,
@@ -109,6 +112,8 @@ export type LeadSourceSavePayload = {
   label: string
   sortOrder: number
   isActive: boolean
+  /** Bắt buộc khi tạo mới / luôn ghi để query theo org. */
+  orgId: string
   /** Pass null to clear playbook mode. */
   defaultWorkMode?: LeadWorkMode | null
   defaultScoringProfileId?: string | null
@@ -120,9 +125,12 @@ export async function saveLeadSourceRow(
   id: string | null,
   payload: LeadSourceSavePayload,
 ): Promise<string> {
+  const org = payload.orgId.trim()
+  if (!org) throw new Error('Thiếu orgId khi lưu nguồn lead.')
   const ref = id ? doc(db, FS_COLLECTIONS.leadSources, id) : doc(collection(db, FS_COLLECTIONS.leadSources))
   const now = Timestamp.now()
   const body: Record<string, unknown> = {
+    orgId: org,
     label: payload.label.trim(),
     sortOrder: payload.sortOrder,
     isActive: payload.isActive,

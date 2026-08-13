@@ -326,7 +326,7 @@ function sheetMappedRows(
     raw: true,
     range: headerRowIndex,
   })
-  let rows = json.map((row) => mapSheetRow(row)).filter((row) => !isMappedRowEmpty(row))
+  const rows = json.map((row) => mapSheetRow(row)).filter((row) => !isMappedRowEmpty(row))
 
   if (!fallbackOrderedHeaders?.length) return rows
 

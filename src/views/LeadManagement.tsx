@@ -886,7 +886,9 @@ export function LeadManagement() {
   }, [workspaceToolsOpen, filterPanelOpen, filtersPendingApply, searchParams])
 
   const captureListChromeBeforeDetailRef = useRef(captureListChromeBeforeDetail)
-  captureListChromeBeforeDetailRef.current = captureListChromeBeforeDetail
+  useEffect(() => {
+    captureListChromeBeforeDetailRef.current = captureListChromeBeforeDetail
+  }, [captureListChromeBeforeDetail])
 
   const restoreListChromeAfterDetail = useCallback(() => {
     const snap = listChromeBeforeDetailRef.current
@@ -2935,8 +2937,9 @@ export function LeadManagement() {
           setSelected((p) => {
             if (p?.id !== id) return p
             if (clear) {
-              const { intakeProgram: _drop, ...rest } = { ...p, ...touch }
-              return rest as Lead
+              const nextLead = { ...p, ...touch } as Lead
+              delete (nextLead as { intakeProgram?: string }).intakeProgram
+              return nextLead
             }
             return { ...p, ...localPatch }
           })
@@ -3523,6 +3526,7 @@ export function LeadManagement() {
             active={workModeFilter}
             summary={workModeSummary}
             onSelect={(next) => applyWorkModeQuick(next)}
+            sampleOnly={!listNeedsFullScope}
             className="w-full"
           />
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
@@ -4717,7 +4721,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={bulkBusy}
                 onClick={() => setBulkModal(null)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed"
               >
                 Hủy
               </button>
@@ -4725,7 +4729,7 @@ export function LeadManagement() {
                 type="button"
                 disabled={bulkBusy}
                 onClick={() => void applyBulkWorkMode()}
-                className="rounded-xl border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
+                className="cursor-pointer rounded-xl border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {bulkBusy ? 'Đang xử lý…' : 'Gán chế độ'}
               </button>

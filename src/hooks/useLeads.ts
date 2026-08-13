@@ -1057,7 +1057,9 @@ export function useLeads(opts?: UseLeadsOptions) {
   )
   const fullScopeMatchKey = opts?.fullScopeMatchKey ?? ''
   const fullScopeKeepMatchRef = useRef(opts?.fullScopeKeepMatch)
-  fullScopeKeepMatchRef.current = opts?.fullScopeKeepMatch
+  useEffect(() => {
+    fullScopeKeepMatchRef.current = opts?.fullScopeKeepMatch
+  }, [opts?.fullScopeKeepMatch])
   const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
   const includeScopeSourceOptions = Boolean(opts?.includeScopeSourceOptions)
   const includeScopeProgramOptions = Boolean(opts?.includeScopeProgramOptions)

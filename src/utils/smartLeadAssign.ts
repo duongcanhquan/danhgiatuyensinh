@@ -40,7 +40,7 @@ export function pickLeadIdsForAssign(
     if (!id || uniq.has(id)) continue
     uniq.set(id, { id, createdAtMs: row.createdAtMs })
   }
-  let ordered = [...uniq.values()]
+  const ordered = [...uniq.values()]
   if (rule === 'oldest') {
     ordered.sort((a, b) => {
       const am = a.createdAtMs != null && Number.isFinite(a.createdAtMs) ? a.createdAtMs : Number.POSITIVE_INFINITY

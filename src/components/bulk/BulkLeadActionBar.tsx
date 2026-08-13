@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
+/* eslint-disable react-refresh/only-export-components -- file also exports bulk priority option constants */
 import { UserPlus, Download, GitBranch, Sparkles, X, Tags, Layers, Trash2, Workflow } from 'lucide-react'
 import type { PriorityTag } from '../../types'
 
@@ -164,6 +165,7 @@ export function BulkLeadActionBar({
   )
 }
 
+/** Options shared with LeadManagement bulk priority modal. */
 export const BULK_PRIORITY_TAG_OPTIONS: { value: PriorityTag; label: string }[] = [
   { value: 'HOT', label: 'HOT' },
   { value: 'WARM', label: 'WARM' },

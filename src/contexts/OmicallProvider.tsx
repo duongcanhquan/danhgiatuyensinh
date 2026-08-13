@@ -213,6 +213,9 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const scheduleAutoReconnectRef = useRef<(fullReload?: boolean) => void>(() => {})
 
   const scheduleFinalizeLoggingRef = useRef<() => void>(() => {})
+  const runFinalizeIfNeededRef = useRef<
+    ((opts?: { forcePlaceholder?: boolean }) => Promise<void>) | null
+  >(null)
 
   useEffect(() => {
     activeCallRef.current = activeCall
@@ -506,7 +509,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       if (finalizeTimerRef.current) window.clearTimeout(finalizeTimerRef.current)
       finalizeTimerRef.current = window.setTimeout(() => {
         finalizeTimerRef.current = null
-        void runFinalizeIfNeeded({ forcePlaceholder: true })
+        void runFinalizeIfNeededRef.current?.({ forcePlaceholder: true })
       }, 1800)
       return
     }
@@ -545,6 +548,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       // Giữ pendingFinalizeRef để dismiss/retry sau.
     }
   }, [config.autoLogCalls, profile, captureFinalizeSnapshot])
+
+  useEffect(() => {
+    runFinalizeIfNeededRef.current = runFinalizeIfNeeded
+  }, [runFinalizeIfNeeded])
 
   const scheduleFinalizeLogging = useCallback(() => {
     captureFinalizeSnapshot()

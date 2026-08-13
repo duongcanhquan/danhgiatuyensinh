@@ -339,12 +339,13 @@ export function getDispositionLeadEffects(dispositionId: CallDispositionId): Dis
  */
 export function dispositionPriorityOverridesAfterScoring(
   dispositionId: CallDispositionId,
-  _currentPriorityTag?: PriorityTag,
+  currentPriorityTag?: PriorityTag,
 ): {
   priorityTag?: PriorityTag
   callEvalPriorityBoost?: PriorityTag
   clearCallEvalPriorityBoost?: boolean
 } {
+  void currentPriorityTag
   const fx = getDispositionLeadEffects(dispositionId)
   const out: {
     priorityTag?: PriorityTag

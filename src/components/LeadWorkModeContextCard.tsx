@@ -14,6 +14,8 @@ type Props = {
   onChange: (next: LeadWorkMode | undefined) => void
 }
 
+const SELECT_ID = 'lead-work-mode-select'
+
 /** Khối ngữ cảnh chế độ trên chi tiết — 1 quyết định chính, copy đời thường. */
 export function LeadWorkModeContextCard({ workMode, canEdit, disabled, onChange }: Props) {
   const focus = leadWorkModePrimaryFocus(workMode)
@@ -29,25 +31,23 @@ export function LeadWorkModeContextCard({ workMode, canEdit, disabled, onChange 
       className="rounded-xl border border-slate-200/90 bg-white/95 p-2 shadow-sm ring-1 ring-slate-200/60 sm:p-2.5"
       data-work-focus={focus}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+      <label htmlFor={SELECT_ID} className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         Chế độ xử lý
-      </p>
-      <label className="mt-1 block text-xs font-medium text-slate-800">
-        <span className="sr-only">Chọn chế độ xử lý</span>
-        <select
-          value={workMode ?? ''}
-          disabled={!canEdit || disabled}
-          onChange={(e) => onChange(parseLeadWorkMode(e.target.value))}
-          className="mt-0.5 w-full cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none transition-colors duration-200 focus:ring-1 focus:ring-[var(--color-primary)]/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <option value="">Chưa chọn</option>
-          {LEAD_WORK_MODES.map((m) => (
-            <option key={m} value={m}>
-              {leadWorkModeLabel(m)}
-            </option>
-          ))}
-        </select>
       </label>
+      <select
+        id={SELECT_ID}
+        value={workMode ?? ''}
+        disabled={!canEdit || disabled}
+        onChange={(e) => onChange(parseLeadWorkMode(e.target.value))}
+        className="mt-1 w-full cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none transition-colors duration-200 focus:ring-1 focus:ring-[var(--color-primary)]/40 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <option value="">Chưa chọn</option>
+        {LEAD_WORK_MODES.map((m) => (
+          <option key={m} value={m}>
+            {leadWorkModeLabel(m)}
+          </option>
+        ))}
+      </select>
       <p className="mt-1.5 text-[11px] leading-snug text-slate-600" role="note">
         {workMode ? (
           <>

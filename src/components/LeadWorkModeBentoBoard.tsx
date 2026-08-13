@@ -14,22 +14,31 @@ type Props = {
   summary: LeadWorkModeSummary
   onSelect: (next: Filter) => void
   className?: string
+  /** Số đếm chỉ trên trang/mẫu đang tải (chưa fullScope). */
+  sampleOnly?: boolean
 }
 
 /**
  * Bento «Chế độ xử lý» — một việc / một ô, bấm để lọc (ui-ux-pro-max + bento VietMy).
- * Giữ brand/tokens hiện có; không dùng palette indigo từ search genérico.
  */
-export function LeadWorkModeBentoBoard({ active, summary, onSelect, className = '' }: Props) {
+export function LeadWorkModeBentoBoard({
+  active,
+  summary,
+  onSelect,
+  className = '',
+  sampleOnly = false,
+}: Props) {
   return (
     <div className={['space-y-1.5', className].filter(Boolean).join(' ')}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          Chế độ xử lý hồ sơ
+          Chế độ xử lý hồ sơ{sampleOnly ? ' (trang này)' : ''}
         </p>
         <p className="text-[11px] text-slate-500" aria-live="polite">
           {active === 'all'
-            ? 'Đang xem mọi chế độ'
+            ? sampleOnly
+              ? 'Đếm trên trang đang tải'
+              : 'Đang xem mọi chế độ'
             : `Đang lọc: ${leadWorkModeLabel(active)}`}
         </p>
       </div>
@@ -66,9 +75,11 @@ export function LeadWorkModeBentoBoard({ active, summary, onSelect, className = 
               aria-pressed={selected}
               className={[
                 'bento-stat bento-cell cursor-pointer !p-2 text-left transition-colors duration-200',
-                tone === 'ink' ? 'bento-cell--ink' : '',
-                tone === 'accent' ? 'bento-cell--accent' : '',
-                selected ? 'ring-2 ring-[var(--color-primary)]/50' : 'hover:border-[var(--color-primary)]/35',
+                selected && tone === 'ink' ? 'bento-cell--ink' : '',
+                selected && tone === 'accent' ? 'bento-cell--accent' : '',
+                selected
+                  ? 'ring-2 ring-[var(--color-primary)]/50'
+                  : 'hover:border-[var(--color-primary)]/35',
               ]
                 .filter(Boolean)
                 .join(' ')}

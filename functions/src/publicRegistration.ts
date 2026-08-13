@@ -687,7 +687,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     }
 
     const counselorId = str(input.counselorId)
-    let counselor =
+    const counselor =
       allCounselors.find(
         (c) =>
           c.id === counselorId && c.isActive && c.showOnPublicRegistrationPortal,
