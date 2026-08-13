@@ -46,6 +46,7 @@ export const PERMISSION_TIERS: {
   { id: 'admin', label: 'Quản lý trường', roles: ['admin'] },
   { id: 'super_admin', label: 'Siêu quản trị', roles: ['super_admin'] },
   { id: 'accountant', label: 'Kế toán', roles: ['accountant'] },
+  { id: 'marketing', label: 'Marketing', roles: ['marketing'] },
 ]
 
 export function tierHasPermission(tierId: string, p: Permission): boolean {

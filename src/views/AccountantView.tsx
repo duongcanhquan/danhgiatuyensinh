@@ -9,7 +9,10 @@ import { fetchRecentFinanceReports, sendFinanceReportFromLeads } from '../utils/
 import {
   leadHasFinanceActivity,
   leadHasPendingAccountantReview,
+  leadPassesShowDoneFilter,
+  countEnrollmentStatusStats,
 } from '../utils/accountantFinanceFilter'
+import { useOrg } from '../contexts/OrgProvider'
 import { buildStudentCodeSequenceIndex } from '../utils/studentDisplayCode'
 import { buildAccountantLeadSummary, type AccountantStatusTag } from '../utils/accountantLeadDisplay'
 import { AccountantLeadReviewCard } from '../components/accountant/AccountantLeadReviewCard'
@@ -18,6 +21,7 @@ type QueueFilter = 'pending' | 'done' | 'all'
 
 const STATUS_FILTER_OPTIONS: AccountantStatusTag[] = [
   'Mới',
+  'Đang hoàn thiện',
   'Cọc',
   'Ghi danh',
   'Hoàn thiện phí',
@@ -37,6 +41,7 @@ function normalizeSearch(s: string): string {
 
 export function AccountantView({ portalMode = false }: { portalMode?: boolean }) {
   const { can, profile } = useAuth()
+  const { effectiveOrgId } = useOrg()
   const accountantName = profile?.displayName?.trim() || profile?.email?.trim() || undefined
   const canAccountant = can('finance:accountant')
   const canReports = can('finance:reports')
@@ -46,6 +51,8 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
   const [search, setSearch] = useState('')
   const [filterTag, setFilterTag] = useState<AccountantStatusTag | ''>('')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('pending')
+  /** Apps Script `#showDone` — mặc định ẩn CỌC / ĐÃ HOÀN THIỆN trừ khi còn treo. */
+  const [showDone, setShowDone] = useState(false)
   const [reportBusy, setReportBusy] = useState<'daily' | 'monthly' | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -79,15 +86,17 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
       if (leadHasPendingAccountantReview(l)) pending++
       else done++
     }
-    return { pending, done, total: financeRows.length }
+    return { pending, done, total: financeRows.length, enrollment: countEnrollmentStatusStats(financeRows) }
   }, [financeRows])
 
   const filtered = useMemo(() => {
     const q = normalizeSearch(search)
+    const statusFilterActive = Boolean(filterTag)
     return financeRows
       .filter((lead) => {
         if (queueFilter === 'pending' && !leadHasPendingAccountantReview(lead)) return false
         if (queueFilter === 'done' && leadHasPendingAccountantReview(lead)) return false
+        if (!leadPassesShowDoneFilter(lead, showDone, statusFilterActive)) return false
         const summary = summaryByLeadId.get(lead.id)
         if (filterTag && summary && summary.statusTag !== filterTag) return false
         if (!q) return true
@@ -107,7 +116,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         const pb = leadHasPendingAccountantReview(b) ? 1 : 0
         return pb - pa
       })
-  }, [financeRows, search, filterTag, queueFilter, summaryByLeadId])
+  }, [financeRows, search, filterTag, queueFilter, showDone, summaryByLeadId])
 
   const patchLead = (next: Lead) => {
     setRows((prev) => prev.map((l) => (l.id === next.id ? next : l)))
@@ -125,6 +134,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         kind,
         triggeredBy: profile.id,
         triggeredByName: profile.displayName ?? profile.email,
+        orgId: effectiveOrgId,
       })
       setMsg(kind === 'daily' ? 'Đã gửi báo cáo ngày qua n8n.' : 'Đã gửi báo cáo tháng qua n8n.')
       await fetchRecentFinanceReports(db)
@@ -201,18 +211,26 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         </section>
       ) : null}
 
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: 'Chờ duyệt', value: stats.pending, cls: 'text-amber-700' },
-          { label: 'Đã xử lý', value: stats.done, cls: 'text-emerald-700' },
-          { label: 'Có phát sinh thu', value: stats.total, cls: 'text-sky-700' },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-            <p className="text-xs font-bold uppercase text-slate-500">{s.label}</p>
-            <p className={`text-2xl font-black tabular-nums ${s.cls}`}>{s.value}</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {(
+          [
+            ['Mới', stats.enrollment.moi, 'text-slate-700'],
+            ['Đang HT', stats.enrollment.dang, 'text-sky-700'],
+            ['Cọc', stats.enrollment.coc, 'text-emerald-700'],
+            ['Hoàn thiện', stats.enrollment.hoanThien, 'text-violet-700'],
+            ['Kiểm tra lại', stats.enrollment.kiemTra, 'text-rose-700'],
+          ] as const
+        ).map(([label, value, cls]) => (
+          <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
+            <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
+            <p className={`text-xl font-black tabular-nums ${cls}`}>{value}</p>
           </div>
         ))}
       </div>
+      <p className="text-xs text-slate-500">
+        Hàng đợi: <strong>{stats.pending}</strong> chờ duyệt · <strong>{stats.done}</strong> đã xử lý ·{' '}
+        <strong>{stats.total}</strong> có thu
+      </p>
 
       <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 p-1">
@@ -236,9 +254,18 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
             </button>
           ))}
         </div>
+        <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
+          <input
+            type="checkbox"
+            checked={showDone}
+            onChange={(e) => setShowDone(e.target.checked)}
+            className="rounded border-slate-300"
+          />
+          Hiện CỌC / hoàn thiện
+        </label>
         <input
           className="min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          placeholder="Tìm tên, mã SV, ngành, SĐT…"
+          placeholder="Tìm tên, mã SV, CCCD, SĐT…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

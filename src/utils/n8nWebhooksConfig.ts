@@ -70,6 +70,17 @@ export async function loadOrgN8nWebhooks(
   }
 }
 
+/** Đảm bảo cache khớp org trước khi bắn webhook — «đổi URL là chạy». */
+export async function ensureOrgN8nWebhooksLoaded(
+  db: Firestore | null | undefined,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<OrgN8nWebhooks> {
+  const id = orgId.trim() || DEFAULT_ORG_ID
+  if (orgWebhookOrgId === id && orgWebhookOverrides) return orgWebhookOverrides
+  if (!db) return getOrgN8nWebhookOverrides().hooks ?? emptyOrgN8nWebhooks()
+  return loadOrgN8nWebhooks(db, id)
+}
+
 export async function saveOrgN8nWebhooks(
   db: Firestore,
   orgId: string,

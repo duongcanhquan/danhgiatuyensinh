@@ -36,6 +36,8 @@ export type ExcelLeadRow = {
   gender?: string
   /** Mẫu 2+ : điểm tốt nghiệp (số / chuỗi tự do — tách khỏi học lực Yếu–Giỏi) */
   graduationScore?: string
+  /** CCCD / CMND / hộ chiếu — chống trùng khi nhập Excel */
+  nationalId?: string
 }
 
 /** Map tiêu đề cột Excel (sau chuẩn hoá) → khóa parser. Giữ alias cũ để file mẫu cũ vẫn đọc được. */
@@ -78,6 +80,15 @@ const HEADER_ALIASES: Record<string, keyof ExcelLeadRow> = {
   'gioi tinh': 'gender',
   sex: 'gender',
   gt: 'gender',
+  cccd: 'nationalId',
+  cmnd: 'nationalId',
+  'so cccd': 'nationalId',
+  'so cmnd': 'nationalId',
+  'can cuoc': 'nationalId',
+  'can cuoc cong dan': 'nationalId',
+  'ho chieu': 'nationalId',
+  passport: 'nationalId',
+  'national id': 'nationalId',
   'diem tot nghiep': 'graduationScore',
   'diem tn': 'graduationScore',
   'diem thi tot nghiep': 'graduationScore',
@@ -585,6 +596,7 @@ export function buildLeadFirestorePayload(
     uniqueHash: identity?.uniqueHash ?? '',
     ...(identity?.nationalIdHash ? { nationalIdHash: identity.nationalIdHash } : {}),
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
+    ...(row.nationalId?.trim() ? { nationalId: row.nationalId.trim() } : {}),
     ...(row.studentEmail?.trim() ? { studentEmail: row.studentEmail.trim() } : {}),
     ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
     ...(row.graduationScore?.trim()

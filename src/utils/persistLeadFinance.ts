@@ -47,17 +47,21 @@ export async function persistLeadFinance(opts: {
     const moneyChanged = Object.keys(uploads).length > 0 || plan.resetApprovalSlots.length > 0
     const scholarshipLabels = await resolveScholarshipLabels(db, lead)
     const counselor = await resolveCounselorForLead(db, lead)
-    await triggerProfileFinanceN8n({
-      lead: { ...lead, finance: financeWithEnrollment },
-      finance: financeWithEnrollment,
-      isMoneyChanged: moneyChanged,
-      counselorName: counselorName ?? counselor.name,
-      counselorEmail: counselor.email,
-      scholarship1Label: scholarshipLabels.scholarship1Label,
-      scholarship2Label: scholarshipLabels.scholarship2Label,
-      changedSlots: plan.changedSlots,
-      resetApprovalSlots: plan.resetApprovalSlots,
-    })
+    try {
+      await triggerProfileFinanceN8n({
+        lead: { ...lead, finance: financeWithEnrollment },
+        finance: financeWithEnrollment,
+        isMoneyChanged: moneyChanged,
+        counselorName: counselorName ?? counselor.name,
+        counselorEmail: counselor.email,
+        scholarship1Label: scholarshipLabels.scholarship1Label,
+        scholarship2Label: scholarshipLabels.scholarship2Label,
+        changedSlots: plan.changedSlots,
+        resetApprovalSlots: plan.resetApprovalSlots,
+      })
+    } catch (e) {
+      console.warn('[persistLeadFinance] n8n soft-fail', e)
+    }
   }
 
   return {

@@ -9,6 +9,11 @@ function doPost(e) {
       return jsonOut({ ok: false, error: 'Unauthorized token.' })
     }
 
+    // Apps Script parity: tạo/lấy folder giấy mời trước khi n8n in (không cần file)
+    if (String(body.action || '').trim() === 'ensure_folder') {
+      return ensureFolderOnly(body)
+    }
+
     const fileName = safeName(body.fileName || 'bill')
     const contentType = String(body.contentType || 'application/octet-stream').trim()
     const base64 = String(body.base64 || '').trim()
@@ -19,7 +24,8 @@ function doPost(e) {
     const folderName = safeFolderName(body.folderName || `${leadName}_${profileCode}`)
     const slot = String(body.slot || '').trim()
 
-    const root = DriveApp.getFolderById(ROOT_FOLDER_ID)
+    const rootId = String(body.rootFolderId || ROOT_FOLDER_ID).trim() || ROOT_FOLDER_ID
+    const root = DriveApp.getFolderById(rootId)
     const studentFolder = getOrCreateSubFolder(root, folderName)
 
     const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Ho_Chi_Minh', 'yyyyMMdd_HHmmss')
@@ -48,12 +54,28 @@ function doPost(e) {
     return jsonOut({
       ok: true,
       folderUrl: studentFolder.getUrl(),
+      folderId: studentFolder.getId(),
       fileUrl: storedFile.getUrl(),
       fileId: storedFile.getId(),
     })
   } catch (err) {
     return jsonOut({ ok: false, error: String(err && err.message ? err.message : err) })
   }
+}
+
+function ensureFolderOnly(body) {
+  const leadName = String(body.fullName || 'HoSo').trim()
+  const profileCode = String(body.systemCode || body.customerId || body.leadId || '').trim() || 'NO_CODE'
+  const folderName = safeFolderName(body.folderName || `${leadName}_${profileCode}`)
+  const rootId = String(body.rootFolderId || ROOT_FOLDER_ID).trim() || ROOT_FOLDER_ID
+  if (!rootId) return jsonOut({ ok: false, error: 'Missing rootFolderId.' })
+  const root = DriveApp.getFolderById(rootId)
+  const studentFolder = getOrCreateSubFolder(root, folderName)
+  return jsonOut({
+    ok: true,
+    folderUrl: studentFolder.getUrl(),
+    folderId: studentFolder.getId(),
+  })
 }
 
 function getOrCreateSubFolder(parent, folderName) {

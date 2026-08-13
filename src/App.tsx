@@ -14,6 +14,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginView } from './views/LoginView'
 import { AccountantProtectedRoute } from './components/accountant/AccountantProtectedRoute'
 import { lazyWithRetry } from './utils/lazyWithRetry'
+import { useAuth } from './hooks/useAuth'
 
 const SummaryHubView = lazyWithRetry(() =>
   import('./views/SummaryHubView').then((m) => ({ default: m.SummaryHubView })),
@@ -29,6 +30,9 @@ const UserManualView = lazyWithRetry(() =>
 )
 const AnalyticsAdvancedView = lazyWithRetry(() =>
   import('./views/AnalyticsAdvancedView').then((m) => ({ default: m.AnalyticsAdvancedView })),
+)
+const AdmissionsReportsView = lazyWithRetry(() =>
+  import('./views/AdmissionsReportsView').then((m) => ({ default: m.AdmissionsReportsView })),
 )
 const AccountantView = lazyWithRetry(() =>
   import('./views/AccountantView').then((m) => ({ default: m.AccountantView })),
@@ -72,6 +76,15 @@ function RouteFallback() {
   )
 }
 
+/** Marketing (Apps Script): vào app ưu tiên mở báo cáo tuyển sinh. */
+function MarketingDefaultHome() {
+  const { profile } = useAuth()
+  if (profile?.role === 'marketing') {
+    return <Navigate to="/bao-cao-tuyen-sinh" replace />
+  }
+  return <SummaryHubView />
+}
+
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
 export default function App() {
   const rawBase = import.meta.env.BASE_URL
@@ -105,7 +118,12 @@ export default function App() {
                       <Route path="/login" element={<LoginView />} />
                       <Route element={<ProtectedRoute />}>
                         <Route element={<Layout />}>
-                          <Route index element={<SummaryHubView />} />
+                          <Route
+                            index
+                            element={
+                              <MarketingDefaultHome />
+                            }
+                          />
                           <Route path="leads" element={<LeadsWorkspace />} />
                           <Route path="counselor" element={<Navigate to="/leads" replace />} />
                           <Route
@@ -113,6 +131,7 @@ export default function App() {
                             element={<Navigate to="/settings?tab=data&sub=intake" replace />}
                           />
                           <Route path="analytics" element={<AnalyticsAdvancedView />} />
+                          <Route path="bao-cao-tuyen-sinh" element={<AdmissionsReportsView />} />
                           <Route path="kpi" element={<Navigate to="/?tab=kpi-nhan-su" replace />} />
                           <Route path="command" element={<Navigate to="/?tab=van-hanh" replace />} />
                           <Route path="my-day" element={<MyDayView />} />

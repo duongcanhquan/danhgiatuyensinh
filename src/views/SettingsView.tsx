@@ -56,6 +56,7 @@ import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
 import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
 import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
+import { FinanceThresholdsSettingsPanel } from '../components/FinanceThresholdsSettingsPanel'
 import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSettingsPanel'
 import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
 import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
@@ -1324,6 +1325,9 @@ export function SettingsView() {
             Webhook n8n
           </h2>
           <N8nWebhooksSettingsPanel />
+          <div className="border-t border-slate-200 pt-4">
+            <FinanceThresholdsSettingsPanel />
+          </div>
         </div>
       ) : null}
 

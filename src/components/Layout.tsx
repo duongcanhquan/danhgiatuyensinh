@@ -73,6 +73,15 @@ const mainNav: NavDef[] = [
     perm: 'analytics:advanced',
   },
   {
+    to: '/bao-cao-tuyen-sinh',
+    label: 'Báo cáo tuyển sinh',
+    shortLabel: 'Báo cáo',
+    icon: BarChart3,
+    group: 'more',
+    show: (can) =>
+      can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead'),
+  },
+  {
     to: '/organizations',
     label: 'Quản lý trường',
     shortLabel: 'Trường',

@@ -4,6 +4,7 @@ import type { FinanceReportKind, FinanceReportLog, Lead } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { buildDailyFinanceReportPayload, buildMonthlyFinanceReportPayload } from './financeReports'
 import { triggerDailyReportN8n, triggerMonthlyReportN8n } from './n8nIntegration'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 export async function fetchRecentFinanceReports(db: Firestore, max = 30): Promise<FinanceReportLog[]> {
   const q = query(collection(db, FS_COLLECTIONS.financeReports), orderBy('sentAt', 'desc'), limit(max))
@@ -30,8 +31,13 @@ export async function sendFinanceReportFromLeads(opts: {
   kind: FinanceReportKind
   triggeredBy?: string
   triggeredByName?: string
+  orgId?: string
 }): Promise<FinanceReportLog> {
   const { db, leads, kind, triggeredBy, triggeredByName } = opts
+  const orgId =
+    String(opts.orgId ?? '').trim() ||
+    String(leads.find((l) => l.orgId)?.orgId ?? '').trim() ||
+    DEFAULT_ORG_ID
   const at = new Date()
   let payload: Record<string, unknown>
   let periodLabel: string
@@ -41,6 +47,7 @@ export async function sendFinanceReportFromLeads(opts: {
     const built = buildDailyFinanceReportPayload(leads, at)
     payload = {
       event: 'daily_finance_report',
+      orgId,
       date: built.date,
       dailyDetailHtml: built.dailyDetailHtml,
       message_vi: built.message_vi,
@@ -54,7 +61,7 @@ export async function sendFinanceReportFromLeads(opts: {
     await triggerDailyReportN8n(payload)
   } else {
     const built = buildMonthlyFinanceReportPayload(leads, at)
-    payload = built
+    payload = { ...built, orgId }
     periodLabel = built.month
     preview = `Tháng ${built.month} — NE: ${built.neMonth}, LPXT: ${built.lpxtMonth}`
     await triggerMonthlyReportN8n(payload)

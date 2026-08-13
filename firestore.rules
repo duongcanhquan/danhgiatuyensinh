@@ -158,17 +158,43 @@ service cloud.firestore {
           && matchesOrgData(resource.data));
     }
 
+    function callerRole() {
+      return !signedIn()
+        ? ''
+        : (
+          (request.auth.token.role is string && request.auth.token.role.size() > 0)
+            ? request.auth.token.role
+            : (callerHasUserDoc() && callerUser().keys().hasAll(['role'])
+                ? callerUser().role
+                : '')
+        );
+    }
+
+    /** Marketing không tạo/sửa HS. Kế toán được sửa (duyệt thu) nhưng không tạo mới. */
+    function canCreateLeads() {
+      return callerRole() != 'marketing' && callerRole() != 'accountant';
+    }
+
+    function canUpdateLeads() {
+      return callerRole() != 'marketing';
+    }
+
+    /** Marketing chỉ xem — không tạo/sửa master data, calls, … */
+    function canMutateOrgBusiness() {
+      return callerRole() != 'marketing';
+    }
+
     function orgScopedRead() {
       return (signedIn() && schoolOrgActive() && matchesOrgData(resource.data))
         || schoolAdminOrgRead(resource.data);
     }
 
     function orgScopedCreate() {
-      return signedIn() && (createInOwnOrg() || createLegacyVietmyOk());
+      return signedIn() && canMutateOrgBusiness() && (createInOwnOrg() || createLegacyVietmyOk());
     }
 
     function orgScopedWrite() {
-      return signedIn() && (updateKeepsOrg());
+      return signedIn() && canMutateOrgBusiness() && (updateKeepsOrg());
     }
 
     // ----- Platform registry -----
@@ -231,8 +257,8 @@ service cloud.firestore {
     // ----- Leads + subcollections -----
     match /leads/{leadId} {
       allow read: if orgScopedRead();
-      allow create: if orgScopedCreate();
-      allow update: if orgScopedWrite();
+      allow create: if signedIn() && canCreateLeads() && (createInOwnOrg() || createLegacyVietmyOk());
+      allow update: if signedIn() && canUpdateLeads() && (updateKeepsOrg());
       allow delete: if canDeleteLead();
 
       match /interactions/{id} {

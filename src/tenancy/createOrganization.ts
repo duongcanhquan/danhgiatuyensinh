@@ -11,6 +11,7 @@ export const ORG_SETTINGS_TEMPLATE_DOC_IDS = [
   'tvvSignalDefinitions',
   'orgAiIntegration',
   'n8nWebhooks',
+  'financeThresholds',
   'integrationHub',
   'inviteDocumentsConfig',
   'receiptStorageConfig',

@@ -38,6 +38,7 @@ export const USER_ROLES = [
   'team_lead',
   'admin',
   'accountant',
+  'marketing',
 ] as const
 
 export type UserRole = (typeof USER_ROLES)[number]
@@ -50,6 +51,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   team_lead: 'Trưởng nhóm Sale',
   admin: 'Quản lý',
   accountant: 'Kế toán',
+  marketing: 'Marketing',
 }
 
 /**

@@ -42,3 +42,51 @@ export function countFinanceSlotsWithAmount(lead: Pick<Lead, 'finance'>): number
   }
   return n
 }
+
+/** Apps Script: CỌC THÀNH CÔNG / ĐÃ HOÀN THIỆN — ẩn mặc định trừ khi còn treo. */
+export function leadIsSettledCocOrComplete(lead: Pick<Lead, 'finance'>): boolean {
+  const es = String(lead.finance?.enrollmentStatus ?? '')
+    .trim()
+    .toUpperCase()
+  return es === 'CỌC THÀNH CÔNG' || es === 'ĐÃ HOÀN THIỆN'
+}
+
+/**
+ * Toggle «Hiện CỌC THÀNH CÔNG» (Account.html `#showDone`).
+ * Ẩn cọc/hoàn thiện trừ khi: bật toggle, đang lọc status, hoặc còn batch/Full NE treo.
+ */
+export function leadPassesShowDoneFilter(
+  lead: Pick<Lead, 'finance'>,
+  showDone: boolean,
+  statusFilterActive: boolean,
+): boolean {
+  if (showDone || statusFilterActive) return true
+  if (!leadIsSettledCocOrComplete(lead)) return true
+  return leadHasPendingAccountantReview(lead)
+}
+
+/** Stat bar Account.html — đếm trên toàn DATA (không theo search/filter). */
+export function countEnrollmentStatusStats(leads: readonly Pick<Lead, 'finance'>[]): {
+  moi: number
+  dang: number
+  coc: number
+  kiemTra: number
+  hoanThien: number
+} {
+  let moi = 0
+  let dang = 0
+  let coc = 0
+  let kiemTra = 0
+  let hoanThien = 0
+  for (const lead of leads) {
+    const es = String(lead.finance?.enrollmentStatus ?? 'MỚI')
+      .trim()
+      .toUpperCase()
+    if (es === 'KIỂM TRA LẠI') kiemTra++
+    else if (es === 'CỌC THÀNH CÔNG') coc++
+    else if (es === 'ĐÃ HOÀN THIỆN') hoanThien++
+    else if (es === 'ĐANG HOÀN THIỆN') dang++
+    else moi++
+  }
+  return { moi, dang, coc, kiemTra, hoanThien }
+}

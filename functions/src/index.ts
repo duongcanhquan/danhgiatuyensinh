@@ -23,6 +23,18 @@ import {
   rollupKpiMonthly,
 } from './kpiEngine.js'
 import {
+  buildDailyPayload,
+  buildMonthlyPayload,
+  isLastDayOfMonthIct,
+  listActiveOrgIdsForReports,
+  loadOrgDailyWebhook,
+  loadOrgFinanceThresholds,
+  loadOrgLeadsForFinanceReport,
+  loadOrgMonthlyWebhook,
+  logFinanceReport,
+  postWebhook,
+} from './financeScheduledReports.js'
+import {
   fetchOmicallHistoryPage,
   parseOmicallUserDataLeadId,
   parseOmicallUserDataCounselorUid,
@@ -43,6 +55,7 @@ import {
 import { omicallClick2Call as postOmicallClick2Call } from './omicallClick2CallApi.js'
 import { registerOmicallCallWebhook } from './omicallWebhookApi.js'
 import { registerPublicRegistrationFunctions } from './publicRegistration.js'
+import { registerAccountantFinanceCallables } from './accountantFinanceApi.js'
 import { isAuthUserNotFound, toStaffAuthHttpsError } from './authAdminErrors.js'
 import {
   getAllDocumentsChunked,
@@ -1353,6 +1366,88 @@ export const syncOmicallCallHistory = onSchedule(
   },
 )
 
+/**
+ * Apps Script parity: gửi báo cáo thu ngày (mỗi ngày 23:55 ICT) + tháng (ngày cuối tháng).
+ * Lặp mọi org active có webhook daily/monthly.
+ */
+export const sendScheduledFinanceReports = onSchedule(
+  {
+    schedule: '55 23 * * *',
+    timeZone: 'Asia/Ho_Chi_Minh',
+    timeoutSeconds: 540,
+    memory: '1GiB',
+  },
+  async (): Promise<void> => {
+    const at = new Date()
+    const orgIds = await listActiveOrgIdsForReports(db)
+    const sendMonthly = isLastDayOfMonthIct(at)
+
+    for (const orgId of orgIds) {
+      const dailyUrl = await loadOrgDailyWebhook(db, orgId)
+      const monthlyUrl = sendMonthly ? await loadOrgMonthlyWebhook(db, orgId) : ''
+      if (!dailyUrl && !monthlyUrl) continue
+
+      const leads = await loadOrgLeadsForFinanceReport(db, orgId)
+      const thresholds = await loadOrgFinanceThresholds(db, orgId)
+
+      if (dailyUrl) {
+        try {
+          const payload = buildDailyPayload(leads, at, thresholds)
+          await postWebhook(dailyUrl, { ...payload, orgId })
+          await logFinanceReport(db, {
+            kind: 'daily',
+            periodLabel: payload.date,
+            preview: `[${orgId}] Ngày ${payload.date} — ${payload.tongHocSinhNop} HS, ${payload.tongTien.toLocaleString('vi-VN')}đ`,
+            n8nOk: true,
+          })
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          console.error('[sendScheduledFinanceReports] daily', orgId, msg)
+          await logFinanceReport(db, {
+            kind: 'daily',
+            periodLabel: vnDateLabel(at),
+            preview: `[${orgId}] Lỗi gửi báo cáo ngày`,
+            n8nOk: false,
+            errorMessage: msg,
+          })
+        }
+      }
+
+      if (monthlyUrl) {
+        try {
+          const payload = buildMonthlyPayload(leads, at, thresholds)
+          await postWebhook(monthlyUrl, { ...payload, orgId })
+          await logFinanceReport(db, {
+            kind: 'monthly',
+            periodLabel: payload.month,
+            preview: `[${orgId}] Tháng ${payload.month} — NE: ${payload.neMonth}, LPXT: ${payload.lpxtMonth}`,
+            n8nOk: true,
+          })
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          console.error('[sendScheduledFinanceReports] monthly', orgId, msg)
+          await logFinanceReport(db, {
+            kind: 'monthly',
+            periodLabel: 'month',
+            preview: `[${orgId}] Lỗi gửi báo cáo tháng`,
+            n8nOk: false,
+            errorMessage: msg,
+          })
+        }
+      }
+    }
+  },
+)
+
+function vnDateLabel(d: Date): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d)
+}
+
 /** Đồng bộ thủ công từ Settings — admin / quyền config:omicall. */
 export const triggerOmicallHistorySync = onCall(
   { secrets: [OMICALL_API_KEY, OMICALL_API_BASE_URL] },
@@ -2131,6 +2226,10 @@ export const adminStaffAccountAction = onCall(async (request) => {
 const publicRegistrationFns = registerPublicRegistrationFunctions(db)
 export const getPublicRegistrationMeta = publicRegistrationFns.getPublicRegistrationMeta
 export const submitPublicLead = publicRegistrationFns.submitPublicLead
+
+const accountantFinanceFns = registerAccountantFinanceCallables()
+export const accountantApplyPaymentDecision = accountantFinanceFns.accountantApplyPaymentDecision
+export const accountantConfirmFullNe = accountantFinanceFns.accountantConfirmFullNe
 
 export const syncCounselorLoadOnLeadWrite = registerCounselorLoadOnLeadWrite(
   db,

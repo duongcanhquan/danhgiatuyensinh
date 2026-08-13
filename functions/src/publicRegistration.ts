@@ -6,6 +6,25 @@ const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 const COUNTERS_DOC_ID = 'systemLeadCodeCounters'
 const VN_TZ = 'Asia/Ho_Chi_Minh'
 
+/** Rate limit đơn giản theo IP (memory instance) — chống spam form public. */
+const publicSubmitBuckets = new Map<string, { count: number; resetAt: number }>()
+const PUBLIC_RATE_LIMIT = 8
+const PUBLIC_RATE_WINDOW_MS = 10 * 60 * 1000
+
+function assertPublicRateLimit(ip: string): void {
+  const key = ip || 'unknown'
+  const now = Date.now()
+  const cur = publicSubmitBuckets.get(key)
+  if (!cur || now > cur.resetAt) {
+    publicSubmitBuckets.set(key, { count: 1, resetAt: now + PUBLIC_RATE_WINDOW_MS })
+    return
+  }
+  cur.count += 1
+  if (cur.count > PUBLIC_RATE_LIMIT) {
+    throw new HttpsError('resource-exhausted', 'Gửi quá nhiều lần — thử lại sau vài phút.')
+  }
+}
+
 type PublicRegistrationConfig = {
   schemaVersion: 1
   enabled: boolean
@@ -584,6 +603,12 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
   })
 
   const submitPublicLead = onCall({ invoker: 'public' }, async (request) => {
+    const rawIp =
+      str(request.rawRequest?.headers?.['x-forwarded-for']).split(',')[0] ||
+      str(request.rawRequest?.ip) ||
+      'unknown'
+    assertPublicRateLimit(rawIp)
+
     const data = (request.data ?? {}) as PublicLeadInput & { orgSlug?: string }
     const slug = normalizeOrgSlugParam(data.orgSlug)
     const orgId = await resolveActiveOrgId(db, slug)

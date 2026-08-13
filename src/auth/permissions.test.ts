@@ -82,6 +82,18 @@ describe('defaultPermissionsForRole', () => {
     expect(hasPermission(perms, 'leads:read:global')).toBe(false)
   })
 
+  it('marketing: xem toàn trường + báo cáo, không tạo/sửa hồ sơ', () => {
+    const perms = defaultPermissionsForRole('marketing')
+    expect(hasPermission(perms, 'leads:read:global')).toBe(true)
+    expect(hasPermission(perms, 'analytics:advanced')).toBe(true)
+    expect(hasPermission(perms, 'dashboard:counselor')).toBe(true)
+    expect(hasPermission(perms, 'leads:write:self_assigned')).toBe(false)
+    expect(hasPermission(perms, 'leads:write:team_scope')).toBe(false)
+    expect(hasPermission(perms, 'leads:delete')).toBe(false)
+    expect(hasPermission(perms, 'data:intake')).toBe(false)
+    expect(hasPermission(perms, 'config:users')).toBe(false)
+  })
+
   it('legacy head_of_profession resolves to team_lead permissions', () => {
     const perms = defaultPermissionsForRole('head_of_profession')
     expect(hasPermission(perms, 'config:playbooks')).toBe(true)

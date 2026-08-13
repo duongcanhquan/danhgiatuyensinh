@@ -64,6 +64,9 @@ export function defaultPermissionsForRole(role: UserRole | string): readonly Per
       ]
     case 'team_lead':
       return TEAM_LEAD_PERMISSIONS
+    case 'marketing':
+      // Apps Script role marketing: xem all + báo cáo, ẩn tạo/sửa HS
+      return ['leads:read:global', 'analytics:advanced', 'dashboard:counselor']
     default:
       return []
   }

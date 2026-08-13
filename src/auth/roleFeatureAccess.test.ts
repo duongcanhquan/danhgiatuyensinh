@@ -21,6 +21,14 @@ const stubProfile = (role: VietMyUserProfile['role']): VietMyUserProfile =>
   }) as VietMyUserProfile
 
 describe('role feature boundaries', () => {
+  it('marketing: xem all + báo cáo, không tạo hồ sơ', () => {
+    const can = canFromRole('marketing')
+    expect(hasGlobalLeadFilters(defaultPermissionsForRole('marketing'))).toBe(true)
+    expect(can('analytics:advanced')).toBe(true)
+    expect(canCreateLead(stubProfile('marketing'), can)).toBe(false)
+    expect(canAccessSettingsPage(defaultPermissionsForRole('marketing'))).toBe(false)
+  })
+
   it('quản lý (admin): cấu hình rộng, không LLM API / kế toán', () => {
     const can = canFromRole('admin')
     expect(hasGlobalLeadFilters(defaultPermissionsForRole('admin'))).toBe(true)

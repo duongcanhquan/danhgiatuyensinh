@@ -9,6 +9,10 @@ import { triggerAccountantDecisionN8n, triggerAccountantFullNeN8n } from './n8nI
 import { resolveCounselorForLead } from './accountantN8nPayload'
 import { resolveScholarshipLabels } from './scholarshipLabelResolver'
 import { leadTouchPatch } from './leadTouch'
+import {
+  callAccountantApplyPaymentDecision,
+  callAccountantConfirmFullNe,
+} from '../services/accountantFinanceCallable'
 
 const SLOT_BY_BATCH: LeadPaymentSlotKey[] = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
@@ -42,9 +46,46 @@ export async function persistAccountantPaymentDecision(opts: {
     receiptUrl = await uploadLeadReceiptFile(lead, slotKey, newFile)
   }
 
+  const collectedAt = dateInputToStored(collectedAtIso) || collectedAtIso
+  const viaCf = await callAccountantApplyPaymentDecision({
+    leadId: lead.id,
+    batch,
+    decision,
+    amountVnd,
+    collectedAt,
+    receiptUrl: receiptUrl || undefined,
+    approvalNote,
+  })
+  if (viaCf?.finance) {
+    const finance = viaCf.finance
+    const touch = leadTouchPatch()
+    const [scholarshipLabels, counselor] = await Promise.all([
+      resolveScholarshipLabels(db, lead),
+      resolveCounselorForLead(db, lead),
+    ])
+    try {
+      await triggerAccountantDecisionN8n({
+        lead: { ...lead, finance },
+        finance,
+        decision,
+        batch,
+        slotKey,
+        amountVnd,
+        approvalNote: finance.payments?.[slotKey]?.approvalNote,
+        counselor,
+        scholarship1Label: scholarshipLabels.scholarship1Label,
+        scholarship2Label: scholarshipLabels.scholarship2Label,
+        accountantName,
+      })
+    } catch (e) {
+      console.warn('[persistAccountantPaymentDecision] n8n soft-fail', e)
+    }
+    return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
+  }
+
   payments[slotKey] = {
     amountVnd,
-    collectedAt: dateInputToStored(collectedAtIso) || undefined,
+    collectedAt: collectedAt || undefined,
     receiptUrl: receiptUrl || undefined,
     approvalStatus: decision,
     approvalNote:
@@ -72,19 +113,23 @@ export async function persistAccountantPaymentDecision(opts: {
     resolveCounselorForLead(db, lead),
   ])
 
-  await triggerAccountantDecisionN8n({
-    lead: { ...lead, finance },
-    finance,
-    decision,
-    batch,
-    slotKey,
-    amountVnd,
-    approvalNote: payments[slotKey]?.approvalNote,
-    counselor,
-    scholarship1Label: scholarshipLabels.scholarship1Label,
-    scholarship2Label: scholarshipLabels.scholarship2Label,
-    accountantName,
-  })
+  try {
+    await triggerAccountantDecisionN8n({
+      lead: { ...lead, finance },
+      finance,
+      decision,
+      batch,
+      slotKey,
+      amountVnd,
+      approvalNote: payments[slotKey]?.approvalNote,
+      counselor,
+      scholarship1Label: scholarshipLabels.scholarship1Label,
+      scholarship2Label: scholarshipLabels.scholarship2Label,
+      accountantName,
+    })
+  } catch (e) {
+    console.warn('[persistAccountantPaymentDecision] n8n soft-fail', e)
+  }
 
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
 }
@@ -95,14 +140,55 @@ export async function persistAccountantFullNe(opts: {
   accountantName?: string
 }): Promise<{ lead: Lead; finance: LeadFinanceRecord }> {
   const { db, lead, accountantName } = opts
+
+  const viaCf = await callAccountantConfirmFullNe(lead.id)
+  if (viaCf?.finance) {
+    const finance = viaCf.finance
+    const touch = leadTouchPatch()
+    const [scholarshipLabels, counselor] = await Promise.all([
+      resolveScholarshipLabels(db, lead),
+      resolveCounselorForLead(db, lead),
+    ])
+    try {
+      await triggerAccountantFullNeN8n({
+        lead: { ...lead, finance },
+        finance,
+        autoApprovedAmount: viaCf.autoApproved,
+        counselor,
+        scholarship1Label: scholarshipLabels.scholarship1Label,
+        scholarship2Label: scholarshipLabels.scholarship2Label,
+        accountantName,
+      })
+    } catch (e) {
+      console.warn('[persistAccountantFullNe] n8n soft-fail', e)
+    }
+    return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
+  }
+
   const prev = lead.finance ?? { payments: {} }
   const payments = { ...(prev.payments ?? {}) }
   let autoApproved = 0
 
+  const todayParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).formatToParts(new Date())
+  const dd = todayParts.find((p) => p.type === 'day')?.value ?? '01'
+  const mm = todayParts.find((p) => p.type === 'month')?.value ?? '01'
+  const yyyy = todayParts.find((p) => p.type === 'year')?.value ?? '1970'
+  const todayStr = `${dd}/${mm}/${yyyy}`
+
   for (const key of SLOT_BY_BATCH) {
     const line = payments[key]
     if (line?.amountVnd && !line.approvalStatus) {
-      payments[key] = { ...line, approvalStatus: 'ĐỒNG Ý' }
+      // Apps Script setFullNE: gắn ngày hôm nay cho khoản treo được auto duyệt
+      payments[key] = {
+        ...line,
+        approvalStatus: 'ĐỒNG Ý',
+        collectedAt: line.collectedAt?.trim() || todayStr,
+      }
       autoApproved += line.amountVnd
     }
   }
@@ -111,8 +197,9 @@ export async function persistAccountantFullNe(opts: {
     ...prev,
     payments,
     fullNeStatus: 'ĐÃ FULL NE',
+    fullNeAt: todayStr,
     reqFullNe: false,
-    enrollmentStatus: 'CỌC THÀNH CÔNG',
+    enrollmentStatus: 'ĐÃ HOÀN THIỆN',
     declaredTotalVnd: sumPayments(payments),
   }
 
@@ -126,15 +213,19 @@ export async function persistAccountantFullNe(opts: {
     resolveScholarshipLabels(db, lead),
     resolveCounselorForLead(db, lead),
   ])
-  await triggerAccountantFullNeN8n({
-    lead: { ...lead, finance },
-    finance,
-    autoApprovedAmount: autoApproved,
-    counselor,
-    scholarship1Label: scholarshipLabels.scholarship1Label,
-    scholarship2Label: scholarshipLabels.scholarship2Label,
-    accountantName,
-  })
+  try {
+    await triggerAccountantFullNeN8n({
+      lead: { ...lead, finance },
+      finance,
+      autoApprovedAmount: autoApproved,
+      counselor,
+      scholarship1Label: scholarshipLabels.scholarship1Label,
+      scholarship2Label: scholarshipLabels.scholarship2Label,
+      accountantName,
+    })
+  } catch (e) {
+    console.warn('[persistAccountantFullNe] n8n soft-fail', e)
+  }
 
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
 }

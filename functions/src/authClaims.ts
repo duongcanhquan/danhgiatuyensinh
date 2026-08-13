@@ -1,7 +1,7 @@
 /** Mirrored from src/tenancy/authClaims.ts — keep in sync when changing claim shape. */
 
 const DEFAULT_ORG_ID = 'vietmy'
-const USER_ROLES = ['super_admin', 'admin', 'team_lead', 'counselor', 'ctv', 'accountant'] as const
+const USER_ROLES = ['super_admin', 'admin', 'team_lead', 'counselor', 'ctv', 'accountant', 'marketing'] as const
 
 export type AuthCustomClaims = {
   role: string

@@ -6,6 +6,7 @@ import { resolveStudentDisplayCode } from './studentDisplayCode'
 
 export type AccountantStatusTag =
   | 'Mới'
+  | 'Đang hoàn thiện'
   | 'Cọc'
   | 'Ghi danh'
   | 'Hoàn thiện phí'
@@ -14,6 +15,7 @@ export type AccountantStatusTag =
 
 const STATUS_STYLES: Record<AccountantStatusTag, string> = {
   Mới: 'bg-slate-100 text-slate-800',
+  'Đang hoàn thiện': 'bg-sky-100 text-sky-900',
   Cọc: 'bg-emerald-100 text-emerald-900',
   'Ghi danh': 'bg-blue-100 text-blue-900',
   'Hoàn thiện phí': 'bg-violet-100 text-violet-900',
@@ -29,7 +31,7 @@ export function accountantFinanceStatusTag(lead: Lead): AccountantStatusTag {
   if (es.includes('CỌC THÀNH CÔNG')) return 'Cọc'
   if (es.includes('ĐÃ HOÀN THIỆN')) return 'Hoàn thiện phí'
   if (es.includes('KIỂM TRA')) return 'Kiểm tra lại'
-  if (es.includes('ĐANG HOÀN THIỆN')) return 'Hoàn thiện phí'
+  if (es.includes('ĐANG HOÀN THIỆN')) return 'Đang hoàn thiện'
   return 'Mới'
 }
 

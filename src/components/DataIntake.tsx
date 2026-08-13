@@ -35,6 +35,7 @@ import { pickPrimaryAdminUid } from '../utils/routing'
 import {
   computeLeadUniqueHash,
   leadDedupeStrength,
+  nationalIdHashFromInput,
   normalizePhoneKey,
   shouldQueryExistingByUniqueHash,
 } from '../utils/leadIdentity'
@@ -71,6 +72,8 @@ type PreparedRow = {
   index: number
   row: Partial<ExcelLeadRow>
   hash: string
+  /** Hash CCCD — trống nếu không có / CHƯA CÓ */
+  nationalIdHash: string
   existingId?: string
   inFileDuplicate: boolean
   /** phone | identity | weak — weak không so trùng DB / không gom trùng file theo mã trống */
@@ -153,6 +156,31 @@ async function fetchExistingIdsByHash(
     waveIndex += 1
     onWaveDone?.(waveIndex, waveCount)
     if (waveIndex % 4 === 0) await yieldToMain()
+  }
+  return map
+}
+
+/** Chống trùng CCCD khi nhập Excel — parity Apps Script. */
+async function fetchExistingIdsByNationalIdHash(
+  db: NonNullable<ReturnType<typeof getFirestoreDb>>,
+  hashes: string[],
+  orgId: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  const uniq = [...new Set(hashes)].filter(Boolean)
+  const parts = chunkArray(uniq, IN_QUERY_CHUNK)
+  for (const part of parts) {
+    const snap = await getDocs(
+      query(
+        collection(db, FS_COLLECTIONS.leads),
+        where('orgId', '==', orgId),
+        where('nationalIdHash', 'in', part),
+      ),
+    )
+    snap.forEach((d) => {
+      const h = d.data().nationalIdHash
+      if (h && !map.has(String(h))) map.set(String(h), d.id)
+    })
   }
   return map
 }
@@ -333,6 +361,7 @@ export function DataIntake() {
           index: number
           row: Partial<ExcelLeadRow>
           hash: string
+          nationalIdHash: string
           strength: PreparedRow['strength']
         }[] = []
         for (let i = 0; i < rows.length; i += HASH_COMPUTE_CHUNK) {
@@ -346,6 +375,7 @@ export function DataIntake() {
               row,
               strength,
               hash: computeLeadUniqueHash(row, `${uploadBatchId}:${j}`),
+              nationalIdHash: nationalIdHashFromInput(row.nationalId) ?? '',
             })
           }
           if (end < rows.length) {
@@ -357,7 +387,8 @@ export function DataIntake() {
         }
 
         const firstIndexByHash = new Map<string, number>()
-        const prepared: PreparedRow[] = hashRows.map(({ index, row, hash, strength }) => {
+        const firstIndexByNationalId = new Map<string, number>()
+        const prepared: PreparedRow[] = hashRows.map(({ index, row, hash, strength, nationalIdHash }) => {
           // Chỉ gom trùng trong file khi có SĐT hoặc họ tên đủ rõ — tránh «trùng toàn bộ» vì cột không đọc được.
           let inFileDuplicate = false
           if (strength !== 'weak') {
@@ -365,18 +396,27 @@ export function DataIntake() {
             inFileDuplicate = first !== undefined && first !== index
             if (first === undefined) firstIndexByHash.set(hash, index)
           }
-          return { index, row, hash, strength, inFileDuplicate }
+          if (!inFileDuplicate && nationalIdHash) {
+            const firstN = firstIndexByNationalId.get(nationalIdHash)
+            inFileDuplicate = firstN !== undefined && firstN !== index
+            if (firstN === undefined) firstIndexByNationalId.set(nationalIdHash, index)
+          }
+          return { index, row, hash, nationalIdHash, strength, inFileDuplicate }
         })
 
         const hashesForQuery = prepared
           .filter((p) => !p.inFileDuplicate && shouldQueryExistingByUniqueHash(p.row))
           .map((p) => p.hash)
+        const nationalHashesForQuery = prepared
+          .filter((p) => !p.inFileDuplicate && p.nationalIdHash)
+          .map((p) => p.nationalIdHash)
         const uniqQueryCount = new Set(hashesForQuery).size
-        const queryParts = Math.max(1, Math.ceil(uniqQueryCount / IN_QUERY_CHUNK))
-        const waveTotal = Math.max(1, Math.ceil(queryParts / EXISTING_HASH_QUERY_CONCURRENCY))
-        if (uniqQueryCount > 0) {
+        const uniqNationalCount = new Set(nationalHashesForQuery).size
+        if (uniqQueryCount > 0 || uniqNationalCount > 0) {
           setBanner(
-            `Đang kiểm tra trùng trên hệ thống (${uniqQueryCount.toLocaleString('vi-VN')} mã, ~${waveTotal} nhóm truy vấn)…`,
+            `Đang kiểm tra trùng trên hệ thống (${uniqQueryCount.toLocaleString('vi-VN')} SĐT` +
+              (uniqNationalCount ? `, ${uniqNationalCount.toLocaleString('vi-VN')} CCCD` : '') +
+              `)…`,
           )
         }
 
@@ -387,16 +427,23 @@ export function DataIntake() {
                 hashesForQuery,
                 effectiveOrgId,
                 (wave, waves) => {
-                  setBanner(
-                    `Đang kiểm tra trùng: nhóm ${wave}/${waves} (${uniqQueryCount.toLocaleString('vi-VN')} mã)…`,
-                  )
+                  setBanner(`Đang kiểm tra trùng SĐT: nhóm ${wave}/${waves}…`)
                 },
                 isPlatformSuperAdmin,
               )
             : new Map<string, string>()
+        const existingByNational =
+          uniqNationalCount > 0
+            ? await fetchExistingIdsByNationalIdHash(db, nationalHashesForQuery, effectiveOrgId)
+            : new Map<string, string>()
         for (const p of prepared) {
-          if (!p.inFileDuplicate && shouldQueryExistingByUniqueHash(p.row)) {
+          if (p.inFileDuplicate) continue
+          if (shouldQueryExistingByUniqueHash(p.row)) {
             const id = existingByHash.get(p.hash)
+            if (id) p.existingId = id
+          }
+          if (!p.existingId && p.nationalIdHash) {
+            const id = existingByNational.get(p.nationalIdHash)
             if (id) p.existingId = id
           }
         }
@@ -485,6 +532,7 @@ export function DataIntake() {
         const now = Timestamp.now()
         const base = buildLeadFirestorePayload(pr.row, 0, 'COLD', counselorId, ownership, {
           uniqueHash: pr.hash,
+          ...(pr.nationalIdHash ? { nationalIdHash: pr.nationalIdHash } : {}),
         })
 
         const cls = classificationRuntime.enabled ? classificationRuntime : null

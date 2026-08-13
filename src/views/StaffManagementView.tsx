@@ -32,7 +32,7 @@ import {
 } from '../utils/teamScope'
 
 /** Vai trò quản trị được tạo trong app; kế toán là cổng riêng, không nằm trong quyền admin. */
-const ROLES_BASE: UserRole[] = ['counselor', 'ctv', 'team_lead', 'admin', 'accountant']
+const ROLES_BASE: UserRole[] = ['counselor', 'ctv', 'team_lead', 'admin', 'accountant', 'marketing']
 
 /** Quản lý gán số nội bộ / mật khẩu SIP cho nhân viên gọi điện và Trưởng nhóm. */
 function canAssignOmicallSip(role: UserRole): boolean {

@@ -30,6 +30,7 @@ function PaymentSlotActions({
   const status = String(line?.approvalStatus ?? '').trim()
   const [amount, setAmount] = useState(amt ? String(amt) : '')
   const [dateVal, setDateVal] = useState(isoToDateInput(line?.collectedAt))
+  const [billFile, setBillFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
 
   if (amt <= 0 && !line?.receiptUrl?.trim() && !status) return null
@@ -44,6 +45,10 @@ function PaymentSlotActions({
       window.alert('Chưa có số tiền — TVV cần ghi nhận trước.')
       return
     }
+    if (!dateVal.trim()) {
+      window.alert('Chọn ngày thu trước khi duyệt.')
+      return
+    }
     let approvalNote: string | undefined
     if (decision === 'TỪ CHỐI') {
       const reason = window.prompt('Lý do từ chối (bắt buộc):', line?.approvalNote ?? '')
@@ -53,6 +58,8 @@ function PaymentSlotActions({
         return
       }
       approvalNote = reason.trim()
+    } else if (!window.confirm(`Duyệt ${slotLabel} — ${amountVnd.toLocaleString('vi-VN')}đ?`)) {
+      return
     }
     setBusy(true)
     try {
@@ -62,10 +69,12 @@ function PaymentSlotActions({
         batch,
         decision,
         amountVnd,
-        collectedAtIso: dateVal || new Date().toISOString().slice(0, 10),
+        collectedAtIso: dateVal,
+        newFile: billFile,
         approvalNote,
         accountantName,
       })
+      setBillFile(null)
       onDone(next)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Không lưu được.')
@@ -123,6 +132,16 @@ function PaymentSlotActions({
             disabled={disabled || busy}
             onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
           />
+          <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700">
+            {billFile ? billFile.name.slice(0, 18) : 'Đính bill'}
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              className="sr-only"
+              disabled={disabled || busy}
+              onChange={(e) => setBillFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
           <button
             type="button"
             disabled={disabled || busy}
@@ -160,10 +179,11 @@ function FullNeBlock({
 }) {
   const [busy, setBusy] = useState(false)
   const st = String(lead.finance?.fullNeStatus ?? '').trim()
+  const fullNeAt = String(lead.finance?.fullNeAt ?? '').trim()
   if (st === 'ĐÃ FULL NE') {
     return (
       <p className="rounded-lg bg-slate-800 px-3 py-2 text-center text-xs font-bold text-amber-200">
-        Đã xác nhận Full NE
+        Đã xác nhận Full NE{fullNeAt ? ` · ${fullNeAt}` : ''}
       </p>
     )
   }
@@ -229,7 +249,16 @@ export function AccountantLeadReviewCard({
               <span className="text-slate-500"> · {summary.educationLevel}</span>
             ) : null}
           </p>
-          {summary.phone ? <p className="text-xs text-slate-500">SĐT: {summary.phone}</p> : null}
+          <p className="mt-0.5 text-xs text-slate-500">
+            {summary.phone ? <>SĐT: {summary.phone}</> : null}
+            {summary.nationalId ? (
+              <>
+                {summary.phone ? ' · ' : null}
+                CCCD: {summary.nationalId}
+              </>
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-400">TT thu phí: {summary.statusRaw}</p>
         </div>
         <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-extrabold ${statusTagClass(summary.statusTag)}`}>
           {summary.statusTag}
@@ -247,37 +276,30 @@ export function AccountantLeadReviewCard({
         </div>
       </div>
 
-      {summary.scholarships.length > 0 ? (
-        <div className="mt-3 rounded-xl border border-violet-200/80 bg-violet-50/50 px-3 py-2">
-          <p className="text-[10px] font-bold uppercase text-violet-900">Học bổng áp dụng</p>
-          <ul className="mt-1 space-y-0.5 text-sm text-violet-950">
-            {summary.scholarships.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <p className="mt-3 text-xs text-slate-400">Chưa chọn học bổng trên hồ sơ.</p>
-      )}
+      {summary.scholarships.length ? (
+        <ul className="mt-2 space-y-0.5 text-xs text-violet-900">
+          {summary.scholarships.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      ) : null}
 
-      <div className="mt-4 space-y-2">
-        <p className="text-xs font-bold uppercase text-slate-600">Từng đợt thu + minh chứng</p>
-        {activePayments.length === 0 ? (
-          <p className="text-sm text-slate-500">Chưa có khoản thu chi tiết.</p>
-        ) : (
-          activePayments.map((p) => (
+      <div className="mt-3 space-y-2">
+        {activePayments.map((p) => {
+          const batch = PAYMENT_SLOT_DEFS.findIndex((d) => d.key === p.key) + 1
+          return (
             <PaymentSlotActions
               key={p.key}
               lead={lead}
-              batch={PAYMENT_SLOT_DEFS.findIndex((s) => s.key === p.key) + 1}
+              batch={batch}
               slotKey={p.key as LeadPaymentSlotKey}
               slotLabel={p.label}
               disabled={disabled}
               accountantName={accountantName}
               onDone={onDone}
             />
-          ))
-        )}
+          )
+        })}
       </div>
 
       <div className="mt-3">

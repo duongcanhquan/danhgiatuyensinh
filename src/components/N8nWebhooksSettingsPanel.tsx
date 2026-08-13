@@ -24,7 +24,7 @@ const FIELDS: Array<{
   { key: 'monthly', label: 'Báo cáo tháng', icon: CalendarRange },
 ]
 
-/** Webhook n8n — form gọn icon + URL. */
+/** Webhook n8n — form gọn icon + URL. Đổi URL và Lưu là các luồng TVV/KT/báo cáo dùng ngay. */
 export function N8nWebhooksSettingsPanel() {
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
@@ -83,6 +83,9 @@ export function N8nWebhooksSettingsPanel() {
         <h2 className="text-base font-semibold text-slate-900">Webhook n8n</h2>
         <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
       </div>
+      <p className="text-xs text-slate-600">
+        Dán URL rồi Lưu — giấy mời, CTSV/kế toán, báo cáo ngày/tháng dùng ngay (không cần deploy lại).
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {FIELDS.map((f) => {
