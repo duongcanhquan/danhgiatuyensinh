@@ -19,6 +19,7 @@ import type {
   Lead,
   LeadCounselorStatus,
   LeadPipelineStatus,
+  LeadWorkMode,
   PriorityTag,
   ProfileCustomScoringSignal,
   ScoringProfile,
@@ -116,7 +117,18 @@ import {
   type CallWorkBucketFilter,
 } from '../utils/callWorkQueue'
 import { BulkPriorityPartialError, bulkSetLeadPriorityTags } from '../utils/bulkLeadPriorityTag'
+import {
+  BULK_WORK_MODE_OPTIONS,
+  BulkWorkModePartialError,
+  bulkSetLeadWorkModes,
+} from '../utils/bulkLeadWorkMode'
 import { BulkReassignPartialError, bulkReassignLeads } from '../utils/bulkLeadReassign'
+import {
+  LEAD_WORK_MODES,
+  leadMatchesWorkModeFilter,
+  leadWorkModeLabel,
+  parseLeadWorkMode,
+} from '../utils/leadWorkMode'
 import {
   pickLeadIdsForAssign,
   planLeadAssignments,
@@ -195,6 +207,7 @@ import {
   parseDispositionFromUrl,
   parsePipelineFromUrl,
   parseTagFromUrl,
+  parseWorkModeFromUrl,
   stripListFiltersKeepOpenView,
   urlHasLeadListFilters,
 } from '../utils/leadWorkspaceUrlFilters'
@@ -250,6 +263,8 @@ type LeadUiFilters = {
   tag: string
   callQueue: CallWorkBucketFilter
   disposition: CallDispositionFilter
+  /** Chế độ xử lý hồ sơ (`wm`) */
+  workMode: 'all' | LeadWorkMode
   region: string
   major: string
   status: string
@@ -271,6 +286,7 @@ function emptyLeadUiFilters(): LeadUiFilters {
     tag: 'ALL',
     callQueue: 'all',
     disposition: 'all',
+    workMode: 'all',
     region: 'ALL',
     major: 'ALL',
     status: 'ALL',
@@ -292,6 +308,7 @@ function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
     a.tag === b.tag &&
     a.callQueue === b.callQueue &&
     a.disposition === b.disposition &&
+    a.workMode === b.workMode &&
     a.region === b.region &&
     a.major === b.major &&
     a.status === b.status &&
@@ -394,6 +411,7 @@ export function LeadManagement() {
   const [tagFilter, setTagFilter] = useState<string>('ALL')
   const [callWorkBucketFilter, setCallWorkBucketFilter] = useState<CallWorkBucketFilter>('all')
   const [dispositionFilter, setDispositionFilter] = useState<CallDispositionFilter>('all')
+  const [workModeFilter, setWorkModeFilter] = useState<'all' | LeadWorkMode>('all')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -421,6 +439,7 @@ export function LeadManagement() {
       tag: tagFilter,
       callQueue: callWorkBucketFilter,
       disposition: dispositionFilter,
+      workMode: workModeFilter,
       region: regionFilter,
       major: majorFilter,
       status: statusFilter,
@@ -439,6 +458,7 @@ export function LeadManagement() {
       tagFilter,
       callWorkBucketFilter,
       dispositionFilter,
+      workModeFilter,
       regionFilter,
       majorFilter,
       statusFilter,
@@ -469,6 +489,8 @@ export function LeadManagement() {
   const tagClientEval = !urlQuery.trim() && tagFilter !== 'ALL' && profileScoringLive
   /** Lọc hàng chờ / note sau gọi — thiếu field trên hồ sơ cũ → quét phạm vi rộng. */
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
+  /** Lọc chế độ xử lý — field tùy chọn trên hồ sơ → fullScope + lọc client. */
+  const workModeNeedsScope = workModeFilter !== 'all'
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
   /** Có chọn chương trình (kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
@@ -547,7 +569,12 @@ export function LeadManagement() {
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
 
   const listNeedsFullScope =
-    tagClientEval || callQueueNeedsScope || assigneeUnsetNeedsScope || programNeedsScope || uploadedDateNeedsScope
+    tagClientEval ||
+    callQueueNeedsScope ||
+    workModeNeedsScope ||
+    assigneeUnsetNeedsScope ||
+    programNeedsScope ||
+    uploadedDateNeedsScope
 
   /** «Chưa gắn» / lọc ngày tải: quét theo id + chỉ giữ hồ sơ khớp predicate. */
   const unsetProgramKeepMatch = useMemo(() => {
@@ -564,6 +591,7 @@ export function LeadManagement() {
         return false
       }
       if (dispositionFilter !== 'all' && !leadMatchesDisposition(l, dispositionFilter)) return false
+      if (!leadMatchesWorkModeFilter(l, workModeFilter)) return false
       if (assigneeFilter === '__UNASSIGNED__') {
         if (effectiveLeadAssigneeUid(l)) return false
       } else if (assigneeFilter && effectiveLeadAssigneeUid(l) !== assigneeFilter) {
@@ -578,6 +606,7 @@ export function LeadManagement() {
     uploadedToFilter,
     callWorkBucketFilter,
     dispositionFilter,
+    workModeFilter,
     assigneeFilter,
   ])
 
@@ -612,7 +641,7 @@ export function LeadManagement() {
     fullScopeKeepMatch: unsetProgramKeepMatch,
     fullScopeMatchKey:
       programNeedsScope || uploadedDateNeedsScope
-        ? `keep|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|as:${assigneeFilter}`
+        ? `keep|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
         : undefined,
     // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
     includeScopeTagCounts: false,
@@ -760,9 +789,9 @@ export function LeadManagement() {
   /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
   const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [bulkModal, setBulkModal] = useState<null | 'reassign' | 'crm' | 'priorityTag' | 'intakeProgram'>(
-    null,
-  )
+  const [bulkModal, setBulkModal] = useState<
+    null | 'reassign' | 'crm' | 'priorityTag' | 'workMode' | 'intakeProgram'
+  >(null)
   const [bulkReassignUid, setBulkReassignUid] = useState<string>('')
   const [bulkAssignMode, setBulkAssignMode] = useState<SmartAssignMode>('single')
   const [bulkAssignPoolIds, setBulkAssignPoolIds] = useState<string[]>([])
@@ -801,6 +830,7 @@ export function LeadManagement() {
   const selectScopeLeadsRef = useRef<Map<string, Lead>>(new Map())
   const [bulkCrmStatus, setBulkCrmStatus] = useState<LeadCounselorStatus>('NEW')
   const [bulkPriorityTag, setBulkPriorityTag] = useState<PriorityTag>('WARM')
+  const [bulkWorkMode, setBulkWorkMode] = useState<LeadWorkMode>('score_queue')
   const [bulkIntakeProgram, setBulkIntakeProgram] = useState('')
   const [bulkIntakeProgramRecent, setBulkIntakeProgramRecent] = useState<string[]>(() =>
     loadRecentIntakePrograms(),
@@ -1055,6 +1085,9 @@ export function LeadManagement() {
     if (dispositionFilter !== 'all') {
       rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
     }
+    if (workModeFilter !== 'all') {
+      rows = rows.filter((l) => leadMatchesWorkModeFilter(l, workModeFilter))
+    }
     if (programFilter === '__UNSET__') {
       rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
     } else if (programFilter !== 'ALL') {
@@ -1083,6 +1116,7 @@ export function LeadManagement() {
     effectiveLeadTag,
     callWorkBucketFilter,
     dispositionFilter,
+    workModeFilter,
     programFilter,
     assigneeFilter,
     uploadedFromFilter,
@@ -1112,6 +1146,9 @@ export function LeadManagement() {
         return false
       }
       if (dispositionFilter !== 'all' && !leadMatchesDisposition(l, dispositionFilter)) {
+        return false
+      }
+      if (!leadMatchesWorkModeFilter(l, workModeFilter)) {
         return false
       }
       if (tagClientEval && tagFilter !== 'ALL' && effectiveLeadTag(l) !== tagFilter) {
@@ -1147,6 +1184,7 @@ export function LeadManagement() {
       assigneeFilter,
       callWorkBucketFilter,
       dispositionFilter,
+      workModeFilter,
       tagClientEval,
       tagFilter,
       effectiveLeadTag,
@@ -1251,6 +1289,7 @@ export function LeadManagement() {
       scoreMaxInput.trim() !== '' ||
       dispositionFilter !== 'all' ||
       callWorkBucketFilter !== 'all' ||
+      workModeFilter !== 'all' ||
       aiShortlistOnly
     ) {
       return sortedFiltered.length
@@ -1266,6 +1305,7 @@ export function LeadManagement() {
     scoreMaxInput,
     dispositionFilter,
     callWorkBucketFilter,
+    workModeFilter,
     aiShortlistOnly,
     totalLeadCount,
   ])
@@ -1343,6 +1383,7 @@ export function LeadManagement() {
         const d = parseDispositionFromUrl(sp.get(LWF.DISP))
         return d && isCallDispositionId(d) ? d : 'all'
       })(),
+      workMode: parseWorkModeFromUrl(sp.get(LWF.WM)),
       // Điểm / AI shortlist không nằm trên URL — giữ giá trị đang áp dụng.
       scoreMin: scoreMinInput,
       scoreMax: scoreMaxInput,
@@ -1361,6 +1402,7 @@ export function LeadManagement() {
     setAssigneeFilter(next.assignee)
     setCallWorkBucketFilter(next.callQueue)
     setDispositionFilter(next.disposition)
+    setWorkModeFilter(next.workMode)
     setUploadedFromFilter(next.uploadedFrom)
     setUploadedToFilter(next.uploadedTo)
     setDraftFilters((prev) => ({
@@ -1378,6 +1420,7 @@ export function LeadManagement() {
     setTagFilter(d.tag)
     setCallWorkBucketFilter(d.callQueue)
     setDispositionFilter(d.disposition)
+    setWorkModeFilter(d.workMode)
     setRegionFilter(d.region)
     setMajorFilter(d.major)
     setStatusFilter(d.status)
@@ -1398,6 +1441,7 @@ export function LeadManagement() {
       [LWF.TAG]: d.tag === 'ALL' ? null : d.tag,
       [LWF.CQ]: d.callQueue === 'all' ? null : d.callQueue,
       [LWF.DISP]: d.disposition === 'all' ? null : d.disposition,
+      [LWF.WM]: d.workMode === 'all' ? null : d.workMode,
       [LWF.REGION]: d.region === 'ALL' ? null : d.region,
       [LWF.MAJOR]: d.major === 'ALL' ? null : d.major,
       [LWF.PIPE]: d.status === 'ALL' ? null : d.status,
@@ -1457,6 +1501,17 @@ export function LeadManagement() {
     [mergeListFilterUrl, setPage],
   )
 
+  /** Chế độ xử lý hồ sơ: áp dụng ngay. */
+  const applyWorkModeQuick = useCallback(
+    (workMode: 'all' | LeadWorkMode) => {
+      setDraftFilters((prev) => ({ ...prev, workMode }))
+      setWorkModeFilter(workMode)
+      mergeListFilterUrl({ [LWF.WM]: workMode === 'all' ? null : workMode })
+      setPage(1)
+    },
+    [mergeListFilterUrl, setPage],
+  )
+
   /** Nhãn HOT/WARM/…: áp dụng ngay. */
   const applyTagQuick = useCallback(
     (tag: string) => {
@@ -1477,6 +1532,7 @@ export function LeadManagement() {
     setTagFilter(empty.tag)
     setCallWorkBucketFilter(empty.callQueue)
     setDispositionFilter(empty.disposition)
+    setWorkModeFilter(empty.workMode)
     setRegionFilter(empty.region)
     setMajorFilter(empty.major)
     setStatusFilter(empty.status)
@@ -1556,6 +1612,18 @@ export function LeadManagement() {
           setDraftFilters((prev) => ({ ...prev, disposition: 'all' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.DISP]: null })
+        },
+      })
+    }
+    if (workModeFilter !== 'all') {
+      out.push({
+        id: 'workMode',
+        label: `Chế độ: ${leadWorkModeLabel(workModeFilter)}`,
+        onClear: () => {
+          setWorkModeFilter('all')
+          setDraftFilters((prev) => ({ ...prev, workMode: 'all' }))
+          setPage(1)
+          mergeListFilterUrl({ [LWF.WM]: null })
         },
       })
     }
@@ -1708,6 +1776,7 @@ export function LeadManagement() {
     tagFilter,
     callWorkBucketFilter,
     dispositionFilter,
+    workModeFilter,
     regionFilter,
     majorFilter,
     statusFilter,
@@ -2413,6 +2482,57 @@ export function LeadManagement() {
       setBulkBusy(false)
     }
   }, [db, profile, selectedIds, bulkPriorityTag, applyLocalLeadPatch, refetchLeads])
+
+  const applyBulkWorkMode = useCallback(async () => {
+    if (!db || !profile || !selectedIds.size) return
+    setBulkBusy(true)
+    setRescoreMsg(null)
+    const ids = [...selectedIds]
+    const touch = leadTouchPatch()
+    const applyCommitted = (committedIds: string[]) => {
+      for (const id of committedIds) {
+        const localPatch = { workMode: bulkWorkMode, ...touch } as Partial<Lead>
+        applyLocalLeadPatch(id, localPatch)
+        setSelected((p) => (p?.id === id ? { ...p, ...localPatch } : p))
+      }
+    }
+    try {
+      const { committedIds } = await bulkSetLeadWorkModes(db, ids, bulkWorkMode)
+      applyCommitted(committedIds)
+      const performer = profile.displayName || profile.email || profile.id
+      const modeLabel = leadWorkModeLabel(bulkWorkMode)
+      for (const id of committedIds.slice(0, 40)) {
+        await commitAuditLog(db, {
+          leadId: id,
+          actionType: 'SYSTEM_UPDATE',
+          description: `Gán chế độ xử lý hàng loạt → ${modeLabel}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+      setBulkModal(null)
+      setSelectedIds(new Set())
+      const auditNote =
+        committedIds.length > 40
+          ? ` (đã ghi nhật ký mẫu ${Math.min(40, committedIds.length)} hồ sơ)`
+          : ''
+      setRescoreMsg(`Đã gán chế độ «${modeLabel}» cho ${committedIds.length} hồ sơ.${auditNote}`)
+      refetchLeads()
+    } catch (e) {
+      console.error(e)
+      if (e instanceof BulkWorkModePartialError) {
+        applyCommitted(e.committedIds)
+        setBulkModal(null)
+        setSelectedIds(new Set(e.remainingIds))
+        setRescoreMsg(e.message)
+        refetchLeads()
+      } else {
+        setRescoreMsg(e instanceof Error ? e.message : 'Không gán được chế độ xử lý hàng loạt.')
+      }
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [db, profile, selectedIds, bulkWorkMode, applyLocalLeadPatch, refetchLeads])
 
   const applyBulkDelete = useCallback(async () => {
     if (!db || !profile || !canDeleteLeads || !selectedIds.size || bulkBusy) return
@@ -3446,6 +3566,27 @@ export function LeadManagement() {
               ))}
             </select>
           </label>
+          <label
+            className={`${LEAD_FILTER_LABEL} w-[11rem] shrink-0`}
+            title="Lọc theo cách đang xử lý hồ sơ"
+          >
+            <span>Chế độ xử lý</span>
+            <select
+              value={draftFilters.workMode === 'all' ? 'all' : draftFilters.workMode}
+              onChange={(e) => {
+                const next = parseLeadWorkMode(e.target.value) ?? 'all'
+                applyWorkModeQuick(next)
+              }}
+              className={`${LEAD_FILTER_CONTROL} cursor-pointer normal-case tracking-normal`}
+            >
+              <option value="all">Tất cả</option>
+              {LEAD_WORK_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {leadWorkModeLabel(m)}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="min-w-0 flex-1">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Nhãn</p>
             <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc nhanh nhãn">
@@ -3819,7 +3960,8 @@ export function LeadManagement() {
                 {rescoreMsg}
               </p>
             ) : null}
-            {(tagClientEval || callQueueNeedsScope || programNeedsScope) && scopeFetchTruncated ? (
+            {(tagClientEval || callQueueNeedsScope || workModeNeedsScope || programNeedsScope) &&
+            scopeFetchTruncated ? (
               <p className="text-xs font-medium text-amber-900">
                 {programNeedsScope
                   ? `Đã quét tối đa ${LEADS_UI_PROGRAM_SCAN_MAX.toLocaleString('vi-VN')} hồ sơ hoặc đủ ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} kết quả — có thể còn hồ sơ khớp phía sau.`
@@ -4215,6 +4357,10 @@ export function LeadManagement() {
             setBulkPriorityTag('WARM')
             setBulkModal('priorityTag')
           }}
+          onBulkWorkMode={() => {
+            setBulkWorkMode('score_queue')
+            setBulkModal('workMode')
+          }}
           onBulkIntakeProgram={() => {
             setBulkIntakeProgramRecent(loadRecentIntakePrograms())
             setBulkIntakeProgram(
@@ -4527,6 +4673,58 @@ export function LeadManagement() {
                 className="rounded-xl border border-sky-600 bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
               >
                 {bulkBusy ? 'Đang xử lý…' : 'Gán nhãn'}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {bulkModal === 'workMode' && db ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[55] bg-slate-900/25 backdrop-blur-md"
+            aria-label="Đóng"
+            onClick={() => !bulkBusy && setBulkModal(null)}
+          />
+          <div className="app-modal app-modal-sheet shadow-xl">
+            <h3 className="app-section-heading">Gán chế độ xử lý</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Gán cùng một cách xử lý cho {selectedIds.size} hồ sơ đã chọn — dùng khi lọc danh sách theo chế độ.
+            </p>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Chế độ xử lý
+              <select
+                value={bulkWorkMode}
+                onChange={(e) => {
+                  const next = parseLeadWorkMode(e.target.value)
+                  if (next) setBulkWorkMode(next)
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-teal-200"
+              >
+                {BULK_WORK_MODE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} className="bg-white">
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => setBulkModal(null)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => void applyBulkWorkMode()}
+                className="rounded-xl border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-40"
+              >
+                {bulkBusy ? 'Đang xử lý…' : 'Gán chế độ'}
               </button>
             </div>
           </div>
@@ -5818,6 +6016,49 @@ function LeadDetailPanel({
     [pickListUsers, counselorUsers],
   )
 
+  const saveWorkMode = async (next: LeadWorkMode | undefined) => {
+    if (!db || !profile) {
+      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      return
+    }
+    if (!showCounselorProgressForm) {
+      setMsg('Bạn không có quyền đổi chế độ xử lý trên hồ sơ này.')
+      return
+    }
+    if ((next ?? undefined) === (lead.workMode ?? undefined)) return
+    setSaving(true)
+    setMsg(null)
+    try {
+      const touch = leadTouchPatch()
+      const patch: Partial<Lead> = { ...touch }
+      const firestorePatch: Record<string, unknown> = { ...touch }
+      if (next) {
+        patch.workMode = next
+        firestorePatch.workMode = next
+      } else {
+        firestorePatch.workMode = deleteField()
+      }
+      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), firestorePatch)
+      onUpdated(next ? patch : { ...touch, workMode: undefined })
+      const performer = profile.displayName?.trim() || profile.email || profile.id
+      await commitAuditLog(db, {
+        leadId: lead.id,
+        actionType: 'SYSTEM_UPDATE',
+        description: next
+          ? `Đổi chế độ xử lý → ${leadWorkModeLabel(next)}`
+          : 'Gỡ chế độ xử lý hồ sơ',
+        performedBy: profile.id,
+        performedByName: performer,
+      })
+      setMsg(next ? `Đã đổi chế độ → ${leadWorkModeLabel(next)}.` : 'Đã gỡ chế độ xử lý.')
+    } catch (e) {
+      console.error(e)
+      setMsg('Không lưu được chế độ xử lý. Kiểm tra Firestore Rules.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const saveFinanceProfile = async () => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
@@ -6829,6 +7070,29 @@ function LeadDetailPanel({
                                     </>
                                   ) : null}
                                 </p>
+                                <label className="mt-2 block text-xs font-medium text-slate-800">
+                                  Chế độ xử lý
+                                  <select
+                                    value={lead.workMode ?? ''}
+                                    disabled={!showCounselorProgressForm || saving || financeSaving}
+                                    onChange={(e) => {
+                                      const next = parseLeadWorkMode(e.target.value)
+                                      void saveWorkMode(next)
+                                    }}
+                                    className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <option value="">Chưa chọn</option>
+                                    {LEAD_WORK_MODES.map((m) => (
+                                      <option key={m} value={m}>
+                                        {leadWorkModeLabel(m)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="mt-0.5 block text-[10px] font-normal text-slate-500">
+                                    Hiện tại:{' '}
+                                    {lead.workMode ? leadWorkModeLabel(lead.workMode) : 'Chưa chọn'}
+                                  </span>
+                                </label>
                                 <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                                   {showCounselorProgressForm ? (
                                     <label className="block text-xs font-medium text-slate-800">
