@@ -3,10 +3,11 @@
 | Thuộc tính | Giá trị |
 |------------|---------|
 | **Mã** | `DES-WORKMODE-2026-08` |
-| **Ngày** | 2026-08-13 |
+| **Ngày** | 2026-08-13 (rà soát code: 2026-08-14) |
 | **Trạng thái** | Chờ duyệt triển khai — **không sửa code cho đến khi người dùng OK** |
 | **Phụ thuộc** | Kim chỉ nam CRM (`2026-07-29-crm-platform-north-star.md`); hàng chờ gọi (`2026-08-06-call-work-queue-design.md`); bộ chấm / InfoScore hiện có |
 | **Nguyên tắc an toàn** | Triển khai theo pha; không phá lọc list, bộ chấm, OMICall, disposition, KPI; mọi thay đổi UI mặc định tương thích ngược |
+| **Rà soát** | §14 — đối chiếu cấu trúc hiện có (Lead, `useLeads`, `CALL_DISPOSITIONS`, intake, URL filters) |
 
 ---
 
@@ -113,12 +114,12 @@ Cấu hình theo **nguồn** hoặc **nhóm nguồn** (và có thể ghi đè l�
 Bộ lọc trên Hồ sơ vẫn **AND** được (giữ hành vi hiện có + thêm mode):
 
 - Nguồn 1/2, kênh vào (Excel / tay / cổng ĐK…)  
-- Ngày vào / khoảng ngày  
-- Người nhập, TVV phụ trách  
+- Ngày vào / khoảng ngày (`uploadedAt` / trục ngày hiện có)  
+- Người nhập (`uploadedBy`), TVV phụ trách (`assignedTo`)  
 - Pipeline / CRM status  
-- `workMode`  
+- `workMode` (URL `wm` — client filter P1)  
 - Bộ chấm đang xem + nhãn HOT/WARM/COLD (live hoặc đã lưu — giữ semantics hiện tại + hint)  
-- Hàng chờ gọi / disposition (theo `DES-CALL-Q-2026-08`)  
+- Hàng chờ gọi / disposition (theo `DES-CALL-Q-2026-08`, `cq` / `disp`)  
 - Tìm mã / tên / SĐT  
 
 **Bulk** trên tập đã lọc: phân công, đổi trạng thái, đổi nhãn (quyền), chuyển `workMode`, tính lại theo bộ chấm, export…  
@@ -149,9 +150,9 @@ Chọn bộ chấm trên list = **cách xem / tính** trên tập đang mở —
 ### 6.3. Theo chế độ
 
 **`volume_filter` (short)**  
-1. Kết quả bắt buộc (disposition / Quan tâm–Không–Không nghe–Hẹn — **tái sử dụng catalog `DES-CALL-Q`**, không tạo song song).  
+1. Kết quả bắt buộc = **`CALL_DISPOSITIONS`** trong `src/utils/callWorkQueue.ts` (DES-CALL-Q) — **không** tạo catalog “Quan tâm” song song. Nhãn gần nhất đã có: `high_interest` («Quan tâm cao»), `not_interested`, `knm`, `callback_later`, …  
 2. Tuỳ chọn 1 dòng lý do / rào cản chính.  
-3. Lưu → cập nhật bucket gọi + pipeline; nếu Quan tâm → gợi ý / chuyển `care_close`.
+3. Lưu qua đường hiện có (`buildCallWorkLeadPatch` / `saveCallSessionInteraction`); nếu disposition thuộc nhóm INTERESTED (xem §7 + §14.4) → gợi ý / chuyển `care_close`.
 
 **`care_close` (full)**  
 Giữ chiều hữu ích: ai quyết định, rào cản, việc đã hẹn (gửi tài liệu, tham quan…).  
@@ -178,13 +179,17 @@ Giữ khả năng kỹ thuật `mergeCallEvalPriorityBoost` / disposition `colle
 
 ## 7. Chuyển `workMode`
 
-| Sự kiện | Hành vi |
-|---------|---------|
-| Disposition = quan tâm / tương đương “nuôi–chốt” | Gợi ý hoặc auto → `care_close` (cấu hình được) |
-| Không quan tâm / từ chối / enrolled elsewhere | Không đẩy chăm; giữ hoặc đánh dấu loại theo pipeline hiện có |
-| Hẹn gọi lại / KNM | Giữ mode + follow-up / bucket callback |
-| Cổng ĐK / nộp form | Theo kịch bản (mặc định khuyến nghị `care_close`) |
+Dựa trên **disposition id hiện có** (`getDispositionLeadEffects`), không invent id mới:
+
+| Sự kiện (disposition / intake) | Hành vi |
+|--------------------------------|---------|
+| `high_interest`, `college_hot`, `positive`, `uni_top_high`, `uni_top_mid` | Gợi ý hoặc auto → `care_close` (cờ cấu hình) |
+| `not_interested`, `negative`, `enrolled_elsewhere`, `wrong_number` | Không đẩy chăm |
+| `knm`, `callback_later` (+ các bucket `callback`) | Giữ mode + follow-up / hàng chờ gọi lại |
+| Cổng ĐK / nộp form | Theo kịch bản nguồn / `PublicRegistrationConfig` (khuyến nghị mặc định `care_close`) |
 | QL/TVV đổi tay | Theo quyền |
+
+Tuỳ chọn mở rộng (cấu hình): các disposition “nuôi” (`undecided_*`, `financial_issue`, …) có thể cũng gợi ý `care_close` — **tắt mặc định** để không đẩy sớm.
 
 ---
 
@@ -205,19 +210,22 @@ Khớp north-star: đa thao tác trong Hồ sơ, không nhân route.
 
 ### 9.1. Lead (đề xuất)
 
-- `workMode?: 'score_queue' | 'volume_filter' | 'care_close'`  
-- Giữ nguyên: `calculatedScore`, `priorityTag`, `scoringSignals`, `callWorkBucket`, disposition, pipeline, nguồn, `createdAt`, người tạo/phụ trách…
+- `workMode?: 'score_queue' | 'volume_filter' | 'care_close'` (optional — lead cũ thiếu field OK)  
+- Giữ nguyên các field đã có trên `Lead`: `calculatedScore`, `priorityTag`, `scoringSignals`, `callWorkBucket`, `lastCallDispositionId` / `Label`, `pipelineStatus`, `status`, `source` / `source1` / `source2`, `uploadedAt`, `uploadedBy` / `uploaderName`, `assignedTo`, `intakeProgram`, …  
+- **Không** có `createdBy` trên Lead — lọc “người nhập” = `uploadedBy` (đã có server filter `uploadedByIn`).
 
 ### 9.2. Cấu hình nguồn / kịch bản
 
-- Mở rộng `leadSources` (hoặc doc phụ `scoringAux` / orgSettings) với các trường mục 4.  
+- Mở rộng **`LeadSourceRecord`** (optional fields) + `mapLeadSourceDoc` / `saveLeadSourceRow` / `LeadProfileSettingsTab`.  
+- Cổng ĐK: đọc mode từ nguồn `defaultSource1` **hoặc** thêm optional trên `PublicRegistrationConfig`.  
 - Import Excel: cho phép ghi đè kịch bản **một lần nhập** mà không đổi mặc định nguồn (tuỳ UI intake).
 
 ### 9.3. Tương thích ngược
 
-- Lead thiếu `workMode`: list/filter hoạt động như hiện tại; mode suy mặc định không chặn lọc cũ.  
-- Không bắt buộc migration phá dữ liệu.  
-- Form gọi đầy đủ vẫn đọc được config `callSessionChips` hiện có; variant short = subset / preset, không xóa config admin.
+- Lead thiếu `workMode`: list/filter hoạt động như hiện tại; lọc `wm` chỉ thu hẹp lead đã gán (thiếu field = không khớp equality — giống pattern unset program / `cq`).  
+- **P1 lọc `workMode`:** client-side + `fullScope` khi bật (mirror `cq`/`disp`) — **tránh** nổ composite index Firestore ngay. Server `where('workMode')` chỉ khi đã khai báo index tối thiểu.  
+- URL param mới: **`wm`** (không đụng `cq`, `disp`, `tag`, `source`, `prog`, … trong `leadWorkspaceUrlFilters.ts`).  
+- Form gọi đầy đủ vẫn đọc `scoringAux/callSessionChips`; short = subset + **không** để `enrollment_signal.required` chặn lưu khi đã ẩn UI (xem §14.5).
 
 ---
 
@@ -225,13 +233,13 @@ Khớp north-star: đa thao tác trong Hồ sơ, không nhân route.
 
 | Pha | Nội dung | Rủi ro cần kiểm |
 |-----|----------|-----------------|
-| **P1** | Field `workMode` + kịch bản nguồn + lọc theo mode; gán lúc intake; mặc định an toàn cho lead cũ | List/filter/pagination Firestore; import; cổng ĐK |
-| **P2** | UI nhấn mạnh theo mode; form gọi short/full; ẩn `enrollment_signal` khỏi UX mặc định; copy tách boost vs bộ chấm | OMICall panel, disposition, `DES-CALL-Q` tabs |
-| **P3** | Gộp/ẩn panel tín hiệu trùng; tắt nổi classification trên TVV nếu chưa dùng | Rescore / `persistedLeadScoringFields` / auto-persist |
+| **P1** | `workMode?` trên Lead; optional playbook trên `LeadSourceRecord`; gán lúc Excel / manual / public portal; lọc URL `wm` (client như `cq`); bulk gán mode (QL) | `useLeads` fullScope/paging; import `DataIntake`; `manualLeadCreate`; CF `publicRegistration`; URL hydrate |
+| **P2** | UI nhấn theo mode; form gọi short/full; ẩn `enrollment_signal` + nới `required` khi short; map disposition → gợi ý `care_close`; copy tách boost vs bộ chấm | `CallSessionQuickPanel` / `saveCallSessionInteraction` / `validateEvaluationSelections`; tabs `cq`/`disp` không đổi |
+| **P3** | Ẩn/gộp `LeadScoringSignalsPanel` trùng; classification không nổi TVV mặc định | `persistedLeadScoringFields` / `useAutoPersistLeadScores` / rescore |
 
-**Cấm trong mọi pha:** rewrite `scoringEngine` lớn; đổi KPI V2; xóa collection/field đang dùng mà không có dual-read.
+**Cấm trong mọi pha:** rewrite `scoringEngine` lớn; đổi KPI V2; xóa `CALL_DISPOSITIONS` / `scoringSignals` / `callSessionChips`; phá tab hàng chờ `cq`.
 
-**Kiểm trước khi merge mỗi pha:** lọc nguồn/ngày/TVV/nhãn; chọn bộ chấm + tính lại; gọi + lưu disposition; KPI Ngày của tôi / bảng điểm không regress; tạo lead tay + import + (nếu có) cổng ĐK.
+**Kiểm trước khi merge mỗi pha:** lọc nguồn/`uploadedBy`/ngày/`tag`/`cq`/`disp`; chọn bộ chấm + tính lại; lưu gọi có disposition (`high_interest` / `not_interested` / `knm`); KPI Ngày của tôi không regress; tạo tay + Excel + cổng ĐK (workMode đúng kịch bản).
 
 ---
 
@@ -258,10 +266,84 @@ Khớp north-star: đa thao tác trong Hồ sơ, không nhân route.
 
 ## 13. Việc tiếp theo sau khi user duyệt file này
 
-1. User xác nhận spec (sửa chữ nếu cần).  
+1. User xác nhận spec (kèm §14).  
 2. Khi user **OK chạy**: viết `docs/superpowers/plans/…` chi tiết file/test từng pha, rồi mới đụng code — ưu tiên P1.  
 3. Không invoke triển khai ngoài yêu cầu rõ ràng.
 
 ---
 
+## 14. Rà soát tương thích codebase (2026-08-14)
+
+Đối chiếu spec với cấu trúc hiện có — **chốt cách làm để chạy không vỡ**.
+
+### 14.1. Khớp / tái sử dụng (không đụng lại)
+
+| Thành phần hiện có | Vai trò với DES-WORKMODE |
+|--------------------|---------------------------|
+| `ScoringProfile` + `scoringEngine` / `useLeadScoring` | Giữ — thước mode `score_queue` |
+| `CALL_DISPOSITIONS` + `buildCallWorkLeadPatch` (`callWorkQueue.ts`) | **Nguồn chân lý** kết quả sau gọi; không catalog mới |
+| Tabs `cq` / `disp` + `callWorkBucket` | Giữ nguyên; `wm` là lọc **thêm**, không thay |
+| Lọc server: `source`, `uploadedByIn`, `priorityTag`, `pipelineStatus`, `intakeProgram`, … (`useLeads.ts`) | Giữ; thêm `wm` theo kiểu client trước |
+| InfoScore / classification | Giữ kỹ thuật; UI TVV không nổi thêm |
+| KPI / Scorecard | Domain khác — không đổi công thức |
+
+### 14.2. Chỗ gắn `workMode` (intake)
+
+| Đường tạo lead | File chính | Việc P1 |
+|----------------|------------|---------|
+| Excel | `DataIntake.tsx` + `excelLeadMapper` / `pickProfileForImport` | Sau map nguồn → set `workMode` từ `LeadSourceRecord` (hoặc override lần nhập); **giữ** evaluateLead như hiện tại |
+| Tạo tay | `manualLeadCreate.ts` + `CreateLeadModal` | Set `workMode` theo nguồn; vẫn cần bộ chấm đang chọn như nay |
+| Cổng ĐK | `functions/src/publicRegistration.ts` (`buildLeadDoc`) | Hiện hardcode `calculatedScore: 0`, `priorityTag: 'COLD'`, `registrationChannel: 'public_portal'` — **thêm** `workMode` từ playbook nguồn/`PublicRegistrationConfig`; **không** bắt buộc bật scoring engine trên CF ở P1 |
+
+### 14.3. Lọc & URL — quyết định an toàn
+
+- Param: **`wm`** trong `leadWorkspaceUrlFilters.ts` (`LWF`).  
+- P1: lọc client + bật `fullScope` khi `wm` active (cùng pattern `cq`/`disp` trong `LeadManagement.tsx`) — tránh thiếu index / miss lead chưa có field.  
+- Server equality + composite index: chỉ phase sau khi có nhu cầu phân trang lớn theo mode.
+
+### 14.4. Map disposition → `care_close` (đã có trong code)
+
+Dùng `getDispositionLeadEffects` / status `INTERESTED`:
+
+- **Đẩy chăm (mặc định):** `high_interest`, `college_hot`, `positive`, `uni_top_high`, `uni_top_mid`  
+- **Không đẩy:** `not_interested`, `negative`, `enrolled_elsewhere`, `wrong_number`  
+- **Giữ + gọi lại:** `knm`, `callback_later`, …
+
+### 14.5. Rủi ro P2 nếu ẩn `enrollment_signal` — bắt buộc xử lý
+
+- Default: `enrollment_signal` **`required: true`** (`callSessionEvaluationDefaults.ts`).  
+- `CallSessionQuickPanel` → `validateEvaluationSelections`: ẩn UI mà vẫn required → **không lưu được**.  
+- **Cách an toàn:** short/full preset lọc dimension + coi `enrollment_signal.required = false` khi validate (hoặc cập nhật doc org `required: false`); **không xóa** schema / analytics aggregator.  
+- Boost HOT vẫn có thể từ `readiness` + **disposition thắng cuối** (`dispositionPriorityOverridesAfterScoring`) — đúng hướng “một quyết định lúc gọi”.  
+- Test cần chạy lại: `callWorkQueue.test.ts`, `callSessionPriorityFromEvaluation.test.ts`, `callSessionEvaluation*.test.ts`, URL filter tests.
+
+### 14.6. Trùng panel tín hiệu (P3, không P1)
+
+- `LeadScoringSignalsPanel` hiện trên tab tư vấn (`detailLeftTab === 'counselor'`) — độc lập form gọi.  
+- P1–P2 **không** xóa panel; P3 mới ẩn/gộp theo cấu hình.
+
+### 14.7. Lệch nhỏ đã sửa trong spec sau rà soát
+
+| Trước (mơ hồ) | Sau (khớp code) |
+|---------------|-----------------|
+| “Quan tâm” như disposition mới | Dùng `high_interest` («Quan tâm cao») |
+| “Người nhập” = createdBy | `uploadedBy` |
+| Lọc mode server ngay | Client + fullScope trước |
+| URL không nói | `wm` |
+| Playbook “leadSources hoặc scoringAux” | Ưu tiên optional trên `LeadSourceRecord` + map/save hiện có |
+
+### 14.8. Kết luận rà soát
+
+Mô hình 3 lớp + kịch bản nguồn **khả thi trên cấu trúc hiện tại** nếu:
+
+1. Tái sử dụng hàng chờ gọi / disposition (không song song).  
+2. `workMode` optional + lọc kiểu `cq` ở P1.  
+3. P2 xử lý `required` khi rút gọn form gọi.  
+4. Không rewrite scoring/KPI; gắn mode tại 3 intake path.  
+
+Khi user **OK chạy** → plan P1 liệt kê từng file/test theo bảng §14.2–14.5.
+
+---
+
 *Hết DES-WORKMODE-2026-08.*
+
