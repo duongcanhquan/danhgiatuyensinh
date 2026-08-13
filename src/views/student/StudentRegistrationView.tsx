@@ -43,13 +43,15 @@ export function StudentRegistrationView() {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState(emptyPublicRegistrationForm)
   const [busy, setBusy] = useState(false)
+  const [portalClosed, setPortalClosed] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const t = useCallback((key: Parameters<typeof publicRegText>[1]) => publicRegText(lang, key), [lang])
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
       setLoading(false)
-      setError('Hệ thống chưa cấu hình Firebase — không thể nhận đăng ký online.')
+      setLoadFailed(true)
       return
     }
     let cancelled = false
@@ -57,13 +59,14 @@ export function StudentRegistrationView() {
       .then((m) => {
         if (cancelled) return
         setMeta(m)
-        if (!m.enabled) {
-          setError(publicRegText(lang, 'closed'))
-        }
+        setLoadFailed(false)
+        setPortalClosed(!m.enabled)
+        setError(null)
       })
-      .catch((e) => {
+      .catch(() => {
         if (cancelled) return
-        setError(e instanceof Error ? e.message : 'Không tải được cấu hình cổng đăng ký.')
+        setLoadFailed(true)
+        setPortalClosed(false)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -71,7 +74,15 @@ export function StudentRegistrationView() {
     return () => {
       cancelled = true
     }
-  }, [orgSlug, lang])
+  }, [orgSlug])
+
+  const bannerError = !isFirebaseConfigured()
+    ? t('firebaseMissing')
+    : loadFailed
+      ? t('loadFailed')
+      : portalClosed
+        ? t('closed')
+        : error
 
   const patch = useCallback((partial: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...partial }))
@@ -142,22 +153,23 @@ export function StudentRegistrationView() {
           successMessage: result.successMessage,
           counselorName: result.counselorName,
           n8nOk: result.n8nOk,
+          lang,
         },
       })
     } catch (err) {
-      let msg = lang === 'en' ? 'Could not submit. Please try again.' : 'Không gửi được đăng ký. Thử lại sau.'
+      let msg = t('submitFailed')
       const firebaseErr =
         err instanceof FirebaseError
           ? err
           : err instanceof Error && err.cause instanceof FirebaseError
             ? err.cause
             : null
+      const serverMsg = (err instanceof Error ? err.message : '') || firebaseErr?.message || ''
       if (firebaseErr?.code === 'functions/already-exists') {
-        msg =
-          lang === 'en'
-            ? 'A profile with this phone already exists. Please contact a counselor.'
-            : 'Đã có hồ sơ trùng số điện thoại trên hệ thống. Vui lòng liên hệ tư vấn viên.'
-      } else if (err instanceof Error && err.message) {
+        const isNid =
+          /CCCD|Passport|national.?id|mã định danh/i.test(serverMsg)
+        msg = isNid ? t('dupNationalId') : t('dupPhone')
+      } else if (lang === 'vn' && err instanceof Error && err.message) {
         msg = err.message
       }
       setError(msg)
@@ -204,22 +216,28 @@ export function StudentRegistrationView() {
           <header className="mb-4 pt-5 text-center sm:mb-5 sm:pt-1">
             <img
               src={logoSrc}
-              alt="Cao đẳng Việt Mỹ - Hà Nội"
+              alt={t('logoAlt')}
               className="mx-auto mb-2 h-auto max-w-[110px] sm:max-w-[130px]"
             />
             <h1 className="text-lg font-extrabold uppercase tracking-tight text-[#0056b3] sm:text-xl">
-              {meta?.portalTitle?.trim() || t('portalTitle')}
+              {lang === 'vn' && meta?.portalTitle?.trim() ? meta.portalTitle.trim() : t('portalTitle')}
             </h1>
             <p className="mx-auto mt-1.5 max-w-xl text-sm leading-relaxed text-slate-600">
-              {meta?.introText?.trim() || t('portalSub')}
+              {lang === 'vn' && meta?.introText?.trim() ? meta.introText.trim() : t('portalSub')}
             </p>
             <div className="mt-3 inline-block rounded-xl border border-[#0056b3]/15 bg-white/60 px-3.5 py-2.5 text-left text-xs font-semibold text-slate-800 sm:text-sm">
               <p className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" aria-hidden />
-                <span>{meta?.contactAddress || '168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội'}</span>
+                <span>
+                  <span className="text-slate-500">{t('addressLabel')}: </span>
+                  {lang === 'vn'
+                    ? meta?.contactAddress || t('contactAddress')
+                    : t('contactAddress')}
+                </span>
               </p>
               <p className="mt-1.5 flex items-center gap-2">
                 <Phone className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                <span className="text-slate-500">{t('phoneLabel')}: </span>
                 {contactPhoneTel ? (
                   <a
                     href={`tel:${contactPhoneTel}`}
@@ -241,9 +259,9 @@ export function StudentRegistrationView() {
             </div>
           ) : meta?.enabled ? (
             <>
-              {error ? (
+              {bannerError ? (
                 <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900" role="alert">
-                  {error}
+                  {bannerError}
                 </div>
               ) : null}
 
@@ -370,6 +388,7 @@ export function StudentRegistrationView() {
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.permanentAddress}
                         onChange={(e) => patch({ permanentAddress: e.target.value })}
+                        placeholder={t('phAddress')}
                         required
                       />
                     </label>
@@ -385,6 +404,7 @@ export function StudentRegistrationView() {
                         className={`${PUBLIC_REG_INPUT_CLS} uppercase`}
                         value={form.fatherName}
                         onChange={(e) => patch({ fatherName: e.target.value.toUpperCase() })}
+                        placeholder={t('phFatherName')}
                       />
                     </label>
                     <label>
@@ -393,6 +413,7 @@ export function StudentRegistrationView() {
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.fatherPhone}
                         onChange={(e) => patch({ fatherPhone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        placeholder={t('phPhone')}
                         inputMode="tel"
                       />
                     </label>
@@ -402,6 +423,7 @@ export function StudentRegistrationView() {
                         className={`${PUBLIC_REG_INPUT_CLS} uppercase`}
                         value={form.motherName}
                         onChange={(e) => patch({ motherName: e.target.value.toUpperCase() })}
+                        placeholder={t('phMotherName')}
                       />
                     </label>
                     <label>
@@ -410,6 +432,7 @@ export function StudentRegistrationView() {
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.motherPhone}
                         onChange={(e) => patch({ motherPhone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        placeholder={t('phPhone')}
                         required
                         inputMode="tel"
                       />
@@ -426,6 +449,7 @@ export function StudentRegistrationView() {
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.highSchool}
                         onChange={(e) => patch({ highSchool: e.target.value })}
+                        placeholder={t('phSchool')}
                         required
                       />
                     </label>
@@ -435,6 +459,7 @@ export function StudentRegistrationView() {
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.schoolProvince}
                         onChange={(e) => patch({ schoolProvince: e.target.value })}
+                        placeholder={t('phSchoolProvince')}
                         required
                       />
                     </label>
@@ -558,7 +583,7 @@ export function StudentRegistrationView() {
             </>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center text-sm text-amber-950">
-              <p>{error ?? t('closed')}</p>
+              <p>{bannerError ?? t('closed')}</p>
             </div>
           )}
         </div>

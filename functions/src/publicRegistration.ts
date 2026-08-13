@@ -532,6 +532,7 @@ function buildLeadDoc(
     assignedCounselorId: assignee,
     assignedTo: assignee,
     status: 'NEW',
+    counselorStatus: 'NEW',
     pipelineStatus: 'NEW',
     description: str(input.description),
     highSchool: str(input.highSchool),

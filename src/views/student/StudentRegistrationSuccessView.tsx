@@ -2,12 +2,14 @@ import { Link, useLocation, Navigate } from 'react-router-dom'
 import { StaffLoginCornerGate } from '../../components/StaffLoginCornerGate'
 import { CheckCircle2, Copy, GraduationCap } from 'lucide-react'
 import { useState } from 'react'
+import { publicRegText, type PublicRegLang } from '../../utils/publicRegistrationI18n'
 
 type SuccessState = {
   systemCode: string
   successMessage: string
   counselorName: string | null
   n8nOk?: boolean
+  lang?: PublicRegLang
 }
 
 export function StudentRegistrationSuccessView() {
@@ -18,6 +20,13 @@ export function StudentRegistrationSuccessView() {
   if (!state?.systemCode) {
     return <Navigate to="/dang-ky" replace />
   }
+
+  const lang: PublicRegLang = state.lang === 'en' ? 'en' : 'vn'
+  const t = (key: Parameters<typeof publicRegText>[1]) => publicRegText(lang, key)
+  const successBody =
+    lang === 'en'
+      ? t('successDefault')
+      : state.successMessage?.trim() || t('successDefault')
 
   const copyCode = async () => {
     try {
@@ -37,8 +46,8 @@ export function StudentRegistrationSuccessView() {
             <GraduationCap className="h-5 w-5" aria-hidden />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Cao đẳng Việt Mỹ</p>
-            <h1 className="text-base font-extrabold text-slate-900 sm:text-lg">Đăng ký thành công</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{t('brandShort')}</p>
+            <h1 className="text-base font-extrabold text-slate-900 sm:text-lg">{t('successTitle')}</h1>
           </div>
         </div>
       </header>
@@ -48,10 +57,10 @@ export function StudentRegistrationSuccessView() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
             <CheckCircle2 className="h-8 w-8" aria-hidden />
           </div>
-          <p className="mt-4 text-sm leading-relaxed text-slate-700">{state.successMessage}</p>
+          <p className="mt-4 text-sm leading-relaxed text-slate-700">{successBody}</p>
 
           <div className="mx-auto mt-6 max-w-sm rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mã hồ sơ của bạn</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('yourCode')}</p>
             <p className="mt-1 font-mono text-2xl font-extrabold tracking-wide text-emerald-800">{state.systemCode}</p>
             <button
               type="button"
@@ -59,31 +68,27 @@ export function StudentRegistrationSuccessView() {
               className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
               <Copy className="h-3.5 w-3.5" aria-hidden />
-              {copied ? 'Đã copy' : 'Copy mã'}
+              {copied ? t('copied') : t('copyCode')}
             </button>
           </div>
 
           {state.counselorName ? (
             <p className="mt-4 text-sm text-slate-600">
-              Tư vấn viên phụ trách: <strong>{state.counselorName}</strong>
+              {t('counselorAssigned')}: <strong>{state.counselorName}</strong>
             </p>
           ) : null}
 
           {state.n8nOk === false ? (
-            <p className="mt-3 text-xs text-amber-800">
-              Hồ sơ đã lưu; email thông báo có thể gửi chậm — trường vẫn liên hệ qua SĐT/email bạn đã khai báo.
-            </p>
+            <p className="mt-3 text-xs text-amber-800">{t('emailSlow')}</p>
           ) : (
-            <p className="mt-3 text-xs text-slate-500">
-              Email xác nhận sẽ gửi tới địa chỉ bạn đã khai báo (nếu trường đã bật thông báo tự động).
-            </p>
+            <p className="mt-3 text-xs text-slate-500">{t('emailOk')}</p>
           )}
 
           <Link
             to="/dang-ky"
             className="mt-8 inline-flex min-h-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
           >
-            Quay lại trang đăng ký
+            {t('backToReg')}
           </Link>
         </div>
       </main>
