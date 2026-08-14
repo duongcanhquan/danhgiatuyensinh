@@ -427,7 +427,7 @@ function CounselorLeadWorklist({
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white/35 shadow-md backdrop-blur-xl">
       <div
-        className={`scroll-touch overflow-x-auto ${
+        className={`scroll-touch-x overflow-x-auto ${
           selectedIds.size > 0 ? 'pb-[calc(var(--nav-bottom-height,4rem)+9rem)] lg:pb-24' : ''
         }`}
       >

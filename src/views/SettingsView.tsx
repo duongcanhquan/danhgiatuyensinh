@@ -753,7 +753,6 @@ export function SettingsView() {
           </p>
         </BentoCell>
       ) : null}
-      {activeMainTab === 'connect' ? <IntegrationsStatusStrip /> : null}
       {!configured || !db ? (
         <div className={`rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2.5 text-rose-900 ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
@@ -771,10 +770,11 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && settingsAccess ? (
-        <BentoCell className="min-w-0 max-w-full space-y-2 !p-1.5 sm:!p-2">
+      {db && settingsAccess && !settingsWorkspaceOpen ? (
+        <div className="sticky top-0 z-30 -mx-1 space-y-2 bg-[var(--vm-canvas)]/95 px-1 pb-2 pt-1 backdrop-blur-md">
+          <BentoCell className="min-w-0 max-w-full space-y-2 !p-1.5 sm:!p-2">
           <nav
-            className="app-tab-segmented scroll-touch flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto overscroll-x-contain"
+            className="app-tab-segmented scroll-touch-x flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto"
             role="tablist"
             aria-label="Nhóm cài đặt chính"
           >
@@ -795,7 +795,7 @@ export function SettingsView() {
               )
             })}
           </nav>
-          <div className="scroll-touch flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain border-t border-slate-100 pt-1.5 md:gap-1.5">
+          <div className="scroll-touch-x flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-t border-slate-100 pt-1.5 md:gap-1.5">
             <nav
               className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 md:gap-1.5"
               role="tablist"
@@ -886,7 +886,8 @@ export function SettingsView() {
               <CircleHelp className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
             </button>
           </div>
-        </BentoCell>
+          </BentoCell>
+        </div>
       ) : null}
 
       {activeSubTab === 'intake' && canIntake ? (
@@ -1318,11 +1319,14 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'hub' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-hub" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-hub" className="sr-only">
-            Hub kết nối
-          </h2>
-          <IntegrationHubPanel />
+        <div role="tabpanel" aria-labelledby="tab-hub" className="space-y-3">
+          <IntegrationsStatusStrip />
+          <div className="bento-cell space-y-3 !p-3 sm:!p-4">
+            <h2 id="tab-hub" className="sr-only">
+              Hub kết nối
+            </h2>
+            <IntegrationHubPanel />
+          </div>
         </div>
       ) : null}
 

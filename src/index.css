@@ -447,9 +447,21 @@ a {
   touch-action: manipulation;
 }
 
+/**
+ * Momentum scroll trên iOS — không gắn overscroll-behavior:contain ở đây.
+ * overflow-x:auto làm overflow-y thành auto (CSS); contain sẽ nuốt con lăn dọc
+ * trên thanh tab ngang và không chuyển cuộn lên trang.
+ * Panel dọc cố ý chặn chuỗi cuộn: thêm class Tailwind `overscroll-contain`.
+ */
 .scroll-touch {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+}
+
+/** Thanh kéo ngang (tab) — chỉ chứa overscroll theo trục X. */
+.scroll-touch-x {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 @supports (padding: max(0px)) {
@@ -581,7 +593,9 @@ a {
   display: flex;
   gap: 0.125rem;
   overflow-x: auto;
+  /* overflow-x:auto ép overflow-y thành auto — để y:auto để con lăn dọc chuyển lên trang */
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   border-radius: 0.875rem;
   border: 1px solid var(--color-border);
   background: rgb(241 245 249 / 0.85);

@@ -32,7 +32,7 @@ export function TabStrip<T extends string>({
       <div
         role="tablist"
         aria-label={ariaLabel}
-        className={`app-tab-segmented scroll-touch ${className}`}
+        className={`app-tab-segmented scroll-touch-x ${className}`}
       >
         {tabs.map((tab) => {
           const on = active === tab.id
@@ -61,7 +61,7 @@ export function TabStrip<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`scroll-touch flex gap-2 overflow-x-auto overscroll-x-contain pb-0.5 ${className}`}
+      className={`scroll-touch-x flex gap-2 overflow-x-auto pb-0.5 ${className}`}
     >
       {tabs.map((tab) => {
         const on = active === tab.id

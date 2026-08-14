@@ -83,7 +83,7 @@ export function PermissionMatrixPanel() {
         </p>
       ) : null}
 
-      <div className="scroll-touch overflow-x-auto rounded-xl border border-slate-200">
+      <div className="scroll-touch-x overflow-x-auto rounded-xl border border-slate-200">
         <table className="min-w-[720px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-white text-xs font-semibold uppercase tracking-wide text-slate-600">

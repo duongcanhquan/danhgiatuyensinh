@@ -123,6 +123,7 @@ export function Layout() {
   /** Desktop: mở full khi hover / focus trong menu; thu về icon khi rời chuột. */
   const [railExpanded, setRailExpanded] = useState(false)
   const railLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mainScrollRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     setSidebarOpen(false)
@@ -316,13 +317,13 @@ export function Layout() {
   )
 
   return (
-    <div className="relative min-h-[100dvh] text-slate-800 antialiased">
+    <div className="relative h-[100dvh] overflow-hidden text-slate-800 antialiased">
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
         <div className="absolute -left-[10%] -top-[15%] h-[420px] w-[480px] rounded-full bg-blue-400/6 blur-[100px]" />
         <div className="absolute -right-[5%] top-[8%] h-[360px] w-[400px] rounded-full bg-emerald-400/5 blur-[90px]" />
       </div>
 
-      <div className="relative z-10 flex min-h-[100dvh]">
+      <div className="relative z-10 flex h-[100dvh]">
         {sidebarOpen ? (
           <button
             type="button"
@@ -332,7 +333,8 @@ export function Layout() {
           />
         ) : null}
 
-        {/* Desktop: khi mở rộng phủ lên nội dung — chỉ dành chỗ cố định bằng hàng icon. */}
+        {/* Desktop: khi mở rộng phủ lên nội dung — chỉ dành chỗ cố định bằng hàng icon.
+            Con lăn trên lớp phủ chuyển xuống vùng nội dung chính (không nuốt cuộn). */}
         {railExpanded ? (
           <button
             type="button"
@@ -340,6 +342,11 @@ export function Layout() {
             aria-label="Thu gọn menu"
             tabIndex={-1}
             onClick={() => setRailExpanded(false)}
+            onWheel={(e) => {
+              const el = mainScrollRef.current
+              if (!el) return
+              el.scrollTop += e.deltaY
+            }}
           />
         ) : null}
 
@@ -369,7 +376,7 @@ export function Layout() {
         </aside>
 
         {/* pl-16 = chỗ dành cho hàng icon; menu full phủ lên, không đẩy lead. */}
-        <div className="flex min-h-[100dvh] min-w-0 flex-1 flex-col lg:min-h-0 lg:pl-16">
+        <div className="flex h-[100dvh] min-w-0 flex-1 flex-col lg:pl-16">
           <header className="safe-area-pt sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-2 sm:px-4 lg:hidden">
             <button
               type="button"
@@ -403,9 +410,13 @@ export function Layout() {
             ) : null}
           </header>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[var(--vm-canvas)]">
-            <main className="safe-area-pb-nav flex min-h-0 min-w-0 w-full flex-1 flex-col">
-              <div className="min-h-0 min-w-0 w-full flex-1 px-3 py-3 text-sm font-normal leading-relaxed text-[var(--vm-text)] sm:px-4 sm:py-4 md:px-6 md:py-5 lg:px-8">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--vm-canvas)]">
+            <main
+              ref={mainScrollRef}
+              data-app-main-scroll=""
+              className="safe-area-pb-nav flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-y-auto overscroll-y-contain"
+            >
+              <div className="min-w-0 w-full flex-1 px-3 py-3 text-sm font-normal leading-relaxed text-[var(--vm-text)] sm:px-4 sm:py-4 md:px-6 md:py-5 lg:px-8">
                 <OrgAiIntegrationProvider>
                   <KpiEvaluationRulesProvider>
                     <KpiV2ConfigProvider>
