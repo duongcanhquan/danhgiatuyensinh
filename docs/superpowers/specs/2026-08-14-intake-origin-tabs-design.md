@@ -2,7 +2,8 @@
 
 **Status:** implemented  
 **Date:** 2026-08-14  
-**Approach:** A (đã duyệt)
+**Approach:** A (đã duyệt)  
+**UI note:** 3 tab trên màn Hồ sơ đã được supersede bởi [DES-INTAKE-PORTAL-MERGE-2026-08](./2026-08-14-intake-portal-merge-design.md) (2 nút: chiến dịch | Cổng đăng ký). Field `intakeOrigin: manual` vẫn còn trên hồ sơ cũ và thuộc nhóm Cổng đăng ký.
 
 ## Problem
 

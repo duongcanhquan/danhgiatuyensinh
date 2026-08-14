@@ -1,6 +1,6 @@
 # DES-INTAKE-PORTAL-MERGE-2026-08 — Gộp tạo tay vào Cổng đăng ký
 
-**Status:** approved (chờ triển khai)  
+**Status:** approved / implemented  
 **Date:** 2026-08-14  
 **Approach:** A (đã duyệt) — gộp tab, không backfill  
 **Supersedes (UI):** 3 tab trong [DES-INTAKE-ORIGIN-2026-08](./2026-08-14-intake-origin-tabs-design.md). Field `intakeOrigin` gồm `manual` vẫn giữ cho hồ sơ cũ.
