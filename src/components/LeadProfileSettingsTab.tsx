@@ -22,7 +22,7 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 import { saveLeadSourceRow, seedDefaultLeadSources } from '../utils/leadProfileCatalogSeed'
 
-import { ensureApplicantCategoriesCatalog } from '../utils/ensureApplicantCategoriesCatalog'
+import { ensureDefaultMasterCatalogDocs } from '../utils/ensureApplicantCategoriesCatalog'
 
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
 
@@ -87,8 +87,8 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
   useEffect(() => {
     if (!canEdit) return
-    void ensureApplicantCategoriesCatalog(db).catch((err) => {
-      console.warn('[ensureApplicantCategoriesCatalog]', err)
+    void ensureDefaultMasterCatalogDocs(db).catch((err) => {
+      console.warn('[ensureDefaultMasterCatalogDocs]', err)
     })
   }, [db, canEdit])
 

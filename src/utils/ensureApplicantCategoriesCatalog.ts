@@ -1,5 +1,11 @@
 import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore'
-import { FS_COLLECTIONS, MASTER_DATA_REGISTRY_DOC_ID, type MasterCatalogDefinition } from '../types'
+import {
+  DEFAULT_MASTER_CATALOGS,
+  FS_COLLECTIONS,
+  MASTER_DATA_REGISTRY_DOC_ID,
+  type MasterCatalogDefinition,
+  type MasterDataEntry,
+} from '../types'
 import {
   APPLICANT_CATEGORIES_CATALOG_ID,
   DEFAULT_APPLICANT_CATEGORY_ENTRIES,
@@ -10,29 +16,37 @@ import {
   parseEntriesFromDoc,
 } from './masterDataRegistry'
 
-const CATALOG_DEF: MasterCatalogDefinition = {
-  id: APPLICANT_CATEGORIES_CATALOG_ID,
-  label: 'Đối tượng dự tuyển',
-  order: 45,
-  ruleCategory: 'academic',
+function seedEntriesForCatalog(catalogId: string): MasterDataEntry[] {
+  if (catalogId === APPLICANT_CATEGORIES_CATALOG_ID) {
+    return DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => ({ ...e }))
+  }
+  return []
 }
 
 /**
- * Đảm bảo danh mục đối tượng dự tuyển tồn tại (seed nếu trống) và có trong `_registry`.
- * Gọi khi admin mở tab hồ sơ / cổng đăng ký — an toàn gọi nhiều lần.
+ * Đồng bộ catalog mặc định (đối tượng, cơ sở, niên khóa…) vào Firestore:
+ * - tạo doc nếu thiếu / seed đối tượng nếu trống
+ * - bổ sung `_registry` nếu thiếu id
+ *
+ * An toàn gọi nhiều lần (mở Cài đặt hồ sơ / cổng đăng ký).
  */
-export async function ensureApplicantCategoriesCatalog(db: Firestore): Promise<void> {
-  const catRef = doc(db, FS_COLLECTIONS.masterData, APPLICANT_CATEGORIES_CATALOG_ID)
-  const catSnap = await getDoc(catRef)
-  const existing = catSnap.exists()
-    ? parseEntriesFromDoc(catSnap.data() as Record<string, unknown>)
-    : []
-  if (existing.length === 0) {
+export async function ensureDefaultMasterCatalogDocs(db: Firestore): Promise<void> {
+  for (const def of DEFAULT_MASTER_CATALOGS) {
+    const catRef = doc(db, FS_COLLECTIONS.masterData, def.id)
+    const catSnap = await getDoc(catRef)
+    const existing = catSnap.exists()
+      ? parseEntriesFromDoc(catSnap.data() as Record<string, unknown>)
+      : []
+    const needsSeed =
+      !catSnap.exists() ||
+      (def.id === APPLICANT_CATEGORIES_CATALOG_ID && existing.length === 0)
+    if (!needsSeed) continue
+    const entries = existing.length > 0 ? existing : seedEntriesForCatalog(def.id)
     await setDoc(
       catRef,
       {
-        id: APPLICANT_CATEGORIES_CATALOG_ID,
-        entries: masterDataEntriesForFirestore([...DEFAULT_APPLICANT_CATEGORY_ENTRIES]),
+        id: def.id,
+        entries: masterDataEntriesForFirestore(entries),
         updatedAt: Timestamp.now(),
       },
       { merge: true },
@@ -45,12 +59,18 @@ export async function ensureApplicantCategoriesCatalog(db: Firestore): Promise<v
     parseCatalogsFromRegistryData(
       regSnap.exists() ? (regSnap.data() as Record<string, unknown>) : undefined,
     ) ?? []
-  if (current.some((c) => c.id === APPLICANT_CATEGORIES_CATALOG_ID)) return
+  const known = new Set(current.map((c) => c.id))
+  const missing: MasterCatalogDefinition[] = DEFAULT_MASTER_CATALOGS.filter((d) => !known.has(d.id))
+  if (missing.length === 0) return
 
-  const nextOrder = current.reduce((m, c) => Math.max(m, c.order), 0) + 10
+  let nextOrder = current.reduce((m, c) => Math.max(m, c.order), 0) + 10
   const catalogs = [
     ...current,
-    { ...CATALOG_DEF, order: current.length ? nextOrder : CATALOG_DEF.order },
+    ...missing.map((d) => {
+      const row = { ...d, order: current.length ? nextOrder : d.order }
+      nextOrder += 10
+      return row
+    }),
   ].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
 
   await setDoc(
@@ -68,4 +88,9 @@ export async function ensureApplicantCategoriesCatalog(db: Firestore): Promise<v
     },
     { merge: true },
   )
+}
+
+/** @deprecated Dùng `ensureDefaultMasterCatalogDocs` — giữ alias để không gãy import cũ. */
+export async function ensureApplicantCategoriesCatalog(db: Firestore): Promise<void> {
+  await ensureDefaultMasterCatalogDocs(db)
 }

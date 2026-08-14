@@ -157,6 +157,9 @@ function entriesForKind(kind: string): MasterDataEntry[] {
       return defaultMajors()
     case 'applicant_categories':
       return DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => ({ ...e }))
+    case 'campuses':
+    case 'school_years':
+      return []
     case 'school_types':
       return defaultSchoolTypes()
     case 'financial_profiles':

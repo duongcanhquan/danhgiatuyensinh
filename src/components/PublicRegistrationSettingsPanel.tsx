@@ -12,7 +12,7 @@ import { getFirestoreDb } from '../services/firebase'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
-import { ensureApplicantCategoriesCatalog } from '../utils/ensureApplicantCategoriesCatalog'
+import { ensureDefaultMasterCatalogDocs } from '../utils/ensureApplicantCategoriesCatalog'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 
@@ -64,8 +64,8 @@ export function PublicRegistrationSettingsPanel() {
 
   useEffect(() => {
     if (!db || !canEdit) return
-    void ensureApplicantCategoriesCatalog(db).catch((err) => {
-      console.warn('[ensureApplicantCategoriesCatalog]', err)
+    void ensureDefaultMasterCatalogDocs(db).catch((err) => {
+      console.warn('[ensureDefaultMasterCatalogDocs]', err)
     })
   }, [db, canEdit])
 

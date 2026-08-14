@@ -18,6 +18,7 @@ export const AI_LEAD_FIELD_OPTIONS: { id: string; label: string; extra?: boolean
   { id: 'hanoiArea', label: 'Quận / huyện (hanoiArea)' },
   { id: 'campus', label: 'Cơ sở học (campus)' },
   { id: 'schoolYear', label: 'Niên khóa (schoolYear)' },
+  { id: 'applicantCategory', label: 'Đối tượng dự tuyển (applicantCategory)' },
   { id: 'highSchool', label: 'Trường học (highSchool)' },
   { id: 'highSchoolName', label: 'Trường THPT (alias highSchoolName)' },
   { id: 'gradeClass', label: 'Lớp hiện đang học (gradeClass)' },
