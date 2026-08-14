@@ -21,10 +21,14 @@ import { evaluateLeadWithClassification, classificationFirestorePatch } from './
 import { partialLeadFromExcelRow } from './scoringLeadInput'
 import { leadCoreDraftToFirestoreFields, type LeadCoreDraft } from './leadProfileEdit'
 import { studyFormatFromParts } from './studyFormatMerge'
-import { validateNationalIdInput } from './leadProfileCatalog'
 import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
 import { resolveWorkModeForLeadIntake } from './leadWorkMode'
+import {
+  isValidPublicDob,
+  isValidPublicNationalId,
+  isValidPublicPhone,
+} from './publicRegistrationForm'
 
 function norm(s: string): string {
   return s.trim()
@@ -64,17 +68,50 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
   }
 }
 
+export function manualLeadCreatedOriginFields(): {
+  intakeOrigin: 'public_portal'
+  registrationChannel: 'public_portal'
+} {
+  return { intakeOrigin: 'public_portal', registrationChannel: 'public_portal' }
+}
+
 export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
-  if (!norm(draft.source1)) {
-    return 'Cần chọn Nguồn 1 trước khi lưu hồ sơ mới.'
+  if (!norm(draft.fullName)) return 'Vui lòng nhập họ và tên.'
+  if (!isValidPublicDob(draft.dateOfBirth)) {
+    return 'Ngày sinh cần đúng DD/MM/YYYY và tuổi hợp lý (12–70).'
   }
-  const name = norm(draft.fullName)
-  const phoneKey = normalizePhoneKey(draft.phone, draft.parentPhone)
-  if (!name && phoneKey.length < 9) {
-    return 'Nhập ít nhất họ tên hoặc số điện thoại hợp lệ (≥ 9 chữ số).'
+  const gender = norm(draft.gender)
+  if (gender !== 'Nam' && gender !== 'Nữ') return 'Vui lòng chọn giới tính Nam hoặc Nữ.'
+  if (!norm(draft.placeOfBirth)) return 'Vui lòng nhập nơi sinh.'
+  if (!norm(draft.ethnicity)) return 'Vui lòng nhập dân tộc.'
+  if (!isValidPublicNationalId(draft.nationalId, draft.nationalIdNotAvailable)) {
+    return 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
   }
-  const cccdErr = validateNationalIdInput(draft.nationalId, draft.nationalIdNotAvailable)
-  if (cccdErr) return cccdErr
+  if (!isValidPublicPhone(draft.phone)) {
+    return 'SĐT Việt Nam 10 số (bắt đầu 0) hoặc quốc tế bắt đầu bằng +.'
+  }
+  const email = norm(draft.studentEmail)
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Email không hợp lệ.'
+  if (!norm(draft.permanentAddress) && !norm(draft.address)) {
+    return 'Vui lòng nhập địa chỉ thường trú.'
+  }
+  if (!isValidPublicPhone(draft.motherPhone)) {
+    return 'SĐT mẹ bắt buộc (10 số VN hoặc + quốc tế).'
+  }
+  if (norm(draft.fatherPhone) && !isValidPublicPhone(draft.fatherPhone)) {
+    return 'SĐT cha không hợp lệ.'
+  }
+  if (!norm(draft.highSchool)) return 'Vui lòng nhập trường đã theo học.'
+  if (!norm(draft.province)) return 'Vui lòng nhập tỉnh/thành.'
+  if (!norm(draft.applicantCategory)) return 'Vui lòng chọn đối tượng dự tuyển.'
+  if (!norm(draft.studyIntention) && !norm(draft.educationLevel)) {
+    return 'Vui lòng chọn hệ đào tạo.'
+  }
+  if (!norm(draft.majorInterest)) return 'Vui lòng chọn ngành học.'
+  if (!norm(draft.academicPerformance)) return 'Vui lòng chọn học lực.'
+  if (!norm(draft.source1) && !norm(draft.source)) {
+    return 'Cần nguồn tiếp nhận (Nguồn 1) trước khi lưu hồ sơ mới.'
+  }
   return null
 }
 
@@ -220,7 +257,7 @@ export async function createManualLead(
     priorityTag,
     ...pillarPatch,
     ...(workMode ? { workMode } : {}),
-    intakeOrigin: 'manual' as const,
+    ...manualLeadCreatedOriginFields(),
     createdAt: now,
     updatedAt: now,
     uploadedAt: now,
