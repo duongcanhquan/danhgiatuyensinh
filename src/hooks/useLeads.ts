@@ -502,6 +502,8 @@ export type LeadListServerFilters = {
   aiShortlistedOnly?: boolean
   /** Nguồn nhập đã ghi trên doc (`intakeOrigin`). */
   intakeOrigin?: LeadIntakeOrigin
+  /** Tab Cổng đăng ký: SV cổng ∪ tạo tay (manual) ∪ tạo mới (public_portal). */
+  portalIntakeGroup?: boolean
 }
 
 /**
@@ -672,6 +674,14 @@ function filterConstraints(
     const u = f.uploadedByIn.filter(Boolean).slice(0, 10)
     if (u.length === 1) c.push(where('uploadedBy', '==', u[0]))
     else if (u.length > 1) c.push(where('uploadedBy', 'in', u))
+  }
+  if (f.portalIntakeGroup) {
+    c.push(
+      or(
+        where('uploadedBy', '==', 'public_portal'),
+        where('intakeOrigin', 'in', ['manual', 'public_portal']),
+      ),
+    )
   }
   if (f.provinceIn?.length) {
     const p = f.provinceIn.map((x) => x.trim()).filter(Boolean).slice(0, 10)
