@@ -9,10 +9,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { deleteDoc, doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
-import type { OmicallCallTarget, OmicallCallUserData, OmicallIntegrationConfig } from '../types'
+import { deleteDoc, doc, getDoc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
+import type { LeadWorkMode, OmicallCallTarget, OmicallCallUserData, OmicallIntegrationConfig } from '../types'
 import { FS_COLLECTIONS, SCORING_AUX_OMICALL_DOC_ID } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { parseLeadWorkMode } from '../utils/leadWorkMode'
 import { useAuth } from '../hooks/useAuth'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
@@ -91,6 +92,8 @@ export type OmicallActiveCall = {
   phone: string
   leadId?: string
   leadName?: string
+  /** Chế độ xử lý hồ sơ lúc bắt đầu gọi — form đánh giá short/full. */
+  workMode?: LeadWorkMode
   target?: OmicallCallTarget
   outbound?: string
   durationSec: number
@@ -125,12 +128,14 @@ type OmicallContextValue = {
     leadName: string
     phone: string
     target: OmicallCallTarget
+    workMode?: LeadWorkMode
   }) => Promise<void>
   makeLeadCallClick2Call: (input: {
     leadId: string
     leadName: string
     phone: string
     target: OmicallCallTarget
+    workMode?: LeadWorkMode
   }) => Promise<void>
 }
 
@@ -176,7 +181,12 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const sdkRef = useRef<OmicallSdkGlobal | null>(null)
   const loggedCallUidsRef = useRef<Set<string>>(new Set())
   const pendingCallMetaRef = useRef<OmicallCallUserData | null>(null)
-  const pendingCallDisplayRef = useRef<{ leadId: string; leadName: string; target: OmicallCallTarget } | null>(null)
+  const pendingCallDisplayRef = useRef<{
+    leadId: string
+    leadName: string
+    target: OmicallCallTarget
+    workMode?: LeadWorkMode
+  } | null>(null)
   const activeCallUidRef = useRef<string | null>(null)
   const activeCallRef = useRef<OmicallActiveCall | null>(null)
   /** Payload thô từ SDK — dùng `call.end()` trên v3. */
@@ -203,10 +213,39 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   const scheduleAutoReconnectRef = useRef<(fullReload?: boolean) => void>(() => {})
 
   const scheduleFinalizeLoggingRef = useRef<() => void>(() => {})
+  const runFinalizeIfNeededRef = useRef<
+    ((opts?: { forcePlaceholder?: boolean }) => Promise<void>) | null
+  >(null)
 
   useEffect(() => {
     activeCallRef.current = activeCall
   }, [activeCall])
+
+  /** Inbound / SDK paths may have leadId without workMode — hydrate from lead doc once. */
+  useEffect(() => {
+    const leadId = activeCall?.leadId?.trim()
+    if (!leadId || activeCall?.workMode) return
+    const db = getFirestoreDb()
+    if (!db) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, leadId))
+        if (cancelled || !snap.exists()) return
+        const mode = parseLeadWorkMode(snap.data()?.workMode)
+        if (!mode) return
+        setActiveCall((prev) => {
+          if (!prev || prev.leadId !== leadId || prev.workMode) return prev
+          return { ...prev, workMode: mode }
+        })
+      } catch {
+        /* ignore — form falls back to full variant */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeCall?.leadId, activeCall?.workMode])
 
   useEffect(() => {
     sipReadyRef.current = sipReady
@@ -470,7 +509,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       if (finalizeTimerRef.current) window.clearTimeout(finalizeTimerRef.current)
       finalizeTimerRef.current = window.setTimeout(() => {
         finalizeTimerRef.current = null
-        void runFinalizeIfNeeded({ forcePlaceholder: true })
+        void runFinalizeIfNeededRef.current?.({ forcePlaceholder: true })
       }, 1800)
       return
     }
@@ -509,6 +548,10 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
       // Giữ pendingFinalizeRef để dismiss/retry sau.
     }
   }, [config.autoLogCalls, profile, captureFinalizeSnapshot])
+
+  useEffect(() => {
+    runFinalizeIfNeededRef.current = runFinalizeIfNeeded
+  }, [runFinalizeIfNeeded])
 
   const scheduleFinalizeLogging = useCallback(() => {
     captureFinalizeSnapshot()
@@ -648,6 +691,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
               phone,
               leadId,
               leadName,
+              workMode: display?.workMode,
               target: display?.target ?? pending?.target,
               outbound:
                 call.sipNumber?.number ||
@@ -665,6 +709,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
             leadId,
             leadName,
             phone,
+            workMode: prev?.workMode ?? display?.workMode ?? base.workMode,
             durationSec,
             durationLabel: call.callingDuration?.text ?? base.durationLabel,
           }
@@ -698,6 +743,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         phone,
         leadId,
         leadName,
+        workMode: display?.workMode ?? activeCallRef.current?.workMode,
         target,
         outbound:
           call.sipNumber?.number || resolvedOutboundRef.current || availableHotlinesRef.current[0],
@@ -1282,7 +1328,13 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   )
 
   const makeLeadCallClick2Call = useCallback(
-    async (input: { leadId: string; leadName: string; phone: string; target: OmicallCallTarget }) => {
+    async (input: {
+      leadId: string
+      leadName: string
+      phone: string
+      target: OmicallCallTarget
+      workMode?: LeadWorkMode
+    }) => {
       if (!canClick2Call) {
         throw new Error(
           'Chưa gọi được qua tổng đài — cần số nội bộ, đầu số gọi ra và API key trong Cài đặt → Gọi điện.',
@@ -1307,6 +1359,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         leadId: input.leadId,
         leadName: input.leadName,
         target: input.target,
+        workMode: input.workMode,
       }
       activeCallUidRef.current = null
       activeCallStartedMsRef.current = Date.now()
@@ -1319,6 +1372,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         phone: normalized,
         leadId: input.leadId,
         leadName: input.leadName,
+        workMode: input.workMode,
         target: input.target,
         outbound,
         durationSec: 0,
@@ -1370,7 +1424,13 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const makeLeadCall = useCallback(
-    async (input: { leadId: string; leadName: string; phone: string; target: OmicallCallTarget }) => {
+    async (input: {
+      leadId: string
+      leadName: string
+      phone: string
+      target: OmicallCallTarget
+      workMode?: LeadWorkMode
+    }) => {
       if (config.callMode === 'deskPhone') {
         return makeLeadCallClick2Call(input)
       }
@@ -1404,6 +1464,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         leadId: input.leadId,
         leadName: input.leadName,
         target: input.target,
+        workMode: input.workMode,
       }
       const outbound =
         resolveOmicallOutboundNumber(config, profile, resolvedOutbound || availableHotlines[0]) || undefined
@@ -1418,6 +1479,7 @@ export function OmicallProvider({ children }: { children: ReactNode }) {
         phone: normalized,
         leadId: input.leadId,
         leadName: input.leadName,
+        workMode: input.workMode,
         target: input.target,
         outbound,
         durationSec: 0,

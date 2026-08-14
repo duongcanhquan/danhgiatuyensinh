@@ -29,5 +29,6 @@ export function resolveWriteOrgId(input: {
 
 /** Platform superadmin: mọi tài khoản role `super_admin` (không gắn vào một trường vận hành). */
 export function isPlatformSuperAdminRole(role: UserRole | null | undefined, _orgId?: string | null | undefined): boolean {
+  void _orgId
   return role === 'super_admin'
 }

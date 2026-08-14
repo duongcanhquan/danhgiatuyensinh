@@ -195,6 +195,39 @@ describe('buildCallWorkLeadPatch', () => {
     expect(patch.status).toBeUndefined()
     expect(patch.pipelineStatus).toBeUndefined()
   })
+
+  it('merges workMode care_close after high_interest when current is not care_close', () => {
+    const patch = buildCallWorkLeadPatch({
+      dispositionId: 'high_interest',
+      calledByLabel: 'TVV',
+      currentWorkMode: 'volume_filter',
+    })
+    expect(patch.workMode).toBe('care_close')
+  })
+
+  it('does not set workMode for knm / not_interested or when already care_close', () => {
+    expect(
+      buildCallWorkLeadPatch({
+        dispositionId: 'knm',
+        calledByLabel: 'TVV',
+        currentWorkMode: 'volume_filter',
+      }).workMode,
+    ).toBeUndefined()
+    expect(
+      buildCallWorkLeadPatch({
+        dispositionId: 'not_interested',
+        calledByLabel: 'TVV',
+        currentWorkMode: 'score_queue',
+      }).workMode,
+    ).toBeUndefined()
+    expect(
+      buildCallWorkLeadPatch({
+        dispositionId: 'high_interest',
+        calledByLabel: 'TVV',
+        currentWorkMode: 'care_close',
+      }).workMode,
+    ).toBeUndefined()
+  })
 })
 
 describe('buildNoAnswerSoftCallWorkPatch', () => {

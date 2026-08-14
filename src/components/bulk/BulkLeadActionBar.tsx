@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { UserPlus, Download, GitBranch, Sparkles, X, Tags, Layers, Trash2 } from 'lucide-react'
+/* eslint-disable react-refresh/only-export-components -- file also exports bulk priority option constants */
+import { UserPlus, Download, GitBranch, Sparkles, X, Tags, Layers, Trash2, Workflow } from 'lucide-react'
 import type { PriorityTag } from '../../types'
 
 type Props = {
@@ -10,6 +11,8 @@ type Props = {
   onExport: () => void
   /** Gán nhãn HOT/WARM/COLD/LOSS hàng loạt */
   onBulkPriorityTag?: () => void
+  /** Gán chế độ xử lý (Sàng data / Lọc gọi nhanh / Chăm & chốt) hàng loạt */
+  onBulkWorkMode?: () => void
   /** Gán chương trình / đợt nhập hàng loạt */
   onBulkIntakeProgram?: () => void
   /** Admin: xóa hồ sơ đã chọn */
@@ -31,6 +34,7 @@ export function BulkLeadActionBar({
   onBulkStatus,
   onExport,
   onBulkPriorityTag,
+  onBulkWorkMode,
   onBulkIntakeProgram,
   onBulkDelete,
   showReassign,
@@ -89,6 +93,17 @@ export function BulkLeadActionBar({
                   <Tags className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="sm:hidden">Gán nhãn</span>
                   <span className="hidden sm:inline">Gán nhãn phân loại</span>
+                </button>
+              ) : null}
+              {onBulkWorkMode ? (
+                <button
+                  type="button"
+                  onClick={onBulkWorkMode}
+                  className={`${BAR_BTN} border-teal-300 bg-teal-50 text-teal-950 hover:border-teal-400 hover:bg-teal-100`}
+                >
+                  <Workflow className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  <span className="sm:hidden">Chế độ</span>
+                  <span className="hidden sm:inline">Gán chế độ xử lý</span>
                 </button>
               ) : null}
               {onBulkIntakeProgram ? (
@@ -150,6 +165,7 @@ export function BulkLeadActionBar({
   )
 }
 
+/** Options shared with LeadManagement bulk priority modal. */
 export const BULK_PRIORITY_TAG_OPTIONS: { value: PriorityTag; label: string }[] = [
   { value: 'HOT', label: 'HOT' },
   { value: 'WARM', label: 'WARM' },

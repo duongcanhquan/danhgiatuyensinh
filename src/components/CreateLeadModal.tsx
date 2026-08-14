@@ -128,6 +128,7 @@ export function CreateLeadModal({
           createdByUid: profile.id,
           createdByName: performer,
           orgId: effectiveOrgId,
+          leadSources,
         },
         {
           profile: activeScoringProfile,
@@ -181,6 +182,7 @@ export function CreateLeadModal({
     schoolTvvSignalDefs,
     infoScoreRuntime,
     classificationRuntime,
+    leadSources,
     onCreated,
     onClose,
   ])

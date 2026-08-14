@@ -47,6 +47,7 @@ import {
   type CallDispositionId,
 } from '../utils/callWorkQueue'
 import { mapDoc } from '../hooks/useLeads'
+import { parseLeadWorkMode } from '../utils/leadWorkMode'
 import { persistedLeadScoringFields, type MasterDataBuckets } from '../utils/scoring'
 import type { InfoScoreRuntime } from '../utils/infoScoreRules'
 import type { LeadClassificationRuntime } from '../utils/leadClassificationConfig'
@@ -79,6 +80,10 @@ function mapLeadFromSnap(id: string, data: Record<string, unknown>): Lead {
     pipelineStatus: (data.pipelineStatus as Lead['pipelineStatus']) ?? 'NEW',
     uniqueHash: String(data.uniqueHash ?? id),
     createdAt: created,
+    ...((): { workMode?: Lead['workMode'] } => {
+      const mode = parseLeadWorkMode(data.workMode)
+      return mode ? { workMode: mode } : {}
+    })(),
   }
 }
 
@@ -234,6 +239,7 @@ export async function saveCallSessionInteraction(
           previousAttemptCount: prevAttempts,
           bumpAttempt: true,
           existingScoringSignals: rawSignals,
+          currentWorkMode: lead.workMode,
         })
       : buildLastCallLeadPatch({
           calledByLabel: callerLabel,

@@ -15,14 +15,23 @@ import {
   buildPicksFromSelections,
   validateEvaluationSelections,
 } from '../utils/callSessionEvaluation'
+import {
+  callFormVariantForWorkMode,
+  filterDimensionsForCallForm,
+  type CallFormVariant,
+} from '../utils/callSessionFormVariant'
 import { behaviorScoreFromSelections, formatBehaviorDelta } from '../utils/callSessionBehaviorScore'
 import { CALL_DISPOSITIONS, isCallDispositionId } from '../utils/callWorkQueue'
-import type { CallAiAssessment } from '../types'
+import type { CallAiAssessment, LeadWorkMode } from '../types'
 import { CallSessionEvaluationBoard } from './CallSessionEvaluationBoard'
 
 type Props = {
   call: OmicallActiveCall
   institutionalRagBlock?: string
+  /** Ưu tiên hơn `workMode` nếu truyền. */
+  callFormVariant?: CallFormVariant
+  /** Chế độ xử lý hồ sơ — suy ra short/full khi chưa truyền variant. */
+  workMode?: LeadWorkMode
   onSaved?: (result: { callAiAssessment?: CallAiAssessment }) => void
   onClose: () => void
 }
@@ -30,12 +39,14 @@ type Props = {
 export function CallSessionQuickPanel({
   call,
   institutionalRagBlock,
+  callFormVariant: callFormVariantProp,
+  workMode: workModeProp,
   onSaved,
   onClose,
 }: Props) {
   const { profile, canRunLlmAnalysis } = useAuth()
   const { draft, setFreeNote, setCallOutcome, setDispositionId, resetDraft } = useCallSessionDraft()
-  const { dimensions } = useCallSessionConfigOptional()
+  const { dimensions: configDimensions } = useCallSessionConfigOptional()
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { activeScoringProfile, schoolTvvSignalDefs, masterBuckets } = useLeadScoring([])
@@ -46,6 +57,14 @@ export function CallSessionQuickPanel({
   const aiReady = Boolean(resolveAIIntegrationConfig()?.apiKey?.trim())
   const showAiOption = canRunLlmAnalysis && aiReady
   const isWrapup = call.phase === 'wrapup' || call.state === 'ended'
+
+  const workMode = workModeProp ?? call.workMode
+  const formVariant = callFormVariantProp ?? callFormVariantForWorkMode(workMode)
+  const dimensions = useMemo(
+    () => filterDimensionsForCallForm(configDimensions, formVariant),
+    [configDimensions, formVariant],
+  )
+  const isShortForm = formVariant === 'short'
 
   const behaviorPreview = useMemo(
     () => behaviorScoreFromSelections(dimensions, draft.selections),
@@ -129,8 +148,17 @@ export function CallSessionQuickPanel({
             {isWrapup ? 'Bảng đánh giá sau cuộc gọi' : 'Bảng đánh giá trực tiếp'}
           </p>
           <p className="mt-0.5 text-xs leading-snug text-violet-200/85">
-            Tick hành vi TVV để cộng/trừ điểm ngay. Phần dưới đánh giá khách/hồ sơ. Mục có{' '}
-            <span className="text-rose-300">*</span> là bắt buộc.
+            {isShortForm ? (
+              <>
+                Chọn <strong className="text-white">kết quả sau gọi</strong> bên dưới là đủ để lưu. Tick hành vi
+                TVV (nếu có) để cộng/trừ điểm — không bắt buộc.
+              </>
+            ) : (
+              <>
+                Tick hành vi TVV để cộng/trừ điểm ngay. Phần dưới đánh giá khách/hồ sơ. Mục có{' '}
+                <span className="text-rose-300">*</span> là bắt buộc.
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -173,18 +201,21 @@ export function CallSessionQuickPanel({
         </select>
       </label>
 
-      <div className="max-h-[min(42vh,360px)] overflow-y-auto overscroll-contain pr-0.5">
-        <CallSessionEvaluationBoard dimensions={dimensions} disabled={busy} />
-      </div>
+      {dimensions.length > 0 ? (
+        <div className="max-h-[min(42vh,360px)] overflow-y-auto overscroll-contain pr-0.5">
+          <CallSessionEvaluationBoard dimensions={dimensions} disabled={busy} />
+        </div>
+      ) : (
+        <p className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-violet-200/90">
+          Form gọn — chỉ cần chọn kết quả sau gọi rồi lưu.
+        </p>
+      )}
 
       {picksPreview.length > 0 ? (
         <p className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[10px] text-violet-200/90">
           Đã chọn {picksPreview.length} mục
           {behaviorPreview.behaviorPointsDelta !== 0
             ? ` · Hành vi: ${behaviorPreview.behaviorScore}/100 (${formatBehaviorDelta(behaviorPreview.behaviorPointsDelta)})`
-            : ''}
-          {picksPreview.find((p) => p.dimensionId === 'enrollment_signal')
-            ? ` · Tín hiệu: ${picksPreview.find((p) => p.dimensionId === 'enrollment_signal')!.optionLabel}`
             : ''}
         </p>
       ) : null}

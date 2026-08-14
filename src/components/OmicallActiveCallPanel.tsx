@@ -213,6 +213,7 @@ export function OmicallActiveCallPanel() {
             {showQuickNotes ? (
               <CallSessionQuickPanel
                 call={call}
+                workMode={call.workMode}
                 institutionalRagBlock={institutionalRagBlock}
                 onClose={onDismiss}
               />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { doc, getDoc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
+import { deleteField, doc, getDoc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore'
 import { Copy, ExternalLink, Save } from 'lucide-react'
 import {
   defaultPublicRegistrationConfig,
@@ -11,6 +11,7 @@ import { useOrg } from '../contexts/OrgProvider'
 import { getFirestoreDb } from '../services/firebase'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 
@@ -30,6 +31,10 @@ function parseConfig(data: Record<string, unknown> | undefined): PublicRegistrat
     introText: String(data.introText ?? base.introText).trim() || base.introText,
     successMessage: String(data.successMessage ?? base.successMessage).trim() || base.successMessage,
     defaultSource1: String(data.defaultSource1 ?? base.defaultSource1).trim() || base.defaultSource1,
+    ...((): Partial<Pick<PublicRegistrationConfig, 'defaultWorkMode'>> => {
+      const mode = parseLeadWorkMode(data.defaultWorkMode)
+      return mode ? { defaultWorkMode: mode } : {}
+    })(),
     autoAssignCounselor: data.autoAssignCounselor !== false,
     n8nEnabled: data.n8nEnabled !== false,
     n8nWebhookUrl: String(data.n8nWebhookUrl ?? '').trim(),
@@ -135,11 +140,16 @@ export function PublicRegistrationSettingsPanel() {
         updatedAt: new Date().toISOString(),
         updatedBy: profile?.email ?? profile?.id ?? 'admin',
       }
-      await setDoc(
-        ref,
-        { ...payload, orgId: effectiveOrgId, updatedAtServer: Timestamp.now() },
-        { merge: true },
-      )
+      const mode = parseLeadWorkMode(payload.defaultWorkMode)
+      if (mode) payload.defaultWorkMode = mode
+      else delete payload.defaultWorkMode
+      const firestoreBody: Record<string, unknown> = {
+        ...payload,
+        orgId: effectiveOrgId,
+        updatedAtServer: Timestamp.now(),
+        defaultWorkMode: mode ?? deleteField(),
+      }
+      await setDoc(ref, firestoreBody, { merge: true })
       await setDoc(
         doc(db, FS_COLLECTIONS.orgSettings, effectiveOrgId),
         { orgId: effectiveOrgId, updatedAt: Timestamp.now() },
@@ -149,7 +159,11 @@ export function PublicRegistrationSettingsPanel() {
       if (effectiveOrgId === DEFAULT_ORG_ID) {
         await setDoc(
           doc(db, FS_COLLECTIONS.scoringAux, PUBLIC_REGISTRATION_DOC_ID),
-          { ...payload, updatedAtServer: Timestamp.now() },
+          {
+            ...payload,
+            updatedAtServer: Timestamp.now(),
+            defaultWorkMode: mode ?? deleteField(),
+          },
           { merge: true },
         )
       }
@@ -276,6 +290,31 @@ export function PublicRegistrationSettingsPanel() {
             onChange={(e) => patch({ defaultSource1: e.target.value })}
             placeholder="Web đăng ký"
           />
+        </label>
+        <label>
+          <span className="text-sm font-semibold text-slate-800">Chế độ xử lý mặc định</span>
+          <select
+            className={`mt-1 ${INPUT}`}
+            value={draft.defaultWorkMode ?? ''}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const mode = parseLeadWorkMode(e.target.value)
+              setDraftDirty(true)
+              setDraft((d) => {
+                const next = { ...d }
+                if (mode) next.defaultWorkMode = mode
+                else delete next.defaultWorkMode
+                return next
+              })
+            }}
+          >
+            <option value="">— Trống (không gán) —</option>
+            {LEAD_WORK_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {leadWorkModeLabel(mode)}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           <span className="text-sm font-semibold text-slate-800">URL cổng (gửi kèm n8n)</span>

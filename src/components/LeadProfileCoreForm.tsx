@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { useFloatingDropdownPosition } from '../hooks/useFloatingDropdownPosition'
 import type { LeadCoreDraft } from '../utils/leadProfileEdit'
-import type { LeadSourceRecord, MasterDataEntry, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
+import type { LeadSourceRecord, LeadWorkMode, MasterDataEntry, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
 import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
 import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
@@ -445,7 +445,7 @@ function PhoneFieldWithCall({
   value: string
   disabled: boolean
   onChange: (v: string) => void
-  callContext?: { leadId: string; leadName: string }
+  callContext?: { leadId: string; leadName: string; workMode?: LeadWorkMode }
   target: OmicallCallTarget
 }) {
   return (
@@ -464,6 +464,7 @@ function PhoneFieldWithCall({
             leadName={callContext.leadName}
             phone={value}
             target={target}
+            workMode={callContext.workMode}
             disabled={disabled}
             placement="beside"
           />
@@ -522,7 +523,7 @@ export function LeadProfileCoreForm({
   financePanel?: ReactNode
   invitePanel?: ReactNode
   /** Khi có — hiện nút gọi OMICall cạnh các ô SĐT */
-  callContext?: { leadId: string; leadName: string }
+  callContext?: { leadId: string; leadName: string; workMode?: LeadWorkMode }
 }) {
   const [activeTab, setActiveTab] = useState<LeadProfileFormTabId>(defaultTab)
   const tabPanelRef = useRef<HTMLDivElement>(null)

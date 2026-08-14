@@ -117,6 +117,7 @@ export function resolveEffectivePermissions(
   profile: Pick<VietMyUserProfile, 'role' | 'extraPermissions' | 'deniedPermissions'> | null | undefined,
   _orgCaps?: OrgRoleCapabilities | null,
 ): readonly Permission[] {
+  void _orgCaps
   if (!profile) return []
   const base = new Set<Permission>(defaultPermissionsForRole(profile.role))
   for (const p of profile.extraPermissions ?? []) {

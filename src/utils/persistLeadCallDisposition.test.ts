@@ -87,4 +87,37 @@ describe('persistLeadCallDisposition', () => {
     expect(patch.priorityTag).toBe('LOSS')
     expect(patch.scoringSignals).toMatchObject({ enrolledElsewhere: true })
   })
+
+  it('sets workMode care_close after high_interest when current is not care_close', async () => {
+    await persistLeadCallDisposition(
+      {} as never,
+      { id: 'u1', role: 'counselor', displayName: 'TVV', email: null },
+      {
+        id: 'lead-1',
+        workMode: 'volume_filter',
+        priorityTag: 'WARM' as const,
+        status: 'CONTACTED' as const,
+        pipelineStatus: 'CONTACTED' as const,
+      },
+      { dispositionId: 'high_interest' },
+    )
+    const patch = updateDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(patch.workMode).toBe('care_close')
+  })
+
+  it('does not set workMode for knm', async () => {
+    await persistLeadCallDisposition(
+      {} as never,
+      { id: 'u1', role: 'counselor', displayName: 'TVV', email: null },
+      {
+        id: 'lead-1',
+        workMode: 'volume_filter',
+        status: 'NEW' as const,
+        pipelineStatus: 'NEW' as const,
+      },
+      { dispositionId: 'knm' },
+    )
+    const patch = updateDoc.mock.calls[0]![1] as Record<string, unknown>
+    expect(patch.workMode).toBeUndefined()
+  })
 })

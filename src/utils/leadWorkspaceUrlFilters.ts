@@ -1,5 +1,6 @@
 import type { LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from '../types'
 import { LEAD_COUNSELOR_STATUS_ORDER } from '../types'
+import { parseLeadWorkModeFromUrl } from './leadWorkMode'
 
 /** Tham số URL lọc/tìm hồ sơ trên `/leads` (đồng bộ bookmark và chia sẻ link). */
 export const LWF = {
@@ -23,6 +24,8 @@ export const LWF = {
   DISP: 'disp',
   /** Chương trình / đợt nhập */
   PROG: 'prog',
+  /** Chế độ xử lý hồ sơ: score_queue | volume_filter | care_close */
+  WM: 'wm',
 } as const
 
 const TAG_SET = new Set<string>(['HOT', 'WARM', 'COLD', 'LOSS'])
@@ -85,6 +88,11 @@ export function parseDispositionFromUrl(raw: string | null): string {
   return (raw ?? '').trim().slice(0, 64)
 }
 
+/** Chế độ xử lý hồ sơ từ URL (`wm`) — bọc `parseLeadWorkModeFromUrl`. */
+export function parseWorkModeFromUrl(raw: string | null) {
+  return parseLeadWorkModeFromUrl(raw)
+}
+
 /** Chuỗi ổn định để hydrate từ URL (không gồm `q` — ô tìm đọc trực tiếp từ `searchParams`). */
 export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
   const keys = [
@@ -104,6 +112,7 @@ export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
     LWF.CQ,
     LWF.DISP,
     LWF.PROG,
+    LWF.WM,
   ] as const
   return keys.map((k) => `${k}=${sp.get(k) ?? ''}`).join('|')
 }

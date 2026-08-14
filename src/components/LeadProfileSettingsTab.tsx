@@ -6,7 +6,7 @@ import { deleteDoc, doc, type Firestore } from 'firebase/firestore'
 
 import { Plus, Trash2 } from 'lucide-react'
 
-import type { LeadSourceRecord } from '../types'
+import type { LeadSourceRecord, LeadWorkMode } from '../types'
 
 import { FS_COLLECTIONS } from '../types'
 
@@ -14,7 +14,15 @@ import { useLeadSources } from '../hooks/useLeadSources'
 
 import { useMasterData } from '../hooks/useMasterData'
 
+import { useOrg } from '../hooks/useOrg'
+
+import { useScoringProfiles } from '../hooks/useScoringProfiles'
+
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+
 import { saveLeadSourceRow, seedDefaultLeadSources } from '../utils/leadProfileCatalogSeed'
+
+import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
 
 import { MasterCatalogEditor } from './MasterCatalogEditor'
 
@@ -405,6 +413,8 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
 function SourcesSection({ db, canEdit }: { db: Firestore; canEdit: boolean }) {
 
+  const { effectiveOrgId } = useOrg()
+
   const { items: sources, loading: srcLoading, error: srcError } = useLeadSources()
 
   const [busy, setBusy] = useState(false)
@@ -463,7 +473,7 @@ function SourcesSection({ db, canEdit }: { db: Firestore; canEdit: boolean }) {
 
           run(async () => {
 
-            const n = await seedDefaultLeadSources(db)
+            const n = await seedDefaultLeadSources(db, effectiveOrgId.trim() || DEFAULT_ORG_ID)
 
             setMsg(`Đã nạp ${n} nguồn mặc định.`)
 
@@ -475,7 +485,7 @@ function SourcesSection({ db, canEdit }: { db: Firestore; canEdit: boolean }) {
 
           run(async () => {
 
-            await saveLeadSourceRow(db, row.id, row)
+            await saveLeadSourceRow(db, row.id, { ...row, orgId: effectiveOrgId.trim() || DEFAULT_ORG_ID })
 
             setMsg('Đã lưu nguồn.')
 
@@ -537,13 +547,31 @@ function SourcesPanel({
 
   onSeed: () => void
 
-  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean }) => void
+  onSave: (row: {
+
+    id: string | null
+
+    label: string
+
+    sortOrder: number
+
+    isActive: boolean
+
+    defaultWorkMode?: LeadWorkMode | null
+
+    defaultScoringProfileId?: string | null
+
+    allowProfileSwitchOnList?: boolean
+
+  }) => void
 
   onDelete: (id: string) => void
 
 }) {
 
   const [label, setLabel] = useState('')
+
+  const { profiles: scoringProfiles } = useScoringProfiles()
 
   const sorted = useMemo(
 
@@ -579,7 +607,7 @@ function SourcesPanel({
 
             onClick={onSeed}
 
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100 disabled:opacity-40"
+            className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
 
           >
 
@@ -611,7 +639,7 @@ function SourcesPanel({
 
               }}
 
-              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
 
             >
 
@@ -633,11 +661,27 @@ function SourcesPanel({
 
         busy={busy}
 
-        columns={['Nguồn', 'TT', 'Bật']}
+        columns={['Nguồn', 'TT', 'Bật', 'Chế độ', 'Đổi bộ chấm', 'Bộ chấm mặc định']}
 
         renderRow={(row) => (
 
-          <SourceRow key={row.id} row={row} canEdit={canEdit} busy={busy} onSave={onSave} onDelete={onDelete} />
+          <SourceRow
+
+            key={row.id}
+
+            row={row}
+
+            canEdit={canEdit}
+
+            busy={busy}
+
+            scoringProfiles={scoringProfiles}
+
+            onSave={onSave}
+
+            onDelete={onDelete}
+
+          />
 
         )}
 
@@ -663,6 +707,8 @@ function SourceRow({
 
   busy,
 
+  scoringProfiles,
+
   onSave,
 
   onDelete,
@@ -675,7 +721,25 @@ function SourceRow({
 
   busy: boolean
 
-  onSave: (row: { id: string | null; label: string; sortOrder: number; isActive: boolean }) => void
+  scoringProfiles: { id: string; profileName: string }[]
+
+  onSave: (row: {
+
+    id: string | null
+
+    label: string
+
+    sortOrder: number
+
+    isActive: boolean
+
+    defaultWorkMode?: LeadWorkMode | null
+
+    defaultScoringProfileId?: string | null
+
+    allowProfileSwitchOnList?: boolean
+
+  }) => void
 
   onDelete: (id: string) => void
 
@@ -687,7 +751,19 @@ function SourceRow({
 
   const [isActive, setIsActive] = useState(row.isActive)
 
-  const dirty = label !== row.label || sortOrder !== row.sortOrder || isActive !== row.isActive
+  const [defaultWorkMode, setDefaultWorkMode] = useState<LeadWorkMode | ''>(row.defaultWorkMode ?? '')
+
+  const [defaultScoringProfileId, setDefaultScoringProfileId] = useState(row.defaultScoringProfileId ?? '')
+
+  const [allowProfileSwitchOnList, setAllowProfileSwitchOnList] = useState(row.allowProfileSwitchOnList ?? true)
+
+  const dirty =
+    label !== row.label ||
+    sortOrder !== row.sortOrder ||
+    isActive !== row.isActive ||
+    (defaultWorkMode || undefined) !== (row.defaultWorkMode || undefined) ||
+    (defaultScoringProfileId || null) !== (row.defaultScoringProfileId || null) ||
+    allowProfileSwitchOnList !== (row.allowProfileSwitchOnList ?? true)
 
 
 
@@ -725,6 +801,92 @@ function SourceRow({
 
       </td>
 
+      <td className="p-2">
+
+        <select
+
+          className={INPUT}
+
+          value={defaultWorkMode}
+
+          disabled={!canEdit || busy}
+
+          onChange={(e) => setDefaultWorkMode(parseLeadWorkMode(e.target.value) ?? '')}
+
+          aria-label="Chế độ xử lý mặc định"
+
+        >
+
+          <option value="">— Trống —</option>
+
+          {LEAD_WORK_MODES.map((mode) => (
+
+            <option key={mode} value={mode}>
+
+              {leadWorkModeLabel(mode)}
+
+            </option>
+
+          ))}
+
+        </select>
+
+      </td>
+
+      <td className="p-2">
+
+        <label className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+
+          <input
+
+            type="checkbox"
+
+            checked={allowProfileSwitchOnList}
+
+            disabled={!canEdit || busy}
+
+            onChange={(e) => setAllowProfileSwitchOnList(e.target.checked)}
+
+          />
+
+          Cho đổi bộ chấm trên danh sách
+
+        </label>
+
+      </td>
+
+      <td className="p-2">
+
+        <select
+
+          className={INPUT}
+
+          value={defaultScoringProfileId}
+
+          disabled={!canEdit || busy}
+
+          onChange={(e) => setDefaultScoringProfileId(e.target.value)}
+
+          aria-label="Bộ chấm mặc định"
+
+        >
+
+          <option value="">— Trống —</option>
+
+          {scoringProfiles.map((p) => (
+
+            <option key={p.id} value={p.id}>
+
+              {p.profileName}
+
+            </option>
+
+          ))}
+
+        </select>
+
+      </td>
+
       {canEdit ? (
 
         <td className="p-2">
@@ -735,7 +897,17 @@ function SourceRow({
 
             dirty={dirty && Boolean(label.trim())}
 
-            onSave={() => onSave({ id: row.id, label, sortOrder, isActive })}
+            onSave={() =>
+              onSave({
+                id: row.id,
+                label,
+                sortOrder,
+                isActive,
+                defaultWorkMode: defaultWorkMode ? defaultWorkMode : null,
+                defaultScoringProfileId: defaultScoringProfileId ? defaultScoringProfileId : null,
+                allowProfileSwitchOnList,
+              })
+            }
 
             onDelete={() => {
 
@@ -791,7 +963,7 @@ function RowActions({
 
         onClick={onSave}
 
-        className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold disabled:opacity-40"
+        className="cursor-pointer rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
 
       >
 
@@ -807,7 +979,7 @@ function RowActions({
 
         onClick={onDelete}
 
-        className="rounded border border-rose-200 p-1 text-rose-700 hover:bg-rose-50"
+        className="cursor-pointer rounded border border-rose-200 p-1 text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed"
 
         aria-label="Xóa"
 
