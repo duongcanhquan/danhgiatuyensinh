@@ -32,13 +32,13 @@ export function LeadWorkModeBentoBoard({
     <div className={['space-y-1.5', className].filter(Boolean).join(' ')}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          Chế độ xử lý hồ sơ{sampleOnly ? ' (trang này)' : ''}
+          Cách làm việc — lọc danh sách{sampleOnly ? ' (trang này)' : ''}
         </p>
         <p className="text-[11px] text-slate-500" aria-live="polite">
           {active === 'all'
             ? sampleOnly
-              ? 'Đếm trên trang đang tải'
-              : 'Đang xem mọi chế độ'
+              ? 'Chọn ô để thu hẹp hồ sơ cần xử lý'
+              : 'Chọn chế độ để lọc gọn danh sách'
             : `Đang lọc: ${leadWorkModeLabel(active)}`}
         </p>
       </div>

@@ -129,6 +129,7 @@ import {
   findLeadSourceByLabel,
   leadMatchesWorkModeFilter,
   leadWorkModeLabel,
+  leadWorkModePrimaryFocus,
   parseLeadWorkMode,
   summarizeLeadWorkModes,
 } from '../utils/leadWorkMode'
@@ -3340,6 +3341,15 @@ export function LeadManagement() {
           </div>
         </div>
 
+        {/* Lọc chế độ — LUÔN ngoài danh sách (không giấu trong Công cụ). */}
+        <LeadWorkModeBentoBoard
+          active={workModeFilter}
+          summary={workModeSummary}
+          onSelect={(next) => applyWorkModeQuick(next)}
+          sampleOnly={!listNeedsFullScope}
+          className="w-full border-t border-slate-200/60 pt-2"
+        />
+
         {workspaceToolsOpen ? (
           <>
         <div className="flex flex-wrap items-center gap-2">
@@ -3522,13 +3532,6 @@ export function LeadManagement() {
               />
             </BentoGrid>
           ) : null}
-          <LeadWorkModeBentoBoard
-            active={workModeFilter}
-            summary={workModeSummary}
-            onSelect={(next) => applyWorkModeQuick(next)}
-            sampleOnly={!listNeedsFullScope}
-            className="w-full"
-          />
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
           <div className="min-w-0">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hàng chờ gọi</p>
@@ -5666,6 +5669,7 @@ function LeadDetailPanel({
     [infoScoreRuntime, classificationRuntime],
   )
   const canEditScoringSignals = canWriteLead(profile, lead, can, pickListUsers)
+  const workFocus = leadWorkModePrimaryFocus(lead.workMode)
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
@@ -5834,7 +5838,9 @@ function LeadDetailPanel({
     setStatusDirty(null)
     setMsg(null)
     setPlaybookPopupTab('consulting')
-    setDetailLeftTab('counselor')
+    setDetailLeftTab(
+      leadWorkModePrimaryFocus(lead.workMode) === 'care_dossier' ? 'profile' : 'counselor',
+    )
     setDetailRightTab('history')
     signalsHelpRef.current?.close()
     // Chỉ reset khi đổi hồ sơ — không phụ thuộc field lead (tránh xóa draft khi patch local).
@@ -7204,6 +7210,21 @@ function LeadDetailPanel({
                             </div>
                           ) : null}
 
+                          {workFocus === 'care_dossier' ? (
+                            <p className="rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] leading-snug text-emerald-950">
+                              Chế độ <strong>Chăm &amp; chốt</strong> — dùng tab{' '}
+                              <button
+                                type="button"
+                                className="cursor-pointer font-semibold underline underline-offset-2"
+                                onClick={() => setDetailLeftTab('profile')}
+                              >
+                                Hồ sơ ứng viên
+                              </button>{' '}
+                              để cập nhật giấy tờ / đóng tiền. Tab này giữ note gọi &amp; tiến độ.
+                            </p>
+                          ) : null}
+
+                          {workFocus === 'scoring' ? (
                           <details className="group rounded-xl border border-emerald-200/90 bg-gradient-to-br from-indigo-50/45 via-white to-slate-50/90 shadow-md ring-1 ring-emerald-900/10 open:p-2 sm:open:p-2.5">
                             <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
                               <ChevronDown
@@ -7211,7 +7232,7 @@ function LeadDetailPanel({
                                 aria-hidden
                               />
                               <span className="min-w-0 flex-1 text-xs font-semibold text-emerald-950">
-                                Nâng cao — tín hiệu cho bộ chấm
+                                Tín hiệu cho bộ chấm (Sàng data)
                               </span>
                               <button
                                 type="button"
@@ -7228,8 +7249,7 @@ function LeadDetailPanel({
                               </button>
                             </summary>
                             <p className="px-2.5 pb-1 text-[11px] leading-snug text-slate-600 sm:px-0">
-                              Cờ hành vi / rủi ro cho bộ chấm điểm — mỗi thay đổi <strong>lưu ngay</strong>; không thay kết
-                              quả sau gọi. Điểm &amp; nhãn HOT/WARM/COLD theo profile đang chọn.
+                              Chỉ dùng khi sàng data — cộng điểm bộ chấm. Không thay note sau gọi.
                             </p>
 
                             <dialog
@@ -7253,18 +7273,8 @@ function LeadDetailPanel({
                                 </div>
                                 <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
                                   <p>
-                                    Khối <strong>Nâng cao — tín hiệu cho bộ chấm</strong> phục vụ chấm điểm profile, nhãn{' '}
-                                    <strong>HOT / WARM / COLD</strong>, lọc bảng hồ sơ và dữ liệu cho{' '}
-                                    <strong>AI</strong>. Không trùng với bảng đánh giá cuộc gọi (kết quả sau gọi / note).
-                                  </p>
-                                  <p className="mt-2">
-                                    <span className="font-semibold text-slate-900">Hành vi &amp; rủi ro</span> — bật/tắt là{' '}
-                                    <strong>lưu ngay</strong> từng mục (không dùng chung nút «Lưu cập nhật» của khối tiến độ).
-                                  </p>
-                                  <p className="mt-2">
-                                    <span className="font-semibold text-slate-900">Tiến độ &amp; ghi chú</span> — thẻ màu
-                                    cam: tình trạng tư vấn, tình trạng hồ sơ, phản hồi nhanh, ghi chú TVV và nút{' '}
-                                    <strong>Lưu cập nhật</strong>.
+                                    Tín hiệu phục vụ <strong>Sàng data</strong> (HOT/WARM). Kết quả cuộc gọi dùng{' '}
+                                    <strong>Phản hồi nhanh / note</strong> phía trên — không trùng.
                                   </p>
                                 </div>
                               </div>
@@ -7282,6 +7292,7 @@ function LeadDetailPanel({
                               />
                             </div>
                           </details>
+                          ) : null}
                         </div>
                       ) : null}
                     </aside>
