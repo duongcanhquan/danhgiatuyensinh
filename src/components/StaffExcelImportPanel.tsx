@@ -2,17 +2,19 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import { Download, FileSpreadsheet, Upload } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
+import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import {
   downloadStaffIntakeTemplate,
   parseStaffWorkbook,
   type ExcelStaffRow,
 } from '../utils/excelStaffMapper'
-import { USER_ROLE_LABELS, type UserRole } from '../types'
+import { USER_ROLE_LABELS, type UserRole, type VietMyUserProfile } from '../types'
 
 /** Nhập Excel tư vấn viên — làm trước khi import Sheet hồ sơ (map theo Tên hiển thị). */
 export function StaffExcelImportPanel() {
-  const { can, createStaffAccount, users } = useAuth()
+  const { can, createStaffAccount } = useAuth()
   const { effectiveOrgId } = useOrg()
+  const { users } = useCounselorDirectory()
   const canCreate = can('config:users')
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<ExcelStaffRow[] | null>(null)
@@ -24,7 +26,9 @@ export function StaffExcelImportPanel() {
 
   if (!canCreate) return null
 
-  const existingEmails = new Set(users.map((u) => u.email.toLowerCase().trim()))
+  const existingEmails = new Set(
+    users.map((u: VietMyUserProfile) => u.email.toLowerCase().trim()),
+  )
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
