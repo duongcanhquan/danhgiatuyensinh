@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   leadIntakeOriginToUrlParam,
   leadMatchesIntakeOrigin,
+  leadMatchesIntakeOriginTab,
   parseLeadIntakeOrigin,
   parseLeadIntakeOriginFromUrl,
   resolveLeadIntakeOrigin,
+  LEAD_INTAKE_ORIGIN_TABS,
 } from './leadIntakeOrigin'
 
 describe('parseLeadIntakeOrigin', () => {
@@ -27,10 +29,27 @@ describe('parseLeadIntakeOriginFromUrl', () => {
     expect(parseLeadIntakeOriginFromUrl('bogus')).toBe('campaign_upload')
   })
 
-  it('maps short codes', () => {
+  it('maps short codes; bookmark manual → portal tab', () => {
     expect(parseLeadIntakeOriginFromUrl('campaign')).toBe('campaign_upload')
-    expect(parseLeadIntakeOriginFromUrl('manual')).toBe('manual')
+    expect(parseLeadIntakeOriginFromUrl('manual')).toBe('public_portal')
     expect(parseLeadIntakeOriginFromUrl('portal')).toBe('public_portal')
+  })
+})
+
+describe('LEAD_INTAKE_ORIGIN_TABS', () => {
+  it('has campaign and portal only', () => {
+    expect([...LEAD_INTAKE_ORIGIN_TABS]).toEqual(['campaign_upload', 'public_portal'])
+  })
+})
+
+describe('leadMatchesIntakeOriginTab', () => {
+  it('portal tab includes manual and public_portal', () => {
+    expect(leadMatchesIntakeOriginTab({ intakeOrigin: 'manual' }, 'public_portal')).toBe(true)
+    expect(leadMatchesIntakeOriginTab({ uploadedBy: 'public_portal' }, 'public_portal')).toBe(true)
+    expect(leadMatchesIntakeOriginTab({ uploadBatchId: 'manual-abc-1' }, 'public_portal')).toBe(true)
+    expect(leadMatchesIntakeOriginTab({}, 'public_portal')).toBe(false)
+    expect(leadMatchesIntakeOriginTab({ uploadedBy: 'public_portal' }, 'campaign_upload')).toBe(false)
+    expect(leadMatchesIntakeOriginTab({}, 'campaign_upload')).toBe(true)
   })
 })
 

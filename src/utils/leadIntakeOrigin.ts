@@ -8,6 +8,13 @@ export const LEAD_INTAKE_ORIGINS: readonly LeadIntakeOrigin[] = [
   'public_portal',
 ] as const
 
+export type LeadIntakeOriginTab = 'campaign_upload' | 'public_portal'
+
+export const LEAD_INTAKE_ORIGIN_TABS: readonly LeadIntakeOriginTab[] = [
+  'campaign_upload',
+  'public_portal',
+] as const
+
 const LABELS: Record<LeadIntakeOrigin, string> = {
   campaign_upload: 'Tải lên / chiến dịch',
   manual: 'Tạo tay',
@@ -20,10 +27,10 @@ const HINTS: Record<LeadIntakeOrigin, string> = {
   public_portal: 'Form công khai — tải đủ để thao tác',
 }
 
-/** URL short codes → origin */
-const URL_TO_ORIGIN: Record<string, LeadIntakeOrigin> = {
+/** URL short codes → tab */
+const URL_TO_ORIGIN: Record<string, LeadIntakeOriginTab> = {
   campaign: 'campaign_upload',
-  manual: 'manual',
+  manual: 'public_portal',
   portal: 'public_portal',
   campaign_upload: 'campaign_upload',
   public_portal: 'public_portal',
@@ -51,7 +58,7 @@ export function parseLeadIntakeOrigin(raw: unknown): LeadIntakeOrigin | undefine
 }
 
 /** Mặc định tab chiến dịch. */
-export function parseLeadIntakeOriginFromUrl(raw: string | null): LeadIntakeOrigin {
+export function parseLeadIntakeOriginFromUrl(raw: string | null): LeadIntakeOriginTab {
   const key = (raw ?? '').trim().toLowerCase()
   if (!key) return 'campaign_upload'
   return URL_TO_ORIGIN[key] ?? 'campaign_upload'
@@ -95,4 +102,13 @@ export function leadMatchesIntakeOrigin(
   origin: LeadIntakeOrigin,
 ): boolean {
   return resolveLeadIntakeOrigin(lead) === origin
+}
+
+export function leadMatchesIntakeOriginTab(
+  lead: LeadIntakeOriginResolveInput,
+  tab: LeadIntakeOriginTab,
+): boolean {
+  const resolved = resolveLeadIntakeOrigin(lead)
+  if (tab === 'campaign_upload') return resolved === 'campaign_upload'
+  return resolved === 'public_portal' || resolved === 'manual'
 }
