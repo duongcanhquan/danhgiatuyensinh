@@ -1,6 +1,6 @@
 # DES-INTAKE-ORIGIN-2026-08 — Tách nguồn nhập hồ sơ (3 tab)
 
-**Status:** implementing  
+**Status:** implemented  
 **Date:** 2026-08-14  
 **Approach:** A (đã duyệt)
 
@@ -23,3 +23,9 @@ URL: `origin=campaign|manual|portal` (mặc định `campaign`).
 Suy diễn legacy: portal (`registrationChannel` / `uploadedBy` / lô `public-…`) → tạo tay (lô `manual-…`) → còn lại campaign.
 
 Ghi origin khi Excel / tạo tay / cổng từ nay.
+
+## Bugfix (rà soát 2026-08-14)
+
+1. Tab chiến dịch phân trang bị «thủng» vì cổng/tạo tay chiếm `limit` → thêm `pagedKeepMatch` oversample đủ 1 trang khớp.
+2. Đếm / bento / chương trình lẫn origin khác → `originScopedLeads` + không dùng `totalLeadCount` thô trên tab chiến dịch.
+3. «Xóa lọc» reset về chiến dịch → giữ `origin` trên URL.

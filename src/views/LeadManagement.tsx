@@ -680,6 +680,13 @@ export function LeadManagement() {
     fullScopeMatchKey: clientKeepMatchNeeded
       ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
       : undefined,
+    /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ. */
+    pagedKeepMatch:
+      !listNeedsFullScope && intakeOriginTab === 'campaign_upload'
+        ? (l: Lead) => leadMatchesIntakeOrigin(l, 'campaign_upload')
+        : undefined,
+    pagedKeepMatchKey:
+      !listNeedsFullScope && intakeOriginTab === 'campaign_upload' ? 'origin:campaign_upload' : undefined,
     // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
     includeScopeTagCounts: false,
     includeScopeSourceOptions: sourceCatalogRequested,
@@ -1298,19 +1305,25 @@ export function LeadManagement() {
     infoScoreRuntime,
   ])
 
+  /** Hồ sơ đã tải thuộc đúng tab nguồn — dùng đếm bento / hàng chờ của tôi. */
+  const originScopedLeads = useMemo(
+    () => leads.filter((l) => leadMatchesIntakeOrigin(l, intakeOriginTab)),
+    [leads, intakeOriginTab],
+  )
+
   /** Tổng kết hàng chờ của người đang đăng nhập (hồ sơ gán cho mình trong phạm vi đã tải). */
   const myCallWorkSummary = useMemo(() => {
     const uid = profile?.id?.trim()
     const mine = uid
-      ? leads.filter((l) => effectiveLeadAssigneeUid(l) === uid)
+      ? originScopedLeads.filter((l) => effectiveLeadAssigneeUid(l) === uid)
       : []
     return summarizeCallWorkQueue(mine)
-  }, [leads, profile?.id])
+  }, [originScopedLeads, profile?.id])
 
-  /** Đếm chế độ hiệu lực trên tập đã tải — ô bento lọc ngữ cảnh. */
+  /** Đếm chế độ hiệu lực trên tập đã tải (đã theo tab nguồn). */
   const workModeSummary = useMemo(
-    () => summarizeLeadWorkModes(leads, leadSources),
-    [leads, leadSources],
+    () => summarizeLeadWorkModes(originScopedLeads, leadSources),
+    [originScopedLeads, leadSources],
   )
 
   /**
@@ -1340,14 +1353,16 @@ export function LeadManagement() {
     // Khi fullScope / hàng chờ / chương trình: `listNeedsFullScope` đã true → đếm client.
     if (listNeedsFullScope || clientPagingActive) return sortedFiltered.length
     const q = (searchParams.get(LWF.Q) ?? '').trim()
-    if (q) return searchHitTotal ?? sortedFiltered.length
+    // Tab nguồn luôn siết client — không dùng totalLeadCount / searchHitTotal thô (gồm cổng…).
+    if (q) return sortedFiltered.length
     if (
       scoreMinInput.trim() !== '' ||
       scoreMaxInput.trim() !== '' ||
       dispositionFilter !== 'all' ||
       callWorkBucketFilter !== 'all' ||
       workModeFilter !== 'all' ||
-      aiShortlistOnly
+      aiShortlistOnly ||
+      intakeOriginTab === 'campaign_upload'
     ) {
       return sortedFiltered.length
     }
@@ -1357,13 +1372,13 @@ export function LeadManagement() {
     clientPagingActive,
     sortedFiltered.length,
     searchParams,
-    searchHitTotal,
     scoreMinInput,
     scoreMaxInput,
     dispositionFilter,
     callWorkBucketFilter,
     workModeFilter,
     aiShortlistOnly,
+    intakeOriginTab,
     totalLeadCount,
   ])
 
@@ -1371,7 +1386,7 @@ export function LeadManagement() {
     const source =
       listNeedsFullScope || clientPagingActive || (searchParams.get(LWF.Q) ?? '').trim()
         ? sortedFiltered
-        : leads
+        : originScopedLeads
     const map = new Map<string, number>()
     let unset = 0
     for (const l of source) {
@@ -1387,7 +1402,7 @@ export function LeadManagement() {
       .slice(0, 8)
     const sampleOnly = !(listNeedsFullScope || clientPagingActive) && !(searchParams.get(LWF.Q) ?? '').trim()
     return { rows, unset, sampleSize: source.length, sampleOnly }
-  }, [listNeedsFullScope, clientPagingActive, sortedFiltered, leads, searchParams])
+  }, [listNeedsFullScope, clientPagingActive, sortedFiltered, originScopedLeads, searchParams])
 
   useEffect(() => {
     if (currentPage > displayTotalPages) setPage(displayTotalPages)
@@ -1617,9 +1632,16 @@ export function LeadManagement() {
     setUploadedFromFilter(empty.uploadedFrom)
     setUploadedToFilter(empty.uploadedTo)
     setDraftFilters(empty)
-    setSearchParams((prev) => stripListFiltersKeepOpenView(prev), { replace: true })
+    // Giữ tab nguồn nhập (không coi là «lọc tạm»).
+    setSearchParams((prev) => {
+      const next = stripListFiltersKeepOpenView(prev)
+      if (intakeOriginTab !== 'campaign_upload') {
+        next.set(LWF.ORIGIN, leadIntakeOriginToUrlParam(intakeOriginTab))
+      }
+      return next
+    }, { replace: true })
     setPage(1)
-  }, [setSearchParams, setPage])
+  }, [setSearchParams, setPage, intakeOriginTab])
 
   const activeFilterChips = useMemo(() => {
     type Chip = { id: string; label: string; onClear: () => void }
@@ -3402,10 +3424,8 @@ export function LeadManagement() {
               Nguồn nhập hồ sơ
             </p>
             <p className="text-[11px] text-slate-500" aria-live="polite">
-              {intakeOriginNeedsScope
-                ? loading || loadingPage
-                  ? 'Đang tải đủ hồ sơ tab này…'
-                  : leadIntakeOriginHint(intakeOriginTab)
+              {intakeOriginNeedsScope && (loading || loadingPage)
+                ? 'Đang tải đủ hồ sơ tab này…'
                 : leadIntakeOriginHint(intakeOriginTab)}
             </p>
           </div>

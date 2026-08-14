@@ -3,6 +3,7 @@ import {
   LWF,
   leadFilterSignatureForHydrate,
   parseWorkModeFromUrl,
+  stripListFiltersKeepOpenView,
   urlHasLeadListFilters,
 } from './leadWorkspaceUrlFilters'
 
@@ -35,5 +36,20 @@ describe('leadWorkspaceUrlFilters work mode', () => {
   it('detects wm as a list filter on URL', () => {
     expect(urlHasLeadListFilters(new URLSearchParams('wm=care_close'))).toBe(true)
     expect(urlHasLeadListFilters(new URLSearchParams('q=an&wm=score_queue'))).toBe(true)
+  })
+
+  it('includes origin in hydrate signature', () => {
+    const sp = new URLSearchParams()
+    sp.set(LWF.ORIGIN, 'portal')
+    expect(leadFilterSignatureForHydrate(sp)).toContain('origin=portal')
+  })
+
+  it('preserves origin tab when stripping list filters', () => {
+    const sp = new URLSearchParams('origin=portal&wm=care_close&tag=HOT&open=abc')
+    const next = stripListFiltersKeepOpenView(sp)
+    expect(next.get(LWF.ORIGIN)).toBe('portal')
+    expect(next.get('open')).toBe('abc')
+    expect(next.get(LWF.WM)).toBeNull()
+    expect(next.get(LWF.TAG)).toBeNull()
   })
 })

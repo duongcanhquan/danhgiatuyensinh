@@ -145,15 +145,18 @@ export function mergeLeadFiltersIntoSearchParams(
   return p
 }
 
-/** Xóa mọi bộ lọc danh sách + `q`, giữ `open` / `view` (nếu có). */
+/** Xóa mọi bộ lọc danh sách + `q`, giữ `open` / `view` / tab nguồn nhập (`origin`). */
 export function stripListFiltersKeepOpenView(prev: URLSearchParams): URLSearchParams {
   const open = prev.get('open')
   const view = prev.get('view')
+  const origin = prev.get(LWF.ORIGIN)
   const p = new URLSearchParams(prev)
   for (const v of Object.values(LWF)) p.delete(v)
   if (open) p.set('open', open)
   else p.delete('open')
   if (view) p.set('view', view)
   else p.delete('view')
+  if (origin?.trim()) p.set(LWF.ORIGIN, origin.trim())
+  else p.delete(LWF.ORIGIN)
   return p
 }

@@ -30,6 +30,12 @@ Bấm một chế độ **không** lọc trên 1 trang. Hệ thống:
 
 Khi «Tất cả»: đếm ô là ước tính trang hiện tại; bấm ô mới quét toàn phạm vi (tiết kiệm đọc khi chưa lọc).
 
+### Bugfix 2026-08-14 (rà soát)
+
+- Tab **chiến dịch** phân trang: `pagedKeepMatch` oversample đủ 1 trang khớp origin (tránh trang trống vì cổng chen chỗ).
+- Đếm / bento / chương trình: theo `originScopedLeads`, không dùng `totalLeadCount` thô trên tab chiến dịch.
+- «Xóa lọc» **giữ** tab nguồn (`origin` URL).
+
 ## Code
 
 - `resolveEffectiveWorkMode` / `summarizeLeadWorkModes` / `leadMatchesWorkModeFilter` trong `src/utils/leadWorkMode.ts`

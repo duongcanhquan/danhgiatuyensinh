@@ -577,6 +577,12 @@ export type UseLeadsOptions = {
   /** Khóa ổn định cho `fullScopeKeepMatch` (đưa vào filterKey). */
   fullScopeMatchKey?: string
   /**
+   * `paged`: oversampil từng trang — chỉ giữ hồ sơ khớp (vd. tab chiến dịch),
+   * tránh trang trống khi cổng/tạo tay chen vào limit Firestore.
+   */
+  pagedKeepMatch?: (lead: Lead) => boolean
+  pagedKeepMatchKey?: string
+  /**
    * Khi true: gọi thêm getCount theo từng nhãn `priorityTag` (4 lần) — tốn chi phí aggregation.
    * Chỉ bật nơi thật sự dùng `scopeTagCounts` (vd. Phân tích nâng cao). Mặc định false.
    */
@@ -1069,6 +1075,11 @@ export function useLeads(opts?: UseLeadsOptions) {
   useEffect(() => {
     fullScopeKeepMatchRef.current = opts?.fullScopeKeepMatch
   }, [opts?.fullScopeKeepMatch])
+  const pagedKeepMatchKey = opts?.pagedKeepMatchKey ?? ''
+  const pagedKeepMatchRef = useRef(opts?.pagedKeepMatch)
+  useEffect(() => {
+    pagedKeepMatchRef.current = opts?.pagedKeepMatch
+  }, [opts?.pagedKeepMatch])
   const includeScopeTagCounts = Boolean(opts?.includeScopeTagCounts)
   const includeScopeSourceOptions = Boolean(opts?.includeScopeSourceOptions)
   const includeScopeProgramOptions = Boolean(opts?.includeScopeProgramOptions)
@@ -1103,7 +1114,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     if (dataMode === 'fullScope') {
       return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}|om:${fullScopeOrderMode}|scan:${maxFullScopeScanDocs}|mk:${fullScopeMatchKey}`
     }
-    return b
+    return `${b}|pk:${pagedKeepMatchKey}`
   }, [
     serverFiltersKey,
     searchText,
@@ -1116,6 +1127,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeOrderMode,
     maxFullScopeScanDocs,
     fullScopeMatchKey,
+    pagedKeepMatchKey,
     canReadGlobal,
     effectiveOrgId,
     profileListKey,
@@ -1429,32 +1441,114 @@ export function useLeads(opts?: UseLeadsOptions) {
       const prev = pg <= 1 ? null : snaps[pg - 2]
       const canSingleStep = pg === 1 || (prev !== undefined && prev !== null)
 
-      const fetchOnePage = async (after: QueryDocumentSnapshot<DocumentData> | null) => {
-        const snap = await getDocsListWithOrgFallback(
-          firestore,
-          profile,
-          hoDQueryLabels,
-          serverFilters,
-          effectiveOrgId,
-          canReadGlobal,
-          (base) =>
-            after === null
-              ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
-              : query(base, orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE)),
-        )
-        if (cancelled) return
-        const mapped: Lead[] = []
-        snap.forEach((d) => {
-          const row = mapDoc(d.id, d.data() as Record<string, unknown>)
-          if (row) mapped.push(row)
-        })
-        mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
-        snaps[pg - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
+      const fetchOnePage = async (
+        pageNum: number,
+        after: QueryDocumentSnapshot<DocumentData> | null,
+        opts?: { applyLeads?: boolean; updateTotalPages?: boolean },
+      ) => {
+        const applyLeads = opts?.applyLeads !== false
+        const updateTotalPages = opts?.updateTotalPages !== false
+        const pageKeep = pagedKeepMatchRef.current
+        if (!pageKeep) {
+          const snap = await getDocsListWithOrgFallback(
+            firestore,
+            profile,
+            hoDQueryLabels,
+            serverFilters,
+            effectiveOrgId,
+            canReadGlobal,
+            (base) =>
+              after === null
+                ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+                : query(base, orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE)),
+          )
+          if (cancelled) return
+          const mapped: Lead[] = []
+          snap.forEach((d) => {
+            const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+            if (row) mapped.push(row)
+          })
+          mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+          if (applyLeads) {
+            setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
+          }
+          snaps[pageNum - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
+          return
+        }
+
+        /** Oversample: đọc nhiều lô đến khi đủ 1 trang khớp (hoặc hết / trần). */
+        const acc: Lead[] = []
+        let cursor = after
+        let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null
+        let exhausted = false
+        const maxRounds = 25
+        for (let round = 0; round < maxRounds && acc.length < LEADS_PAGE_SIZE; round++) {
+          const snap = await getDocsListWithOrgFallback(
+            firestore,
+            profile,
+            hoDQueryLabels,
+            serverFilters,
+            effectiveOrgId,
+            canReadGlobal,
+            (base) =>
+              cursor === null
+                ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
+                : query(base, orderBy('updatedAt', 'desc'), startAfter(cursor), limit(LEADS_PAGE_SIZE)),
+          )
+          if (cancelled) return
+          if (!snap.docs.length) {
+            exhausted = true
+            break
+          }
+          lastDoc = snap.docs[snap.docs.length - 1]!
+          cursor = lastDoc
+          const mappedChunk: Lead[] = []
+          snap.forEach((d) => {
+            const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+            if (row) mappedChunk.push(row)
+          })
+          const roleFiltered = applyRoleClientFilter(
+            mappedChunk,
+            profile,
+            hoDQueryLabels,
+            canReadGlobal,
+            effectiveOrgId,
+          )
+          for (const row of roleFiltered) {
+            if (!pageKeep(row)) continue
+            acc.push(row)
+            if (acc.length >= LEADS_PAGE_SIZE) break
+          }
+          if (snap.docs.length < LEADS_PAGE_SIZE) {
+            exhausted = true
+            break
+          }
+        }
+        acc.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+        if (applyLeads) setLeads(acc)
+        snaps[pageNum - 1] = lastDoc
+        if (updateTotalPages) {
+          setTotalPages(
+            acc.length >= LEADS_PAGE_SIZE && !exhausted ? Math.max(pageNum + 1, 1) : Math.max(1, pageNum),
+          )
+        }
+      }
+
+      const pageKeepActive = Boolean(pagedKeepMatchRef.current)
+      if (pageKeepActive) {
+        for (let p = 1; p < pg; p++) {
+          if (snaps[p - 1] !== undefined) continue
+          const afterPrev = p === 1 ? null : (snaps[p - 2] as QueryDocumentSnapshot<DocumentData> | null)
+          await fetchOnePage(p, afterPrev, { applyLeads: false, updateTotalPages: false })
+          if (cancelled) return
+        }
+        const afterTarget = pg <= 1 ? null : (snaps[pg - 2] as QueryDocumentSnapshot<DocumentData> | null)
+        await fetchOnePage(pg, afterTarget, { applyLeads: true, updateTotalPages: true })
+        return
       }
 
       if (canSingleStep) {
-        await fetchOnePage(pg <= 1 ? null : (prev as QueryDocumentSnapshot<DocumentData>))
+        await fetchOnePage(pg, pg <= 1 ? null : (prev as QueryDocumentSnapshot<DocumentData>))
       } else if (pg * LEADS_PAGE_SIZE <= MAX_LIST_BULK_FETCH) {
         const bulkLimit = pg * LEADS_PAGE_SIZE
         const snap = await getDocsListWithOrgFallback(
@@ -1504,7 +1598,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (!snap.docs.length) break
         }
         const afterSnap = pg <= 1 ? null : (snaps[pg - 2] as QueryDocumentSnapshot<DocumentData> | null)
-        await fetchOnePage(afterSnap)
+        await fetchOnePage(pg, afterSnap)
       }
 
       const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
@@ -1532,6 +1626,8 @@ export function useLeads(opts?: UseLeadsOptions) {
       if (searchText) {
         mapped = mapped.filter((l) => leadMatchesClientSearch(l, searchText, directoryLabels))
       }
+      const pageKeep = pagedKeepMatchRef.current
+      if (pageKeep) mapped = mapped.filter((l) => pageKeep(l))
       searchBucketRef.current = mapped
       setSearchHitTotal(mapped.length)
     }
@@ -1716,6 +1812,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         }
 
         let total = totalRef.current
+        const pagedKeepActive = Boolean(pagedKeepMatchKey)
         if (fkChanged || total == null || manualRefetch) {
           const tentativePage = fkChanged ? 1 : Math.max(1, pageToLoad)
           await Promise.all([fetchTotalOnly(), loadFirestorePage(tentativePage, null)])
@@ -1725,12 +1822,14 @@ export function useLeads(opts?: UseLeadsOptions) {
             applyEmptyList()
             return
           }
-          const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
-          setTotalPages(tp)
-          const safePage = Math.min(Math.max(1, tentativePage), tp)
-          if (safePage !== tentativePage) {
-            setCurrentPageState(safePage)
-            await loadFirestorePage(safePage, total)
+          if (!pagedKeepActive) {
+            const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
+            setTotalPages(tp)
+            const safePage = Math.min(Math.max(1, tentativePage), tp)
+            if (safePage !== tentativePage) {
+              setCurrentPageState(safePage)
+              await loadFirestorePage(safePage, total)
+            }
           }
           if (includeScopeTagCounts) void fetchTagCountsOnly()
           if (includeScopeSourceOptions) void fetchSourceCatalog()
@@ -1740,11 +1839,15 @@ export function useLeads(opts?: UseLeadsOptions) {
             applyEmptyList()
             return
           }
-          const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
-          setTotalPages(tp)
-          const safePage = Math.min(Math.max(1, pageToLoad), tp)
-          if (safePage !== pageToLoad) setCurrentPageState(safePage)
-          await loadFirestorePage(safePage, total)
+          if (!pagedKeepActive) {
+            const tp = total != null && total > 0 ? Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)) : 1
+            setTotalPages(tp)
+            const safePage = Math.min(Math.max(1, pageToLoad), tp)
+            if (safePage !== pageToLoad) setCurrentPageState(safePage)
+            await loadFirestorePage(safePage, total)
+          } else {
+            await loadFirestorePage(Math.max(1, pageToLoad), total)
+          }
           if (manualRefetch && includeScopeProgramOptions) void fetchProgramCatalog()
         }
       } catch (e) {
@@ -1779,6 +1882,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeOrderMode,
     maxFullScopeScanDocs,
     fullScopeMatchKey,
+    pagedKeepMatchKey,
     filterKey,
     directoryLabelsKey,
     pagedFirestoreDep,
