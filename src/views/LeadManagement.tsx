@@ -18,7 +18,6 @@ import type {
   InviteDocumentType,
   Lead,
   LeadCounselorStatus,
-  LeadIntakeOrigin,
   LeadPipelineStatus,
   LeadWorkMode,
   PriorityTag,
@@ -134,12 +133,14 @@ import {
   resolveEffectiveWorkMode,
 } from '../utils/leadWorkMode'
 import {
-  LEAD_INTAKE_ORIGINS,
+  LEAD_INTAKE_ORIGIN_TABS,
   leadIntakeOriginHint,
   leadIntakeOriginLabel,
   leadIntakeOriginToUrlParam,
   leadMatchesIntakeOrigin,
+  leadMatchesIntakeOriginTab,
   parseLeadIntakeOriginFromUrl,
+  type LeadIntakeOriginTab,
 } from '../utils/leadIntakeOrigin'
 import {
   pickLeadIdsForAssign,
@@ -425,7 +426,7 @@ export function LeadManagement() {
   const [dispositionFilter, setDispositionFilter] = useState<CallDispositionFilter>('all')
   const [workModeFilter, setWorkModeFilter] = useState<'all' | LeadWorkMode>('all')
   /** Tab nguồn nhập — mặc định data thô / chiến dịch. */
-  const [intakeOriginTab, setIntakeOriginTab] = useState<LeadIntakeOrigin>('campaign_upload')
+  const [intakeOriginTab, setIntakeOriginTab] = useState<LeadIntakeOriginTab>('campaign_upload')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -505,9 +506,8 @@ export function LeadManagement() {
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
   /** Lọc chế độ xử lý — field tùy chọn trên hồ sơ → fullScope + lọc client. */
   const workModeNeedsScope = workModeFilter !== 'all'
-  /** Cổng / tạo tay: load đủ trong phạm vi (không chỉ 1 trang). Chiến dịch: phân trang. */
-  const intakeOriginNeedsScope =
-    intakeOriginTab === 'manual' || intakeOriginTab === 'public_portal'
+  /** Cổng đăng ký: load đủ trong phạm vi (không chỉ 1 trang). Chiến dịch: phân trang. */
+  const intakeOriginNeedsScope = intakeOriginTab === 'public_portal'
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
   /** Có chọn chương trình (kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
@@ -565,13 +565,7 @@ export function LeadManagement() {
       o.assignedCounselorIn = [assigneeFilter]
     }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
-    /** Cổng ĐK: `uploadedBy` đã có trên mọi hồ sơ cổng (kể cả trước khi có `intakeOrigin`). */
-    if (intakeOriginTab === 'public_portal') o.uploadedByIn = ['public_portal']
-    /**
-     * Tạo tay: lọc server theo field (hồ sơ mới luôn ghi `intakeOrigin`).
-     * Tránh fullScope + keepMatch quét hàng nghìn hồ sơ chiến dịch khi tab trống.
-     */
-    if (intakeOriginTab === 'manual') o.intakeOrigin = 'manual'
+    if (intakeOriginTab === 'public_portal') o.portalIntakeGroup = true
     return Object.keys(o).length ? o : undefined
   }, [
     statusFilter,
@@ -605,8 +599,7 @@ export function LeadManagement() {
   /**
    * Lọc không where được trên Firestore (hàng chờ, chưa gắn chương trình, ngày tải…)
    * → quét theo docId + chỉ giữ hồ sơ khớp.
-   * Tab cổng/tạo tay: đã siết server (`uploadedBy` / `intakeOrigin`) — không keepMatch riêng
-   * (tránh quét cả kho chiến dịch khi tab trống).
+   * Tab cổng đã siết server theo nhóm nguồn nhập — không keepMatch riêng.
    */
   const clientKeepMatchNeeded =
     programNeedsScope ||
@@ -618,7 +611,7 @@ export function LeadManagement() {
   const fullScopeKeepMatch = useMemo(() => {
     if (!clientKeepMatchNeeded) return undefined
     return (l: Lead) => {
-      if (!leadMatchesIntakeOrigin(l, intakeOriginTab)) return false
+      if (!leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
       if (programNeedsScope && (l.intakeProgram ?? '').trim()) return false
       if (
         uploadedDateNeedsScope &&
@@ -1142,7 +1135,7 @@ export function LeadManagement() {
     if (workModeFilter !== 'all') {
       rows = rows.filter((l) => leadMatchesWorkModeFilter(l, workModeFilter, leadSources))
     }
-    rows = rows.filter((l) => leadMatchesIntakeOrigin(l, intakeOriginTab))
+    rows = rows.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab))
     if (programFilter === '__UNSET__') {
       rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
     } else if (programFilter !== 'ALL') {
@@ -1208,7 +1201,7 @@ export function LeadManagement() {
       if (!leadMatchesWorkModeFilter(l, workModeFilter, leadSources)) {
         return false
       }
-      if (!leadMatchesIntakeOrigin(l, intakeOriginTab)) return false
+      if (!leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
       if (tagClientEval && tagFilter !== 'ALL' && effectiveLeadTag(l) !== tagFilter) {
         return false
       }
@@ -1309,7 +1302,7 @@ export function LeadManagement() {
 
   /** Hồ sơ đã tải thuộc đúng tab nguồn — dùng đếm bento / hàng chờ của tôi. */
   const originScopedLeads = useMemo(
-    () => leads.filter((l) => leadMatchesIntakeOrigin(l, intakeOriginTab)),
+    () => leads.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab)),
     [leads, intakeOriginTab],
   )
 
@@ -1575,9 +1568,9 @@ export function LeadManagement() {
     [mergeListFilterUrl, setPage],
   )
 
-  /** Tab nguồn nhập (chiến dịch / tạo tay / cổng). */
+  /** Tab nguồn nhập (chiến dịch / cổng). */
   const applyIntakeOriginTab = useCallback(
-    (origin: LeadIntakeOrigin) => {
+    (origin: LeadIntakeOriginTab) => {
       setIntakeOriginTab(origin)
       mergeListFilterUrl({
         [LWF.ORIGIN]: origin === 'campaign_upload' ? null : leadIntakeOriginToUrlParam(origin),
@@ -3347,20 +3340,16 @@ export function LeadManagement() {
               ) : null}
             </p>
             <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Nguồn nhập hồ sơ">
-              {LEAD_INTAKE_ORIGINS.map((origin) => {
+              {LEAD_INTAKE_ORIGIN_TABS.map((origin) => {
                 const selected = intakeOriginTab === origin
                 const tone =
                   origin === 'campaign_upload'
                     ? selected
                       ? 'border-slate-800 bg-slate-800 text-white shadow-md ring-2 ring-slate-400/50'
                       : 'border-slate-300 bg-slate-50 text-slate-800 hover:border-slate-500 hover:bg-slate-100'
-                    : origin === 'manual'
-                      ? selected
-                        ? 'border-emerald-700 bg-emerald-600 text-white shadow-md ring-2 ring-emerald-300/60'
-                        : 'border-emerald-300 bg-emerald-50 text-emerald-950 hover:border-emerald-500 hover:bg-emerald-100'
-                      : selected
-                        ? 'border-sky-700 bg-sky-600 text-white shadow-md ring-2 ring-sky-300/60'
-                        : 'border-sky-300 bg-sky-50 text-sky-950 hover:border-sky-500 hover:bg-sky-100'
+                    : selected
+                      ? 'border-sky-700 bg-sky-600 text-white shadow-md ring-2 ring-sky-300/60'
+                      : 'border-sky-300 bg-sky-50 text-sky-950 hover:border-sky-500 hover:bg-sky-100'
                 return (
                   <button
                     key={origin}
@@ -4271,17 +4260,13 @@ export function LeadManagement() {
                 <tr>
                   <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
                     <p>
-                      {intakeOriginTab === 'manual'
-                        ? 'Chưa có hồ sơ tạo tay trong phạm vi này.'
-                        : intakeOriginTab === 'public_portal'
-                          ? 'Chưa có hồ sơ từ cổng đăng ký trong phạm vi này.'
-                          : 'Không có hồ sơ khớp bộ lọc.'}
+                      {intakeOriginTab === 'public_portal'
+                        ? 'Chưa có hồ sơ cổng đăng ký trong phạm vi này.'
+                        : 'Không có hồ sơ khớp bộ lọc.'}
                     </p>
-                    {intakeOriginTab === 'manual' || intakeOriginTab === 'public_portal' ? (
+                    {intakeOriginTab === 'public_portal' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        {intakeOriginTab === 'manual'
-                          ? 'Bấm «Tạo mới» để thêm hồ sơ, hoặc chuyển sang «Tải lên / chiến dịch» nếu đang tìm data Excel.'
-                          : 'Khi sinh viên gửi form cổng ĐK, hồ sơ sẽ hiện ở đây.'}
+                        Bấm «Tạo mới» để thêm hồ sơ, hoặc chờ sinh viên gửi form cổng. Data Excel nằm ở «Tải lên / chiến dịch».
                       </p>
                     ) : programFilter === '__UNSET__' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
