@@ -564,7 +564,12 @@ export function LeadManagement() {
       o.assignedCounselorIn = [assigneeFilter]
     }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
-    if (intakeOriginTab === 'public_portal') o.portalIntakeGroup = true
+    /**
+     * Không gắn portalIntakeGroup ở đây:
+     * - OR portal × OR team-lead `in` dễ vượt 30 disjunction Firestore.
+     * - Server OR cũng bỏ sót legacy `uploadBatchId: manual-…` (không có intakeOrigin).
+     * Tab cổng dùng fullScope + keepMatch origin (dưới).
+     */
     return Object.keys(o).length ? o : undefined
   }, [
     statusFilter,
@@ -581,7 +586,6 @@ export function LeadManagement() {
     aiShortlistOnly,
     tagClientEval,
     can,
-    intakeOriginTab,
   ])
 
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
@@ -596,11 +600,12 @@ export function LeadManagement() {
     uploadedDateNeedsScope
 
   /**
-   * Lọc không where được trên Firestore (hàng chờ, chưa gắn chương trình, ngày tải…)
+   * Lọc không where được trên Firestore (hàng chờ, chưa gắn chương trình, ngày tải, nhóm cổng…)
    * → quét theo docId + chỉ giữ hồ sơ khớp.
-   * Tab cổng đã siết server theo nhóm nguồn nhập — không keepMatch riêng.
+   * Tab cổng: keepMatch origin để gồm legacy manual-… và tránh OR server × team-lead.
    */
   const clientKeepMatchNeeded =
+    intakeOriginNeedsScope ||
     programNeedsScope ||
     uploadedDateNeedsScope ||
     workModeNeedsScope ||
@@ -1341,7 +1346,7 @@ export function LeadManagement() {
     // Khi fullScope / hàng chờ / chương trình: `listNeedsFullScope` đã true → đếm client.
     if (listNeedsFullScope || clientPagingActive) return sortedFiltered.length
     const q = (searchParams.get(LWF.Q) ?? '').trim()
-    // Tab nguồn luôn siết client — không dùng totalLeadCount / searchHitTotal thô (gồm cổng…).
+    // Tab nguồn / lọc client — không dùng totalLeadCount thô (gồm cổng…).
     if (q) return sortedFiltered.length
     if (
       scoreMinInput.trim() !== '' ||
@@ -1352,6 +1357,7 @@ export function LeadManagement() {
       aiShortlistOnly ||
       intakeOriginTab === 'campaign_upload'
     ) {
+      // Paged + keepMatch chiến dịch: chỉ biết số dòng trang hiện tại — không giả là tổng.
       return sortedFiltered.length
     }
     return totalLeadCount ?? sortedFiltered.length
@@ -3216,12 +3222,18 @@ export function LeadManagement() {
           <span>
             Tổng{' '}
             <strong className="tabular-nums text-slate-900">
-              {(scopeBaselineTotal ?? totalLeadCount)?.toLocaleString('vi-VN') ?? '…'}
+              {intakeOriginTab === 'campaign_upload' && !listNeedsFullScope
+                ? '—'
+                : ((scopeBaselineTotal ?? totalLeadCount)?.toLocaleString('vi-VN') ?? '…')}
             </strong>
           </span>
           <span className="hidden h-3 w-px bg-slate-200 sm:inline" aria-hidden />
           <span>
-            {activeFilterChips.length > 0 ? 'Khớp lọc' : 'Đang xem'}{' '}
+            {intakeOriginTab === 'campaign_upload' && !listNeedsFullScope && activeFilterChips.length === 0
+              ? 'Trang này'
+              : activeFilterChips.length > 0
+                ? 'Khớp lọc'
+                : 'Đang xem'}{' '}
             <strong className="tabular-nums text-amber-900">
               {loading ? '…' : filterMatchCount.toLocaleString('vi-VN')}
             </strong>
@@ -6336,9 +6348,13 @@ function LeadDetailPanel({
       )
       return
     }
+    const canPersistNote = noteDidChange && canSaveInteraction
     if (noteDidChange && !canSaveInteraction) {
-      setMsg('Bạn không có quyền ghi tương tác.')
-      return
+      if (!crmChanged && !pipeChanged && !coreChanged && !dispChanged) {
+        setMsg('Bạn không có quyền ghi tương tác.')
+        return
+      }
+      // Có thay đổi khác được phép — bỏ qua ghi chú, vẫn lưu phần còn lại.
     }
 
     setSaving(true)
@@ -6425,9 +6441,9 @@ function LeadDetailPanel({
           ? leadListActivityPatch({
               kind: 'call',
               summary: dispDefForActivity.label,
-              counselorNote: noteTrim || null,
+              counselorNote: canPersistNote && noteTrim ? noteTrim : null,
             })
-          : noteDidChange && noteTrim
+          : canPersistNote && noteTrim
             ? leadListActivityPatch({
                 kind: 'note',
                 summary: noteTrim,
@@ -6511,10 +6527,10 @@ function LeadDetailPanel({
       }
 
       const dispDef = dispDefForActivity
-      if ((noteDidChange && noteTrim) || dispChanged) {
+      if ((canPersistNote && noteTrim) || dispChanged) {
         const sub = collection(db, FS_COLLECTIONS.leads, lead.id, FS_COLLECTIONS.interactions)
         const counselorNote =
-          noteTrim ||
+          (canPersistNote ? noteTrim : '') ||
           (dispDef ? `Phản hồi nhanh: ${dispDef.label}` : '')
         await addDoc(sub, {
           leadId: lead.id,
@@ -6538,7 +6554,7 @@ function LeadDetailPanel({
           leadId: lead.id,
           actionType: 'NOTE_ADDED',
           description: dispDef
-            ? `Phản hồi nhanh: ${dispDef.label}${noteTrim ? ` — ${noteTrim.slice(0, 200)}` : ''}`
+            ? `Phản hồi nhanh: ${dispDef.label}${canPersistNote && noteTrim ? ` — ${noteTrim.slice(0, 200)}` : ''}`
             : `Ghi chú TVV: ${noteTrim.slice(0, 280)}${noteTrim.length > 280 ? '…' : ''}`,
           performedBy: profile.id,
           performedByName: performer,

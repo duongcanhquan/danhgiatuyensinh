@@ -7,6 +7,11 @@ function str(v: unknown): string {
   return String(v ?? '').trim()
 }
 
+/** True portal SV create already bumped load in pickCounselorByLoadInTransaction. */
+export function shouldSkipCounselorLoadOnCreate(data: Record<string, unknown>): boolean {
+  return str(data.uploadedBy) === 'public_portal'
+}
+
 function leadAssignee(data: Record<string, unknown> | undefined): string {
   if (!data) return ''
   return str(data.assignedTo) || str(data.assignedCounselorId)
@@ -37,8 +42,9 @@ export function registerCounselorLoadOnLeadWrite(db: Firestore, databaseId: stri
       const afterAssignee = leadAssignee(afterData)
 
       if (!before?.exists) {
-        // Cổng đăng ký đã tăng counter trong pickCounselorByLoadInTransaction.
-        if (str(afterData.registrationChannel) === 'public_portal') return
+        // Cổng SV đã tăng counter trong pickCounselorByLoadInTransaction (uploadedBy=public_portal).
+        // Tạo mới trong app cũng ghi registrationChannel=public_portal nhưng uploadedBy=UID — vẫn phải đếm load.
+        if (shouldSkipCounselorLoadOnCreate(afterData)) return
         if (afterAssignee) await adjustCounselorLoad(db, null, afterAssignee)
         return
       }

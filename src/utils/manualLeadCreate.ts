@@ -200,6 +200,7 @@ export async function createManualLead(
     profileNote1: norm(draft.profileNote1) || undefined,
     profileNote2: norm(draft.profileNote2) || undefined,
     otherAttentionNotes: norm(draft.otherAttentionNotes) || undefined,
+    applicantCategory: norm(draft.applicantCategory) || undefined,
   })
 
   const ownership = {

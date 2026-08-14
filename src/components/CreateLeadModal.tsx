@@ -95,10 +95,12 @@ export function CreateLeadModal({
   }, [profile, elevated, teamLead, pickList])
 
   const wasOpenRef = useRef(false)
+  const assigneeTouchedRef = useRef(false)
 
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false
+      assigneeTouchedRef.current = false
       return
     }
     const justOpened = !wasOpenRef.current
@@ -109,10 +111,17 @@ export function CreateLeadModal({
     setDraft({ ...emptyLeadCoreDraft(), source1: seedSource1, source: seedSource1 })
     setFinanceDraft(emptyFinanceDraft())
     setAssigneeUid(defaultAssignee)
+    assigneeTouchedRef.current = false
     setError(null)
     setDuplicateId(null)
     setBusy(false)
     queueMicrotask(() => bodyScrollRef.current?.scrollTo(0, 0))
+  }, [open, defaultAssignee])
+
+  useEffect(() => {
+    if (!open || assigneeTouchedRef.current) return
+    if (!defaultAssignee) return
+    setAssigneeUid((prev) => (prev === defaultAssignee ? prev : defaultAssignee))
   }, [open, defaultAssignee])
 
   useEffect(() => {
@@ -304,7 +313,10 @@ export function CreateLeadModal({
             <select
               value={assigneeUid}
               disabled={busy || isFieldStaffRole(profile?.role)}
-              onChange={(e) => setAssigneeUid(e.target.value)}
+              onChange={(e) => {
+                assigneeTouchedRef.current = true
+                setAssigneeUid(e.target.value)
+              }}
               className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/25 disabled:bg-slate-50"
             >
               {pickList.map((u) => (

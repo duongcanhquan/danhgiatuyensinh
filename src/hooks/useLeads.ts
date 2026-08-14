@@ -676,12 +676,17 @@ function filterConstraints(
     else if (u.length > 1) c.push(where('uploadedBy', 'in', u))
   }
   if (f.portalIntakeGroup) {
-    c.push(
-      or(
-        where('uploadedBy', '==', 'public_portal'),
-        where('intakeOrigin', 'in', ['manual', 'public_portal']),
-      ),
-    )
+    // Team-lead RBAC đã là OR(assignedTo in N, assignedCounselorId in N).
+    // Nhân thêm OR portal (~3 nhánh) dễ vượt trần 30 disjunction Firestore khi N ≥ 6.
+    const teamSize = isTeamLeadRole(profile.role) ? (profile.managedCounselorIds ?? []).filter(Boolean).length : 0
+    if (!(isTeamLeadRole(profile.role) && teamSize > 4)) {
+      c.push(
+        or(
+          where('uploadedBy', '==', 'public_portal'),
+          where('intakeOrigin', 'in', ['manual', 'public_portal']),
+        ),
+      )
+    }
   }
   if (f.provinceIn?.length) {
     const p = f.provinceIn.map((x) => x.trim()).filter(Boolean).slice(0, 10)
