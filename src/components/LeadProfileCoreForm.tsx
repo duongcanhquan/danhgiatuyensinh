@@ -625,13 +625,26 @@ export function LeadProfileCoreForm({
             <input className={INPUT_CLS} value={draft.dateOfBirth} disabled={disabled} onChange={(e) => patch('dateOfBirth', e.target.value)} />
           </Field>
           <Field label="Giới tính">
-            <input
-              className={INPUT_CLS}
-              value={draft.gender}
-              disabled={disabled}
-              placeholder="Nam / Nữ / …"
-              onChange={(e) => patch('gender', e.target.value)}
-            />
+            {isNewLead ? (
+              <select
+                className={INPUT_CLS}
+                value={draft.gender}
+                disabled={disabled}
+                onChange={(e) => patch('gender', e.target.value)}
+              >
+                <option value="">— Chọn —</option>
+                <option value="Nam">Nam</option>
+                <option value="Nữ">Nữ</option>
+              </select>
+            ) : (
+              <input
+                className={INPUT_CLS}
+                value={draft.gender}
+                disabled={disabled}
+                placeholder="Nam / Nữ / …"
+                onChange={(e) => patch('gender', e.target.value)}
+              />
+            )}
           </Field>
           <Field label="Nơi sinh">
             <input

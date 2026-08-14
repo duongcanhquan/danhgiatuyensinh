@@ -24,10 +24,15 @@ import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { emptyFinanceDraft, financeDraftHasContent } from '../utils/leadFinance'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { getDoc, doc } from 'firebase/firestore'
-import { FS_COLLECTIONS } from '../types'
+import {
+  defaultPublicRegistrationConfig,
+  FS_COLLECTIONS,
+  SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID,
+} from '../types'
 import { mapDoc } from '../hooks/useLeads'
 import { useOrg } from '../hooks/useOrg'
 import { useAuth } from '../hooks/useAuth'
+import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 
 export function CreateLeadModal({
   open,
@@ -98,7 +103,35 @@ export function CreateLeadModal({
     setDuplicateId(null)
     setBusy(false)
     queueMicrotask(() => bodyScrollRef.current?.scrollTo(0, 0))
-  }, [open, defaultAssignee])
+    if (!db) return
+    let cancelled = false
+    void (async () => {
+      let raw = ''
+      try {
+        const orgSnap = await getDoc(
+          doc(db, ...orgSettingsDocSegments(effectiveOrgId, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID)),
+        )
+        if (orgSnap.exists()) {
+          raw = String((orgSnap.data() as { defaultSource1?: unknown }).defaultSource1 ?? '').trim()
+        } else {
+          const legacy = await getDoc(
+            doc(db, FS_COLLECTIONS.scoringAux, SCORING_AUX_PUBLIC_REGISTRATION_DOC_ID),
+          )
+          if (legacy.exists()) {
+            raw = String((legacy.data() as { defaultSource1?: unknown }).defaultSource1 ?? '').trim()
+          }
+        }
+      } catch {
+        /* giữ mặc định code */
+      }
+      if (cancelled) return
+      const source1 = raw || defaultPublicRegistrationConfig().defaultSource1
+      setDraft((d) => (d.source1.trim() ? d : { ...d, source1, source: d.source || source1 }))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, defaultAssignee, db, effectiveOrgId])
 
   const handleSubmit = useCallback(async () => {
     if (!db || !profile) {
@@ -210,7 +243,7 @@ export function CreateLeadModal({
               Tạo hồ sơ mới
             </p>
             <p className="mt-0.5 text-sm text-slate-600">
-              Điền thông tin cơ bản và tab <strong>Tài chính</strong> nếu thu tiền ngay — mã hệ thống sinh khi lưu.
+              Điền đủ thông tin như form cổng đăng ký; tab <strong>Tài chính</strong> nếu thu tiền ngay.
             </p>
           </div>
           <button
