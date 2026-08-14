@@ -25,6 +25,7 @@ import {
 import { parseAppsScriptWorkbook } from '../utils/appsScriptWorkbookParse'
 import {
   parseAppsScriptCreatedAtMs,
+  mapAppsScriptToCounselorStatus,
   type AppsScriptStudentExtras,
 } from '../utils/appsScriptStudentMapper'
 import {
@@ -85,7 +86,7 @@ type PreparedRow = {
   inFileDuplicate: boolean
   /** phone | identity | weak — weak không so trùng DB / không gom trùng file theo mã trống */
   strength: 'phone' | 'identity' | 'weak'
-  /** Chỉ mẫu Sheet Apps Script 70 cột */
+  /** Chỉ mẫu Sheet Apps Script 71 cột */
   appsScriptExtras?: AppsScriptStudentExtras
 }
 
@@ -568,9 +569,18 @@ export function DataIntake() {
 
         const record = evaluationRecordFromLeadLike(partialLeadFromExcelRow(pr.row))
         const now = Timestamp.now()
+        const extras = pr.appsScriptExtras
+        const counselorStatus = extras
+          ? mapAppsScriptToCounselorStatus(
+              pr.row.statusRaw ?? '',
+              extras.finance.enrollmentStatus ?? '',
+            )
+          : undefined
+
         const base = buildLeadFirestorePayload(pr.row, 0, 'COLD', counselorId, ownership, {
           uniqueHash: pr.hash,
           ...(pr.nationalIdHash ? { nationalIdHash: pr.nationalIdHash } : {}),
+          ...(counselorStatus ? { counselorStatus } : {}),
         })
 
         const cls = classificationRuntime.enabled ? classificationRuntime : null
@@ -611,7 +621,6 @@ export function DataIntake() {
           source1,
           sources: leadSources,
         })
-        const extras = pr.appsScriptExtras
         const createdMs = extras ? parseAppsScriptCreatedAtMs(extras.createdAtRaw) : null
         const createdAt =
           createdMs != null ? Timestamp.fromMillis(createdMs) : now
@@ -638,6 +647,7 @@ export function DataIntake() {
             ...(extras?.motherName ? { motherName: extras.motherName } : {}),
             ...(extras?.motherPhone ? { motherPhone: extras.motherPhone } : {}),
             ...(extras?.guardian ? { guardian: extras.guardian } : {}),
+            ...(extras?.nationalIdNotAvailable ? { nationalIdNotAvailable: true } : {}),
             uploadedAt: createdAt,
             importedAt: now,
             createdAt,
@@ -711,7 +721,9 @@ export function DataIntake() {
       downloadLeadIntakeTemplate(templateId)
       const tpl = getLeadIntakeTemplate(templateId)
       setBanner(
-        `Đã tải ${tpl.downloadFileName} — điền sheet «${tpl.sheetName}» (hàng 1 tiêu đề, dữ liệu từ hàng 2) rồi tải lên lại.`,
+        tpl.positionalAppsScript
+          ? `Đã tải ${tpl.downloadFileName} — xuất DU_LIEU_SINH_VIEN giữ thứ tự ${tpl.columns.length} cột, data từ dòng 3; hoặc dùng sheet tiêu đề trong file mẫu.`
+          : `Đã tải ${tpl.downloadFileName} — điền sheet «${tpl.sheetName}» (hàng 1 tiêu đề, dữ liệu từ hàng 2) rồi tải lên lại.`,
       )
     } catch (e) {
       console.error(e)

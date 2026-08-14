@@ -83,7 +83,7 @@ export function downloadStaffIntakeTemplate(): void {
     ['2. Email = tài khoản đăng nhập (duy nhất).'],
     ['3. Mật khẩu tạm; nhân sự đổi sau khi đăng nhập.'],
     ['4. Vai trò: counselor (TVV), ctv, team_lead, admin, marketing, accountant.'],
-    ['5. Import TVV trước → rồi mới import Sheet hồ sơ 70 cột.'],
+    ['5. Import TVV trước → rồi mới import Sheet hồ sơ 71 cột (Mẫu 3).'],
   ])
   guide['!cols'] = [{ wch: 90 }]
   const wb = XLSX.utils.book_new()

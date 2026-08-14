@@ -1,4 +1,10 @@
-import type { LeadFinanceRecord, LeadPaymentApprovalStatus, LeadPaymentLine, LeadPaymentSlotKey } from '../types'
+import type {
+  LeadCounselorStatus,
+  LeadFinanceRecord,
+  LeadPaymentApprovalStatus,
+  LeadPaymentLine,
+  LeadPaymentSlotKey,
+} from '../types'
 import type { ExcelLeadRow } from './excelLeadMapper'
 
 /** Data Sheet Apps Script bắt đầu dòng 3 Excel (= index 2). */
@@ -42,6 +48,8 @@ export type AppsScriptStudentExtras = {
   schoolYear: string
   /** Cột 43 — điểm Sheet (nếu có) */
   sheetScore: string
+  /** Cột 16 = «CHƯA CÓ» */
+  nationalIdNotAvailable: boolean
 }
 
 export type AppsScriptStudentParsed = {
@@ -117,6 +125,41 @@ function buildFinanceFromRow(r: unknown[]): LeadFinanceRecord {
   }
 }
 
+/**
+ * Cột 39 (trạng thái Sheet) + cột 42 (hoàn thiện) → Kanban TVV.
+ * Không dùng `coerceLeadCounselorStatus` trực tiếp vì Sheet ghi tiếng Việt (CỌC THÀNH CÔNG…).
+ */
+export function mapAppsScriptToCounselorStatus(
+  statusCol39: string,
+  situationCol42: string,
+): LeadCounselorStatus {
+  const fold = (s: string) =>
+    s
+      .trim()
+      .toUpperCase()
+      .replace(/[đĐ]/g, 'D')
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .replace(/\s+/g, ' ')
+
+  const sit = fold(situationCol42)
+  if (sit.includes('DA HOAN THIEN')) return 'ENROLLED'
+
+  const st = fold(statusCol39)
+  if (!st || st === 'MOI') return 'NEW'
+  if (st.includes('DA HOAN THIEN')) return 'ENROLLED'
+  if (st.includes('COC THANH CONG') || st.includes('DA COC')) return 'DEPOSIT_PAID'
+  if (st.includes('DANG HOAN THIEN') || st.includes('KIEM TRA')) return 'INTERESTED'
+  return 'NEW'
+}
+
+function isNationalIdNotAvailable(raw: string): boolean {
+  const s = raw.trim().toUpperCase().replace(/\s+/g, ' ')
+  if (!s) return false
+  const fold = s.replace(/[đĐ]/g, 'D').normalize('NFD').replace(/\p{M}/gu, '')
+  return fold === 'CHUA CO' || fold.startsWith('CHUA CO')
+}
+
 /** Một hàng Sheet (mảng ô) → hồ sơ + finance. */
 export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): AppsScriptStudentParsed | null {
   const systemCode = cell(r, 1)
@@ -134,7 +177,9 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
   const schoolYear = cell(r, 13)
   const placeOfBirth = cell(r, 14)
   const ethnicity = cell(r, 15)
-  const nationalId = cell(r, 16)
+  const nationalIdRaw = cell(r, 16)
+  const nationalIdNotAvailable = isNationalIdNotAvailable(nationalIdRaw)
+  const nationalId = nationalIdNotAvailable ? '' : nationalIdRaw
   const createdAtRaw = cell(r, 17)
   const assignedToRaw = cell(r, 18)
   const campus = cell(r, 19)
@@ -207,6 +252,7 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
     campus,
     schoolYear,
     sheetScore,
+    nationalIdNotAvailable,
   }
 
   return { sheetRowIndex, row, extras }
@@ -230,6 +276,14 @@ export function parseAppsScriptCreatedAtMs(raw: string): number | null {
     .trim()
     .replace(/^'/, '')
   if (!s) return null
+  // Excel serial (xuất số thay vì text dd/MM/yyyy)
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const serial = Number(s)
+    if (serial >= 25569 && serial < 80000) {
+      const ms = Math.round((serial - 25569) * 86400 * 1000)
+      return Number.isFinite(ms) ? ms : null
+    }
+  }
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/)
   if (!m) return null
   const dd = Number(m[1])

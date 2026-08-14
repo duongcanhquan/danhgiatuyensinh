@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { mapAppsScriptStudentRow, parseAppsScriptCreatedAtMs, parseAppsScriptSheetAoa } from './appsScriptStudentMapper'
+import {
+  mapAppsScriptStudentRow,
+  mapAppsScriptToCounselorStatus,
+  parseAppsScriptCreatedAtMs,
+  parseAppsScriptSheetAoa,
+} from './appsScriptStudentMapper'
 
 describe('appsScriptStudentMapper', () => {
   it('map đủ hồ sơ + 5 đợt thu + Full NE + TVV', () => {
@@ -43,6 +48,27 @@ describe('appsScriptStudentMapper', () => {
     expect(parsed!.extras.finance.enrollmentStatus).toBe('ĐÃ HOÀN THIỆN')
     expect(parsed!.extras.finance.fullNeStatus).toBe('ĐÃ FULL NE')
     expect(parsed!.extras.motherPhone).toBe('0987654321')
+    expect(parsed!.extras.nationalIdNotAvailable).toBe(false)
+    expect(
+      mapAppsScriptToCounselorStatus(parsed!.row.statusRaw ?? '', parsed!.extras.finance.enrollmentStatus ?? ''),
+    ).toBe('ENROLLED')
+  })
+
+  it('CHƯA CÓ CCCD → không ghi nationalId, flag notAvailable', () => {
+    const r: unknown[] = new Array(71).fill('')
+    r[2] = 'B'
+    r[5] = '0901111222'
+    r[16] = 'CHƯA CÓ'
+    const parsed = mapAppsScriptStudentRow(r, 2)
+    expect(parsed!.row.nationalId).toBe('')
+    expect(parsed!.extras.nationalIdNotAvailable).toBe(true)
+  })
+
+  it('map trạng thái Sheet → Kanban TVV', () => {
+    expect(mapAppsScriptToCounselorStatus('CỌC THÀNH CÔNG', '')).toBe('DEPOSIT_PAID')
+    expect(mapAppsScriptToCounselorStatus('ĐANG HOÀN THIỆN', '')).toBe('INTERESTED')
+    expect(mapAppsScriptToCounselorStatus('MỚI', '')).toBe('NEW')
+    expect(mapAppsScriptToCounselorStatus('CỌC THÀNH CÔNG', 'ĐÃ HOÀN THIỆN')).toBe('ENROLLED')
   })
 
   it('bỏ 2 hàng đầu khi parse AOA', () => {
@@ -58,6 +84,13 @@ describe('appsScriptStudentMapper', () => {
 
   it('parse ngày tạo ICT', () => {
     const ms = parseAppsScriptCreatedAtMs('13/08/2026 10:00:00')
+    expect(ms).not.toBeNull()
+    expect(new Date(ms!).toISOString()).toContain('2026-08-13')
+  })
+
+  it('parse Excel serial ngày tạo', () => {
+    const serial = String(Math.round(Date.UTC(2026, 7, 13) / 86400000) + 25569)
+    const ms = parseAppsScriptCreatedAtMs(serial)
     expect(ms).not.toBeNull()
     expect(new Date(ms!).toISOString()).toContain('2026-08-13')
   })
