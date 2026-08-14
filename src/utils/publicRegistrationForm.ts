@@ -1,5 +1,5 @@
 import type { PublicRegistrationFormInput } from '../services/publicRegistration'
-import { DEFAULT_APPLICANT_CATEGORY_ENTRIES } from './applicantCategoryCatalog'
+import { DEFAULT_APPLICANT_CATEGORY_LABELS } from './applicantCategoryCatalog'
 import { SCORE_PRESETS } from './publicRegistrationI18n'
 
 export type PublicRegLang = 'vn' | 'en'
@@ -104,7 +104,7 @@ export function resolveAcademicPerformance(form: PublicRegistrationFormInput): s
 }
 
 const ALLOWED_GENDERS = new Set<string>(['Nam', 'Nữ'])
-const ALLOWED_CATEGORIES = new Set<string>(DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => e.label))
+const ALLOWED_CATEGORIES = new Set<string>(DEFAULT_APPLICANT_CATEGORY_LABELS)
 const ALLOWED_SCORE_PRESETS = new Set<string>(SCORE_PRESETS.map((s) => s.value))
 
 export function validatePublicRegistrationForm(

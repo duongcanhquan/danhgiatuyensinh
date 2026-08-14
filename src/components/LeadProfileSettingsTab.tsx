@@ -22,7 +22,7 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 import { saveLeadSourceRow, seedDefaultLeadSources } from '../utils/leadProfileCatalogSeed'
 
-import { ensureDefaultMasterCatalogDocs } from '../utils/ensureApplicantCategoriesCatalog'
+import { ensureDefaultMasterCatalogDocs } from '../utils/ensureDefaultMasterCatalogDocs'
 
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
 

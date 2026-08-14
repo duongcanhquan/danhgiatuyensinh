@@ -37,6 +37,10 @@ export const DEFAULT_APPLICANT_CATEGORY_ENTRIES: readonly MasterDataEntry[] = [
   },
 ]
 
+/** Nhãn lưu trên lead — đồng bộ fallback CF `FALLBACK_APPLICANT_CATEGORIES`. */
+export const DEFAULT_APPLICANT_CATEGORY_LABELS: readonly string[] =
+  DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => e.label)
+
 export type ApplicantCategoryOption = {
   value: string
   labelVn: string

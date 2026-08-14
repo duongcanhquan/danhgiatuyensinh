@@ -4,31 +4,21 @@ import {
   FS_COLLECTIONS,
   MASTER_DATA_REGISTRY_DOC_ID,
   type MasterCatalogDefinition,
-  type MasterDataEntry,
 } from '../types'
-import {
-  APPLICANT_CATEGORIES_CATALOG_ID,
-  DEFAULT_APPLICANT_CATEGORY_ENTRIES,
-} from './applicantCategoryCatalog'
+import { seedEntriesForMasterCatalog, shouldSeedEmptyMasterCatalog } from './masterCatalogSeed'
 import {
   masterDataEntriesForFirestore,
   parseCatalogsFromRegistryData,
   parseEntriesFromDoc,
 } from './masterDataRegistry'
 
-function seedEntriesForCatalog(catalogId: string): MasterDataEntry[] {
-  if (catalogId === APPLICANT_CATEGORIES_CATALOG_ID) {
-    return DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => ({ ...e }))
-  }
-  return []
-}
-
 /**
- * Đồng bộ catalog mặc định (đối tượng, cơ sở, niên khóa…) vào Firestore:
- * - tạo doc nếu thiếu / seed đối tượng nếu trống
+ * Đồng bộ mọi catalog trong `DEFAULT_MASTER_CATALOGS` lên Firestore:
+ * - tạo doc nếu thiếu
+ * - seed đối tượng dự tuyển nếu doc trống
  * - bổ sung `_registry` nếu thiếu id
  *
- * An toàn gọi nhiều lần (mở Cài đặt hồ sơ / cổng đăng ký).
+ * Gọi khi mở Cài đặt → Hồ sơ / Cổng đăng ký (idempotent).
  */
 export async function ensureDefaultMasterCatalogDocs(db: Firestore): Promise<void> {
   for (const def of DEFAULT_MASTER_CATALOGS) {
@@ -37,11 +27,9 @@ export async function ensureDefaultMasterCatalogDocs(db: Firestore): Promise<voi
     const existing = catSnap.exists()
       ? parseEntriesFromDoc(catSnap.data() as Record<string, unknown>)
       : []
-    const needsSeed =
-      !catSnap.exists() ||
-      (def.id === APPLICANT_CATEGORIES_CATALOG_ID && existing.length === 0)
-    if (!needsSeed) continue
-    const entries = existing.length > 0 ? existing : seedEntriesForCatalog(def.id)
+    const needsWrite = !catSnap.exists() || shouldSeedEmptyMasterCatalog(def.id, existing.length)
+    if (!needsWrite) continue
+    const entries = existing.length > 0 ? existing : seedEntriesForMasterCatalog(def.id)
     await setDoc(
       catRef,
       {
@@ -88,9 +76,4 @@ export async function ensureDefaultMasterCatalogDocs(db: Firestore): Promise<voi
     },
     { merge: true },
   )
-}
-
-/** @deprecated Dùng `ensureDefaultMasterCatalogDocs` — giữ alias để không gãy import cũ. */
-export async function ensureApplicantCategoriesCatalog(db: Firestore): Promise<void> {
-  await ensureDefaultMasterCatalogDocs(db)
 }

@@ -164,30 +164,6 @@ export function publicRegText(lang: PublicRegLang, key: keyof typeof VN): string
   return (lang === 'en' ? EN : VN)[key] ?? VN[key] ?? key
 }
 
-/** @deprecated Dùng `DEFAULT_APPLICANT_CATEGORY_ENTRIES` / masterData `applicant_categories`. */
-export const APPLICANT_CATEGORIES = [
-  {
-    value: 'Học sinh lớp 9',
-    vn: 'Học sinh lớp 9 (Xét học bạ)',
-    en: 'Grade 9 Student (Transcript-based)',
-  },
-  {
-    value: 'Học sinh lớp 12',
-    vn: 'Học sinh lớp 12 (Xét học bạ/Điểm thi)',
-    en: 'Grade 12 Student (Transcript/Exam)',
-  },
-  {
-    value: 'Đã tốt nghiệp PTTH',
-    vn: 'Đã tốt nghiệp THPT',
-    en: 'High School Graduate',
-  },
-  {
-    value: 'Đã tốt nghiệp TC, CĐ, ĐH khác',
-    vn: 'Đã tốt nghiệp TC, CĐ, ĐH khác',
-    en: 'College/University Graduate',
-  },
-] as const
-
 export const SCORE_PRESETS = [
   { value: '8.0-9.0', vn: '8.0 - 9.0 (Ưu tiên tuyển thẳng)', en: '8.0 - 9.0 (Direct Admission Priority)' },
   { value: '6.5-7.9', vn: '6.5 - 7.9', en: '6.5 - 7.9' },

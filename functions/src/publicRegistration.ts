@@ -443,12 +443,36 @@ function isValidCustomScore(raw: string): boolean {
 }
 
 const ALLOWED_GENDERS = new Set(['Nam', 'Nữ'])
-const FALLBACK_CATEGORIES = new Set([
-  'Học sinh lớp 9',
-  'Học sinh lớp 12',
-  'Đã tốt nghiệp PTTH',
-  'Đã tốt nghiệp TC, CĐ, ĐH khác',
-])
+/**
+ * Fallback khi `masterData/applicant_categories` chưa seed.
+ * Đồng bộ `DEFAULT_APPLICANT_CATEGORY_ENTRIES` trong `src/utils/applicantCategoryCatalog.ts`.
+ */
+const FALLBACK_APPLICANT_CATEGORIES: CatalogOption[] = [
+  {
+    id: 'hs-lop-9',
+    label: 'Học sinh lớp 9',
+    labelEn: 'Grade 9 Student (Transcript-based)',
+  },
+  {
+    id: 'hs-lop-12',
+    label: 'Học sinh lớp 12',
+    labelEn: 'Grade 12 Student (Transcript/Exam)',
+  },
+  {
+    id: 'tn-thpt',
+    label: 'Đã tốt nghiệp PTTH',
+    labelEn: 'High School Graduate',
+  },
+  {
+    id: 'tn-tc-cd-dh',
+    label: 'Đã tốt nghiệp TC, CĐ, ĐH khác',
+    labelEn: 'College/University Graduate',
+  },
+]
+
+function resolveApplicantCategories(loaded: CatalogOption[]): CatalogOption[] {
+  return loaded.length > 0 ? loaded : FALLBACK_APPLICANT_CATEGORIES
+}
 
 function validatePublicLeadInput(
   input: PublicLeadInput,
@@ -499,10 +523,8 @@ function validatePublicLeadInput(
   }
   const category = str(input.applicantCategory)
   if (!category) return 'Vui lòng chọn đối tượng dự tuyển.'
-  const categoryOk =
-    catalogs.applicantCategories.length > 0
-      ? catalogs.applicantCategories.some((c) => c.label === category || c.id === category)
-      : FALLBACK_CATEGORIES.has(category)
+  const categories = resolveApplicantCategories(catalogs.applicantCategories)
+  const categoryOk = categories.some((c) => c.label === category || c.id === category)
   if (!categoryOk) return 'Đối tượng dự tuyển không nằm trong danh mục hiện tại.'
   if (!study) return 'Vui lòng chọn hệ đào tạo.'
   const program =
@@ -632,12 +654,13 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     const orgId = await resolveActiveOrgId(db, slug)
     const config = await loadPublicRegistrationConfig(db, orgId)
 
-    const [trainingPrograms, majors, applicantCategories, counselors] = await Promise.all([
+    const [trainingPrograms, majors, applicantCategoriesRaw, counselors] = await Promise.all([
       loadMasterCatalog(db, 'training_programs', orgId),
       loadMasterCatalog(db, 'majors', orgId),
       loadMasterCatalog(db, 'applicant_categories', orgId),
       loadCounselors(db, orgId),
     ])
+    const applicantCategories = resolveApplicantCategories(applicantCategoriesRaw)
 
     const portalCounselors = counselors
       .filter((c) => c.isActive && c.showOnPublicRegistrationPortal)
@@ -687,12 +710,13 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       parentPhone: str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
     }
 
-    const [trainingPrograms, majors, applicantCategories, allCounselors] = await Promise.all([
+    const [trainingPrograms, majors, applicantCategoriesRaw, allCounselors] = await Promise.all([
       loadMasterCatalog(db, 'training_programs', config.orgId),
       loadMasterCatalog(db, 'majors', config.orgId),
       loadMasterCatalog(db, 'applicant_categories', config.orgId),
       loadCounselors(db, config.orgId),
     ])
+    const applicantCategories = resolveApplicantCategories(applicantCategoriesRaw)
 
     const validation = validatePublicLeadInput(input, config.defaultSource1, {
       trainingPrograms,

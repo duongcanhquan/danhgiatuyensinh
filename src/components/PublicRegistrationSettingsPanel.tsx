@@ -12,7 +12,7 @@ import { getFirestoreDb } from '../services/firebase'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
-import { ensureDefaultMasterCatalogDocs } from '../utils/ensureApplicantCategoriesCatalog'
+import { ensureDefaultMasterCatalogDocs } from '../utils/ensureDefaultMasterCatalogDocs'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 
