@@ -62,7 +62,6 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
-import { LeadWorkModeContextCard } from '../components/LeadWorkModeContextCard'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import { LlmAccessHelpPanel } from '../components/LlmAccessHelpPanel'
 import { LeadKnowledgePanel } from '../components/LeadKnowledgePanel'
@@ -6102,49 +6101,6 @@ function LeadDetailPanel({
     [pickListUsers, counselorUsers],
   )
 
-  const saveWorkMode = async (next: LeadWorkMode | undefined) => {
-    if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
-      return
-    }
-    if (!showCounselorProgressForm) {
-      setMsg('Bạn không có quyền đổi chế độ xử lý trên hồ sơ này.')
-      return
-    }
-    if ((next ?? undefined) === (lead.workMode ?? undefined)) return
-    setSaving(true)
-    setMsg(null)
-    try {
-      const touch = leadTouchPatch()
-      const patch: Partial<Lead> = { ...touch }
-      const firestorePatch: Record<string, unknown> = { ...touch }
-      if (next) {
-        patch.workMode = next
-        firestorePatch.workMode = next
-      } else {
-        firestorePatch.workMode = deleteField()
-      }
-      await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), firestorePatch)
-      onUpdated(next ? patch : { ...touch, workMode: undefined })
-      const performer = profile.displayName?.trim() || profile.email || profile.id
-      await commitAuditLog(db, {
-        leadId: lead.id,
-        actionType: 'SYSTEM_UPDATE',
-        description: next
-          ? `Đổi chế độ xử lý → ${leadWorkModeLabel(next)}`
-          : 'Gỡ chế độ xử lý hồ sơ',
-        performedBy: profile.id,
-        performedByName: performer,
-      })
-      setMsg(next ? `Đã đổi chế độ → ${leadWorkModeLabel(next)}.` : 'Đã gỡ chế độ xử lý.')
-    } catch (e) {
-      console.error(e)
-      setMsg('Không lưu được chế độ xử lý. Kiểm tra Firestore Rules.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const saveFinanceProfile = async () => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
@@ -6866,36 +6822,36 @@ function LeadDetailPanel({
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
               <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:h-full lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
                 <nav
-                  className="sticky top-0 z-10 flex shrink-0 items-stretch gap-1 rounded-lg border border-slate-200/90 bg-slate-100/95 p-0.5 shadow-sm backdrop-blur-sm"
+                  className="sticky top-0 z-10 flex shrink-0 items-stretch gap-1 rounded-xl border border-slate-200/90 bg-white/95 p-1 shadow-md backdrop-blur-sm"
                   role="tablist"
                   aria-label="Nội dung chính chi tiết hồ sơ"
                 >
-                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-0.5">
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-1">
                     <button
                       type="button"
                       role="tab"
                       aria-selected={detailLeftTab === 'counselor'}
                       onClick={() => setDetailLeftTab('counselor')}
                       className={[
-                        'relative flex min-h-8 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-center transition sm:px-2',
+                        'relative flex min-h-9 items-center justify-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-center transition sm:px-2.5',
                         detailLeftTab === 'counselor'
-                          ? 'border-amber-500/70 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm ring-1 ring-amber-400/40'
-                          : 'border-transparent bg-white text-slate-800 hover:border-amber-200 hover:bg-amber-50/80',
+                          ? 'border-amber-600 bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md ring-2 ring-amber-300/50'
+                          : 'border-amber-200/80 bg-amber-50 text-amber-950 hover:border-amber-400 hover:bg-amber-100',
                       ].join(' ')}
                     >
                       <ClipboardList
                         className={[
-                          'h-3.5 w-3.5 shrink-0',
+                          'h-4 w-4 shrink-0',
                           detailLeftTab === 'counselor' ? 'text-amber-50' : 'text-amber-700',
                         ].join(' ')}
                         aria-hidden
                       />
-                      <span className="truncate text-[11px] font-bold leading-tight tracking-tight sm:text-xs">
+                      <span className="truncate text-xs font-bold leading-tight tracking-tight sm:text-sm">
                         Thao tác TVV
                       </span>
                       {hasUnsavedProgress && detailLeftTab !== 'counselor' ? (
                         <span
-                          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500 ring-2 ring-white"
+                          className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
                           title="Có thay đổi chưa lưu"
                           aria-hidden
                         />
@@ -6907,25 +6863,25 @@ function LeadDetailPanel({
                       aria-selected={detailLeftTab === 'profile'}
                       onClick={() => setDetailLeftTab('profile')}
                       className={[
-                        'relative flex min-h-8 items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-center transition sm:px-2',
+                        'relative flex min-h-9 items-center justify-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-center transition sm:px-2.5',
                         detailLeftTab === 'profile'
-                          ? 'border-slate-600/60 bg-slate-800 text-white shadow-sm ring-1 ring-slate-500/30'
-                          : 'border-transparent bg-white text-slate-800 hover:border-slate-200 hover:bg-slate-50',
+                          ? 'border-indigo-700 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white shadow-md ring-2 ring-indigo-300/45'
+                          : 'border-indigo-200/80 bg-indigo-50 text-indigo-950 hover:border-indigo-400 hover:bg-indigo-100',
                       ].join(' ')}
                     >
                       <UserRound
                         className={[
-                          'h-3.5 w-3.5 shrink-0',
-                          detailLeftTab === 'profile' ? 'text-slate-200' : 'text-slate-600',
+                          'h-4 w-4 shrink-0',
+                          detailLeftTab === 'profile' ? 'text-indigo-100' : 'text-indigo-700',
                         ].join(' ')}
                         aria-hidden
                       />
-                      <span className="truncate text-[11px] font-bold leading-tight tracking-tight sm:text-xs">
+                      <span className="truncate text-xs font-bold leading-tight tracking-tight sm:text-sm">
                         Hồ sơ ứng viên
                       </span>
                       {(coreDirty || financeDirty) && detailLeftTab !== 'profile' ? (
                         <span
-                          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500 ring-2 ring-white"
+                          className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
                           title="Có thay đổi hồ sơ chưa lưu"
                           aria-hidden
                         />
@@ -6933,13 +6889,13 @@ function LeadDetailPanel({
                     </button>
                   </div>
                   <div
-                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200/80 bg-white px-2 py-1"
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1"
                     title="Điểm và nhãn theo bộ chấm đang chọn"
                   >
-                    <span className="hidden text-[9px] font-bold uppercase tracking-wide text-slate-500 sm:inline">
+                    <span className="hidden text-[9px] font-bold uppercase tracking-wide text-violet-700 sm:inline">
                       Điểm
                     </span>
-                    <span className="tabular-nums text-sm font-bold text-[var(--color-primary)]">
+                    <span className="tabular-nums text-sm font-bold text-violet-900">
                       {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
                     </span>
                     <TagBadge tag={detailScoringPreview?.priorityTag ?? lead.priorityTag} />
@@ -7055,14 +7011,8 @@ function LeadDetailPanel({
                 >
                   {detailLeftTab === 'profile' ? (
                     <aside className="flex min-h-0 flex-1 flex-col text-xs leading-snug text-slate-800 lg:overflow-hidden">
-                      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/90 bg-white p-1.5 shadow-sm sm:p-2">
-                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b border-slate-100 pb-1.5">
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-600">
-                            <span className="tabular-nums">
-                              Điểm: {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
-                            </span>
-                            <TagBadge tag={detailScoringPreview?.priorityTag ?? lead.priorityTag} />
-                          </div>
+                      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-indigo-200/90 bg-white p-1.5 shadow-sm ring-1 ring-indigo-100/80 sm:p-2">
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-b border-indigo-100 pb-1.5">
                           {showCounselorProgressForm ? (
                             <div className="flex flex-wrap items-center gap-1.5">
                               {coreDirty || financeDirty ? (
@@ -7139,143 +7089,40 @@ function LeadDetailPanel({
                         <div className="space-y-2">
                           {showCounselorProgressForm || canSaveInteraction ? (
                             <div className="space-y-1.5 border-b border-slate-200/70 pb-2">
-                              <div className="rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 via-white to-amber-50/35 p-2 shadow-md ring-1 ring-amber-200/70 sm:p-2.5">
-                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900/90">
-                                  Tiến độ tư vấn &amp; ghi chú
-                                </p>
-                                <p className="mt-1 text-[11px] leading-snug text-slate-600">
-                                  Hàng chờ:{' '}
-                                  <span className="font-semibold text-slate-800">
-                                    {resolveCallWorkBucket(lead) === 'uncalled'
-                                      ? 'Chưa gọi'
-                                      : resolveCallWorkBucket(lead) === 'callback'
-                                        ? 'Gọi lại'
-                                        : 'Đã xử lý'}
-                                  </span>
-                                  {lead.lastCallDispositionLabel ? (
-                                    <>
-                                      {' '}
-                                      · Note hiện tại:{' '}
-                                      <span className="font-semibold text-slate-800">
-                                        {lead.lastCallDispositionLabel}
-                                      </span>
-                                    </>
-                                  ) : null}
-                                </p>
-                                <div className="mt-2">
-                                  <LeadWorkModeContextCard
-                                    workMode={lead.workMode}
-                                    effectiveWorkMode={effectiveWorkMode}
-                                    canEdit={showCounselorProgressForm}
-                                    disabled={saving || financeSaving}
-                                    onChange={(next) => {
-                                      void saveWorkMode(next)
-                                    }}
-                                  />
-                                </div>
-                                <div className="mt-2 rounded-lg border border-amber-200/70 bg-white/80 px-2 py-1.5">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
-                                      Tư vấn: {LEAD_COUNSELOR_STATUS_LABELS[crmForForm]}
-                                    </span>
-                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
-                                      Hồ sơ: {PIPELINE_LABEL[statusForForm]}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-[10px] leading-snug text-slate-500">
-                                    Hệ thống tự cập nhật khi bạn lưu phản hồi gọi, hoặc khi có đóng tiền / đủ hồ sơ.
-                                    Không cần chỉnh tay mỗi lần gọi.
-                                  </p>
-                                </div>
-                                <div className="mt-2" role="group" aria-label="Phản hồi nhanh">
-                                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-                                      Phản hồi nhanh
+                              <div className="rounded-xl border-2 border-amber-300/90 bg-gradient-to-br from-amber-50/95 via-white to-orange-50/40 p-2 shadow-md ring-1 ring-amber-200/80 sm:p-2.5">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-bold tracking-tight text-amber-950 sm:text-base">
+                                      Tiến độ tư vấn &amp; ghi chú
                                     </p>
-                                    {dispositionDraft ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setDispositionDraft('')
-                                          setCrmDirty(null)
-                                          setStatusDirty(null)
-                                        }}
-                                        className="text-[11px] font-semibold text-slate-600 underline-offset-2 hover:text-amber-800 hover:underline"
-                                      >
-                                        Bỏ chọn
-                                      </button>
-                                    ) : null}
+                                    <p className="mt-1 text-[11px] leading-snug text-slate-600">
+                                      Hàng chờ:{' '}
+                                      <span className="font-semibold text-slate-800">
+                                        {resolveCallWorkBucket(lead) === 'uncalled'
+                                          ? 'Chưa gọi'
+                                          : resolveCallWorkBucket(lead) === 'callback'
+                                            ? 'Gọi lại'
+                                            : 'Đã xử lý'}
+                                      </span>
+                                      {lead.lastCallDispositionLabel ? (
+                                        <>
+                                          {' '}
+                                          · Note hiện tại:{' '}
+                                          <span className="font-semibold text-slate-800">
+                                            {lead.lastCallDispositionLabel}
+                                          </span>
+                                        </>
+                                      ) : null}
+                                    </p>
                                   </div>
-                                  <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                                    Chọn một nút rồi «Lưu cập nhật» — ghi note sau gọi và (khi có) tình trạng + nhãn HOT/WARM.
-                                  </p>
-                                  <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
-                                    {CALL_DISPOSITIONS.map((d) => {
-                                      const selected = dispositionDraft === d.id
-                                      return (
-                                        <button
-                                          key={d.id}
-                                          type="button"
-                                          aria-pressed={selected}
-                                          title={d.label}
-                                          onClick={() => {
-                                            if (selected) {
-                                              setDispositionDraft('')
-                                              setCrmDirty(null)
-                                              setStatusDirty(null)
-                                              return
-                                            }
-                                            setDispositionDraft(d.id)
-                                            const fx = getDispositionLeadEffects(d.id)
-                                            // Có map → điền sẵn; không map (KNM…) → trả form về giá trị đang lưu trên hồ sơ.
-                                            setCrmDirty(fx.status ?? null)
-                                            setStatusDirty(fx.pipelineStatus ?? null)
-                                          }}
-                                          className={[
-                                            'min-h-9 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold leading-snug transition sm:text-xs',
-                                            selected
-                                              ? 'border-amber-600 bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/45'
-                                              : 'border-slate-200 bg-white text-slate-800 hover:border-amber-300 hover:bg-amber-50',
-                                          ].join(' ')}
-                                        >
-                                          {d.label}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                  {dispositionSavePreview ? (
-                                    dispositionSavePreview.length ? (
-                                      <p className="mt-1.5 rounded-md border border-amber-200/80 bg-amber-50/80 px-2 py-1 text-[11px] leading-snug text-amber-950">
-                                        Khi lưu sẽ ghi: {dispositionSavePreview.join(' · ')}
-                                      </p>
-                                    ) : (
-                                      <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
-                                        Khi lưu: ghi phản hồi này — không đổi tình trạng tư vấn / hồ sơ.
-                                      </p>
-                                    )
-                                  ) : null}
-                                </div>
-                                <details className="group mt-2 rounded-lg border border-slate-200/90 bg-white/70 open:pb-2">
-                                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
-                                    <ChevronDown
-                                      className="h-3.5 w-3.5 shrink-0 text-slate-500 transition group-open:rotate-180"
-                                      aria-hidden
-                                    />
-                                    <span className="text-[11px] font-semibold text-slate-700">
-                                      Nâng cao — chỉnh tay tình trạng
-                                    </span>
-                                  </summary>
-                                  <p className="px-2 pb-1 text-[10px] leading-snug text-slate-500">
-                                    Chỉ dùng khi dữ liệu lệch hoặc cần sửa giúp. Ngày thường chọn phản hồi nhanh là đủ.
-                                  </p>
-                                  <div className="grid grid-cols-1 gap-1.5 px-2 sm:grid-cols-2">
+                                  <div className="flex w-full min-w-0 flex-wrap items-end gap-1.5 sm:w-auto sm:max-w-[min(100%,22rem)] sm:justify-end">
                                     {showCounselorProgressForm ? (
-                                      <label className="block text-xs font-medium text-slate-800">
-                                        Tình trạng tư vấn
+                                      <label className="block min-w-[9.5rem] flex-1 text-[10px] font-semibold text-amber-950 sm:flex-none">
+                                        Tư vấn
                                         <select
                                           value={crmForForm}
                                           onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
-                                          className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                          className="mt-0.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
                                         >
                                           {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
                                             <option key={s} value={s} className="bg-white">
@@ -7284,13 +7131,18 @@ function LeadDetailPanel({
                                           ))}
                                         </select>
                                       </label>
-                                    ) : null}
-                                    <label className="block text-xs font-medium text-slate-800">
-                                      Tình trạng hồ sơ
+                                    ) : (
+                                      <span className="rounded-md border border-amber-200 bg-white/90 px-1.5 py-1 text-[11px] font-semibold text-slate-800">
+                                        Tư vấn: {LEAD_COUNSELOR_STATUS_LABELS[crmForForm]}
+                                      </span>
+                                    )}
+                                    <label className="block min-w-[9.5rem] flex-1 text-[10px] font-semibold text-amber-950 sm:flex-none">
+                                      Hồ sơ
                                       <select
                                         value={statusForForm}
                                         onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                                        className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                        disabled={!showCounselorProgressForm && !canSaveInteraction}
+                                        className="mt-0.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50 disabled:cursor-not-allowed disabled:opacity-60"
                                       >
                                         {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
                                           <option key={k} value={k} className="bg-white">
@@ -7300,18 +7152,157 @@ function LeadDetailPanel({
                                       </select>
                                     </label>
                                   </div>
-                                </details>
-                                <label className="mt-2 block text-xs font-medium text-slate-800">
-                                  Ghi chú TVV
+                                </div>
+                                <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-stretch">
+                                  <div
+                                    className="flex min-h-0 flex-col rounded-xl border-2 border-amber-400/80 bg-amber-50/70 p-2 shadow-sm sm:p-2.5"
+                                    role="group"
+                                    aria-label="Phản hồi nhanh"
+                                  >
+                                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                      <p className="text-sm font-bold tracking-tight text-amber-950">
+                                        Phản hồi nhanh
+                                      </p>
+                                      {dispositionDraft ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setDispositionDraft('')
+                                            setCrmDirty(null)
+                                            setStatusDirty(null)
+                                          }}
+                                          className="text-[11px] font-bold text-amber-800 underline-offset-2 hover:underline"
+                                        >
+                                          Bỏ chọn
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-0.5 text-[10px] font-medium leading-snug text-amber-900/75">
+                                      Chọn một nút rồi «Lưu cập nhật» — ghi note và (khi có) tình trạng + nhãn HOT/WARM.
+                                    </p>
+                                    <div className="mt-1.5 grid flex-1 grid-cols-2 gap-1.5 content-start">
+                                      {CALL_DISPOSITIONS.map((d) => {
+                                        const selected = dispositionDraft === d.id
+                                        return (
+                                          <button
+                                            key={d.id}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            title={d.label}
+                                            onClick={() => {
+                                              if (selected) {
+                                                setDispositionDraft('')
+                                                setCrmDirty(null)
+                                                setStatusDirty(null)
+                                                return
+                                              }
+                                              setDispositionDraft(d.id)
+                                              const fx = getDispositionLeadEffects(d.id)
+                                              setCrmDirty(fx.status ?? null)
+                                              setStatusDirty(fx.pipelineStatus ?? null)
+                                            }}
+                                            className={[
+                                              'min-h-9 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold leading-snug transition sm:text-xs',
+                                              selected
+                                                ? 'border-amber-700 bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/50'
+                                                : 'border-amber-200/90 bg-white text-slate-800 hover:border-amber-400 hover:bg-amber-100/80',
+                                            ].join(' ')}
+                                          >
+                                            {d.label}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                    {dispositionSavePreview ? (
+                                      dispositionSavePreview.length ? (
+                                        <p className="mt-1.5 rounded-md border border-amber-300/80 bg-white/90 px-2 py-1 text-[11px] font-semibold leading-snug text-amber-950">
+                                          Khi lưu sẽ ghi: {dispositionSavePreview.join(' · ')}
+                                        </p>
+                                      ) : (
+                                        <p className="mt-1.5 text-[10px] font-medium leading-snug text-amber-900/70">
+                                          Khi lưu: ghi phản hồi này — không đổi tình trạng tư vấn / hồ sơ.
+                                        </p>
+                                      )
+                                    ) : null}
+                                  </div>
+
+                                  <div className="flex min-h-0 flex-col rounded-xl border-2 border-emerald-500/70 bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/50 p-2 shadow-sm sm:p-2.5">
+                                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                      <p className="text-sm font-bold tracking-tight text-emerald-950">
+                                        Đánh giá gọi
+                                      </p>
+                                      <button
+                                        type="button"
+                                        className="shrink-0 rounded-full border border-emerald-300/90 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-emerald-100"
+                                        aria-label="Giải thích đánh giá gọi"
+                                        title="Giải thích"
+                                        onClick={() => signalsHelpRef.current?.showModal()}
+                                      >
+                                        <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                                      </button>
+                                    </div>
+                                    <p className="mt-0.5 text-[10px] font-medium leading-snug text-emerald-900/75">
+                                      Tín hiệu hành vi / rủi ro theo bộ chấm — mỗi mục lưu ngay, không thay ghi chú bên dưới.
+                                    </p>
+                                    <dialog
+                                      ref={signalsHelpRef}
+                                      className="w-[min(100vw-2rem,40rem)] max-h-[min(88dvh,40rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
+                                      onClick={(e) => {
+                                        if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
+                                      }}
+                                    >
+                                      <div className="flex max-h-[min(88dvh,40rem)] flex-col">
+                                        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
+                                          <p className="text-sm font-bold text-emerald-950">Giải thích nhanh</p>
+                                          <button
+                                            type="button"
+                                            className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
+                                            aria-label="Đóng"
+                                            onClick={() => signalsHelpRef.current?.close()}
+                                          >
+                                            <X className="h-4 w-4" aria-hidden />
+                                          </button>
+                                        </div>
+                                        <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
+                                          <p>
+                                            <strong>Phản hồi nhanh</strong> (bên trái) chốt kết quả cuộc gọi và tình
+                                            trạng. <strong>Đánh giá gọi</strong> (bên phải) ghi hành vi / rủi ro theo bộ
+                                            chấm đang chọn — phục vụ nhãn HOT/WARM, lọc danh sách và AI.
+                                          </p>
+                                          <p className="mt-2">
+                                            Bật/tắt từng mục trong Đánh giá gọi là <strong>lưu ngay</strong> (không dùng
+                                            chung nút «Lưu cập nhật»).
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </dialog>
+                                    <div className="mt-1.5 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                                      <LeadScoringSignalsPanel
+                                        key={`sig-${lead.id}`}
+                                        lead={lead}
+                                        db={db}
+                                        activeScoringProfile={activeScoringProfile}
+                                        canEdit={canEditScoringSignals}
+                                        onUpdated={onUpdated}
+                                        compact
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <label className="mt-3 block rounded-xl border-2 border-sky-400/80 bg-sky-50/80 p-2.5 shadow-sm sm:p-3">
+                                  <span className="text-sm font-bold tracking-tight text-sky-950">
+                                    Ghi chú TVV
+                                  </span>
                                   <textarea
                                     value={note}
                                     onChange={(e) => setNote(e.target.value)}
-                                    rows={3}
+                                    rows={4}
                                     placeholder="Nội dung hiện trên cột Ghi chú của danh sách hồ sơ…"
-                                    className="mt-0.5 w-full resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                    className="mt-1.5 w-full resize-y rounded-lg border-2 border-sky-300/80 bg-white px-2.5 py-2 text-sm font-semibold leading-relaxed text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-400/40"
                                   />
                                 </label>
-                                {msg ? <p className="mt-1 text-xs font-medium text-amber-900">{msg}</p> : null}
+                                {msg ? <p className="mt-1 text-xs font-bold text-amber-900">{msg}</p> : null}
                                 <button
                                   type="button"
                                   disabled={
@@ -7321,7 +7312,7 @@ function LeadDetailPanel({
                                     !hasUnsavedProgress
                                   }
                                   onClick={() => void saveUnified()}
-                                  className="mt-2 w-full rounded-md border border-amber-600 bg-gradient-to-r from-amber-500 to-amber-600 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
+                                  className="mt-2 w-full rounded-lg border-2 border-amber-700 bg-gradient-to-r from-amber-500 to-orange-600 py-2.5 text-sm font-bold text-white shadow-md transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
                                 >
                                   {saving ? 'Đang lưu…' : 'Lưu cập nhật'}
                                 </button>
@@ -7342,86 +7333,6 @@ function LeadDetailPanel({
                               để cập nhật giấy tờ / đóng tiền. Tab này giữ note gọi &amp; tiến độ.
                             </p>
                           ) : null}
-
-                          {/**
-                           * Luôn có (đóng sẵn): đánh giá sơ bộ theo bộ chấm đang chọn.
-                           * Phản hồi nhanh = chốt kết quả gọi; khối này = khi còn ngần ngại / ngoài mẫu nhanh / nhiều tín hiệu cùng lúc.
-                           */}
-                          <details className="group rounded-xl border border-emerald-200/90 bg-gradient-to-br from-indigo-50/45 via-white to-slate-50/90 shadow-md ring-1 ring-emerald-900/10 open:p-2 sm:open:p-2.5">
-                            <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
-                              <ChevronDown
-                                className="h-3.5 w-3.5 shrink-0 text-emerald-800 transition group-open:rotate-180"
-                                aria-hidden
-                              />
-                              <span className="min-w-0 flex-1 text-xs font-semibold text-emerald-950">
-                                Đánh giá sơ bộ theo bộ chấm
-                              </span>
-                              <button
-                                type="button"
-                                className="shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-indigo-100"
-                                aria-label="Giải thích đánh giá sơ bộ theo bộ chấm"
-                                title="Giải thích"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  signalsHelpRef.current?.showModal()
-                                }}
-                              >
-                                <CircleHelp className="h-3.5 w-3.5" aria-hidden />
-                              </button>
-                            </summary>
-                            <p className="px-2.5 pb-1 text-[11px] leading-snug text-slate-600 sm:px-0">
-                              Dùng khi cuộc gọi còn ngần ngại, chưa khớp phản hồi nhanh, hoặc cần ghi nhiều tín hiệu
-                              cùng lúc. Mỗi mục <strong>lưu ngay</strong> — điểm &amp; nhãn HOT/WARM theo bộ chấm đang
-                              chọn. Không thay note sau gọi phía trên.
-                            </p>
-
-                            <dialog
-                              ref={signalsHelpRef}
-                              className="w-[min(100vw-2rem,40rem)] max-h-[min(88dvh,40rem)] overflow-hidden rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40"
-                              onClick={(e) => {
-                                if (e.target === signalsHelpRef.current) signalsHelpRef.current?.close()
-                              }}
-                            >
-                              <div className="flex max-h-[min(88dvh,40rem)] flex-col">
-                                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-emerald-50/60 px-3 py-2">
-                                  <p className="text-sm font-semibold text-emerald-950">Giải thích nhanh</p>
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50"
-                                    aria-label="Đóng"
-                                    onClick={() => signalsHelpRef.current?.close()}
-                                  >
-                                    <X className="h-4 w-4" aria-hidden />
-                                  </button>
-                                </div>
-                                <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
-                                  <p>
-                                    <strong>Phản hồi nhanh</strong> (phía trên) là đường chính để chốt kết quả cuộc gọi
-                                    và tình trạng. Khối <strong>Đánh giá sơ bộ theo bộ chấm</strong> bổ sung khi cần ghi
-                                    hành vi / rủi ro theo đúng bộ chấm đang chọn — phục vụ nhãn HOT/WARM, lọc danh sách
-                                    và AI.
-                                  </p>
-                                  <p className="mt-2">
-                                    Bật/tắt từng mục là <strong>lưu ngay</strong> (không dùng chung nút «Lưu cập nhật»
-                                    của khối tiến độ).
-                                  </p>
-                                </div>
-                              </div>
-                            </dialog>
-
-                            <div className="mt-1 min-h-0 px-2.5 pb-2 sm:px-0 sm:pb-0">
-                              <LeadScoringSignalsPanel
-                                key={`sig-${lead.id}`}
-                                lead={lead}
-                                db={db}
-                                activeScoringProfile={activeScoringProfile}
-                                canEdit={canEditScoringSignals}
-                                onUpdated={onUpdated}
-                                compact
-                              />
-                            </div>
-                          </details>
                         </div>
                       ) : null}
                     </aside>
@@ -7433,7 +7344,7 @@ function LeadDetailPanel({
                 {crmQuickBlockVisible && db ? (
                   <>
                     <nav
-                      className="flex shrink-0 flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-white p-1 shadow-sm"
+                      className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-md"
                       role="tablist"
                       aria-label="Phân công và lịch sử"
                     >
@@ -7443,10 +7354,10 @@ function LeadDetailPanel({
                         aria-selected={detailRightTab === 'assign'}
                         onClick={() => setDetailRightTab('assign')}
                         className={[
-                          'min-h-7 flex-1 rounded-md border px-2 py-1 text-left text-[11px] font-semibold tracking-tight transition sm:text-xs',
+                          'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
                           detailRightTab === 'assign'
-                            ? 'border-indigo-500/55 bg-gradient-to-r from-indigo-600 to-indigo-600 text-white shadow-sm'
-                            : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
+                            ? 'border-violet-700 bg-gradient-to-r from-violet-600 to-indigo-700 text-white shadow-md ring-2 ring-violet-300/40'
+                            : 'border-violet-200 bg-violet-50 text-violet-950 hover:border-violet-400 hover:bg-violet-100',
                         ].join(' ')}
                       >
                         Phân công
@@ -7457,10 +7368,10 @@ function LeadDetailPanel({
                         aria-selected={detailRightTab === 'history'}
                         onClick={() => setDetailRightTab('history')}
                         className={[
-                          'min-h-7 flex-1 rounded-md border px-2 py-1 text-left text-[11px] font-semibold tracking-tight transition sm:text-xs',
+                          'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
                           detailRightTab === 'history'
-                            ? 'border-sky-500/55 bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-sm'
-                            : 'border-transparent bg-slate-50 text-slate-800 hover:border-slate-200 hover:bg-white',
+                            ? 'border-teal-700 bg-gradient-to-r from-teal-600 to-cyan-700 text-white shadow-md ring-2 ring-teal-300/40'
+                            : 'border-teal-200 bg-teal-50 text-teal-950 hover:border-teal-400 hover:bg-teal-100',
                         ].join(' ')}
                       >
                         Lịch sử
