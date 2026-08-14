@@ -63,7 +63,6 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
-import { LeadWorkModeBentoBoard } from '../components/LeadWorkModeBentoBoard'
 import { LeadWorkModeContextCard } from '../components/LeadWorkModeContextCard'
 import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
 import { LlmAccessHelpPanel } from '../components/LlmAccessHelpPanel'
@@ -133,7 +132,6 @@ import {
   leadWorkModePrimaryFocus,
   parseLeadWorkMode,
   resolveEffectiveWorkMode,
-  summarizeLeadWorkModes,
 } from '../utils/leadWorkMode'
 import {
   LEAD_INTAKE_ORIGINS,
@@ -221,7 +219,6 @@ import {
   parseDispositionFromUrl,
   parsePipelineFromUrl,
   parseTagFromUrl,
-  parseWorkModeFromUrl,
   stripListFiltersKeepOpenView,
   urlHasLeadListFilters,
 } from '../utils/leadWorkspaceUrlFilters'
@@ -1319,12 +1316,6 @@ export function LeadManagement() {
     return summarizeCallWorkQueue(mine)
   }, [originScopedLeads, profile?.id])
 
-  /** Đếm chế độ hiệu lực trên tập đã tải (đã theo tab nguồn). */
-  const workModeSummary = useMemo(
-    () => summarizeLeadWorkModes(originScopedLeads, leadSources),
-    [originScopedLeads, leadSources],
-  )
-
   /**
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
    * để «Chọn tất cả trên trang» không chọn hàng nghìn hồ sơ một lúc.
@@ -1454,7 +1445,7 @@ export function LeadManagement() {
         const d = parseDispositionFromUrl(sp.get(LWF.DISP))
         return d && isCallDispositionId(d) ? d : 'all'
       })(),
-      workMode: parseWorkModeFromUrl(sp.get(LWF.WM)),
+      workMode: 'all',
       // Điểm / AI shortlist không nằm trên URL — giữ giá trị đang áp dụng.
       scoreMin: scoreMinInput,
       scoreMax: scoreMaxInput,
@@ -1473,16 +1464,21 @@ export function LeadManagement() {
     setAssigneeFilter(next.assignee)
     setCallWorkBucketFilter(next.callQueue)
     setDispositionFilter(next.disposition)
-    setWorkModeFilter(next.workMode)
+    // List không còn lọc «cách làm việc» — nguồn nhập thay thế; bỏ wm URL cũ.
+    setWorkModeFilter('all')
     setIntakeOriginTab(parseLeadIntakeOriginFromUrl(sp.get(LWF.ORIGIN)))
     setUploadedFromFilter(next.uploadedFrom)
     setUploadedToFilter(next.uploadedTo)
     setDraftFilters((prev) => ({
       ...next,
+      workMode: 'all',
       scoreMin: prev.scoreMin,
       scoreMax: prev.scoreMax,
       aiShortlistOnly: prev.aiShortlistOnly,
     }))
+    if (sp.get(LWF.WM)) {
+      mergeListFilterUrl({ [LWF.WM]: null })
+    }
     // Chỉ hydrate khi chữ ký lọc đổi — không phụ thuộc cả `searchParams` (tránh mất nháp khi đổi `open` / `q`).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filterHydrateSig
   }, [filterHydrateSig])
@@ -1492,7 +1488,7 @@ export function LeadManagement() {
     setTagFilter(d.tag)
     setCallWorkBucketFilter(d.callQueue)
     setDispositionFilter(d.disposition)
-    setWorkModeFilter(d.workMode)
+    setWorkModeFilter('all')
     setRegionFilter(d.region)
     setMajorFilter(d.major)
     setStatusFilter(d.status)
@@ -1513,7 +1509,7 @@ export function LeadManagement() {
       [LWF.TAG]: d.tag === 'ALL' ? null : d.tag,
       [LWF.CQ]: d.callQueue === 'all' ? null : d.callQueue,
       [LWF.DISP]: d.disposition === 'all' ? null : d.disposition,
-      [LWF.WM]: d.workMode === 'all' ? null : d.workMode,
+      [LWF.WM]: null,
       [LWF.REGION]: d.region === 'ALL' ? null : d.region,
       [LWF.MAJOR]: d.major === 'ALL' ? null : d.major,
       [LWF.PIPE]: d.status === 'ALL' ? null : d.status,
@@ -1568,17 +1564,6 @@ export function LeadManagement() {
       setDraftFilters((prev) => ({ ...prev, disposition }))
       setDispositionFilter(disposition)
       mergeListFilterUrl({ [LWF.DISP]: disposition === 'all' ? null : disposition })
-      setPage(1)
-    },
-    [mergeListFilterUrl, setPage],
-  )
-
-  /** Chế độ xử lý hồ sơ: áp dụng ngay. */
-  const applyWorkModeQuick = useCallback(
-    (workMode: 'all' | LeadWorkMode) => {
-      setDraftFilters((prev) => ({ ...prev, workMode }))
-      setWorkModeFilter(workMode)
-      mergeListFilterUrl({ [LWF.WM]: workMode === 'all' ? null : workMode })
       setPage(1)
     },
     [mergeListFilterUrl, setPage],
@@ -1703,18 +1688,6 @@ export function LeadManagement() {
           setDraftFilters((prev) => ({ ...prev, disposition: 'all' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.DISP]: null })
-        },
-      })
-    }
-    if (workModeFilter !== 'all') {
-      out.push({
-        id: 'workMode',
-        label: `Chế độ: ${leadWorkModeLabel(workModeFilter)}`,
-        onClear: () => {
-          setWorkModeFilter('all')
-          setDraftFilters((prev) => ({ ...prev, workMode: 'all' }))
-          setPage(1)
-          mergeListFilterUrl({ [LWF.WM]: null })
         },
       })
     }
@@ -3355,9 +3328,9 @@ export function LeadManagement() {
           ) : null}
         </div>
 
-        {/* Tìm kiếm + thao tác chính (gọn) */}
+        {/* Tìm kiếm + nguồn nhập + thao tác (một hàng). */}
         <div className="flex flex-wrap items-end gap-2.5">
-          <label className={`${LEAD_FILTER_LABEL} min-w-[12rem] flex-1`}>
+          <label className={`${LEAD_FILTER_LABEL} min-w-[10rem] flex-1 basis-[12rem]`}>
             <span>Tìm kiếm</span>
             <input
               value={searchParams.get(LWF.Q) ?? ''}
@@ -3367,6 +3340,39 @@ export function LeadManagement() {
               className={LEAD_FILTER_CONTROL}
             />
           </label>
+          <div className="min-w-0 shrink-0">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Nguồn nhập
+              {intakeOriginNeedsScope && (loading || loadingPage) ? (
+                <span className="ml-1 font-normal normal-case tracking-normal text-slate-400">
+                  · đang tải…
+                </span>
+              ) : null}
+            </p>
+            <div className="flex flex-wrap gap-1" role="tablist" aria-label="Nguồn nhập hồ sơ">
+              {LEAD_INTAKE_ORIGINS.map((origin) => {
+                const selected = intakeOriginTab === origin
+                return (
+                  <button
+                    key={origin}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    title={leadIntakeOriginHint(origin)}
+                    onClick={() => applyIntakeOriginTab(origin)}
+                    className={[
+                      'min-h-8 rounded-md border px-2 py-1 text-[11px] font-semibold leading-snug transition',
+                      selected
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-800 hover:border-[var(--color-primary)]/40 hover:bg-slate-50',
+                    ].join(' ')}
+                  >
+                    {leadIntakeOriginLabel(origin)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {canCreateManualLead && configured && db ? (
               <button
@@ -3415,53 +3421,6 @@ export function LeadManagement() {
             </button>
           </div>
         </div>
-
-        {/* Nguồn nhập — tách data thô lớn / tạo tay / cổng ĐK. */}
-        <div className="w-full border-t border-slate-200/60 pt-2">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Nguồn nhập hồ sơ
-            </p>
-            <p className="text-[11px] text-slate-500" aria-live="polite">
-              {intakeOriginNeedsScope && (loading || loadingPage)
-                ? 'Đang tải đủ hồ sơ tab này…'
-                : leadIntakeOriginHint(intakeOriginTab)}
-            </p>
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-1.5" role="tablist" aria-label="Nguồn nhập hồ sơ">
-            {LEAD_INTAKE_ORIGINS.map((origin) => {
-              const selected = intakeOriginTab === origin
-              return (
-                <button
-                  key={origin}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  title={leadIntakeOriginHint(origin)}
-                  onClick={() => applyIntakeOriginTab(origin)}
-                  className={[
-                    'min-h-9 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-semibold leading-snug transition sm:text-xs',
-                    selected
-                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white shadow-sm ring-2 ring-[var(--color-primary)]/35'
-                      : 'border-slate-200 bg-white text-slate-800 hover:border-[var(--color-primary)]/40 hover:bg-slate-50',
-                  ].join(' ')}
-                >
-                  {leadIntakeOriginLabel(origin)}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Lọc chế độ — LUÔN ngoài danh sách (không giấu trong Công cụ). */}
-        <LeadWorkModeBentoBoard
-          active={workModeFilter}
-          summary={workModeSummary}
-          onSelect={(next) => applyWorkModeQuick(next)}
-          sampleOnly={!listNeedsFullScope}
-          scanning={Boolean(workModeNeedsScope && (loading || loadingPage))}
-          className="w-full border-t border-slate-200/60 pt-2"
-        />
 
         {workspaceToolsOpen ? (
           <>
