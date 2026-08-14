@@ -24,11 +24,11 @@ describe('callFormVariantForWorkMode', () => {
 describe('filterDimensionsForCallForm', () => {
   const dims = getDefaultCallEvaluationConfig()
 
-  it('short loại enrollment_signal và chiều khách', () => {
+  it('short loại enrollment_signal, giữ chiều khách nhưng không bắt buộc', () => {
     const filtered = filterDimensionsForCallForm(dims, 'short')
     expect(filtered.some((d) => d.id === 'enrollment_signal')).toBe(false)
-    expect(filtered.some((d) => d.id === 'affect')).toBe(false)
-    expect(filtered.some((d) => d.id === 'readiness')).toBe(false)
+    expect(filtered.some((d) => d.id === 'affect')).toBe(true)
+    expect(filtered.some((d) => d.id === 'readiness')).toBe(true)
     expect(filtered.every((d) => d.required === false)).toBe(true)
   })
 

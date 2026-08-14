@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import type { Lead, LeadScoringSignalKey, LeadScoringSignals, ProfileCustomScoringSignal, ScoringProfile } from '../types'
+import type {
+  Lead,
+  LeadScoringSignalKey,
+  LeadScoringSignals,
+  PriorityTag,
+  ProfileCustomScoringSignal,
+  ScoringProfile,
+} from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { persistedLeadScoringFields } from '../utils/scoring'
 import { leadTouchPatch } from '../utils/leadTouch'
@@ -85,6 +92,14 @@ export function LeadScoringSignalsPanel({
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  const formatScoreSummary = (score?: number, tag?: PriorityTag) => {
+    if (typeof score !== 'number' || !tag) return null
+    return `Điểm ${Math.round(score)} · ${tag}`
+  }
+
+  /** Tổng kết đang hiển thị = điểm đã lưu trên hồ sơ (cập nhật ngay sau mỗi lần bấm). */
+  const liveSummary = formatScoreSummary(lead.calculatedScore, lead.priorityTag)
+
   const behaviorKeys = useMemo(
     () => ALL_SCORING_SIGNAL_KEYS.filter((k) => SCORING_SIGNAL_META[k].group === 'behavior'),
     [],
@@ -124,7 +139,8 @@ export function LeadScoringSignalsPanel({
           updatedAt: touch.updatedAt,
           lastTouchedAt: touch.lastTouchedAt,
         })
-        setMsg('Đã lưu.')
+        const summary = formatScoreSummary(scoreFields.calculatedScore, scoreFields.priorityTag)
+        setMsg(summary ? `Đã lưu · ${summary}` : 'Đã lưu.')
       } catch (e) {
         console.error(e)
         setMsg('Không lưu được — kiểm tra quyền ghi Firestore.')
@@ -176,7 +192,8 @@ export function LeadScoringSignalsPanel({
           updatedAt: touch.updatedAt,
           lastTouchedAt: touch.lastTouchedAt,
         })
-        setMsg('Đã lưu.')
+        const summary = formatScoreSummary(scoreFields.calculatedScore, scoreFields.priorityTag)
+        setMsg(summary ? `Đã lưu · ${summary}` : 'Đã lưu.')
       } catch (e) {
         console.error(e)
         setMsg('Không lưu được — kiểm tra quyền ghi Firestore.')
@@ -221,6 +238,26 @@ export function LeadScoringSignalsPanel({
         </p>
       ) : null}
       {!canEdit ? <p className={warnCls}>Bạn không có quyền ghi hồ sơ — chỉ xem.</p> : null}
+      {activeScoringProfile ? (
+        <p
+          className={[
+            compact
+              ? 'mt-1 rounded-md border border-indigo-200/80 bg-indigo-50/90 px-2 py-1 text-[11px] leading-snug text-indigo-950'
+              : 'mt-2 rounded-lg border border-indigo-200/80 bg-indigo-50/90 px-2.5 py-1.5 text-xs leading-snug text-indigo-950',
+          ].join(' ')}
+          aria-live="polite"
+        >
+          <span className="font-semibold">Tổng kết bộ chấm:</span>{' '}
+          {liveSummary ?? 'Chưa có điểm — bật/tắt tín hiệu để tính ngay.'}
+          {activeScoringProfile.profileName ? (
+            <span className="mt-0.5 block text-[10px] font-normal text-indigo-800/80">
+              Theo «{activeScoringProfile.profileName}» — mỗi lần bấm là tính lại điểm &amp; nhãn.
+            </span>
+          ) : null}
+        </p>
+      ) : (
+        <p className={warnCls}>Chưa chọn bộ chấm — tín hiệu vẫn lưu, nhưng chưa tính điểm/nhãn.</p>
+      )}
       <div className={groupsWrap}>
         <div>
           <p className={`${subLbl} text-emerald-900`}>Hành vi (+)</p>
@@ -299,8 +336,8 @@ export function LeadScoringSignalsPanel({
           </ul>
         </div>
       </div>
-      {busy ? <p className="mt-2 text-xs text-slate-500">Đang lưu…</p> : null}
-      {msg && !busy ? <p className="mt-2 text-xs text-emerald-700">{msg}</p> : null}
+      {busy ? <p className="mt-2 text-xs text-slate-500">Đang tính điểm &amp; lưu…</p> : null}
+      {msg && !busy ? <p className="mt-2 text-xs font-medium text-emerald-800">{msg}</p> : null}
     </section>
   )
 }

@@ -20,7 +20,7 @@ Phương án **(2)**: một đường chính = phản hồi nhanh + ghi chú; t�
 3. Khi đã chọn phản hồi có map → dòng **xem trước khi lưu**.
 4. Ghi chú + Lưu cập nhật (không đổi logic `saveUnified` / effects).
 5. `<details>` «Nâng cao — chỉnh tay tình trạng»: hai select cũ (CRM nếu có quyền, pipeline).
-6. Tín hiệu bộ chấm: giữ chỉ khi `workFocus === 'scoring'`.
+6. `<details>` «Đánh giá sơ bộ theo bộ chấm» (đóng sẵn, **luôn có**): tín hiệu hành vi/rủi ro theo profile — bổ sung khi gọi còn ngần ngại / ngoài mẫu phản hồi nhanh; không thay note sau gọi.
 
 ## Out of scope
 

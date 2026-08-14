@@ -1,5 +1,4 @@
 import type { CallEvalDimension, LeadWorkMode } from '../types'
-import { isScoringDimension } from './callSessionBehaviorCatalog'
 
 export type CallFormVariant = 'short' | 'full'
 
@@ -12,8 +11,9 @@ export function callFormVariantForWorkMode(mode: LeadWorkMode | undefined): Call
 /**
  * Lọc chiều đánh giá theo variant form gọi.
  * Luôn bỏ `enrollment_signal` khỏi UI/validation (giữ nguyên defaults/Firestore).
- * short: chỉ giữ hành vi TVV (nếu có), required=false — disposition xử lý riêng.
- * full: giữ chiều khách (affect/readiness/…) trừ enrollment_signal.
+ * short: giữ đủ chiều khách + hành vi nhưng **không bắt buộc** — phản hồi nhanh (disposition) là chính;
+ *        TVV mở bảng khi gọi còn ngần ngại / cần ghi nhiều tín hiệu.
+ * full: giữ chiều khách (affect/readiness/…) trừ enrollment_signal (required theo config).
  */
 export function filterDimensionsForCallForm(
   dimensions: readonly CallEvalDimension[],
@@ -21,9 +21,11 @@ export function filterDimensionsForCallForm(
 ): CallEvalDimension[] {
   const withoutSignal = dimensions.filter((d) => d.id !== 'enrollment_signal')
   if (variant === 'short') {
-    return withoutSignal
-      .filter((d) => isScoringDimension(d))
-      .map((d) => ({ ...d, required: false, options: d.options.map((o) => ({ ...o })) }))
+    return withoutSignal.map((d) => ({
+      ...d,
+      required: false,
+      options: d.options.map((o) => ({ ...o })),
+    }))
   }
   return withoutSignal.map((d) => ({
     ...d,

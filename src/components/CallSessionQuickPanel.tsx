@@ -150,8 +150,9 @@ export function CallSessionQuickPanel({
           <p className="mt-0.5 text-xs leading-snug text-violet-200/85">
             {isShortForm ? (
               <>
-                Chọn <strong className="text-white">kết quả sau gọi</strong> bên dưới là đủ để lưu. Tick hành vi
-                TVV (nếu có) để cộng/trừ điểm — không bắt buộc.
+                Chọn <strong className="text-white">kết quả sau gọi</strong> là đủ để lưu. Bảng đánh giá bên dưới{' '}
+                <strong className="text-white">không bắt buộc</strong> — dùng khi khách còn ngần ngại hoặc cần ghi
+                thái độ / sẵn sàng / rào cản.
               </>
             ) : (
               <>

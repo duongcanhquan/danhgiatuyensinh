@@ -7358,7 +7358,10 @@ function LeadDetailPanel({
                             </p>
                           ) : null}
 
-                          {workFocus === 'scoring' ? (
+                          {/**
+                           * Luôn có (đóng sẵn): đánh giá sơ bộ theo bộ chấm đang chọn.
+                           * Phản hồi nhanh = chốt kết quả gọi; khối này = khi còn ngần ngại / ngoài mẫu nhanh / nhiều tín hiệu cùng lúc.
+                           */}
                           <details className="group rounded-xl border border-emerald-200/90 bg-gradient-to-br from-indigo-50/45 via-white to-slate-50/90 shadow-md ring-1 ring-emerald-900/10 open:p-2 sm:open:p-2.5">
                             <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
                               <ChevronDown
@@ -7366,12 +7369,12 @@ function LeadDetailPanel({
                                 aria-hidden
                               />
                               <span className="min-w-0 flex-1 text-xs font-semibold text-emerald-950">
-                                Tín hiệu cho bộ chấm (Sàng data)
+                                Đánh giá sơ bộ theo bộ chấm
                               </span>
                               <button
                                 type="button"
                                 className="shrink-0 rounded-full border border-emerald-300/80 bg-white p-1 text-emerald-900 shadow-sm transition hover:bg-indigo-100"
-                                aria-label="Giải thích tín hiệu cho bộ chấm"
+                                aria-label="Giải thích đánh giá sơ bộ theo bộ chấm"
                                 title="Giải thích"
                                 onClick={(e) => {
                                   e.preventDefault()
@@ -7383,7 +7386,9 @@ function LeadDetailPanel({
                               </button>
                             </summary>
                             <p className="px-2.5 pb-1 text-[11px] leading-snug text-slate-600 sm:px-0">
-                              Chỉ dùng khi sàng data — cộng điểm bộ chấm. Không thay note sau gọi.
+                              Dùng khi cuộc gọi còn ngần ngại, chưa khớp phản hồi nhanh, hoặc cần ghi nhiều tín hiệu
+                              cùng lúc. Mỗi mục <strong>lưu ngay</strong> — điểm &amp; nhãn HOT/WARM theo bộ chấm đang
+                              chọn. Không thay note sau gọi phía trên.
                             </p>
 
                             <dialog
@@ -7407,8 +7412,14 @@ function LeadDetailPanel({
                                 </div>
                                 <div className="min-h-0 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed">
                                   <p>
-                                    Tín hiệu phục vụ <strong>Sàng data</strong> (HOT/WARM). Kết quả cuộc gọi dùng{' '}
-                                    <strong>Phản hồi nhanh / note</strong> phía trên — không trùng.
+                                    <strong>Phản hồi nhanh</strong> (phía trên) là đường chính để chốt kết quả cuộc gọi
+                                    và tình trạng. Khối <strong>Đánh giá sơ bộ theo bộ chấm</strong> bổ sung khi cần ghi
+                                    hành vi / rủi ro theo đúng bộ chấm đang chọn — phục vụ nhãn HOT/WARM, lọc danh sách
+                                    và AI.
+                                  </p>
+                                  <p className="mt-2">
+                                    Bật/tắt từng mục là <strong>lưu ngay</strong> (không dùng chung nút «Lưu cập nhật»
+                                    của khối tiến độ).
                                   </p>
                                 </div>
                               </div>
@@ -7426,7 +7437,6 @@ function LeadDetailPanel({
                               />
                             </div>
                           </details>
-                          ) : null}
                         </div>
                       ) : null}
                     </aside>
