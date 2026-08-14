@@ -125,8 +125,9 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Danh mục trên form hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Chỉnh nguồn, ngành, tỉnh… theo tab dễ đọc. <strong>Cùng dữ liệu</strong> với «Danh mục (nâng cao)» — chỉ khác
-            cách hiển thị. TVV hàng ngày dùng tab này; admin kỹ thuật có thể mở tab nâng cao.
+            Chỉnh nguồn, học bổng, hệ đào tạo, cơ sở, niên khóa, ngành, tỉnh… theo tab dễ đọc.{' '}
+            <strong>Cùng dữ liệu</strong> với «Danh mục (nâng cao)» — chỉ khác cách hiển thị. TVV hàng ngày dùng tab này;
+            admin kỹ thuật có thể mở tab nâng cao.
           </p>
         </>
       )

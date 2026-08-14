@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { useSearchParams } from 'react-router-dom'
 
@@ -22,6 +22,8 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 import { saveLeadSourceRow, seedDefaultLeadSources } from '../utils/leadProfileCatalogSeed'
 
+import { ensureApplicantCategoriesCatalog } from '../utils/ensureApplicantCategoriesCatalog'
+
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
 
 import { MasterCatalogEditor } from './MasterCatalogEditor'
@@ -37,49 +39,40 @@ const INPUT =
 
 
 export type LeadProfileSettingsSubTab =
-
   | 'sources'
-
   | 'scholarships'
-
   | 'training'
-
   | 'majors'
-
+  | 'applicants'
+  | 'campus'
   | 'geo'
-
   | 'study'
 
-
-
 const SUB_TABS: { id: LeadProfileSettingsSubTab; label: string; hint: string }[] = [
-
   { id: 'sources', label: 'Nguồn', hint: 'Nguồn 1 / 2 trên hồ sơ' },
-
-  { id: 'scholarships', label: 'Học bổng', hint: 'Bảng học bổng PHCD / CDCQ' },
-
+  { id: 'scholarships', label: 'Học bổng', hint: 'Bảng học bổng — khớp tên khi import Sheet cũ' },
   { id: 'training', label: 'Hệ đào tạo', hint: 'Danh sách hệ — học sinh chọn trên hồ sơ' },
-
   { id: 'majors', label: 'Chuyên ngành', hint: 'Gắn với hệ đào tạo (departmentId)' },
-
+  { id: 'applicants', label: 'Đối tượng', hint: 'Đối tượng dự tuyển — cổng đăng ký & hồ sơ' },
+  { id: 'campus', label: 'Cơ sở & niên khóa', hint: 'Cơ sở học + niên khóa — import Sheet + form hồ sơ' },
   { id: 'geo', label: 'Địa lý & THPT', hint: 'Tỉnh, quận/huyện, trường THPT' },
-
   { id: 'study', label: 'Học tập khác', hint: 'Học lực, dự định, loại trường, tài chính' },
-
 ]
 
-
-
 function parseProfileSub(raw: string | null): LeadProfileSettingsSubTab | null {
-
-  if (raw === 'sources' || raw === 'scholarships' || raw === 'training' || raw === 'majors' || raw === 'geo' || raw === 'study') {
-
+  if (
+    raw === 'sources' ||
+    raw === 'scholarships' ||
+    raw === 'training' ||
+    raw === 'majors' ||
+    raw === 'applicants' ||
+    raw === 'campus' ||
+    raw === 'geo' ||
+    raw === 'study'
+  ) {
     return raw
-
   }
-
   return null
-
 }
 
 
@@ -92,7 +85,12 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
   const { byKind, loading: mdLoading } = useMasterData()
 
-
+  useEffect(() => {
+    if (!canEdit) return
+    void ensureApplicantCategoriesCatalog(db).catch((err) => {
+      console.warn('[ensureApplicantCategoriesCatalog]', err)
+    })
+  }, [db, canEdit])
 
   const setSub = (id: LeadProfileSettingsSubTab) => {
 
@@ -133,7 +131,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
 
-          Quản lý danh mục dùng trên form hồ sơ: nguồn, học bổng, hệ đào tạo, chuyên ngành, địa lý, trường THPT… TVV có thể
+          Quản lý danh mục dùng trên form hồ sơ: nguồn, học bổng, hệ đào tạo, cơ sở, niên khóa, chuyên ngành, địa lý… TVV có thể
 
           gõ tìm hoặc thêm giá trị mới trực tiếp khi nhập hồ sơ.
 
@@ -271,6 +269,53 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
         />
 
+      ) : null}
+
+      {sub === 'applicants' ? (
+        <MasterCatalogEditor
+          catalogId="applicant_categories"
+          title="Đối tượng dự tuyển"
+          description="Danh sách dùng trên cổng đăng ký công khai và form hồ sơ CRM. Cột «Tiếng Anh» hiện khi chọn EN trên cổng."
+          entries={byKind.applicant_categories ?? []}
+          loading={mdLoading}
+          db={db}
+          canEdit={canEdit}
+          extraColumn={{
+            label: 'Tiếng Anh',
+            render: (entry, onPatch, disabled) => (
+              <input
+                className={INPUT}
+                value={entry.labelEn ?? ''}
+                disabled={disabled}
+                placeholder="English label"
+                onChange={(e) => onPatch({ labelEn: e.target.value || undefined })}
+              />
+            ),
+          }}
+        />
+      ) : null}
+
+      {sub === 'campus' ? (
+        <div className="space-y-4">
+          <MasterCatalogEditor
+            catalogId="campuses"
+            title="Cơ sở học"
+            description="Dùng trên form hồ sơ và khi import Sheet cũ (cột Cơ sở). Thêm/sửa ở đây để TVV chọn đúng."
+            entries={byKind.campuses ?? []}
+            loading={mdLoading}
+            db={db}
+            canEdit={canEdit}
+          />
+          <MasterCatalogEditor
+            catalogId="school_years"
+            title="Niên khóa"
+            description="Ví dụ 2024–2027. Import Sheet (cột Niên khóa) sẽ ghi vào hồ sơ và bổ sung danh mục nếu chưa có."
+            entries={byKind.school_years ?? []}
+            loading={mdLoading}
+            db={db}
+            canEdit={canEdit}
+          />
+        </div>
       ) : null}
 
       {sub === 'geo' ? (

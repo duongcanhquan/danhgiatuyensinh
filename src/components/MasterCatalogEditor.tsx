@@ -180,7 +180,8 @@ function CatalogRow({
   const dirty =
     draft.label !== row.label ||
     draft.isActive !== row.isActive ||
-    draft.departmentId !== row.departmentId
+    draft.departmentId !== row.departmentId ||
+    (draft.labelEn ?? '') !== (row.labelEn ?? '')
 
   return (
     <tr className="border-t border-slate-100">

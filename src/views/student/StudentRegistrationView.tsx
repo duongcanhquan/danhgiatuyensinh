@@ -17,11 +17,14 @@ import {
   validatePublicRegistrationForm,
 } from '../../utils/publicRegistrationForm'
 import {
-  APPLICANT_CATEGORIES,
   publicRegText,
   SCORE_PRESETS,
   type PublicRegLang,
 } from '../../utils/publicRegistrationI18n'
+import {
+  applicantCategoryOptionsFromEntries,
+  type ApplicantCategoryOption,
+} from '../../utils/applicantCategoryCatalog'
 import { normalizeOrgSlug } from '../../tenancy/orgConstants'
 
 function eduLabelHint(label: string, lang: PublicRegLang): string {
@@ -101,12 +104,29 @@ export function StudentRegistrationView() {
     )
   }, [meta?.majors, selectedProgram])
 
+  const applicantCategoryOptions = useMemo((): ApplicantCategoryOption[] => {
+    const fromMeta = (meta?.applicantCategories ?? []).map((c) => ({
+      id: c.id,
+      label: c.label,
+      labelEn: c.labelEn,
+      isActive: true as const,
+    }))
+    return applicantCategoryOptionsFromEntries(fromMeta)
+  }, [meta?.applicantCategories])
+
+  useEffect(() => {
+    if (!applicantCategoryOptions.length) return
+    if (applicantCategoryOptions.some((c) => c.value === form.applicantCategory)) return
+    patch({ applicantCategory: applicantCategoryOptions[0]!.value })
+  }, [applicantCategoryOptions, form.applicantCategory, patch])
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const validationErr = validatePublicRegistrationForm(form, lang, {
       trainingProgramLabels: (meta?.trainingPrograms ?? []).map((p) => p.label),
       majorLabels: majorOptions.map((m) => m.label),
       counselorIds: (meta?.counselors ?? []).map((c) => c.id),
+      applicantCategoryLabels: applicantCategoryOptions.map((c) => c.value),
     })
     if (validationErr) {
       setError(validationErr)
@@ -471,9 +491,9 @@ export function StudentRegistrationView() {
                         onChange={(e) => patch({ applicantCategory: e.target.value })}
                         required
                       >
-                        {APPLICANT_CATEGORIES.map((c) => (
+                        {applicantCategoryOptions.map((c) => (
                           <option key={c.value} value={c.value}>
-                            {lang === 'en' ? c.en : c.vn}
+                            {lang === 'en' ? c.labelEn : c.labelVn}
                           </option>
                         ))}
                       </select>

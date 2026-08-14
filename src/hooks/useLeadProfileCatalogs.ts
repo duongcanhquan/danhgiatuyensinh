@@ -18,12 +18,17 @@ export function useLeadProfileCatalogs(): {
     studyIntentionLabels,
     schoolTypeLabels,
     financialProfileLabels,
+    campusLabels,
+    schoolYearLabels,
   } = useMasterData()
 
   const catalogs = useMemo(
     (): LeadProfileCatalogBundle => ({
       trainingPrograms: byKind.training_programs,
       majors: byKind.majors,
+      applicantCategories: (byKind.applicant_categories ?? [])
+        .filter((e) => e.isActive !== false)
+        .map((e) => e.label),
       provinces: regionLabels,
       hanoiAreas: hanoiAreaLabels,
       highSchools: highSchoolLabels,
@@ -31,10 +36,13 @@ export function useLeadProfileCatalogs(): {
       studyIntentions: studyIntentionLabels,
       schoolTypes: schoolTypeLabels,
       financialProfiles: financialProfileLabels,
+      campuses: campusLabels,
+      schoolYears: schoolYearLabels,
     }),
     [
       byKind.training_programs,
       byKind.majors,
+      byKind.applicant_categories,
       regionLabels,
       hanoiAreaLabels,
       highSchoolLabels,
@@ -42,6 +50,8 @@ export function useLeadProfileCatalogs(): {
       studyIntentionLabels,
       schoolTypeLabels,
       financialProfileLabels,
+      campusLabels,
+      schoolYearLabels,
     ],
   )
 

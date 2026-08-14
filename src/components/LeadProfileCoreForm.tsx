@@ -18,6 +18,7 @@ const INPUT_CLS = 'vm-input'
 export type LeadProfileCatalogBundle = {
   trainingPrograms?: readonly MasterDataEntry[]
   majors?: readonly MasterDataEntry[]
+  applicantCategories?: readonly string[]
   provinces?: readonly string[]
   hanoiAreas?: readonly string[]
   highSchools?: readonly string[]
@@ -25,6 +26,8 @@ export type LeadProfileCatalogBundle = {
   studyIntentions?: readonly string[]
   schoolTypes?: readonly string[]
   financialProfiles?: readonly string[]
+  campuses?: readonly string[]
+  schoolYears?: readonly string[]
 }
 
 export type LeadProfileCatalogEnsure = (
@@ -831,12 +834,13 @@ export function LeadProfileCoreForm({
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
           </Field>
           <Field label="Đối tượng dự tuyển">
-            <input
-              className={INPUT_CLS}
+            <CatalogCombobox
               value={draft.applicantCategory}
+              options={catalogs?.applicantCategories ?? []}
               disabled={disabled}
               placeholder="VD: Học sinh lớp 12"
-              onChange={(e) => patch('applicantCategory', e.target.value)}
+              onChange={(v) => patch('applicantCategory', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('applicant_categories') : undefined}
             />
           </Field>
           <Field label="Loại hình trường">
@@ -846,6 +850,26 @@ export function LeadProfileCoreForm({
               disabled={disabled}
               onChange={(v) => patch('schoolType', v)}
               onEnsureOption={onEnsureCatalogEntry ? ensure('school_types') : undefined}
+            />
+          </Field>
+          <Field label="Cơ sở học">
+            <CatalogCombobox
+              value={draft.campus}
+              options={catalogs?.campuses ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('campus', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('campuses') : undefined}
+              placeholder="Chọn hoặc thêm cơ sở…"
+            />
+          </Field>
+          <Field label="Niên khóa">
+            <CatalogCombobox
+              value={draft.schoolYear}
+              options={catalogs?.schoolYears ?? []}
+              disabled={disabled}
+              onChange={(v) => patch('schoolYear', v)}
+              onEnsureOption={onEnsureCatalogEntry ? ensure('school_years') : undefined}
+              placeholder="Vd. 2025–2028"
             />
           </Field>
           <Field label="Học lực / xếp loại">

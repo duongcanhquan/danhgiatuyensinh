@@ -201,13 +201,8 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
   const inviteFolderUrl = cell(r, 36)
 
   const guardian = [guardianName, guardianPhone].filter(Boolean).join(' — ')
-  const descriptionParts = [
-    note,
-    scholarship1Label ? `HB1: ${scholarship1Label}` : '',
-    scholarship2Label ? `HB2: ${scholarship2Label}` : '',
-    campus ? `Cơ sở: ${campus}` : '',
-    schoolYear ? `Niên khóa: ${schoolYear}` : '',
-  ].filter(Boolean)
+  // Ghi chú Sheet; HB / cơ sở / niên khóa lưu field riêng + danh mục Cài đặt.
+  const descriptionParts = [note].filter(Boolean)
 
   const row: Partial<ExcelLeadRow> = {
     customerId: systemCode,

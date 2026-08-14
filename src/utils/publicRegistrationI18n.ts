@@ -164,6 +164,7 @@ export function publicRegText(lang: PublicRegLang, key: keyof typeof VN): string
   return (lang === 'en' ? EN : VN)[key] ?? VN[key] ?? key
 }
 
+/** @deprecated Dùng `DEFAULT_APPLICANT_CATEGORY_ENTRIES` / masterData `applicant_categories`. */
 export const APPLICANT_CATEGORIES = [
   {
     value: 'Học sinh lớp 9',

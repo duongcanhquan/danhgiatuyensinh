@@ -169,6 +169,8 @@ describe('scoring field coverage', () => {
       currentResidence: 'HT',
       financialStatus: 'Khá',
       hanoiArea: 'Đống Đa',
+      campus: 'Cơ sở Hà Nội',
+      schoolYear: '2025–2028',
       schoolType: 'Công lập',
       studentEmail: 'a@b.c',
       nationalId: '1234567890',

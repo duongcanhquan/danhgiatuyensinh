@@ -190,6 +190,10 @@ export function catalogIdForScoringTargetField(targetField: string): string | nu
       return 'financial_profiles'
     case 'hanoiArea':
       return 'hanoi_areas'
+    case 'campus':
+      return 'campuses'
+    case 'schoolYear':
+      return 'school_years'
     default:
       return null
   }
@@ -620,6 +624,8 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     studyIntention: studyFormat,
     financialStatus: lead.financialStatus?.trim() ?? '',
     hanoiArea: lead.hanoiArea?.trim() ?? '',
+    campus: lead.campus?.trim() ?? '',
+    schoolYear: lead.schoolYear?.trim() ?? '',
     schoolType: lead.schoolType?.trim() ?? '',
     graduationScore: lead.graduationScore?.trim() ?? '',
     nationalId: lead.nationalId?.replace(/\D/g, '') ?? '',

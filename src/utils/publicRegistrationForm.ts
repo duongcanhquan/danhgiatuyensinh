@@ -1,5 +1,6 @@
 import type { PublicRegistrationFormInput } from '../services/publicRegistration'
-import { APPLICANT_CATEGORIES, SCORE_PRESETS } from './publicRegistrationI18n'
+import { DEFAULT_APPLICANT_CATEGORY_ENTRIES } from './applicantCategoryCatalog'
+import { SCORE_PRESETS } from './publicRegistrationI18n'
 
 export type PublicRegLang = 'vn' | 'en'
 
@@ -103,7 +104,7 @@ export function resolveAcademicPerformance(form: PublicRegistrationFormInput): s
 }
 
 const ALLOWED_GENDERS = new Set<string>(['Nam', 'Nữ'])
-const ALLOWED_CATEGORIES = new Set<string>(APPLICANT_CATEGORIES.map((c) => c.value))
+const ALLOWED_CATEGORIES = new Set<string>(DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => e.label))
 const ALLOWED_SCORE_PRESETS = new Set<string>(SCORE_PRESETS.map((s) => s.value))
 
 export function validatePublicRegistrationForm(
@@ -113,6 +114,8 @@ export function validatePublicRegistrationForm(
     trainingProgramLabels?: readonly string[]
     majorLabels?: readonly string[]
     counselorIds?: readonly string[]
+    /** Nhãn đối tượng từ masterData; trống → dùng seed mặc định. */
+    applicantCategoryLabels?: readonly string[]
   },
 ): string | null {
   const t =
@@ -132,6 +135,7 @@ export function validatePublicRegistrationForm(
           school: 'Please enter school attended.',
           schoolProvince: 'Please enter school province/city.',
           situation: 'Please select applicant category.',
+          situationInvalid: 'Selected applicant category is not in the current list.',
           edu: 'Please select education system.',
           eduInvalid: 'Selected education system is invalid.',
           major: 'Please select major.',
@@ -156,6 +160,7 @@ export function validatePublicRegistrationForm(
           school: 'Vui lòng nhập trường đã theo học.',
           schoolProvince: 'Vui lòng nhập tỉnh/thành của trường.',
           situation: 'Vui lòng chọn đối tượng dự tuyển.',
+          situationInvalid: 'Đối tượng dự tuyển không nằm trong danh mục hiện tại.',
           edu: 'Vui lòng chọn hệ đào tạo.',
           eduInvalid: 'Hệ đào tạo không nằm trong danh mục hiện tại.',
           major: 'Vui lòng chọn ngành học.',
@@ -181,7 +186,14 @@ export function validatePublicRegistrationForm(
   if (form.fatherPhone.trim() && !isValidPublicPhone(form.fatherPhone)) return t.fatherPhone
   if (!form.highSchool.trim()) return t.school
   if (!form.schoolProvince.trim()) return t.schoolProvince
-  if (!ALLOWED_CATEGORIES.has(form.applicantCategory.trim())) return t.situation
+
+  const category = form.applicantCategory.trim()
+  if (!category) return t.situation
+  const allowedCategories =
+    opts?.applicantCategoryLabels && opts.applicantCategoryLabels.length > 0
+      ? new Set(opts.applicantCategoryLabels.map((x) => x.trim()).filter(Boolean))
+      : ALLOWED_CATEGORIES
+  if (!allowedCategories.has(category)) return t.situationInvalid
 
   const study = (form.studyIntention || form.educationLevel).trim()
   if (!study) return t.edu

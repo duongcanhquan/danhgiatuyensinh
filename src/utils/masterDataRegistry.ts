@@ -37,6 +37,7 @@ export function masterDataEntriesForFirestore(entries: MasterDataEntry[]): Recor
     if (Array.isArray(e.synonyms) && e.synonyms.length > 0) {
       row.synonyms = e.synonyms.map(String)
     }
+    if (e.labelEn?.trim()) row.labelEn = e.labelEn.trim()
     if (e.departmentId) row.departmentId = e.departmentId
     if (e.annualCapacity !== undefined && Number.isFinite(Number(e.annualCapacity))) {
       row.annualCapacity = Number(e.annualCapacity)
@@ -75,6 +76,7 @@ export function parseEntriesFromDoc(data: Record<string, unknown>): MasterDataEn
             id: String(o.id ?? crypto.randomUUID()),
             label: String(o.label ?? ''),
             synonyms: Array.isArray(o.synonyms) ? o.synonyms.map(String) : undefined,
+            labelEn: o.labelEn ? String(o.labelEn).trim() || undefined : undefined,
             matchMode,
             numericMin: Number.isFinite(numericMin) ? numericMin : undefined,
             numericMax: Number.isFinite(numericMax) ? numericMax : undefined,
@@ -295,6 +297,13 @@ export function processMasterDataDocs(
       merged.push({ id, label: defaultLabelForCatalogId(id), order: nextOrder })
       nextOrder += 10
       known.add(id)
+    }
+    // Seed catalogs mới (campuses, school_years…) luôn hiện trong Cài đặt dù chưa có mục.
+    for (const d of DEFAULT_MASTER_CATALOGS) {
+      if (known.has(d.id)) continue
+      merged.push({ ...d, order: nextOrder })
+      nextOrder += 10
+      known.add(d.id)
     }
     catalogs = merged.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
   } else {

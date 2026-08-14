@@ -6,6 +6,7 @@ export type PublicCatalogOption = {
   id: string
   label: string
   departmentId?: string
+  labelEn?: string
 }
 
 export type PublicPortalCounselor = {
@@ -22,6 +23,8 @@ export type PublicRegistrationMeta = {
   orgId?: string
   trainingPrograms: PublicCatalogOption[]
   majors: PublicCatalogOption[]
+  /** Đối tượng dự tuyển từ masterData `applicant_categories`. */
+  applicantCategories?: PublicCatalogOption[]
   counselors: PublicPortalCounselor[]
   contactAddress?: string
   contactPhone?: string
@@ -90,6 +93,7 @@ export async function fetchPublicRegistrationMeta(orgSlug?: string): Promise<Pub
       ...data,
       trainingPrograms: Array.isArray(data.trainingPrograms) ? data.trainingPrograms : [],
       majors: Array.isArray(data.majors) ? data.majors : [],
+      applicantCategories: Array.isArray(data.applicantCategories) ? data.applicantCategories : [],
       counselors: Array.isArray(data.counselors) ? data.counselors : [],
     }
   } catch (e) {

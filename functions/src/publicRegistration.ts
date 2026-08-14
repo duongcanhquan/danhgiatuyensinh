@@ -79,7 +79,7 @@ type CounselorLite = {
   showOnPublicRegistrationPortal: boolean
 }
 
-type CatalogOption = { id: string; label: string; departmentId?: string }
+type CatalogOption = { id: string; label: string; departmentId?: string; labelEn?: string }
 
 function str(v: unknown): string {
   return String(v ?? '').trim()
@@ -324,7 +324,13 @@ function parseCatalogEntries(data: Record<string, unknown> | undefined): Catalog
     if (!label) continue
     const id = str(o.id) || label
     const departmentId = str(o.departmentId) || undefined
-    out.push({ id, label, ...(departmentId ? { departmentId } : {}) })
+    const labelEn = str(o.labelEn) || undefined
+    out.push({
+      id,
+      label,
+      ...(departmentId ? { departmentId } : {}),
+      ...(labelEn ? { labelEn } : {}),
+    })
   }
   return out
 }
@@ -437,7 +443,7 @@ function isValidCustomScore(raw: string): boolean {
 }
 
 const ALLOWED_GENDERS = new Set(['Nam', 'Nữ'])
-const ALLOWED_CATEGORIES = new Set([
+const FALLBACK_CATEGORIES = new Set([
   'Học sinh lớp 9',
   'Học sinh lớp 12',
   'Đã tốt nghiệp PTTH',
@@ -450,6 +456,7 @@ function validatePublicLeadInput(
   catalogs: {
     trainingPrograms: CatalogOption[]
     majors: CatalogOption[]
+    applicantCategories: CatalogOption[]
   },
 ): string | null {
   const fullName = str(input.fullName)
@@ -490,9 +497,13 @@ function validatePublicLeadInput(
   if (!str(input.schoolProvince) && !str(input.province)) {
     return 'Vui lòng nhập tỉnh/thành của trường.'
   }
-  if (!ALLOWED_CATEGORIES.has(str(input.applicantCategory))) {
-    return 'Vui lòng chọn đối tượng dự tuyển.'
-  }
+  const category = str(input.applicantCategory)
+  if (!category) return 'Vui lòng chọn đối tượng dự tuyển.'
+  const categoryOk =
+    catalogs.applicantCategories.length > 0
+      ? catalogs.applicantCategories.some((c) => c.label === category || c.id === category)
+      : FALLBACK_CATEGORIES.has(category)
+  if (!categoryOk) return 'Đối tượng dự tuyển không nằm trong danh mục hiện tại.'
   if (!study) return 'Vui lòng chọn hệ đào tạo.'
   const program =
     catalogs.trainingPrograms.find((p) => p.label === study || p.id === study) ?? null
@@ -621,9 +632,10 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     const orgId = await resolveActiveOrgId(db, slug)
     const config = await loadPublicRegistrationConfig(db, orgId)
 
-    const [trainingPrograms, majors, counselors] = await Promise.all([
+    const [trainingPrograms, majors, applicantCategories, counselors] = await Promise.all([
       loadMasterCatalog(db, 'training_programs', orgId),
       loadMasterCatalog(db, 'majors', orgId),
+      loadMasterCatalog(db, 'applicant_categories', orgId),
       loadCounselors(db, orgId),
     ])
 
@@ -640,6 +652,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       orgId: config.orgId,
       trainingPrograms,
       majors,
+      applicantCategories,
       counselors: portalCounselors,
       contactAddress: '168 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội',
       contactPhone: '0982.856.648',
@@ -674,15 +687,17 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       parentPhone: str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
     }
 
-    const [trainingPrograms, majors, allCounselors] = await Promise.all([
+    const [trainingPrograms, majors, applicantCategories, allCounselors] = await Promise.all([
       loadMasterCatalog(db, 'training_programs', config.orgId),
       loadMasterCatalog(db, 'majors', config.orgId),
+      loadMasterCatalog(db, 'applicant_categories', config.orgId),
       loadCounselors(db, config.orgId),
     ])
 
     const validation = validatePublicLeadInput(input, config.defaultSource1, {
       trainingPrograms,
       majors,
+      applicantCategories,
     })
     if (validation) {
       throw new HttpsError('invalid-argument', validation)

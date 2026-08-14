@@ -350,6 +350,10 @@ export interface Lead {
   financialStatus?: string
   /** Quận / huyện Hà Nội khi có (danh mục `hanoi_areas`) */
   hanoiArea?: string
+  /** Cơ sở học (danh mục `campuses`) — cột 19 Sheet cũ */
+  campus?: string
+  /** Niên khóa (danh mục `school_years`) — cột 13 Sheet cũ */
+  schoolYear?: string
   /** Người phụ trách — Firebase Auth UID (RBAC biên Counselor) */
   assignedTo: UserId | null
   /** Tình trạng — Kanban tư vấn (Firestore `status`) */
@@ -788,7 +792,10 @@ export const DEFAULT_MASTER_CATALOGS: readonly MasterCatalogDefinition[] = [
   { id: 'hanoi_areas', label: 'Khu vực Hà Nội (quận / huyện)', order: 20, ruleCategory: 'demographics' },
   { id: 'high_schools', label: 'Trường THPT', order: 30, ruleCategory: 'demographics' },
   { id: 'training_programs', label: 'Hệ đào tạo', order: 35, ruleCategory: 'academic' },
+  { id: 'campuses', label: 'Cơ sở học', order: 36, ruleCategory: 'academic' },
+  { id: 'school_years', label: 'Niên khóa', order: 37, ruleCategory: 'academic' },
   { id: 'majors', label: 'Chuyên ngành', order: 40, ruleCategory: 'academic' },
+  { id: 'applicant_categories', label: 'Đối tượng dự tuyển', order: 45, ruleCategory: 'academic' },
   { id: 'school_types', label: 'Loại hình trường', order: 50, ruleCategory: 'academic' },
   { id: 'financial_profiles', label: 'Nhóm tài chính', order: 60, ruleCategory: 'psychographics' },
   { id: 'academic_performance', label: 'Học lực', order: 70, ruleCategory: 'academic' },
@@ -817,6 +824,8 @@ export interface MasterDataEntry {
   label: string
   /** Alternative spellings for intake normalization */
   synonyms?: string[]
+  /** Nhãn tiếng Anh (cổng đăng ký / UI song ngữ). */
+  labelEn?: string
   /** Ghi đè `defaultMatchMode` của catalog cho mục này. */
   matchMode?: MasterEntryMatchMode
   /** Biên dưới (gte, between) hoặc ngưỡng tùy `matchMode`. */

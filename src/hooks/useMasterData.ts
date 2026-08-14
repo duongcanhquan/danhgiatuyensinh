@@ -29,6 +29,8 @@ export function useMasterData() {
     () => (byKind.study_intentions ?? []).map((e) => e.label),
     [byKind],
   )
+  const campusLabels = useMemo(() => (byKind.campuses ?? []).map((e) => e.label), [byKind])
+  const schoolYearLabels = useMemo(() => (byKind.school_years ?? []).map((e) => e.label), [byKind])
 
   return {
     catalogs,
@@ -42,6 +44,8 @@ export function useMasterData() {
     financialProfileLabels,
     academicPerformanceLabels,
     studyIntentionLabels,
+    campusLabels,
+    schoolYearLabels,
     loading,
     error,
     configured,

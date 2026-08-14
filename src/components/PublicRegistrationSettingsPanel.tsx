@@ -12,6 +12,7 @@ import { getFirestoreDb } from '../services/firebase'
 import { orgSettingsDocSegments } from '../tenancy/orgSettingsPaths'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { LEAD_WORK_MODES, leadWorkModeLabel, parseLeadWorkMode } from '../utils/leadWorkMode'
+import { ensureApplicantCategoriesCatalog } from '../utils/ensureApplicantCategoriesCatalog'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 
@@ -60,6 +61,13 @@ export function PublicRegistrationSettingsPanel() {
   useEffect(() => {
     draftDirtyRef.current = draftDirty
   }, [draftDirty])
+
+  useEffect(() => {
+    if (!db || !canEdit) return
+    void ensureApplicantCategoriesCatalog(db).catch((err) => {
+      console.warn('[ensureApplicantCategoriesCatalog]', err)
+    })
+  }, [db, canEdit])
 
   const orgSlug = useMemo(() => {
     const hit = organizations.find((o) => o.id === effectiveOrgId)
@@ -198,9 +206,36 @@ export function PublicRegistrationSettingsPanel() {
         <p className="font-semibold">Cổng đăng ký sinh viên (công khai)</p>
         <p className="mt-1 text-emerald-900/90">
           Đang cấu hình cho <strong>{currentOrgLabel}</strong>. Sinh viên điền form → hồ sơ vào danh sách trường này.
-          Danh sách thầy/cô trên cổng lấy từ Nhân sự (bật «Hiện trên cổng đăng ký»). Hệ đào tạo / chuyên ngành lấy từ
-          Hồ sơ & danh mục.
         </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-emerald-900/90">
+          <li>
+            Thầy/cô trên cổng: <strong>Nhân sự</strong> → bật «Hiện trên cổng đăng ký».
+          </li>
+          <li>
+            Hệ đào tạo / chuyên ngành / đối tượng dự tuyển: chỉnh trong{' '}
+            <strong>Cài đặt → Hồ sơ &amp; danh mục</strong> (các tab Hệ đào tạo, Chuyên ngành, Đối tượng).
+          </li>
+        </ul>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a
+            href="?tab=data&sub=lead_profile&profileSub=training"
+            className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-50"
+          >
+            Hệ đào tạo
+          </a>
+          <a
+            href="?tab=data&sub=lead_profile&profileSub=majors"
+            className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-50"
+          >
+            Chuyên ngành
+          </a>
+          <a
+            href="?tab=data&sub=lead_profile&profileSub=applicants"
+            className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-50"
+          >
+            Đối tượng dự tuyển
+          </a>
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

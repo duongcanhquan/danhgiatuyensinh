@@ -73,6 +73,26 @@ describe('publicRegistrationForm', () => {
         counselorIds: ['tvv-1'],
       }),
     ).toMatch(/không khớp|ngành/i)
+    expect(
+      validatePublicRegistrationForm(form, 'vn', {
+        trainingProgramLabels: ['Cao đẳng chính quy'],
+        majorLabels: ['CNTT'],
+        counselorIds: ['tvv-1'],
+        applicantCategoryLabels: ['Ứng viên nước ngoài'],
+      }),
+    ).toMatch(/không nằm|đối tượng|category/i)
+    expect(
+      validatePublicRegistrationForm(
+        { ...form, applicantCategory: 'Ứng viên nước ngoài' },
+        'vn',
+        {
+          trainingProgramLabels: ['Cao đẳng chính quy'],
+          majorLabels: ['CNTT'],
+          counselorIds: ['tvv-1'],
+          applicantCategoryLabels: ['Ứng viên nước ngoài'],
+        },
+      ),
+    ).toBeNull()
     expect(resolveAcademicPerformance(form)).toBe('8.0-9.0')
     expect(resolveAcademicPerformance({ ...form, scorePreset: 'Khác', customScore: '7,5' })).toBe('7.5')
     expect(

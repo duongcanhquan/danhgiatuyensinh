@@ -17,6 +17,7 @@ import {
   MASTER_DATA_REGISTRY_DOC_ID,
 } from '../types'
 import { processMasterDataDocs } from '../utils/masterDataRegistry'
+import { DEFAULT_APPLICANT_CATEGORY_ENTRIES } from '../utils/applicantCategoryCatalog'
 import { getRealtimeDb } from './firebase'
 import { ensureDefaultCounselingAiTask } from './ensureDefaultCounselingAiTask'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
@@ -154,6 +155,8 @@ function entriesForKind(kind: string): MasterDataEntry[] {
       return defaultTrainingPrograms()
     case 'majors':
       return defaultMajors()
+    case 'applicant_categories':
+      return DEFAULT_APPLICANT_CATEGORY_ENTRIES.map((e) => ({ ...e }))
     case 'school_types':
       return defaultSchoolTypes()
     case 'financial_profiles':

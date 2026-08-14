@@ -4,13 +4,20 @@ import { FS_COLLECTIONS } from '../types'
 import { masterDataEntriesForFirestore } from './masterDataRegistry'
 
 function normalizeLabel(label: string): string {
-  return label.trim().toLowerCase()
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[đĐ]/g, 'd')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
 }
 
 export function activeMasterEntries(entries: readonly MasterDataEntry[] | undefined): MasterDataEntry[] {
   return (entries ?? []).filter((e) => e.isActive !== false)
 }
 
+/** Khớp nhãn (không phân biệt hoa thường / dấu). */
 export function findMasterEntryByLabel(
   entries: readonly MasterDataEntry[],
   label: string,

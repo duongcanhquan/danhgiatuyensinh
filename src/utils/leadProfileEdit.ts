@@ -30,6 +30,8 @@ export type LeadCoreDraft = {
   schoolType: string
   financialStatus: string
   hanoiArea: string
+  campus: string
+  schoolYear: string
   description: string
   aspirations: string
   hobbies: string
@@ -78,6 +80,8 @@ export function emptyLeadCoreDraft(): LeadCoreDraft {
     schoolType: '',
     financialStatus: '',
     hanoiArea: '',
+    campus: '',
+    schoolYear: '',
     description: '',
     aspirations: '',
     hobbies: '',
@@ -129,6 +133,8 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     schoolType: lead.schoolType ?? '',
     financialStatus: lead.financialStatus ?? '',
     hanoiArea: lead.hanoiArea ?? '',
+    campus: lead.campus ?? '',
+    schoolYear: lead.schoolYear ?? '',
     description: lead.description ?? '',
     aspirations: lead.aspirations ?? '',
     hobbies: lead.hobbies ?? '',
@@ -217,6 +223,8 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
   opt('schoolType', 'schoolType')
   opt('financialStatus', 'financialStatus')
   opt('hanoiArea', 'hanoiArea')
+  opt('campus', 'campus')
+  opt('schoolYear', 'schoolYear')
   opt('aspirations', 'aspirations')
   opt('hobbies', 'hobbies')
   opt('fieldTripNotes', 'fieldTripNotes')

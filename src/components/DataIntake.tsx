@@ -58,6 +58,9 @@ import { useOrg } from '../hooks/useOrg'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { useLeadSources } from '../hooks/useLeadSources'
+import { useScholarships } from '../hooks/useScholarships'
+import { findScholarshipIdByLabel } from '../utils/scholarshipLabelResolver'
+import { upsertMasterEntryByLabel } from '../utils/masterDataCatalogOps'
 import { resolveWorkModeForLeadIntake } from '../utils/leadWorkMode'
 /** Giới hạn Firestore mỗi batch commit. */
 const BATCH_SIZE = 500
@@ -211,6 +214,7 @@ export function DataIntake() {
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { items: leadSources } = useLeadSources()
+  const { items: scholarships } = useScholarships()
 
   const matchStaffForImport = useMemo(
     () => activeStaffForExcelAssignMatch(directoryUsers),
@@ -540,10 +544,35 @@ export function DataIntake() {
       }
       const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (isAdminLikeRole(profile.role) ? profile.id : null)
 
+      // Bổ sung danh mục Cơ sở / Niên khóa từ Sheet (Cài đặt admin chỉnh sửa sau).
+      const campusLabels = new Set<string>()
+      const schoolYearLabels = new Set<string>()
+      for (const pr of prepared) {
+        const c = pr.appsScriptExtras?.campus?.trim()
+        const y = pr.appsScriptExtras?.schoolYear?.trim()
+        if (c) campusLabels.add(c)
+        if (y) schoolYearLabels.add(y)
+      }
+      for (const label of campusLabels) {
+        try {
+          await upsertMasterEntryByLabel(db, 'campuses', label)
+        } catch (e) {
+          console.warn('upsert campus', label, e)
+        }
+      }
+      for (const label of schoolYearLabels) {
+        try {
+          await upsertMasterEntryByLabel(db, 'school_years', label)
+        } catch (e) {
+          console.warn('upsert schoolYear', label, e)
+        }
+      }
+
       const toCreate: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
       let rejectedInFile = 0
       let rejectedOnDb = 0
       let importAssignUnresolved = 0
+      let scholarshipUnresolved = 0
 
       for (const pr of prepared) {
         if (pr.inFileDuplicate) {
@@ -577,11 +606,39 @@ export function DataIntake() {
             )
           : undefined
 
-        const base = buildLeadFirestorePayload(pr.row, 0, 'COLD', counselorId, ownership, {
-          uniqueHash: pr.hash,
-          ...(pr.nationalIdHash ? { nationalIdHash: pr.nationalIdHash } : {}),
-          ...(counselorStatus ? { counselorStatus } : {}),
-        })
+        const scholarship1Id = extras?.scholarship1Label
+          ? findScholarshipIdByLabel(scholarships, extras.scholarship1Label)
+          : null
+        const scholarship2Id = extras?.scholarship2Label
+          ? findScholarshipIdByLabel(scholarships, extras.scholarship2Label)
+          : null
+        if (extras?.scholarship1Label && !scholarship1Id) scholarshipUnresolved += 1
+        if (extras?.scholarship2Label && !scholarship2Id) scholarshipUnresolved += 1
+
+        const unmatchedHbNotes = [
+          extras?.scholarship1Label && !scholarship1Id
+            ? `HB1 (chưa khớp danh mục): ${extras.scholarship1Label}`
+            : '',
+          extras?.scholarship2Label && !scholarship2Id
+            ? `HB2 (chưa khớp danh mục): ${extras.scholarship2Label}`
+            : '',
+        ].filter(Boolean)
+        const descriptionMerged = [(pr.row.description ?? '').trim(), ...unmatchedHbNotes]
+          .filter(Boolean)
+          .join('\n')
+
+        const base = buildLeadFirestorePayload(
+          { ...pr.row, description: descriptionMerged },
+          0,
+          'COLD',
+          counselorId,
+          ownership,
+          {
+            uniqueHash: pr.hash,
+            ...(pr.nationalIdHash ? { nationalIdHash: pr.nationalIdHash } : {}),
+            ...(counselorStatus ? { counselorStatus } : {}),
+          },
+        )
 
         const cls = classificationRuntime.enabled ? classificationRuntime : null
         let calculatedScore: number
@@ -648,6 +705,10 @@ export function DataIntake() {
             ...(extras?.motherPhone ? { motherPhone: extras.motherPhone } : {}),
             ...(extras?.guardian ? { guardian: extras.guardian } : {}),
             ...(extras?.nationalIdNotAvailable ? { nationalIdNotAvailable: true } : {}),
+            ...(extras?.campus ? { campus: extras.campus } : {}),
+            ...(extras?.schoolYear ? { schoolYear: extras.schoolYear } : {}),
+            ...(scholarship1Id ? { scholarship1Id } : {}),
+            ...(scholarship2Id ? { scholarship2Id } : {}),
             uploadedAt: createdAt,
             importedAt: now,
             createdAt,
@@ -671,6 +732,10 @@ export function DataIntake() {
               importAssignUnresolved > 0
                 ? ` Trong đó ${importAssignUnresolved} dòng có «Tư vấn viên» không khớp danh bạ — đã gán Admin chờ điều phối.`
                 : ' Hồ sơ chưa ghi TVV trên Excel → gán Admin chờ điều phối (không tự chia tải).'
+            }${
+              scholarshipUnresolved > 0
+                ? ` ${scholarshipUnresolved} học bổng Sheet chưa khớp danh mục (xem ghi chú hồ sơ — chỉnh tại Cài đặt → Học bổng).`
+                : ''
             }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
@@ -696,6 +761,7 @@ export function DataIntake() {
     effectiveOrgId,
     intakeProgram,
     leadSources,
+    scholarships,
   ])
 
   const onDrop = (e: DragEvent) => {

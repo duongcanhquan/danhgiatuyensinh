@@ -62,6 +62,8 @@ export function readLeadSemanticFieldsFromFirestore(data: Record<string, unknown
   const financialStatus = pickFirstFirestoreString(data, ['financialStatus', 'taiChinh', 'financialProfile'])
   const studyIntention = pickFirstFirestoreString(data, ['studyIntention', 'hinhThucHoc'])
   const educationLevelRaw = pickFirstFirestoreString(data, ['educationLevel', 'trinhDo'])
+  const campus = pickFirstFirestoreString(data, ['campus', 'coSo', 'coSoHoc'])
+  const schoolYear = pickFirstFirestoreString(data, ['schoolYear', 'nienKhoa', 'khoa'])
   const permanentAddressRaw = pickFirstFirestoreString(data, [
     'permanentAddress',
     'diaChiThuongTru',
@@ -84,6 +86,8 @@ export function readLeadSemanticFieldsFromFirestore(data: Record<string, unknown
     financialStatus,
     studyIntention,
     educationLevelRaw,
+    campus,
+    schoolYear,
     permanentAddressRaw,
     addressRaw,
     address,
