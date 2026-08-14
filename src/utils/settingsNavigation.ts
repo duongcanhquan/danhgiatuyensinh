@@ -2,6 +2,7 @@ export type SettingsMainTabId = 'data' | 'rules' | 'people' | 'connect'
 
 export type SettingsSubTabId =
   | 'intake'
+  | 'intake_staff'
   | 'master'
   | 'lead_profile'
   | 'scoring_profiles'
@@ -33,6 +34,7 @@ export const SETTINGS_MAIN_LABELS: Record<SettingsMainTabId, string> = {
 
 export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   intake: 'Nhập liệu',
+  intake_staff: 'Nhập tư vấn viên',
   master: 'Danh mục (nâng cao)',
   lead_profile: 'Danh mục hồ sơ',
   scoring_profiles: 'Profile chấm điểm',
@@ -55,7 +57,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
 }
 
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
-  data: ['intake', 'master', 'lead_profile'],
+  data: ['intake', 'intake_staff', 'master', 'lead_profile'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
   people: ['kpi', 'staff', 'permissions'],
   connect: ['hub', 'comms', 'consulting', 'knowledge', 'llm', 'omicall', 'webhooks', 'invite_docs', 'receipts', 'public_registration'],
@@ -64,6 +66,9 @@ export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> =
 const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: SettingsSubTabId }>> = {
   import: { main: 'data', sub: 'intake' },
   intake: { main: 'data', sub: 'intake' },
+  intake_staff: { main: 'data', sub: 'intake_staff' },
+  staff_import: { main: 'data', sub: 'intake_staff' },
+  nhap_tvv: { main: 'data', sub: 'intake_staff' },
   master: { main: 'data', sub: 'master' },
   lead_profile: { main: 'data', sub: 'lead_profile' },
   scholarships: { main: 'data', sub: 'lead_profile' },
@@ -116,6 +121,8 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
   switch (sub) {
     case 'intake':
       return ctx.canIntake
+    case 'intake_staff':
+      return ctx.canStaff
     case 'master':
     case 'lead_profile':
       return ctx.canMaster

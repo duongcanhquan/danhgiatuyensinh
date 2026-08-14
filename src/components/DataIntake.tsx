@@ -955,7 +955,7 @@ export function DataIntake() {
                         </span>
                         <span className="mt-1 block text-[11px] font-medium text-slate-500">
                           {tpl.positionalAppsScript
-                            ? '70 cột theo vị trí · data từ dòng 3'
+                            ? `${tpl.columns.length} cột (index 0–${tpl.columns.length - 1}) · data từ dòng 3`
                             : `${tpl.columns.length} cột · sheet «${tpl.sheetName}»`}
                         </span>
                       </span>
@@ -965,8 +965,8 @@ export function DataIntake() {
               </div>
               {selectedTemplate.positionalAppsScript ? (
                 <p className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-950">
-                  <strong>Trước khi nhập:</strong> Cài đặt → Nhân sự → Nhập Excel tư vấn viên (cột{' '}
-                  <strong>Tên hiển thị</strong> = tên TVV trên Sheet). Rồi xuất{' '}
+                  <strong>Trước khi nhập:</strong> Cài đặt → Dữ liệu → <strong>Nhập tư vấn viên</strong> (cột{' '}
+                  <strong>Tên hiển thị</strong> = tên TVV trên Sheet, cột index 18). Rồi xuất{' '}
                   <code className="rounded bg-white px-1">DU_LIEU_SINH_VIEN</code> .xlsx — không đổi thứ tự cột.
                 </p>
               ) : null}
@@ -1060,8 +1060,17 @@ export function DataIntake() {
                 {busy ? 'Đang xử lý file…' : 'Bấm hoặc kéo thả file .xlsx vào đây'}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Đang dùng: <strong>{selectedTemplate.label}</strong>. Hàng 1 tiêu đề, dữ liệu từ hàng 2. Trùng →
-                không nhập.
+                {selectedTemplate.positionalAppsScript ? (
+                  <>
+                    Đang dùng: <strong>{selectedTemplate.label}</strong>. Đọc theo <strong>vị trí cột</strong>, dữ liệu từ{' '}
+                    <strong>dòng 3</strong>. Trùng → không nhập.
+                  </>
+                ) : (
+                  <>
+                    Đang dùng: <strong>{selectedTemplate.label}</strong>. Hàng 1 tiêu đề, dữ liệu từ hàng 2. Trùng →
+                    không nhập.
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -1076,29 +1085,47 @@ export function DataIntake() {
                 {selectedTemplate.label}
               </h2>
               <p className="mt-1 text-xs leading-snug text-slate-600">
-                Giữ đúng tên cột hàng 1 như danh sách dưới (thứ tự cột trên file có thể khác). Sheet «
-                {selectedTemplate.sheetName}» · {selectedTemplate.columns.length} trường.
+                {selectedTemplate.positionalAppsScript ? (
+                  <>
+                    Đủ {selectedTemplate.columns.length} cột Sheet cũ (index 0–{selectedTemplate.columns.length - 1}).
+                    Import theo <strong>thứ tự cột</strong>, không theo tên header. Sheet «{selectedTemplate.sheetName}»
+                    · data từ dòng 3.
+                  </>
+                ) : (
+                  <>
+                    Giữ đúng tên cột hàng 1 như danh sách dưới (thứ tự cột trên file có thể khác). Sheet «
+                    {selectedTemplate.sheetName}» · {selectedTemplate.columns.length} trường.
+                  </>
+                )}
               </p>
             </div>
             <ol className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 text-left sm:columns-2 sm:gap-x-3 lg:columns-1 xl:columns-2">
-              {selectedTemplate.columns.map((col, idx) => (
-                <li
-                  key={`${selectedTemplate.id}-${col.key}`}
-                  className="mb-1.5 break-inside-avoid"
-                >
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold tabular-nums text-amber-800 ring-1 ring-amber-200/80">
-                      {idx + 1}
-                    </span>
-                    <span className="min-w-0 text-sm font-semibold leading-snug text-slate-900">
-                      {col.header}
-                    </span>
-                  </div>
-                </li>
-              ))}
+              {selectedTemplate.columns.map((col, idx) => {
+                const displayIdx =
+                  col.appsScriptIndex != null ? col.appsScriptIndex : idx + 1
+                const rowKey =
+                  col.key ??
+                  (col.appsScriptIndex != null
+                    ? `appscript-${col.appsScriptIndex}`
+                    : `${selectedTemplate.id}-${idx}`)
+                return (
+                  <li key={rowKey} className="mb-1.5 break-inside-avoid">
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                      <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-white px-1 text-[11px] font-bold tabular-nums text-amber-800 ring-1 ring-amber-200/80">
+                        {displayIdx}
+                      </span>
+                      <span className="min-w-0 text-sm font-semibold leading-snug text-slate-900">
+                        {col.header}
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
             </ol>
             <p className="mt-3 shrink-0 text-[11px] leading-snug text-slate-500">
-              Bấm «Tải mẫu đang chọn» để lấy file trống đúng các cột này, điền rồi tải lên bên trái.
+              {selectedTemplate.positionalAppsScript
+                ? 'Bấm «Tải mẫu đang chọn» để lấy file hướng dẫn + đủ 71 tiêu đề cột + sheet «Danh sách cột».'
+                : 'Bấm «Tải mẫu đang chọn» để lấy file trống đúng các cột này, điền rồi tải lên bên trái.'}
             </p>
           </aside>
         </div>

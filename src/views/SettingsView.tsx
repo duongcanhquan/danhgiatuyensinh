@@ -63,6 +63,7 @@ import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
 import { CommsAutomationSettingsPanel } from '../components/CommsAutomationSettingsPanel'
 import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
+import { StaffExcelImportPanel } from '../components/StaffExcelImportPanel'
 import {
   enabledMainTabs,
   enabledSubsForMain,
@@ -105,6 +106,17 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
           <p className="font-semibold text-slate-900">Nhập liệu hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
             Tải Excel/CSV, xem trước, gán TVV và đẩy vào hệ thống. Sau khi nhập, xem hồ sơ tại menu <strong>Hồ sơ</strong>.
+            Với Sheet cũ (Mẫu 3): nhập TVV trước tại tab <strong>Nhập tư vấn viên</strong>.
+          </p>
+        </>
+      )
+    case 'intake_staff':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Nhập tư vấn viên</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Tạo tài khoản TVV từ Excel. Cột <strong>Tên hiển thị</strong> phải khớp tên TVV trên Sheet cũ (cột index 18)
+            trước khi dùng <strong>Nhập liệu → Mẫu 3</strong>.
           </p>
         </>
       )
@@ -882,6 +894,15 @@ export function SettingsView() {
             Nhập liệu
           </h2>
           <DataIntake />
+        </BentoCell>
+      ) : null}
+
+      {activeSubTab === 'intake_staff' && canStaff ? (
+        <BentoCell role="tabpanel" aria-labelledby="tab-intake-staff" className="space-y-3 !p-3 sm:!p-4">
+          <h2 id="tab-intake-staff" className="sr-only">
+            Nhập tư vấn viên
+          </h2>
+          <StaffExcelImportPanel />
         </BentoCell>
       ) : null}
 

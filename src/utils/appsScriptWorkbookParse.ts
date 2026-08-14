@@ -1,5 +1,9 @@
 import * as XLSX from 'xlsx'
 import { APPS_SCRIPT_SHEET_DATA_START_ROW, parseAppsScriptSheetAoa } from './appsScriptStudentMapper'
+import {
+  APPS_SCRIPT_SHEET_HEADERS,
+  appsScriptColumnGuideRows,
+} from './appsScriptSheetColumns'
 
 /** Đọc workbook xuất từ DU_LIEU_SINH_VIEN (data từ dòng 3). */
 export function parseAppsScriptWorkbook(bytes: ArrayBuffer) {
@@ -25,51 +29,37 @@ export function parseAppsScriptWorkbook(bytes: ArrayBuffer) {
   return parseAppsScriptSheetAoa(aoa)
 }
 
+/**
+ * File mẫu / hướng dẫn: hàng 1 trống hướng dẫn, hàng 2 = đủ 71 tiêu đề, dữ liệu từ hàng 3.
+ * Khi xuất từ Google Sheet cũ: giữ nguyên file — app đọc theo vị trí cột.
+ */
 export function downloadAppsScriptSheetGuide(): void {
-  const headers = [
-    'STT',
-    'Mã SV',
-    'Họ tên',
-    'Giới tính',
-    'Ngày sinh',
-    'SĐT',
-    'Email',
-    '',
-    'Địa chỉ TT',
-    'Nơi ở HT',
-    'Hệ ĐT',
-    '',
-    'Ngành',
-    'Niên khóa',
-    'Nơi sinh',
-    'Dân tộc',
-    'CCCD',
-    'Ngày tạo',
-    'TVV',
-    'Cơ sở',
-    'Họ bố',
-    'SĐT bố',
-    'Họ mẹ',
-    'SĐT mẹ',
+  const row1 = [
+    'KHÔNG XÓA/ĐỔI THỨ TỰ CỘT. Hàng 1 có thể là tiêu đề phụ Sheet cũ. Hàng 2 = tiêu đề chuẩn. Dữ liệu từ hàng 3. Xuất DU_LIEU_SINH_VIEN từ Google Sheet là đủ — không cần copy vào mẫu này nếu đã đúng thứ tự.',
   ]
-  const ws = XLSX.utils.aoa_to_sheet([
-    ['HÀNG 1 — tiêu đề (có thể giữ từ Sheet cũ)'],
-    headers,
-    ['(dữ liệu thật từ dòng 3 — xuất DU_LIEU_SINH_VIEN, giữ đúng thứ tự cột)'],
-  ])
+  const ws = XLSX.utils.aoa_to_sheet([row1, [...APPS_SCRIPT_SHEET_HEADERS]])
+  ws['!cols'] = APPS_SCRIPT_SHEET_HEADERS.map(() => ({ wch: 18 }))
+
   const guide = XLSX.utils.aoa_to_sheet([
-    ['VietMy — Import Sheet Apps Script (70 cột)'],
+    ['VietMy — Import Sheet Apps Script (71 cột, index 0–70)'],
     [''],
-    ['1. Trên Google Sheet DU_LIEU_SINH_VIEN: File → Tải về → .xlsx'],
-    ['2. Không đổi thứ tự cột. Dữ liệu bắt đầu dòng 3.'],
-    ['3. Import TVV trước (Cài đặt → Nhân sự → Nhập Excel TVV) — Tên hiển thị = cột TVV (index 18).'],
-    ['4. Vào Nhập liệu → chọn mẫu «Sheet Apps Script 70 cột» → tải file lên.'],
-    ['5. Hệ thống map tiền/bill/duyệt/Full NE + gán TVV theo tên.'],
-    ['6. Trùng SĐT/CCCD → bỏ qua. TVV không khớp → gán Admin.'],
+    ['1. Cài đặt → Dữ liệu → «Nhập tư vấn viên»: Excel có cột Tên hiển thị = tên TVV trên Sheet (cột index 18).'],
+    ['2. Google Sheet DU_LIEU_SINH_VIEN → File → Tải về → Microsoft Excel (.xlsx).'],
+    ['3. Không đổi thứ tự cột. Dữ liệu bắt đầu dòng 3.'],
+    ['4. Cài đặt → Dữ liệu → Nhập liệu → chọn «Mẫu 3 — Sheet Apps Script» → tải file → đặt tên đợt → Xác nhận.'],
+    ['5. Map: hồ sơ, TVV, 5 đợt tiền+bill+duyệt+ngày, Full NE, nguồn, HB, folder giấy mời.'],
+    ['6. Trùng SĐT/CCCD → bỏ qua. TVV không khớp Tên hiển thị → gán Admin.'],
+    [''],
+    ['Xem sheet «Danh sách cột» để đối chiếu index.'],
   ])
-  guide['!cols'] = [{ wch: 92 }]
+  guide['!cols'] = [{ wch: 100 }]
+
+  const colsSheet = XLSX.utils.aoa_to_sheet(appsScriptColumnGuideRows())
+  colsSheet['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 28 }, { wch: 36 }]
+
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Mau')
+  XLSX.utils.book_append_sheet(wb, ws, 'DU_LIEU_SINH_VIEN')
+  XLSX.utils.book_append_sheet(wb, colsSheet, 'Danh sách cột')
   XLSX.utils.book_append_sheet(wb, guide, 'Huong dan')
-  XLSX.writeFile(wb, 'VietMy_Huong_dan_import_Sheet_AppsScript.xlsx')
+  XLSX.writeFile(wb, 'VietMy_Mau_3_Sheet_AppsScript_71cot.xlsx')
 }

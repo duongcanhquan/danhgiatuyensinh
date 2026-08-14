@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { mapSheetRow, STANDARD_LEAD_INTAKE_HEADERS } from './excelLeadMapper'
+import { APPS_SCRIPT_SHEET_COLUMN_COUNT, APPS_SCRIPT_SHEET_HEADERS } from './appsScriptSheetColumns'
 import {
+  APPSCRIPT_SHEET_V1_INTAKE_COLUMNS,
   COMPACT_V2_INTAKE_COLUMNS,
   getLeadIntakeTemplate,
   LEAD_INTAKE_TEMPLATES,
@@ -16,6 +18,14 @@ describe('leadIntakeTemplates registry', () => {
     expect(getLeadIntakeTemplate('standard_v1').columns).toHaveLength(20)
     expect(getLeadIntakeTemplate('compact_v2').columns).toHaveLength(8)
     expect(getLeadIntakeTemplate('appscript_sheet_v1').positionalAppsScript).toBe(true)
+    expect(getLeadIntakeTemplate('appscript_sheet_v1').columns).toHaveLength(APPS_SCRIPT_SHEET_COLUMN_COUNT)
+  })
+
+  it('appscript mẫu 3 lists all 71 headers in order', () => {
+    expect(APPS_SCRIPT_SHEET_HEADERS).toHaveLength(71)
+    expect(APPSCRIPT_SHEET_V1_INTAKE_COLUMNS.map((c) => c.header)).toEqual([...APPS_SCRIPT_SHEET_HEADERS])
+    expect(APPSCRIPT_SHEET_V1_INTAKE_COLUMNS[18]?.header).toBe('TVV')
+    expect(APPSCRIPT_SHEET_V1_INTAKE_COLUMNS[70]?.header).toBe('Sync status')
   })
 
   it('compact v2 headers match business columns', () => {

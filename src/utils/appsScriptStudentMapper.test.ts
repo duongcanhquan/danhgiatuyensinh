@@ -24,6 +24,7 @@ describe('appsScriptStudentMapper', () => {
     r[34] = 'https://drive.example/bill1'
     r[39] = 'CỌC THÀNH CÔNG'
     r[42] = 'ĐÃ HOÀN THIỆN'
+    r[43] = '8.75'
     r[50] = 'ĐỒNG Ý'
     r[56] = 'Facebook Ads'
     r[60] = '01/08/2026'
@@ -34,6 +35,8 @@ describe('appsScriptStudentMapper', () => {
     expect(parsed).not.toBeNull()
     expect(parsed!.row.fullName).toBe('Nguyễn Văn A')
     expect(parsed!.row.assignedToRaw).toBe('Trần Thị B')
+    expect(parsed!.row.graduationScore).toBe('8.75')
+    expect(parsed!.extras.sheetScore).toBe('8.75')
     expect(parsed!.extras.systemCode).toBe('2608130001')
     expect(parsed!.extras.finance.payments?.deposit?.amountVnd).toBe(1_000_000)
     expect(parsed!.extras.finance.payments?.deposit?.approvalStatus).toBe('ĐỒNG Ý')

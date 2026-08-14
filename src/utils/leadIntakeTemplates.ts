@@ -2,6 +2,11 @@ import * as XLSX from 'xlsx'
 import type { ExcelLeadRow } from './excelLeadMapper'
 import { STANDARD_LEAD_INTAKE_COLUMNS } from './excelLeadMapper'
 import { downloadAppsScriptSheetGuide } from './appsScriptWorkbookParse'
+import {
+  APPS_SCRIPT_SHEET_COLUMN_COUNT,
+  APPS_SCRIPT_SHEET_HEADERS,
+  APPS_SCRIPT_SHEET_UI_BLURB,
+} from './appsScriptSheetColumns'
 
 /**
  * Mẫu nhập Excel hồ sơ — mở rộng bằng cách thêm entry vào LEAD_INTAKE_TEMPLATES.
@@ -10,8 +15,11 @@ import { downloadAppsScriptSheetGuide } from './appsScriptWorkbookParse'
 export type LeadIntakeTemplateId = 'standard_v1' | 'compact_v2' | 'appscript_sheet_v1'
 
 export type LeadIntakeTemplateColumn = {
-  key: keyof ExcelLeadRow
+  /** Có với mẫu 1–2; Mẫu 3 dùng index cột Sheet. */
+  key?: keyof ExcelLeadRow
   header: string
+  /** Index 0-based Sheet Apps Script (Mẫu 3). */
+  appsScriptIndex?: number
 }
 
 export type LeadIntakeTemplateDef = {
@@ -42,6 +50,13 @@ export const COMPACT_V2_INTAKE_COLUMNS: ReadonlyArray<LeadIntakeTemplateColumn> 
   { key: 'graduationScore', header: 'điểm tốt nghiệp' },
 ]
 
+/** Mẫu 3 — đủ 71 cột (index 0–70) đúng DU_LIEU_SINH_VIEN. */
+export const APPSCRIPT_SHEET_V1_INTAKE_COLUMNS: ReadonlyArray<LeadIntakeTemplateColumn> =
+  APPS_SCRIPT_SHEET_HEADERS.map((header, appsScriptIndex) => ({
+    header,
+    appsScriptIndex,
+  }))
+
 export const LEAD_INTAKE_TEMPLATES: readonly LeadIntakeTemplateDef[] = [
   {
     id: 'standard_v1',
@@ -66,14 +81,13 @@ export const LEAD_INTAKE_TEMPLATES: readonly LeadIntakeTemplateDef[] = [
   },
   {
     id: 'appscript_sheet_v1',
-    label: 'Mẫu 3 — Sheet Apps Script (70 cột)',
-    description:
-      'Xuất DU_LIEU_SINH_VIEN (.xlsx). Data từ dòng 3, đúng thứ tự cột cũ. Gồm tiền/duyệt/Full NE + gán TVV theo tên.',
+    label: `Mẫu 3 — Sheet Apps Script (${APPS_SCRIPT_SHEET_COLUMN_COUNT} cột)`,
+    description: APPS_SCRIPT_SHEET_UI_BLURB,
     headerRowIndex: 1,
-    columns: STANDARD_LEAD_INTAKE_COLUMNS,
-    sheetName: 'DU_LIEU',
-    downloadFileName: 'VietMy_Huong_dan_import_Sheet_AppsScript.xlsx',
-    guideTitle: 'VietMy — Import Sheet Apps Script 70 cột',
+    columns: APPSCRIPT_SHEET_V1_INTAKE_COLUMNS,
+    sheetName: 'DU_LIEU_SINH_VIEN',
+    downloadFileName: 'VietMy_Mau_3_Sheet_AppsScript_71cot.xlsx',
+    guideTitle: `VietMy — Import Sheet Apps Script ${APPS_SCRIPT_SHEET_COLUMN_COUNT} cột (index 0–70)`,
     positionalAppsScript: true,
   },
 ] as const
@@ -107,7 +121,7 @@ export function downloadLeadIntakeTemplate(id: LeadIntakeTemplateId): void {
     ['1. Giữ nguyên hàng 1 (tiêu đề cột). Điền dữ liệu từ hàng 2 trở đi.'],
     ['2. Không đổi tên cột trên hàng 1 nếu muốn parse đúng mẫu này.'],
     ['3. Trùng fingerprint trong file hoặc đã có trên hệ thống → bỏ qua dòng.'],
-    ['4. Import TVV trước (Nhân sự) nếu file có cột Tư vấn viên.'],
+    ['4. Import TVV trước (Cài đặt → Dữ liệu → Nhập tư vấn viên) nếu file có cột Tư vấn viên.'],
     [''],
     ['© VietMy'],
   ]

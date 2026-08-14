@@ -24,7 +24,13 @@ export function StaffExcelImportPanel() {
   const [err, setErr] = useState<string | null>(null)
   const [fileName, setFileName] = useState('')
 
-  if (!canCreate) return null
+  if (!canCreate) {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+        Bạn cần quyền quản lý nhân sự để nhập tư vấn viên từ Excel.
+      </section>
+    )
+  }
 
   const existingEmails = new Set(
     users.map((u: VietMyUserProfile) => u.email.toLowerCase().trim()),
@@ -97,8 +103,8 @@ export function StaffExcelImportPanel() {
             Nhập Excel tư vấn viên
           </h3>
           <p className="mt-1 text-xs text-violet-900/80">
-            Làm bước này trước khi import Sheet sinh viên. Cột <strong>Tên hiển thị</strong> phải khớp tên TVV trên
-            Sheet cũ để gán hồ sơ đúng người.
+            Bước 1 trước khi import Sheet sinh viên (Mẫu 3). Cột <strong>Tên hiển thị</strong> phải khớp tên TVV trên
+            Sheet cũ (cột index 18) để gán hồ sơ đúng người. Sau đó sang tab <strong>Nhập liệu</strong>.
           </p>
         </div>
         <button

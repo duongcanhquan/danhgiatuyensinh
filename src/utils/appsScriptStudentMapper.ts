@@ -37,8 +37,11 @@ export type AppsScriptStudentExtras = {
   motherName: string
   motherPhone: string
   guardian: string
+  guardianPhone: string
   campus: string
   schoolYear: string
+  /** Cột 43 — điểm Sheet (nếu có) */
+  sheetScore: string
 }
 
 export type AppsScriptStudentParsed = {
@@ -146,6 +149,7 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
   const hanoiArea = cell(r, 28)
   const scholarship1Label = cell(r, 29)
   const note = cell(r, 38)
+  const sheetScore = cell(r, 43)
   const source = cell(r, 56)
   const source2 = cell(r, 68)
   const scholarship2Label = cell(r, 69)
@@ -179,6 +183,7 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
     source: source || 'Import Sheet',
     description: descriptionParts.join('\n'),
     statusRaw: cell(r, 39),
+    ...(sheetScore ? { graduationScore: sheetScore } : {}),
   }
 
   const extras: AppsScriptStudentExtras = {
@@ -198,8 +203,10 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
     motherName,
     motherPhone,
     guardian,
+    guardianPhone,
     campus,
     schoolYear,
+    sheetScore,
   }
 
   return { sheetRowIndex, row, extras }
