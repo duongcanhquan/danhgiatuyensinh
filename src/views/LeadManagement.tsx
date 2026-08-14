@@ -667,7 +667,6 @@ export function LeadManagement() {
     removeLocalLeads,
     refetchLeads,
     totalLeadCount,
-    searchHitTotal,
   } = useLeads({
     serverFilters: leadServerFilters,
     searchText: urlQuery,
