@@ -250,14 +250,23 @@ export function AccountantLeadReviewCard({
             ) : null}
           </p>
           <p className="mt-0.5 text-xs text-slate-500">
-            {summary.phone ? <>SĐT: {summary.phone}</> : null}
-            {summary.nationalId ? (
+            {summary.phone ? <>SĐT HS: {summary.phone}</> : null}
+            {summary.motherPhone ? (
               <>
                 {summary.phone ? ' · ' : null}
+                SĐT mẹ: {summary.motherPhone}
+              </>
+            ) : null}
+            {summary.nationalId ? (
+              <>
+                {summary.phone || summary.motherPhone ? ' · ' : null}
                 CCCD: {summary.nationalId}
               </>
             ) : null}
           </p>
+          {summary.counselorName ? (
+            <p className="mt-0.5 text-xs font-medium text-slate-600">TVV: {summary.counselorName}</p>
+          ) : null}
           <p className="mt-0.5 text-[11px] text-slate-400">TT thu phí: {summary.statusRaw}</p>
         </div>
         <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-extrabold ${statusTagClass(summary.statusTag)}`}>

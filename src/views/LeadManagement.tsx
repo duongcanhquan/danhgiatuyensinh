@@ -18,6 +18,7 @@ import type {
   InviteDocumentType,
   Lead,
   LeadCounselorStatus,
+  LeadIntakeOrigin,
   LeadPipelineStatus,
   LeadWorkMode,
   PriorityTag,
@@ -131,8 +132,17 @@ import {
   leadWorkModeLabel,
   leadWorkModePrimaryFocus,
   parseLeadWorkMode,
+  resolveEffectiveWorkMode,
   summarizeLeadWorkModes,
 } from '../utils/leadWorkMode'
+import {
+  LEAD_INTAKE_ORIGINS,
+  leadIntakeOriginHint,
+  leadIntakeOriginLabel,
+  leadIntakeOriginToUrlParam,
+  leadMatchesIntakeOrigin,
+  parseLeadIntakeOriginFromUrl,
+} from '../utils/leadIntakeOrigin'
 import {
   pickLeadIdsForAssign,
   planLeadAssignments,
@@ -417,6 +427,8 @@ export function LeadManagement() {
   const [callWorkBucketFilter, setCallWorkBucketFilter] = useState<CallWorkBucketFilter>('all')
   const [dispositionFilter, setDispositionFilter] = useState<CallDispositionFilter>('all')
   const [workModeFilter, setWorkModeFilter] = useState<'all' | LeadWorkMode>('all')
+  /** Tab nguồn nhập — mặc định data thô / chiến dịch. */
+  const [intakeOriginTab, setIntakeOriginTab] = useState<LeadIntakeOrigin>('campaign_upload')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -496,6 +508,9 @@ export function LeadManagement() {
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
   /** Lọc chế độ xử lý — field tùy chọn trên hồ sơ → fullScope + lọc client. */
   const workModeNeedsScope = workModeFilter !== 'all'
+  /** Cổng / tạo tay: load đủ trong phạm vi (không chỉ 1 trang). Chiến dịch: phân trang. */
+  const intakeOriginNeedsScope =
+    intakeOriginTab === 'manual' || intakeOriginTab === 'public_portal'
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
   /** Có chọn chương trình (kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
@@ -553,6 +568,8 @@ export function LeadManagement() {
       o.assignedCounselorIn = [assigneeFilter]
     }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
+    /** Cổng ĐK: `uploadedBy` đã có trên mọi hồ sơ cổng (kể cả trước khi có `intakeOrigin`). */
+    if (intakeOriginTab === 'public_portal') o.uploadedByIn = ['public_portal']
     return Object.keys(o).length ? o : undefined
   }, [
     statusFilter,
@@ -569,6 +586,7 @@ export function LeadManagement() {
     aiShortlistOnly,
     tagClientEval,
     can,
+    intakeOriginTab,
   ])
 
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
@@ -577,14 +595,27 @@ export function LeadManagement() {
     tagClientEval ||
     callQueueNeedsScope ||
     workModeNeedsScope ||
+    intakeOriginNeedsScope ||
     assigneeUnsetNeedsScope ||
     programNeedsScope ||
     uploadedDateNeedsScope
 
-  /** «Chưa gắn» / lọc ngày tải: quét theo id + chỉ giữ hồ sơ khớp predicate. */
-  const unsetProgramKeepMatch = useMemo(() => {
-    if (!programNeedsScope && !uploadedDateNeedsScope) return undefined
+  /**
+   * Lọc không where được trên Firestore (chế độ hiệu lực, hàng chờ, tạo tay, chưa gắn…)
+   * → quét theo docId + chỉ giữ hồ sơ khớp (đã lọc sẵn, không chỉ trang hiện tại).
+   */
+  const clientKeepMatchNeeded =
+    programNeedsScope ||
+    uploadedDateNeedsScope ||
+    workModeNeedsScope ||
+    callQueueNeedsScope ||
+    assigneeUnsetNeedsScope ||
+    intakeOriginTab === 'manual'
+
+  const fullScopeKeepMatch = useMemo(() => {
+    if (!clientKeepMatchNeeded) return undefined
     return (l: Lead) => {
+      if (!leadMatchesIntakeOrigin(l, intakeOriginTab)) return false
       if (programNeedsScope && (l.intakeProgram ?? '').trim()) return false
       if (
         uploadedDateNeedsScope &&
@@ -596,7 +627,7 @@ export function LeadManagement() {
         return false
       }
       if (dispositionFilter !== 'all' && !leadMatchesDisposition(l, dispositionFilter)) return false
-      if (!leadMatchesWorkModeFilter(l, workModeFilter)) return false
+      if (!leadMatchesWorkModeFilter(l, workModeFilter, leadSources)) return false
       if (assigneeFilter === '__UNASSIGNED__') {
         if (effectiveLeadAssigneeUid(l)) return false
       } else if (assigneeFilter && effectiveLeadAssigneeUid(l) !== assigneeFilter) {
@@ -605,6 +636,8 @@ export function LeadManagement() {
       return true
     }
   }, [
+    clientKeepMatchNeeded,
+    intakeOriginTab,
     programNeedsScope,
     uploadedDateNeedsScope,
     uploadedFromFilter,
@@ -612,6 +645,7 @@ export function LeadManagement() {
     callWorkBucketFilter,
     dispositionFilter,
     workModeFilter,
+    leadSources,
     assigneeFilter,
   ])
 
@@ -640,14 +674,12 @@ export function LeadManagement() {
     directoryLabels: counselorDirectoryLabelById,
     dataMode: listNeedsFullScope ? 'fullScope' : 'paged',
     maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
-    fullScopeOrderMode: programNeedsScope || uploadedDateNeedsScope ? 'docId' : undefined,
-    maxFullScopeScanDocs:
-      programNeedsScope || uploadedDateNeedsScope ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
-    fullScopeKeepMatch: unsetProgramKeepMatch,
-    fullScopeMatchKey:
-      programNeedsScope || uploadedDateNeedsScope
-        ? `keep|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
-        : undefined,
+    fullScopeOrderMode: clientKeepMatchNeeded ? 'docId' : undefined,
+    maxFullScopeScanDocs: clientKeepMatchNeeded ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
+    fullScopeKeepMatch,
+    fullScopeMatchKey: clientKeepMatchNeeded
+      ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
+      : undefined,
     // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
     includeScopeTagCounts: false,
     includeScopeSourceOptions: sourceCatalogRequested,
@@ -1099,8 +1131,9 @@ export function LeadManagement() {
       rows = rows.filter((l) => leadMatchesDisposition(l, dispositionFilter))
     }
     if (workModeFilter !== 'all') {
-      rows = rows.filter((l) => leadMatchesWorkModeFilter(l, workModeFilter))
+      rows = rows.filter((l) => leadMatchesWorkModeFilter(l, workModeFilter, leadSources))
     }
+    rows = rows.filter((l) => leadMatchesIntakeOrigin(l, intakeOriginTab))
     if (programFilter === '__UNSET__') {
       rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
     } else if (programFilter !== 'ALL') {
@@ -1130,6 +1163,8 @@ export function LeadManagement() {
     callWorkBucketFilter,
     dispositionFilter,
     workModeFilter,
+    leadSources,
+    intakeOriginTab,
     programFilter,
     assigneeFilter,
     uploadedFromFilter,
@@ -1161,9 +1196,10 @@ export function LeadManagement() {
       if (dispositionFilter !== 'all' && !leadMatchesDisposition(l, dispositionFilter)) {
         return false
       }
-      if (!leadMatchesWorkModeFilter(l, workModeFilter)) {
+      if (!leadMatchesWorkModeFilter(l, workModeFilter, leadSources)) {
         return false
       }
+      if (!leadMatchesIntakeOrigin(l, intakeOriginTab)) return false
       if (tagClientEval && tagFilter !== 'ALL' && effectiveLeadTag(l) !== tagFilter) {
         return false
       }
@@ -1198,6 +1234,8 @@ export function LeadManagement() {
       callWorkBucketFilter,
       dispositionFilter,
       workModeFilter,
+      leadSources,
+      intakeOriginTab,
       tagClientEval,
       tagFilter,
       effectiveLeadTag,
@@ -1269,8 +1307,11 @@ export function LeadManagement() {
     return summarizeCallWorkQueue(mine)
   }, [leads, profile?.id])
 
-  /** Đếm chế độ xử lý trên tập đã tải — ô bento lọc ngữ cảnh. */
-  const workModeSummary = useMemo(() => summarizeLeadWorkModes(leads), [leads])
+  /** Đếm chế độ hiệu lực trên tập đã tải — ô bento lọc ngữ cảnh. */
+  const workModeSummary = useMemo(
+    () => summarizeLeadWorkModes(leads, leadSources),
+    [leads, leadSources],
+  )
 
   /**
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
@@ -1419,6 +1460,7 @@ export function LeadManagement() {
     setCallWorkBucketFilter(next.callQueue)
     setDispositionFilter(next.disposition)
     setWorkModeFilter(next.workMode)
+    setIntakeOriginTab(parseLeadIntakeOriginFromUrl(sp.get(LWF.ORIGIN)))
     setUploadedFromFilter(next.uploadedFrom)
     setUploadedToFilter(next.uploadedTo)
     setDraftFilters((prev) => ({
@@ -1523,6 +1565,18 @@ export function LeadManagement() {
       setDraftFilters((prev) => ({ ...prev, workMode }))
       setWorkModeFilter(workMode)
       mergeListFilterUrl({ [LWF.WM]: workMode === 'all' ? null : workMode })
+      setPage(1)
+    },
+    [mergeListFilterUrl, setPage],
+  )
+
+  /** Tab nguồn nhập (chiến dịch / tạo tay / cổng). */
+  const applyIntakeOriginTab = useCallback(
+    (origin: LeadIntakeOrigin) => {
+      setIntakeOriginTab(origin)
+      mergeListFilterUrl({
+        [LWF.ORIGIN]: origin === 'campaign_upload' ? null : leadIntakeOriginToUrlParam(origin),
+      })
       setPage(1)
     },
     [mergeListFilterUrl, setPage],
@@ -3341,12 +3395,52 @@ export function LeadManagement() {
           </div>
         </div>
 
+        {/* Nguồn nhập — tách data thô lớn / tạo tay / cổng ĐK. */}
+        <div className="w-full border-t border-slate-200/60 pt-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Nguồn nhập hồ sơ
+            </p>
+            <p className="text-[11px] text-slate-500" aria-live="polite">
+              {intakeOriginNeedsScope
+                ? loading || loadingPage
+                  ? 'Đang tải đủ hồ sơ tab này…'
+                  : leadIntakeOriginHint(intakeOriginTab)
+                : leadIntakeOriginHint(intakeOriginTab)}
+            </p>
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5" role="tablist" aria-label="Nguồn nhập hồ sơ">
+            {LEAD_INTAKE_ORIGINS.map((origin) => {
+              const selected = intakeOriginTab === origin
+              return (
+                <button
+                  key={origin}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  title={leadIntakeOriginHint(origin)}
+                  onClick={() => applyIntakeOriginTab(origin)}
+                  className={[
+                    'min-h-9 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-semibold leading-snug transition sm:text-xs',
+                    selected
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white shadow-sm ring-2 ring-[var(--color-primary)]/35'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-[var(--color-primary)]/40 hover:bg-slate-50',
+                  ].join(' ')}
+                >
+                  {leadIntakeOriginLabel(origin)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Lọc chế độ — LUÔN ngoài danh sách (không giấu trong Công cụ). */}
         <LeadWorkModeBentoBoard
           active={workModeFilter}
           summary={workModeSummary}
           onSelect={(next) => applyWorkModeQuick(next)}
           sampleOnly={!listNeedsFullScope}
+          scanning={Boolean(workModeNeedsScope && (loading || loadingPage))}
           className="w-full border-t border-slate-200/60 pt-2"
         />
 
@@ -3970,11 +4064,15 @@ export function LeadManagement() {
                 {rescoreMsg}
               </p>
             ) : null}
-            {(tagClientEval || callQueueNeedsScope || workModeNeedsScope || programNeedsScope) &&
+            {(tagClientEval ||
+              callQueueNeedsScope ||
+              workModeNeedsScope ||
+              intakeOriginNeedsScope ||
+              programNeedsScope) &&
             scopeFetchTruncated ? (
               <p className="text-xs font-medium text-amber-900">
-                {programNeedsScope
-                  ? `Đã quét tối đa ${LEADS_UI_PROGRAM_SCAN_MAX.toLocaleString('vi-VN')} hồ sơ hoặc đủ ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} kết quả — có thể còn hồ sơ khớp phía sau.`
+                {clientKeepMatchNeeded
+                  ? `Đã quét tối đa ${LEADS_UI_PROGRAM_SCAN_MAX.toLocaleString('vi-VN')} hồ sơ hoặc đủ ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} kết quả khớp — có thể còn hồ sơ phía sau.`
                   : `Đã đạt giới hạn tải (${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một phần ở đuôi danh sách.`}
               </p>
             ) : null}
@@ -5669,13 +5767,17 @@ function LeadDetailPanel({
     [infoScoreRuntime, classificationRuntime],
   )
   const canEditScoringSignals = canWriteLead(profile, lead, can, pickListUsers)
-  const workFocus = leadWorkModePrimaryFocus(lead.workMode)
+  const { active: leadSources, items: allLeadSources } = useLeadSources()
+  const effectiveWorkMode = useMemo(
+    () => resolveEffectiveWorkMode(lead, allLeadSources),
+    [lead, allLeadSources],
+  )
+  const workFocus = leadWorkModePrimaryFocus(effectiveWorkMode)
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions } = useInteractions(lead.id)
   const { playbooks } = useConsultingPlaybooks()
   const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const { categories: knowledgeCategories } = useKnowledgeCategories()
-  const { active: leadSources } = useLeadSources()
   const { items: scholarships } = useScholarships()
   const { catalogs: profileCatalogs, onEnsureCatalogEntry } = useLeadProfileCatalogs()
 
@@ -5839,7 +5941,7 @@ function LeadDetailPanel({
     setMsg(null)
     setPlaybookPopupTab('consulting')
     setDetailLeftTab(
-      leadWorkModePrimaryFocus(lead.workMode) === 'care_dossier' ? 'profile' : 'counselor',
+      leadWorkModePrimaryFocus(effectiveWorkMode) === 'care_dossier' ? 'profile' : 'counselor',
     )
     setDetailRightTab('history')
     signalsHelpRef.current?.close()
@@ -5924,6 +6026,16 @@ function LeadDetailPanel({
     (dispositionDraft || null) !== (lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
       ? lead.lastCallDispositionId
       : null)
+
+  const dispositionSavePreview = useMemo(() => {
+    if (!dispositionDraft || !isCallDispositionId(dispositionDraft)) return null
+    const fx = getDispositionLeadEffects(dispositionDraft)
+    const bits: string[] = []
+    if (fx.status) bits.push(LEAD_COUNSELOR_STATUS_LABELS[fx.status])
+    if (fx.pipelineStatus) bits.push(PIPELINE_LABEL[fx.pipelineStatus])
+    if (fx.priorityTag) bits.push(fx.priorityTag)
+    return bits
+  }, [dispositionDraft])
 
   const hasUnsavedProgress = useMemo(
     () =>
@@ -7092,6 +7204,7 @@ function LeadDetailPanel({
                                 <div className="mt-2">
                                   <LeadWorkModeContextCard
                                     workMode={lead.workMode}
+                                    effectiveWorkMode={effectiveWorkMode}
                                     canEdit={showCounselorProgressForm}
                                     disabled={saving || financeSaving}
                                     onChange={(next) => {
@@ -7099,37 +7212,19 @@ function LeadDetailPanel({
                                     }}
                                   />
                                 </div>
-                                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                  {showCounselorProgressForm ? (
-                                    <label className="block text-xs font-medium text-slate-800">
-                                      Tình trạng tư vấn
-                                      <select
-                                        value={crmForForm}
-                                        onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
-                                        className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                      >
-                                        {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
-                                          <option key={s} value={s} className="bg-white">
-                                            {LEAD_COUNSELOR_STATUS_LABELS[s]}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                  ) : null}
-                                  <label className="block text-xs font-medium text-slate-800">
-                                    Tình trạng hồ sơ
-                                    <select
-                                      value={statusForForm}
-                                      onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                                      className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
-                                    >
-                                      {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
-                                        <option key={k} value={k} className="bg-white">
-                                          {PIPELINE_LABEL[k]}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
+                                <div className="mt-2 rounded-lg border border-amber-200/70 bg-white/80 px-2 py-1.5">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
+                                      Tư vấn: {LEAD_COUNSELOR_STATUS_LABELS[crmForForm]}
+                                    </span>
+                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
+                                      Hồ sơ: {PIPELINE_LABEL[statusForForm]}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                                    Hệ thống tự cập nhật khi bạn lưu phản hồi gọi, hoặc khi có đóng tiền / đủ hồ sơ.
+                                    Không cần chỉnh tay mỗi lần gọi.
+                                  </p>
                                 </div>
                                 <div className="mt-2" role="group" aria-label="Phản hồi nhanh">
                                   <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -7139,7 +7234,11 @@ function LeadDetailPanel({
                                     {dispositionDraft ? (
                                       <button
                                         type="button"
-                                        onClick={() => setDispositionDraft('')}
+                                        onClick={() => {
+                                          setDispositionDraft('')
+                                          setCrmDirty(null)
+                                          setStatusDirty(null)
+                                        }}
                                         className="text-[11px] font-semibold text-slate-600 underline-offset-2 hover:text-amber-800 hover:underline"
                                       >
                                         Bỏ chọn
@@ -7147,7 +7246,7 @@ function LeadDetailPanel({
                                     ) : null}
                                   </div>
                                   <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                                    Chọn nút sẽ điền sẵn tình trạng tư vấn / hồ sơ; bấm «Lưu cập nhật» để ghi nhãn HOT/WARM…
+                                    Chọn một nút rồi «Lưu cập nhật» — ghi note sau gọi và (khi có) tình trạng + nhãn HOT/WARM.
                                   </p>
                                   <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
                                     {CALL_DISPOSITIONS.map((d) => {
@@ -7161,6 +7260,8 @@ function LeadDetailPanel({
                                           onClick={() => {
                                             if (selected) {
                                               setDispositionDraft('')
+                                              setCrmDirty(null)
+                                              setStatusDirty(null)
                                               return
                                             }
                                             setDispositionDraft(d.id)
@@ -7181,7 +7282,64 @@ function LeadDetailPanel({
                                       )
                                     })}
                                   </div>
+                                  {dispositionSavePreview ? (
+                                    dispositionSavePreview.length ? (
+                                      <p className="mt-1.5 rounded-md border border-amber-200/80 bg-amber-50/80 px-2 py-1 text-[11px] leading-snug text-amber-950">
+                                        Khi lưu sẽ ghi: {dispositionSavePreview.join(' · ')}
+                                      </p>
+                                    ) : (
+                                      <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
+                                        Khi lưu: ghi phản hồi này — không đổi tình trạng tư vấn / hồ sơ.
+                                      </p>
+                                    )
+                                  ) : null}
                                 </div>
+                                <details className="group mt-2 rounded-lg border border-slate-200/90 bg-white/70 open:pb-2">
+                                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
+                                    <ChevronDown
+                                      className="h-3.5 w-3.5 shrink-0 text-slate-500 transition group-open:rotate-180"
+                                      aria-hidden
+                                    />
+                                    <span className="text-[11px] font-semibold text-slate-700">
+                                      Nâng cao — chỉnh tay tình trạng
+                                    </span>
+                                  </summary>
+                                  <p className="px-2 pb-1 text-[10px] leading-snug text-slate-500">
+                                    Chỉ dùng khi dữ liệu lệch hoặc cần sửa giúp. Ngày thường chọn phản hồi nhanh là đủ.
+                                  </p>
+                                  <div className="grid grid-cols-1 gap-1.5 px-2 sm:grid-cols-2">
+                                    {showCounselorProgressForm ? (
+                                      <label className="block text-xs font-medium text-slate-800">
+                                        Tình trạng tư vấn
+                                        <select
+                                          value={crmForForm}
+                                          onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
+                                          className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                        >
+                                          {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
+                                            <option key={s} value={s} className="bg-white">
+                                              {LEAD_COUNSELOR_STATUS_LABELS[s]}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    ) : null}
+                                    <label className="block text-xs font-medium text-slate-800">
+                                      Tình trạng hồ sơ
+                                      <select
+                                        value={statusForForm}
+                                        onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
+                                        className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
+                                      >
+                                        {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (
+                                          <option key={k} value={k} className="bg-white">
+                                            {PIPELINE_LABEL[k]}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  </div>
+                                </details>
                                 <label className="mt-2 block text-xs font-medium text-slate-800">
                                   Ghi chú TVV
                                   <textarea

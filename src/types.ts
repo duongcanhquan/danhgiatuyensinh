@@ -311,6 +311,9 @@ export type InviteDocumentType =
 /** Chế độ xử lý hồ sơ trên workspace TVV (DES-WORKMODE). */
 export type LeadWorkMode = 'score_queue' | 'volume_filter' | 'care_close'
 
+/** Nguồn nhập hồ sơ — tách tab list (chiến dịch / tạo tay / cổng ĐK). */
+export type LeadIntakeOrigin = 'campaign_upload' | 'manual' | 'public_portal'
+
 /**
  * Canonical Lead — collection `leads/{leadId}`
  * Schema aligned to VietMy Excel intake columns + persistence / analytics system fields.
@@ -437,6 +440,13 @@ export interface Lead {
   uploadedBy?: UserId
   uploaderName?: string
   uploadBatchId?: string
+  /**
+   * Nguồn nhập: Excel/chiến dịch · tạo tay · cổng ĐK.
+   * Thiếu field → suy diễn (xem `resolveLeadIntakeOrigin`).
+   */
+  intakeOrigin?: LeadIntakeOrigin
+  /** Kênh đăng ký (vd. `public_portal`) — bổ sung nhận diện cổng. */
+  registrationChannel?: string
   /**
    * Chương trình / đợt nhập (nhãn TVV) — gắn khi upload Excel hoặc gán hàng loạt.
    * Thiếu / rỗng = chưa phân loại theo chương trình.

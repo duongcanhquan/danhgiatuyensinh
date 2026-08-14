@@ -21,10 +21,12 @@ import {
 } from 'firebase/firestore'
 import { asFirestoreTimestamp } from '../utils/firestoreTimestamp'
 import { parseLeadWorkMode } from '../utils/leadWorkMode'
+import { parseLeadIntakeOrigin } from '../utils/leadIntakeOrigin'
 import type {
   Lead,
   LeadCounselorStatus,
   LeadFinanceRecord,
+  LeadIntakeOrigin,
   LeadPaymentApprovalStatus,
   LeadPaymentLine,
   LeadPaymentSlotKey,
@@ -357,6 +359,10 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
       uploadedBy: data.uploadedBy !== undefined && data.uploadedBy !== null ? String(data.uploadedBy) : undefined,
       uploaderName: data.uploaderName !== undefined ? String(data.uploaderName) : undefined,
       uploadBatchId: data.uploadBatchId !== undefined ? String(data.uploadBatchId) : undefined,
+      intakeOrigin: parseLeadIntakeOrigin(data.intakeOrigin),
+      ...(String(data.registrationChannel ?? '').trim()
+        ? { registrationChannel: String(data.registrationChannel).trim().slice(0, 64) }
+        : {}),
       ...(String(data.intakeProgram ?? '').trim()
         ? { intakeProgram: String(data.intakeProgram).trim().slice(0, 120) }
         : {}),
@@ -490,6 +496,8 @@ export type LeadListServerFilters = {
   adminDateToMs?: number
   /** Chỉ lead đã được AI đánh dấu shortlist (`isAiShortlisted === true`). */
   aiShortlistedOnly?: boolean
+  /** Nguồn nhập đã ghi trên doc (`intakeOrigin`). */
+  intakeOrigin?: LeadIntakeOrigin
 }
 
 /**
@@ -649,6 +657,7 @@ function filterConstraints(
   if (f.scoreMin != null && Number.isFinite(f.scoreMin)) c.push(where('calculatedScore', '>=', f.scoreMin))
   if (f.scoreMax != null && Number.isFinite(f.scoreMax)) c.push(where('calculatedScore', '<=', f.scoreMax))
   if (f.aiShortlistedOnly) c.push(where('isAiShortlisted', '==', true))
+  if (f.intakeOrigin) c.push(where('intakeOrigin', '==', f.intakeOrigin))
   if (f.uploadedByIn?.length) {
     const u = f.uploadedByIn.filter(Boolean).slice(0, 10)
     if (u.length === 1) c.push(where('uploadedBy', '==', u[0]))

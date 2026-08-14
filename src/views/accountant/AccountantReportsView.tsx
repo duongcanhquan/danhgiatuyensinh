@@ -5,12 +5,14 @@ import { useAccountantLeads } from '../../hooks/useAccountantLeads'
 import { getFirestoreDb } from '../../services/firebase'
 import { fetchRecentFinanceReports, sendFinanceReportFromLeads } from '../../utils/persistFinanceReport'
 import type { FinanceReportLog } from '../../types'
+import { canAccessAccountantPortal } from '../../auth/accountantPortal'
 
 export function AccountantReportsView() {
   const { can, profile } = useAuth()
   const { effectiveOrgId } = useOrg()
   const canReports = can('finance:reports')
-  const { leads, loading } = useAccountantLeads(can('finance:accountant'))
+  const canPortal = canAccessAccountantPortal(can, profile)
+  const { leads, loading } = useAccountantLeads(canPortal && canReports)
   const [reportLogs, setReportLogs] = useState<FinanceReportLog[]>([])
   const [reportBusy, setReportBusy] = useState<'daily' | 'monthly' | null>(null)
   const [msg, setMsg] = useState<string | null>(null)

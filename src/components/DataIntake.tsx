@@ -22,6 +22,11 @@ import {
   LEAD_INTAKE_TEMPLATES,
   type LeadIntakeTemplateId,
 } from '../utils/leadIntakeTemplates'
+import { parseAppsScriptWorkbook } from '../utils/appsScriptWorkbookParse'
+import {
+  parseAppsScriptCreatedAtMs,
+  type AppsScriptStudentExtras,
+} from '../utils/appsScriptStudentMapper'
 import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
@@ -80,6 +85,8 @@ type PreparedRow = {
   inFileDuplicate: boolean
   /** phone | identity | weak — weak không so trùng DB / không gom trùng file theo mã trống */
   strength: 'phone' | 'identity' | 'weak'
+  /** Chỉ mẫu Sheet Apps Script 70 cột */
+  appsScriptExtras?: AppsScriptStudentExtras
 }
 
 type ImportPreview = {
@@ -91,7 +98,11 @@ type ImportPreview = {
 }
 
 function activeStaffForExcelAssignMatch(users: VietMyUserProfile[]) {
-  return users.filter((u) => u.isActive && (u.role === 'counselor' || isAdminLikeRole(u.role)))
+  return users.filter(
+    (u) =>
+      u.isActive &&
+      (u.role === 'counselor' || u.role === 'ctv' || u.role === 'team_lead' || isAdminLikeRole(u.role)),
+  )
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -324,27 +335,43 @@ export function DataIntake() {
         const buf = await file.arrayBuffer()
         await yieldToMain()
         const tpl = getLeadIntakeTemplate(templateId)
-        const parseDiagHolder: { diag: ParseWorkbookDiag | null } = { diag: null }
-        const rows = parseWorkbookToRows(buf, {
-          headerRowIndex: tpl.headerRowIndex,
-          fallbackOrderedHeaders: tpl.columns.map((c) => c.header),
-          onDiag: (d) => {
-            parseDiagHolder.diag = d
-          },
-        })
-        if (!rows.length) {
-          const diag = parseDiagHolder.diag
-          const sheets =
-            diag && diag.sheetNames.length > 0 ? `Sheet trong file: ${diag.sheetNames.join(', ')}.` : ''
-          const hdrs =
-            diag && diag.sampleHeaders && diag.sampleHeaders.length > 0
-              ? ` Tiêu đề đọc được (hàng ${diag.pickedHeaderRow ?? 1}): ${diag.sampleHeaders.join(' | ')}.`
-              : ' Không đọc được hàng tiêu đề.'
-          setBanner(
-            `Không tìm thấy dữ liệu (${tpl.label}). ${sheets}${hdrs} Cần sheet dữ liệu (không dùng «Hướng dẫn»), hàng tiêu đề khớp mẫu (Họ tên, điện thoại…), dữ liệu từ hàng dưới. Tải lại file mẫu trong app rồi copy dữ liệu vào sheet «${tpl.sheetName}».`,
-          )
-          setBusy(false)
-          return
+        let rows: Partial<ExcelLeadRow>[] = []
+        let appsExtrasByIndex = new Map<number, AppsScriptStudentExtras>()
+
+        if (tpl.positionalAppsScript) {
+          const parsed = parseAppsScriptWorkbook(buf)
+          if (!parsed.length) {
+            setBanner(
+              `Không tìm thấy dữ liệu Sheet Apps Script. File cần data từ dòng 3 (xuất DU_LIEU_SINH_VIEN), đủ cột Họ tên/SĐT/Mã SV.`,
+            )
+            setBusy(false)
+            return
+          }
+          rows = parsed.map((p) => p.row)
+          parsed.forEach((p, idx) => appsExtrasByIndex.set(idx, p.extras))
+        } else {
+          const parseDiagHolder: { diag: ParseWorkbookDiag | null } = { diag: null }
+          rows = parseWorkbookToRows(buf, {
+            headerRowIndex: tpl.headerRowIndex,
+            fallbackOrderedHeaders: tpl.columns.map((c) => c.header),
+            onDiag: (d) => {
+              parseDiagHolder.diag = d
+            },
+          })
+          if (!rows.length) {
+            const diag = parseDiagHolder.diag
+            const sheets =
+              diag && diag.sheetNames.length > 0 ? `Sheet trong file: ${diag.sheetNames.join(', ')}.` : ''
+            const hdrs =
+              diag && diag.sampleHeaders && diag.sampleHeaders.length > 0
+                ? ` Tiêu đề đọc được (hàng ${diag.pickedHeaderRow ?? 1}): ${diag.sampleHeaders.join(' | ')}.`
+                : ' Không đọc được hàng tiêu đề.'
+            setBanner(
+              `Không tìm thấy dữ liệu (${tpl.label}). ${sheets}${hdrs} Cần sheet dữ liệu (không dùng «Hướng dẫn»), hàng tiêu đề khớp mẫu (Họ tên, điện thoại…), dữ liệu từ hàng dưới. Tải lại file mẫu trong app rồi copy dữ liệu vào sheet «${tpl.sheetName}».`,
+            )
+            setBusy(false)
+            return
+          }
         }
 
         const importProfile = pickProfileForImport(profiles)
@@ -404,7 +431,15 @@ export function DataIntake() {
             inFileDuplicate = firstN !== undefined && firstN !== index
             if (firstN === undefined) firstIndexByNationalId.set(nationalIdHash, index)
           }
-          return { index, row, hash, nationalIdHash, strength, inFileDuplicate }
+          return {
+            index,
+            row,
+            hash,
+            nationalIdHash,
+            strength,
+            inFileDuplicate,
+            ...(appsExtrasByIndex.has(index) ? { appsScriptExtras: appsExtrasByIndex.get(index) } : {}),
+          }
         })
 
         const hashesForQuery = prepared
@@ -576,6 +611,10 @@ export function DataIntake() {
           source1,
           sources: leadSources,
         })
+        const extras = pr.appsScriptExtras
+        const createdMs = extras ? parseAppsScriptCreatedAtMs(extras.createdAtRaw) : null
+        const createdAt =
+          createdMs != null ? Timestamp.fromMillis(createdMs) : now
         toCreate.push({
           ref,
           data: omitUndefined({
@@ -585,9 +624,23 @@ export function DataIntake() {
             priorityTag,
             ...pillarPatch,
             ...(workMode ? { workMode } : {}),
-            uploadedAt: now,
+            ...(extras?.systemCode ? { systemCode: extras.systemCode } : {}),
+            ...(extras?.finance ? { finance: extras.finance } : {}),
+            ...(extras?.inviteFolderUrl ? { inviteFolderUrl: extras.inviteFolderUrl } : {}),
+            ...(extras?.source2 ? { source2: extras.source2 } : {}),
+            ...(source1 ? { source1 } : {}),
+            ...(extras?.placeOfBirth ? { placeOfBirth: extras.placeOfBirth } : {}),
+            ...(extras?.ethnicity ? { ethnicity: extras.ethnicity } : {}),
+            ...(extras?.permanentAddress ? { permanentAddress: extras.permanentAddress } : {}),
+            ...(extras?.currentResidence ? { currentResidence: extras.currentResidence } : {}),
+            ...(extras?.fatherName ? { fatherName: extras.fatherName } : {}),
+            ...(extras?.fatherPhone ? { fatherPhone: extras.fatherPhone } : {}),
+            ...(extras?.motherName ? { motherName: extras.motherName } : {}),
+            ...(extras?.motherPhone ? { motherPhone: extras.motherPhone } : {}),
+            ...(extras?.guardian ? { guardian: extras.guardian } : {}),
+            uploadedAt: createdAt,
             importedAt: now,
-            createdAt: now,
+            createdAt,
             updatedAt: now,
             lastTouchedAt: now,
           } as Record<string, unknown>) as Record<string, unknown>,
@@ -901,13 +954,22 @@ export function DataIntake() {
                           {tpl.description}
                         </span>
                         <span className="mt-1 block text-[11px] font-medium text-slate-500">
-                          {tpl.columns.length} cột · sheet «{tpl.sheetName}»
+                          {tpl.positionalAppsScript
+                            ? '70 cột theo vị trí · data từ dòng 3'
+                            : `${tpl.columns.length} cột · sheet «${tpl.sheetName}»`}
                         </span>
                       </span>
                     </label>
                   )
                 })}
               </div>
+              {selectedTemplate.positionalAppsScript ? (
+                <p className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-950">
+                  <strong>Trước khi nhập:</strong> Cài đặt → Nhân sự → Nhập Excel tư vấn viên (cột{' '}
+                  <strong>Tên hiển thị</strong> = tên TVV trên Sheet). Rồi xuất{' '}
+                  <code className="rounded bg-white px-1">DU_LIEU_SINH_VIEN</code> .xlsx — không đổi thứ tự cột.
+                </p>
+              ) : null}
             </fieldset>
 
             <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">

@@ -588,6 +588,7 @@ function buildLeadDoc(
     ...(opts.nationalIdHash ? { nationalIdHash: opts.nationalIdHash } : {}),
     ...(opts.workMode ? { workMode: opts.workMode } : {}),
     registrationChannel: 'public_portal',
+    intakeOrigin: 'public_portal',
     uploadedBy: 'public_portal',
     uploaderName: 'Cổng đăng ký sinh viên',
     uploadBatchId: `public-${Date.now()}`,

@@ -8,6 +8,7 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
 import { loadFinanceDepositThresholds } from '../utils/financeThresholds'
 import { loadOrgN8nWebhooks } from '../utils/n8nWebhooksConfig'
+import { loadReceiptStorageConfig } from '../utils/receiptStorageConfig'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 import { readStoredActiveOrgId, writeStoredActiveOrgId } from '../tenancy/activeOrgStorage'
 
@@ -67,6 +68,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     if (!db) return
     void loadFinanceDepositThresholds(db, effectiveOrgId)
     void loadOrgN8nWebhooks(db, effectiveOrgId)
+    void loadReceiptStorageConfig(db, effectiveOrgId)
   }, [effectiveOrgId])
 
   useEffect(() => {

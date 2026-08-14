@@ -7,11 +7,15 @@ import {
 } from './leadIntakeTemplates'
 
 describe('leadIntakeTemplates registry', () => {
-  it('keeps standard_v1 and compact_v2; open for more later', () => {
-    expect(LEAD_INTAKE_TEMPLATES.map((t) => t.id)).toEqual(['standard_v1', 'compact_v2'])
+  it('includes standard, compact, and appscript sheet', () => {
+    expect(LEAD_INTAKE_TEMPLATES.map((t) => t.id)).toEqual([
+      'standard_v1',
+      'compact_v2',
+      'appscript_sheet_v1',
+    ])
     expect(getLeadIntakeTemplate('standard_v1').columns).toHaveLength(20)
     expect(getLeadIntakeTemplate('compact_v2').columns).toHaveLength(8)
-    expect(getLeadIntakeTemplate('compact_v2').headerRowIndex).toBe(0)
+    expect(getLeadIntakeTemplate('appscript_sheet_v1').positionalAppsScript).toBe(true)
   })
 
   it('compact v2 headers match business columns', () => {

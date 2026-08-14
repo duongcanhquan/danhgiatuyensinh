@@ -2,8 +2,12 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import type { LeadPaymentSlotKey } from '../types'
 import { optimizeReceiptFile } from '../utils/receiptImageOptimize'
 import { buildFirebaseReceiptPath, buildReceiptObjectKey, receiptPublicUrl } from '../utils/receiptStoragePaths'
-import { getFirebaseStorage } from './firebase'
-import { resolveReceiptStorageRuntime } from '../utils/receiptStorageConfig'
+import { getFirebaseStorage, getFirestoreDb } from './firebase'
+import {
+  ensureReceiptStorageConfigLoaded,
+  resolveReceiptStorageRuntime,
+} from '../utils/receiptStorageConfig'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 /** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */
 export function receiptStorageFolderName(lead: {
@@ -129,10 +133,12 @@ async function uploadReceiptToFirebase(
  * Provider: auto | r2 | drive | firebase.
  */
 export async function uploadLeadReceiptFile(
-  lead: { id: string; fullName: string; systemCode?: string; customerId?: string },
+  lead: { id: string; fullName: string; systemCode?: string; customerId?: string; orgId?: string | null },
   slot: LeadPaymentSlotKey,
   file: File,
 ): Promise<string> {
+  const orgId = String(lead.orgId ?? '').trim() || DEFAULT_ORG_ID
+  await ensureReceiptStorageConfigLoaded(getFirestoreDb(), orgId)
   const prepared = await optimizeReceiptFile(file)
   const runtime = resolveReceiptStorageRuntime()
 

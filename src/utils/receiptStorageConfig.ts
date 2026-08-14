@@ -114,6 +114,17 @@ export async function loadReceiptStorageConfig(
   }
 }
 
+/** Đảm bảo cache chứng từ khớp org trước upload / ensure_folder — «đổi cấu hình là chạy». */
+export async function ensureReceiptStorageConfigLoaded(
+  db: Firestore | null | undefined,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<OrgReceiptStorageConfig> {
+  const id = orgId.trim() || DEFAULT_ORG_ID
+  if (receiptCacheOrgId === id && receiptCache) return receiptCache
+  if (!db) return getReceiptStorageConfigCache().config ?? emptyReceiptStorageConfig()
+  return loadReceiptStorageConfig(db, id)
+}
+
 export async function saveReceiptStorageConfig(
   db: Firestore,
   orgId: string,

@@ -220,6 +220,7 @@ export async function createManualLead(
     priorityTag,
     ...pillarPatch,
     ...(workMode ? { workMode } : {}),
+    intakeOrigin: 'manual' as const,
     createdAt: now,
     updatedAt: now,
     uploadedAt: now,

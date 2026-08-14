@@ -82,7 +82,9 @@ export function ReceiptStorageSettingsPanel() {
         <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
       </div>
       <p className="text-sm text-slate-600">
-        Chọn nơi lưu bill khi TVV / kế toán tải chứng từ. Để trống URL sẽ dùng biến máy chủ (.env) nếu có.
+        Chọn nơi lưu bill khi TVV / kế toán tải chứng từ. Khuyến nghị VietMy: <strong>Drive</strong> (Apps Script) giống hệ
+        cũ, hoặc <strong>R2</strong> nếu đã có worker. URL trống sẽ thử biến .env. Cùng URL Drive dùng luôn cho tạo folder
+        giấy mời.
       </p>
 
       <fieldset className="space-y-2">
@@ -154,6 +156,11 @@ export function ReceiptStorageSettingsPanel() {
             onChange={(e) => patch({ driveWebhookUrl: e.target.value })}
             placeholder="https://script.google.com/macros/s/…/exec"
           />
+          <span className="mt-1 block font-normal text-[11px] text-slate-500">
+            Deploy file <code className="rounded bg-slate-100 px-1">scripts/apps-script/receipt-drive-webapp.gs</code> —
+            cần action upload + <code className="rounded bg-slate-100 px-1">ensure_folder</code>. Xem{' '}
+            <code className="rounded bg-slate-100 px-1">docs/RECEIPT_DRIVE_APPS_SCRIPT.md</code>.
+          </span>
         </label>
         <label className="block text-xs font-semibold text-slate-600 sm:col-span-2">
           Token Drive webhook

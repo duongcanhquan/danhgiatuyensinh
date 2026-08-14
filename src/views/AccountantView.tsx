@@ -16,6 +16,7 @@ import { useOrg } from '../contexts/OrgProvider'
 import { buildStudentCodeSequenceIndex } from '../utils/studentDisplayCode'
 import { buildAccountantLeadSummary, type AccountantStatusTag } from '../utils/accountantLeadDisplay'
 import { AccountantLeadReviewCard } from '../components/accountant/AccountantLeadReviewCard'
+import { canAccessAccountantPortal } from '../auth/accountantPortal'
 
 type QueueFilter = 'pending' | 'done' | 'all'
 
@@ -43,9 +44,11 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
   const { can, profile } = useAuth()
   const { effectiveOrgId } = useOrg()
   const accountantName = profile?.displayName?.trim() || profile?.email?.trim() || undefined
-  const canAccountant = can('finance:accountant')
+  const canPortal = canAccessAccountantPortal(can, profile)
+  /** Duyệt/ghi — quyền finance:accountant; admin vào giám sát vẫn xem được list. */
+  const canWriteAccountant = can('finance:accountant')
   const canReports = can('finance:reports')
-  const { leads, loading, error, reload } = useAccountantLeads(canAccountant)
+  const { leads, loading, error, reload } = useAccountantLeads(canPortal)
   const { items: scholarships } = useScholarships()
   const [rows, setRows] = useState<Lead[]>([])
   const [search, setSearch] = useState('')
@@ -106,15 +109,22 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
           summary?.studentCode,
           lead.id,
           lead.phone,
+          lead.motherPhone,
           lead.nationalId,
           lead.majorInterest,
+          lead.uploaderName,
+          lead.assignedTo,
         ].map((x) => normalizeSearch(String(x ?? '')))
         return hay.some((h) => h.includes(q))
       })
       .sort((a, b) => {
+        // Apps Script getAccountantData: pending trước, rồi ngày tạo mới → cũ
         const pa = leadHasPendingAccountantReview(a) ? 1 : 0
         const pb = leadHasPendingAccountantReview(b) ? 1 : 0
-        return pb - pa
+        if (pb !== pa) return pb - pa
+        const aMs = a.createdAt?.toMillis?.() ?? a.uploadedAt?.toMillis?.() ?? 0
+        const bMs = b.createdAt?.toMillis?.() ?? b.uploadedAt?.toMillis?.() ?? 0
+        return bMs - aMs
       })
   }, [financeRows, search, filterTag, queueFilter, showDone, summaryByLeadId])
 
@@ -146,7 +156,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
     }
   }
 
-  if (!canAccountant && !portalMode) {
+  if (!canPortal && !portalMode) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-950">
         Bạn chưa có quyền cổng kế toán. Liên hệ quản trị để được cấp quyền «Cổng kế toán».
@@ -306,7 +316,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
                 key={lead.id}
                 summary={summary}
                 lead={lead}
-                disabled={loading}
+                disabled={loading || !canWriteAccountant}
                 accountantName={accountantName}
                 onDone={patchLead}
               />

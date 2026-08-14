@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import type { Lead, LeadCounselorStatus, PriorityTag } from '../types'
+import type { Lead, LeadCounselorStatus, LeadIntakeOrigin, PriorityTag } from '../types'
 import { assigneeFirestoreMirror, coerceLeadCounselorStatus, counselorStatusToPipeline } from './leadIdentity'
 
 export type ExcelLeadRow = {
@@ -518,6 +518,8 @@ export type LeadIntakeOwnershipMeta = {
   uploadBatchId: string
   /** Chương trình / đợt nhập — bắt buộc khi commit từ màn Nhập liệu. */
   intakeProgram?: string
+  /** Mặc định `campaign_upload` khi có ownership (Excel). */
+  intakeOrigin?: LeadIntakeOrigin
 }
 
 export type LeadIntakeIdentityMeta = {
@@ -619,6 +621,7 @@ export function buildLeadFirestorePayload(
           uploadedBy: ownership.uploadedBy,
           uploaderName: ownership.uploaderName,
           uploadBatchId: ownership.uploadBatchId,
+          intakeOrigin: ownership.intakeOrigin ?? ('campaign_upload' as const),
           ...(ownership.intakeProgram?.trim()
             ? { intakeProgram: ownership.intakeProgram.trim().slice(0, 120) }
             : {}),

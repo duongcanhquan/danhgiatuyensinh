@@ -168,6 +168,19 @@ export function registerAccountantFinanceCallables() {
       const prev = (data.finance ?? {}) as Record<string, unknown>
       const payments = { ...((prev.payments as Record<string, unknown>) ?? {}) }
       const prevLine = (payments[slotKey] ?? {}) as Record<string, unknown>
+      // Apps Script processPaymentDecision: decision đã giống → no-op
+      if (
+        str(prevLine.approvalStatus) === decision &&
+        Math.round(Number(prevLine.amountVnd) || 0) === amountVnd &&
+        str(prevLine.collectedAt) === collectedAt &&
+        (!receiptUrl || str(prevLine.receiptUrl) === receiptUrl)
+      ) {
+        return {
+          ...prev,
+          payments,
+          declaredTotalVnd: sumPayments(payments as Record<string, { amountVnd?: number }>),
+        }
+      }
       const nextLine: Record<string, unknown> = {
         ...prevLine,
         amountVnd,

@@ -277,7 +277,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
       return (
         <>
           <p className="font-semibold text-slate-900">Webhook n8n</p>
-          <p className={`mt-1.5 ${settingsCopyMuted}`}>Bốn URL: giấy mời, CTSV, báo cáo ngày/tháng.</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Bốn URL: giấy mời, CTSV (Chat thu/duyệt), báo cáo ngày/tháng. Có nút điền mẫu VietMy. Lưu xong dùng ngay —
+            hướng dẫn đầy đủ: <code className="text-[11px]">docs/HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md</code>.
+          </p>
         </>
       )
     case 'invite_docs':

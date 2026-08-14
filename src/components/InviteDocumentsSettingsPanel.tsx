@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FileStack, Save } from 'lucide-react'
+import { FileStack, Save, Sparkles } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
 import { getFirestoreDb } from '../services/firebase'
@@ -9,6 +9,7 @@ import {
   saveInviteDocumentsConfig,
   type OrgInviteDocumentsConfig,
 } from '../utils/inviteDocumentsConfig'
+import { VIETMY_DEFAULT_DRIVE_FOLDERS } from '../utils/vietmyIntegrationDefaults'
 
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
@@ -95,7 +96,8 @@ export function InviteDocumentsSettingsPanel() {
       </div>
       <p className="text-sm text-slate-600">
         Bật/tắt loại giấy, đổi nhãn, gắn mã mẫu Google Docs và thư mục Drive gốc. Webhook tạo giấy nằm ở tab{' '}
-        <strong>Webhook n8n</strong> (ô Giấy mời).
+        <strong>Webhook n8n</strong> (ô Giấy mời). Tạo folder cần URL Drive ở tab <strong>Chứng từ</strong> (cùng Apps
+        Script).
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -106,9 +108,12 @@ export function InviteDocumentsSettingsPanel() {
             value={draft.driveRootFolderId}
             disabled={!canEdit}
             onChange={(e) => patchRoot({ driveRootFolderId: e.target.value })}
-            placeholder="1AbC… (folder ID)"
+            placeholder={VIETMY_DEFAULT_DRIVE_FOLDERS.inviteRootFolderId}
             autoComplete="off"
           />
+          <span className="mt-1 block font-normal text-[11px] text-slate-500">
+            Apps Script cũ: FOLDER_INVITE_ROOT = {VIETMY_DEFAULT_DRIVE_FOLDERS.inviteRootFolderId}
+          </span>
         </label>
         <label className="flex items-center gap-2 self-end rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800">
           <input
@@ -187,6 +192,18 @@ export function InviteDocumentsSettingsPanel() {
           >
             <Save className="h-4 w-4" aria-hidden />
             {busy ? '…' : 'Lưu'}
+          </button>
+          <button
+            type="button"
+            disabled={busy || Boolean(draft.driveRootFolderId.trim())}
+            onClick={() => {
+              patchRoot({ driveRootFolderId: VIETMY_DEFAULT_DRIVE_FOLDERS.inviteRootFolderId })
+              setMsg('Đã điền folder giấy mời VietMy — kiểm tra rồi Lưu.')
+            }}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-900 hover:bg-indigo-50 disabled:opacity-60"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden />
+            Điền folder VietMy
           </button>
           {msg ? <p className="text-sm text-slate-600">{msg}</p> : null}
         </div>

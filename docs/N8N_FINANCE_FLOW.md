@@ -1,20 +1,25 @@
 # Luồng tài chính → n8n → Google Chat
 
-App gửi webhook JSON; **n8n** nhận và đẩy tin nhắn Google Chat (cấu hình trên server n8n).
+App gửi webhook JSON; **n8n** nhận và đẩy tin nhắn Google Chat (cấu hình trên server n8n).  
+**Cấu hình ưu tiên:** Cài đặt → Webhook n8n (Firestore `orgSettings/.../n8nWebhooks`).  
+`.env` `VITE_N8N_*` chỉ là fallback VietMy khi doc chưa load.
 
-## Webhook
+Hướng dẫn cài nhanh: [`HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md`](./HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md).
 
-| Biến môi trường | Mặc định | Mục đích |
-|-----------------|----------|----------|
-| `VITE_N8N_WEBHOOK_CTSV` | `…/webhook/testctsv` | Báo thu TVV + duyệt kế toán |
-| `VITE_N8N_WEBHOOK_DAILY` | `…/webhook/baocao-ngay` | Tổng kết cuối ngày |
-| `VITE_N8N_WEBHOOK_MONTHLY` | `…/webhook/baocao-thang` | Tổng kết tháng |
+## Webhook (4 URL)
 
-## 1. TVV cập nhật tiền / bill (mỗi lần)
+| Ô UI / field | URL mẫu VietMy | Mục đích |
+|---|---|---|
+| Giấy mời `giayMoi` | `…/webhook/giaymoits` | Tạo giấy mời; TVV nộp tiền cũng gửi (parity Apps Script) |
+| CTSV `ctsv` | `…/webhook/testctsv` | Báo thu TVV + duyệt kế toán + Full NE → Chat |
+| Báo cáo ngày `daily` | `…/webhook/baocao-ngay` | Tổng kết cuối ngày |
+| Báo cáo tháng `monthly` | `…/webhook/baocao-thang` | Tổng kết tháng |
 
-**Khi:** Lưu tab Tài chính — đổi số tiền, ngày thu hoặc upload chứng từ (`persistLeadFinance`).
+## 1. TVV cập nhật tiền / bill
 
-**Webhook:** `POST testctsv`
+**Khi:** Lưu tab Tài chính — đổi số tiền, ngày thu, upload chứng từ, hoặc lần đầu YÊU CẦU FULL NE (`persistLeadFinance`).
+
+**Webhook:** POST **CTSV** và **Giấy mời** (cùng payload; trùng URL thì chỉ 1 lần).
 
 **`event`:** `update_profile`  
 **`sub_event`:** `counselor_payment_submitted`
@@ -28,11 +33,13 @@ Trường quan trọng cho Google Chat:
 
 **n8n gợi ý:** Switch theo `event` → node Google Chat dùng `{{ $json.message_vi }}`.
 
+Sau khi lưu Firestore, lỗi HTTP n8n **không rollback** hồ sơ (soft-fail).
+
 ## 2. Kế toán duyệt / từ chối
 
-**Khi:** Cổng `/ke-toan` — Duyệt hoặc Từ chối từng đợt (`persistAccountantPaymentDecision`).
+**Khi:** Cổng `/ke-toan` — Duyệt hoặc Từ chối (`persistAccountantPaymentDecision` → CF atomic ưu tiên).
 
-**Webhook:** `POST testctsv`
+**Webhook:** chỉ **CTSV**
 
 **`event`:** `accountant_decision`
 
@@ -40,34 +47,34 @@ Trường quan trọng cho Google Chat:
 - `message_vi`, `receipt_url`, `rejection_reason`
 - `full_data` — cập nhật valid1…valid5
 
-**Full NE:** `event: accountant_full_ne`
+**Full NE:** `event: accountant_full_ne` (cùng CTSV)
 
 ## 3. Báo cáo cuối ngày
 
-**Khi:** Kế toán bấm «Gửi báo cáo ngày» (Cổng kế toán → Báo cáo).
+**Khi:**
 
-**Webhook:** `POST baocao-ngay`
+- Kế toán bấm «Gửi báo cáo ngày», hoặc
+- Cloud Function `sendScheduledFinanceReports` lúc **23:55 ICT** (cần đã deploy functions)
+
+**Webhook:** `baocao-ngay`
 
 **`event`:** `daily_finance_report`
 
-- `dailyDetailHtml` — HTML (email / Chat rich)
-- `message_vi` / `chat_text` — bản text: tổng HS, tổng tiền duyệt, theo hệ
-- `tongTien`, `tongHocSinhNop`
+- `dailyDetailHtml` — HTML
+- `message_vi` / `chat_text` — bản text
+- `tongTien`, `tongHocSinhNop`, `orgId`
 
-> Báo cáo ngày chỉ tính khoản **kế toán đã duyệt «ĐỒNG Ý»** có ngày thu trong ngày.
+> Chỉ tính khoản **ĐỒNG Ý** có ngày thu trong ngày (và Full NE theo `fullNeAt`).
 
-## Tự động cuối ngày (tuỳ chọn trên n8n)
+## 4. Báo cáo tháng
 
-App **chưa** cron tự gửi — có thể thêm trên n8n:
+**Khi:** Gửi tay hoặc cron **ngày cuối tháng ICT**.
 
-1. Schedule Trigger 18:00
-2. HTTP Request gọi API nội bộ hoặc Firestore (nếu có Cloud Function)
-3. Hoặc kế toán bấm một lần/ngày trên cổng kế toán
+Payload: `month`, `nbMonth`, `lpxtMonth`, `neMonth`, `topTvvName`, `topTvvCount`, `orgId`.
 
 ## Kiểm tra nhanh
 
-1. TVV lưu tài chính có bill → Chat nhận `[TVV BÁO THU]`
-2. Kế toán duyệt → Chat nhận `[KẾ TOÁN] DUYỆT`
-3. Báo cáo ngày → Chat nhận `📊 BÁO CÁO THU NGÀY`
-
-Workflow n8n phải **Active** trên `apchn-host.lapage.vn`.
+1. TVV lưu tài chính có bill → Chat nhận tin báo thu
+2. Kế toán duyệt → Chat nhận tin duyệt
+3. Báo cáo ngày (tay) → Chat/email nhận tổng kết
+4. Workflow n8n phải **Active** trên host (vd. `apchn-host.lapage.vn`)

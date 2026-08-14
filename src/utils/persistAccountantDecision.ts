@@ -47,6 +47,21 @@ export async function persistAccountantPaymentDecision(opts: {
   }
 
   const collectedAt = dateInputToStored(collectedAtIso) || collectedAtIso
+
+  // Apps Script: decision hiện tại đã giống → success no-op (tránh double-submit).
+  const prevLine = prev.payments?.[slotKey]
+  const prevDecision = String(prevLine?.approvalStatus ?? '').trim()
+  const prevAmount = prevLine?.amountVnd ?? 0
+  const prevDate = String(prevLine?.collectedAt ?? '').trim()
+  if (
+    !newFile &&
+    prevDecision === decision &&
+    prevAmount === amountVnd &&
+    prevDate === collectedAt
+  ) {
+    return { lead, finance: prev }
+  }
+
   const viaCf = await callAccountantApplyPaymentDecision({
     leadId: lead.id,
     batch,

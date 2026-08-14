@@ -1,5 +1,7 @@
 # Hướng dẫn: build có `public/seed`, deploy hosting, và nạp mẫu vào Firestore
 
+> Webhook n8n / chứng từ / chạy Chat như Apps Script: xem [`docs/HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md`](docs/HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md).
+
 Tài liệu này trả lời hai việc tách bạch:
 
 1. **Build + deploy** — chỉ đưa **file tĩnh** (`*.json` trong `dist/seed/`) lên hosting để trình duyệt **tải được** khi bạn bấm «Nạp … mẫu».

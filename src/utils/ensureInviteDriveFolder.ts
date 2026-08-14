@@ -1,6 +1,8 @@
 import type { Lead } from '../types'
 import { receiptStorageFolderName } from '../services/leadReceiptStorage'
-import { resolveReceiptStorageRuntime } from './receiptStorageConfig'
+import { ensureReceiptStorageConfigLoaded, resolveReceiptStorageRuntime } from './receiptStorageConfig'
+import { getFirestoreDb } from '../services/firebase'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 /**
  * Tạo/lấy folder Drive giấy mời (Apps Script `triggerInvitation` + FOLDER_INVITE_ROOT).
@@ -13,6 +15,8 @@ export async function ensureInviteDriveFolder(opts: {
   const rootFolderId = String(opts.rootFolderId ?? '').trim()
   if (!rootFolderId) return null
 
+  const orgId = String(opts.lead.orgId ?? '').trim() || DEFAULT_ORG_ID
+  await ensureReceiptStorageConfigLoaded(getFirestoreDb(), orgId)
   const runtime = resolveReceiptStorageRuntime()
   const webhookUrl = runtime.driveWebhookUrl
   if (!webhookUrl.startsWith('http')) return null

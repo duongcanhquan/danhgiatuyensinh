@@ -10,6 +10,7 @@ import {
   leadWorkModePrimaryFocus,
   parseLeadWorkMode,
   parseLeadWorkModeFromUrl,
+  resolveEffectiveWorkMode,
   resolveWorkModeForLeadIntake,
   resolveWorkModeFromSourcePlaybook,
   shouldSuggestCareClose,
@@ -69,15 +70,75 @@ describe('leadMatchesWorkModeFilter', () => {
     expect(leadMatchesWorkModeFilter({ workMode: 'score_queue' }, 'all')).toBe(true)
   })
 
-  it('does not match a specific mode when workMode is missing', () => {
-    expect(leadMatchesWorkModeFilter({}, 'volume_filter')).toBe(false)
+  it('defaults unset leads to volume_filter when no stage/source hint', () => {
+    expect(leadMatchesWorkModeFilter({}, 'volume_filter')).toBe(true)
     expect(leadMatchesWorkModeFilter({ workMode: undefined }, 'care_close')).toBe(false)
+    expect(leadMatchesWorkModeFilter({ workMode: undefined }, 'score_queue')).toBe(false)
   })
 
   it('matches only the same mode', () => {
     const lead: { workMode?: LeadWorkMode } = { workMode: 'volume_filter' }
     expect(leadMatchesWorkModeFilter(lead, 'volume_filter')).toBe(true)
     expect(leadMatchesWorkModeFilter(lead, 'score_queue')).toBe(false)
+  })
+
+  it('matches care_close via stage when workMode unset', () => {
+    expect(
+      leadMatchesWorkModeFilter({ status: 'INTERESTED' }, 'care_close'),
+    ).toBe(true)
+    expect(
+      leadMatchesWorkModeFilter({ pipelineStatus: 'APPLIED' }, 'care_close'),
+    ).toBe(true)
+  })
+
+  it('matches score_queue from source playbook when unset', () => {
+    const sources = [{ label: 'MKT Form', defaultWorkMode: 'score_queue' as const }]
+    expect(
+      leadMatchesWorkModeFilter({ source1: 'MKT Form' }, 'score_queue', sources),
+    ).toBe(true)
+  })
+})
+
+describe('resolveEffectiveWorkMode', () => {
+  const sources = [
+    { label: 'MKT Form', defaultWorkMode: 'score_queue' as const },
+    { label: 'OFF Call', defaultWorkMode: 'volume_filter' as const },
+  ]
+
+  it('prefers stored workMode over source and stage', () => {
+    expect(
+      resolveEffectiveWorkMode(
+        { workMode: 'care_close', source1: 'MKT Form', status: 'NEW' },
+        sources,
+      ),
+    ).toBe('care_close')
+  })
+
+  it('uses source playbook when stored missing', () => {
+    expect(resolveEffectiveWorkMode({ source1: 'MKT Form', status: 'NEW' }, sources)).toBe(
+      'score_queue',
+    )
+  })
+
+  it('uses care_close stage after source miss', () => {
+    expect(
+      resolveEffectiveWorkMode({ status: 'DEPOSIT_PAID', source1: 'Unknown' }, sources),
+    ).toBe('care_close')
+    expect(
+      resolveEffectiveWorkMode({ lastCallDispositionId: 'high_interest' }, sources),
+    ).toBe('care_close')
+  })
+
+  it('defaults to volume_filter', () => {
+    expect(resolveEffectiveWorkMode({ status: 'NEW', pipelineStatus: 'NEW' }, sources)).toBe(
+      'volume_filter',
+    )
+  })
+
+  it('does not invent score_queue from stage alone', () => {
+    expect(resolveEffectiveWorkMode({ status: 'NEW', calculatedScore: 90 } as never)).toBe(
+      'volume_filter',
+    )
   })
 })
 
@@ -203,21 +264,35 @@ describe('leadWorkModeHint + primaryFocus + summarize', () => {
     expect(leadWorkModePrimaryFocus(undefined)).toBe('call_filter')
   })
 
-  it('summarizes counts including unset', () => {
+  it('summarizes by effective mode; unset = missing stored field', () => {
     expect(
       summarizeLeadWorkModes([
         { workMode: 'score_queue' },
         { workMode: 'score_queue' },
         { workMode: 'volume_filter' },
         { workMode: 'care_close' },
-        {},
+        { status: 'NEW' },
+        { status: 'INTERESTED' },
       ]),
     ).toEqual({
       score_queue: 2,
-      volume_filter: 1,
-      care_close: 1,
+      volume_filter: 2,
+      care_close: 2,
+      unset: 2,
+      total: 6,
+    })
+  })
+
+  it('applies source playbook in summary', () => {
+    const sources = [{ label: 'MKT', defaultWorkMode: 'score_queue' as const }]
+    expect(
+      summarizeLeadWorkModes([{ source1: 'MKT', status: 'NEW' }], sources),
+    ).toEqual({
+      score_queue: 1,
+      volume_filter: 0,
+      care_close: 0,
       unset: 1,
-      total: 5,
+      total: 1,
     })
   })
 })

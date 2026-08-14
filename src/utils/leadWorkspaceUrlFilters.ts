@@ -26,6 +26,8 @@ export const LWF = {
   PROG: 'prog',
   /** Chế độ xử lý hồ sơ: score_queue | volume_filter | care_close */
   WM: 'wm',
+  /** Nguồn nhập: campaign | manual | portal */
+  ORIGIN: 'origin',
 } as const
 
 const TAG_SET = new Set<string>(['HOT', 'WARM', 'COLD', 'LOSS'])
@@ -113,6 +115,7 @@ export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
     LWF.DISP,
     LWF.PROG,
     LWF.WM,
+    LWF.ORIGIN,
   ] as const
   return keys.map((k) => `${k}=${sp.get(k) ?? ''}`).join('|')
 }

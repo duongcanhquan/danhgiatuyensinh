@@ -66,7 +66,10 @@ export type AccountantLeadSummary = {
   scholarships: string[]
   payments: AccountantPaymentRow[]
   phone: string
+  motherPhone: string
   nationalId: string
+  /** TVV phụ trách — Account.html hiện tên counselor */
+  counselorName: string
 }
 
 function scholarshipLines(
@@ -124,6 +127,8 @@ export function buildAccountantLeadSummary(
     scholarships: scholarshipLines(lead, opts.scholarshipById),
     payments,
     phone: String(lead.phone ?? '').trim(),
+    motherPhone: String(lead.motherPhone ?? '').trim(),
     nationalId: String(lead.nationalId ?? '').trim(),
+    counselorName: String(lead.uploaderName || lead.assignedTo || '').trim(),
   }
 }

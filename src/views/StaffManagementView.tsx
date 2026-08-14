@@ -21,6 +21,7 @@ import { STAFF_ASSIGNABLE_PERMISSIONS } from '../utils/roleCapabilitiesConfig'
 import { defaultPermissionsForRole } from '../auth/permissions'
 import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import { confirmDangerousStaffAccountDelete } from '../utils/dangerousDeleteConfirm'
+import { StaffExcelImportPanel } from '../components/StaffExcelImportPanel'
 import {
   counselorIdsInManagerScope,
   explicitManagedCounselorIds,
@@ -473,6 +474,8 @@ export function StaffManagementView({
 
       {teamBanner}
       {omicallSyncBanner}
+
+      {canStaffAll && !teamScopeOnly ? <StaffExcelImportPanel /> : null}
 
       {canStaffAll && !teamScopeOnly ? (
         <section className="app-surface-elevated p-4 sm:p-5">

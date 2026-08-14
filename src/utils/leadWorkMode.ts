@@ -1,6 +1,20 @@
-import type { LeadWorkMode } from '../types'
+import type { LeadCounselorStatus, LeadPipelineStatus, LeadWorkMode } from '../types'
 
 export type { LeadWorkMode }
+
+/** Fields used to resolve «chế độ hiệu lực» for list filter / bento counts. */
+export type LeadWorkModeResolveInput = {
+  workMode?: LeadWorkMode
+  source1?: string | null
+  status?: LeadCounselorStatus
+  pipelineStatus?: LeadPipelineStatus
+  lastCallDispositionId?: string | null
+}
+
+export type LeadWorkModeSourcePlaybook = {
+  label: string
+  defaultWorkMode?: LeadWorkMode | null
+}
 
 export const LEAD_WORK_MODES: readonly LeadWorkMode[] = [
   'score_queue',
@@ -48,9 +62,51 @@ export function leadWorkModePrimaryFocus(mode: LeadWorkMode | undefined): LeadWo
 
 export type LeadWorkModeSummary = Record<LeadWorkMode | 'unset', number> & { total: number }
 
-/** Đếm hồ sơ theo chế độ trên tập đã tải (lọc client / ô bento). */
+/**
+ * Chế độ hiệu lực (đếm + lọc UI — không ghi DB):
+ * 1) `workMode` đã lưu
+ * 2) playbook nguồn (source1)
+ * 3) giai đoạn CRM / funnel / disposition quan tâm → care_close
+ * 4) mặc định volume_filter (không tự đoán score_queue)
+ */
+export function resolveEffectiveWorkMode(
+  lead: LeadWorkModeResolveInput,
+  sources?: readonly LeadWorkModeSourcePlaybook[] | null,
+): LeadWorkMode {
+  const stored = parseLeadWorkMode(lead.workMode)
+  if (stored) return stored
+
+  const fromSource = resolveWorkModeForLeadIntake({
+    source1: lead.source1,
+    sources: sources ?? [],
+  })
+  if (fromSource) return fromSource
+
+  if (suggestsCareCloseStage(lead)) return 'care_close'
+  return 'volume_filter'
+}
+
+function suggestsCareCloseStage(lead: LeadWorkModeResolveInput): boolean {
+  const status = lead.status
+  if (
+    status === 'INTERESTED' ||
+    status === 'DEPOSIT_PAID' ||
+    status === 'ENROLLED' ||
+    status === 'SUMMER_MELT'
+  ) {
+    return true
+  }
+  const pipe = lead.pipelineStatus
+  if (pipe === 'QUALIFIED' || pipe === 'APPLIED' || pipe === 'ENROLLED') return true
+  const disp = lead.lastCallDispositionId
+  if (disp && shouldSuggestCareClose(disp)) return true
+  return false
+}
+
+/** Đếm theo chế độ hiệu lực. `unset` = chưa có field `workMode` lưu (đang suy diễn). */
 export function summarizeLeadWorkModes(
-  leads: readonly { workMode?: LeadWorkMode }[],
+  leads: readonly LeadWorkModeResolveInput[],
+  sources?: readonly LeadWorkModeSourcePlaybook[] | null,
 ): LeadWorkModeSummary {
   const out: LeadWorkModeSummary = {
     score_queue: 0,
@@ -60,12 +116,9 @@ export function summarizeLeadWorkModes(
     total: leads.length,
   }
   for (const lead of leads) {
-    const mode = lead.workMode
-    if (mode === 'score_queue' || mode === 'volume_filter' || mode === 'care_close') {
-      out[mode] += 1
-    } else {
-      out.unset += 1
-    }
+    const mode = resolveEffectiveWorkMode(lead, sources)
+    out[mode] += 1
+    if (!parseLeadWorkMode(lead.workMode)) out.unset += 1
   }
   return out
 }
@@ -75,18 +128,18 @@ export function summarizeLeadWorkModes(
  * `workModeFilter === 'all'` / `callQueue === 'all'` / `disposition === 'all'` = không siết trục đó.
  */
 export function leadMatchesWorkContext(opts: {
-  lead: {
-    workMode?: LeadWorkMode
+  lead: LeadWorkModeResolveInput & {
     callWorkBucket?: 'uncalled' | 'callback' | 'called'
     lastCallDispositionId?: string
   }
   workModeFilter: 'all' | LeadWorkMode
   callQueueFilter: 'all' | 'uncalled' | 'callback' | 'called'
   dispositionFilter: 'all' | string
+  sources?: readonly LeadWorkModeSourcePlaybook[] | null
   matchCallQueue: (lead: { callWorkBucket?: 'uncalled' | 'callback' | 'called' }, filter: 'all' | 'uncalled' | 'callback' | 'called') => boolean
   matchDisposition: (lead: { lastCallDispositionId?: string }, filter: 'all' | string) => boolean
 }): boolean {
-  if (!leadMatchesWorkModeFilter(opts.lead, opts.workModeFilter)) return false
+  if (!leadMatchesWorkModeFilter(opts.lead, opts.workModeFilter, opts.sources)) return false
   if (!opts.matchCallQueue(opts.lead, opts.callQueueFilter)) return false
   if (!opts.matchDisposition(opts.lead, opts.dispositionFilter)) return false
   return true
@@ -105,11 +158,12 @@ export function parseLeadWorkModeFromUrl(raw: string | null): 'all' | LeadWorkMo
 }
 
 export function leadMatchesWorkModeFilter(
-  lead: { workMode?: LeadWorkMode },
+  lead: LeadWorkModeResolveInput,
   filter: 'all' | LeadWorkMode,
+  sources?: readonly LeadWorkModeSourcePlaybook[] | null,
 ): boolean {
   if (filter === 'all') return true
-  return lead.workMode === filter
+  return resolveEffectiveWorkMode(lead, sources) === filter
 }
 
 export function resolveWorkModeFromSourcePlaybook(source: {
