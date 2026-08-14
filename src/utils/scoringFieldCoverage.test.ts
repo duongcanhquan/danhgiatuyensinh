@@ -164,6 +164,7 @@ describe('scoring field coverage', () => {
       source2: 'Referral',
       majorInterest: 'CNTT',
       academicPerformance: 'Giỏi',
+      applicantCategory: 'Học sinh lớp 12',
       ethnicity: 'Kinh',
       permanentAddress: 'TT',
       currentResidence: 'HT',

@@ -7141,7 +7141,12 @@ function LeadDetailPanel({
                                       <select
                                         value={statusForForm}
                                         onChange={(e) => setStatusDirty(e.target.value as LeadPipelineStatus)}
-                                        disabled={!showCounselorProgressForm && !canSaveInteraction}
+                                        disabled={!showCounselorProgressForm}
+                                        title={
+                                          showCounselorProgressForm
+                                            ? undefined
+                                            : 'Cần quyền chỉnh hồ sơ được gán để đổi tình trạng hồ sơ'
+                                        }
                                         className="mt-0.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50 disabled:cursor-not-allowed disabled:opacity-60"
                                       >
                                         {(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => (

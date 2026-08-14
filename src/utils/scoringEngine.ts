@@ -627,6 +627,7 @@ export function leadToEvaluationRecord(lead: Lead): Record<string, unknown> {
     campus: lead.campus?.trim() ?? '',
     schoolYear: lead.schoolYear?.trim() ?? '',
     schoolType: lead.schoolType?.trim() ?? '',
+    applicantCategory: lead.applicantCategory?.trim() ?? '',
     graduationScore: lead.graduationScore?.trim() ?? '',
     nationalId: lead.nationalId?.replace(/\D/g, '') ?? '',
     studentEmail: lead.studentEmail?.trim() ?? '',

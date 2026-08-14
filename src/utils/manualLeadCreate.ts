@@ -95,8 +95,9 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
   if (!norm(draft.permanentAddress) && !norm(draft.address)) {
     return 'Vui lòng nhập địa chỉ thường trú.'
   }
-  if (!isValidPublicPhone(draft.motherPhone)) {
-    return 'SĐT mẹ bắt buộc (10 số VN hoặc + quốc tế).'
+  const motherOrContact = norm(draft.motherPhone) || norm(draft.parentPhone)
+  if (!isValidPublicPhone(motherOrContact)) {
+    return 'SĐT mẹ hoặc điện thoại người liên hệ bắt buộc (10 số VN hoặc + quốc tế).'
   }
   if (norm(draft.fatherPhone) && !isValidPublicPhone(draft.fatherPhone)) {
     return 'SĐT cha không hợp lệ.'
@@ -164,18 +165,25 @@ export async function createManualLead(
   const validationErr = validateManualLeadDraft(input.draft)
   if (validationErr) throw new Error(validationErr)
 
-  const row = coreDraftToExcelRow(input.draft)
+  const motherOrContact = norm(input.draft.motherPhone) || norm(input.draft.parentPhone)
+  const draft: LeadCoreDraft = {
+    ...input.draft,
+    motherPhone: motherOrContact,
+    parentPhone: norm(input.draft.parentPhone) || motherOrContact,
+  }
+
+  const row = coreDraftToExcelRow(draft)
   const customerId = norm(row.customerId ?? '')
   const systemCode = await allocateSystemCodeForNewLead(db)
   const rowWithCode = { ...row, customerId }
   const hash = computeLeadUniqueHash(rowWithCode)
   const existingId = await findExistingLeadIdByHash(db, hash, input.orgId)
   if (existingId) {
-    const phoneKey = normalizePhoneKey(input.draft.phone, input.draft.parentPhone)
+    const phoneKey = normalizePhoneKey(draft.phone, draft.parentPhone)
     throw new DuplicateLeadError(existingId, phoneKey.length >= 9 ? 'phone' : 'fingerprint')
   }
 
-  const nidHash = nationalIdHashFromInput(input.draft.nationalId, input.draft.nationalIdNotAvailable)
+  const nidHash = nationalIdHashFromInput(draft.nationalId, draft.nationalIdNotAvailable)
   if (nidHash) {
     const existingById = await findExistingLeadIdByNationalIdHash(db, nidHash, input.orgId)
     if (existingById) throw new DuplicateLeadError(existingById, 'nationalId')
@@ -183,15 +191,15 @@ export async function createManualLead(
 
   const record = evaluationRecordFromLeadLike({
     ...partialLeadFromExcelRow(rowWithCode),
-    source1: norm(input.draft.source1) || undefined,
-    source2: norm(input.draft.source2) || undefined,
-    ethnicity: norm(input.draft.ethnicity) || undefined,
-    currentResidence: norm(input.draft.currentResidence) || undefined,
-    financialStatus: norm(input.draft.financialStatus) || undefined,
-    hanoiArea: norm(input.draft.hanoiArea) || undefined,
-    profileNote1: norm(input.draft.profileNote1) || undefined,
-    profileNote2: norm(input.draft.profileNote2) || undefined,
-    otherAttentionNotes: norm(input.draft.otherAttentionNotes) || undefined,
+    source1: norm(draft.source1) || undefined,
+    source2: norm(draft.source2) || undefined,
+    ethnicity: norm(draft.ethnicity) || undefined,
+    currentResidence: norm(draft.currentResidence) || undefined,
+    financialStatus: norm(draft.financialStatus) || undefined,
+    hanoiArea: norm(draft.hanoiArea) || undefined,
+    profileNote1: norm(draft.profileNote1) || undefined,
+    profileNote2: norm(draft.profileNote2) || undefined,
+    otherAttentionNotes: norm(draft.otherAttentionNotes) || undefined,
   })
 
   const ownership = {
@@ -243,7 +251,7 @@ export async function createManualLead(
   }
 
   const ref = doc(collection(db, FS_COLLECTIONS.leads))
-  const source1 = norm(input.draft.source1) || norm(input.draft.source)
+  const source1 = norm(draft.source1) || norm(draft.source)
   const workMode = resolveWorkModeForLeadIntake({
     workMode: input.workMode,
     source1,
@@ -251,7 +259,7 @@ export async function createManualLead(
   })
   await setDoc(ref, {
     ...base,
-    ...leadCoreDraftToFirestoreFields({ ...input.draft, customerId, systemCode }),
+    ...leadCoreDraftToFirestoreFields({ ...draft, customerId, systemCode }),
     orgId: input.orgId,
     calculatedScore,
     priorityTag,
@@ -267,12 +275,12 @@ export async function createManualLead(
   const { dispatchOutboundEvent } = await import('../integrations/dispatchOutbound')
   const { triggerCommsAutomation } = await import('./commsAutomationDispatch')
   const email =
-    String(input.draft.studentEmail ?? '').trim() ||
+    String(draft.studentEmail ?? '').trim() ||
     (customerId.includes('@') ? customerId : undefined)
   const payload = {
     leadId: ref.id,
-    fullName: input.draft.fullName,
-    phone: input.draft.phone,
+    fullName: draft.fullName,
+    phone: draft.phone,
     email,
     assignedTo: input.assignedCounselorId,
   }
@@ -283,14 +291,14 @@ export async function createManualLead(
   }).catch((e) => console.warn('[lead.created hub]', e))
   triggerCommsAutomation(input.orgId, 'lead.created', {
     id: ref.id,
-    fullName: input.draft.fullName,
-    phone: input.draft.phone,
+    fullName: draft.fullName,
+    phone: draft.phone,
     email,
-    parentPhone: input.draft.parentPhone,
-    majorInterest: input.draft.majorInterest,
-    province: input.draft.province,
-    highSchool: input.draft.highSchool,
-    source: input.draft.source1 || input.draft.source,
+    parentPhone: draft.parentPhone,
+    majorInterest: draft.majorInterest,
+    province: draft.province,
+    highSchool: draft.highSchool,
+    source: draft.source1 || draft.source,
   })
 
   return { id: ref.id }

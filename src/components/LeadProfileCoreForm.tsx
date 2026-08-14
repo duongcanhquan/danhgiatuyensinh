@@ -721,7 +721,17 @@ export function LeadProfileCoreForm({
               label="Điện thoại người liên hệ"
               value={draft.parentPhone}
               disabled={disabled}
-              onChange={(v) => patch('parentPhone', v)}
+              onChange={(v) => {
+                if (isNewLead) {
+                  onChange({
+                    ...draft,
+                    parentPhone: v,
+                    motherPhone: draft.motherPhone.trim() ? draft.motherPhone : v,
+                  })
+                  return
+                }
+                patch('parentPhone', v)
+              }}
               callContext={callContext}
               target="parent"
             />

@@ -94,16 +94,29 @@ export function CreateLeadModal({
     return profile.id
   }, [profile, elevated, teamLead, pickList])
 
+  const wasOpenRef = useRef(false)
+
   useEffect(() => {
-    if (!open) return
-    setDraft(emptyLeadCoreDraft())
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    const justOpened = !wasOpenRef.current
+    wasOpenRef.current = true
+    if (!justOpened) return
+
+    const seedSource1 = defaultPublicRegistrationConfig().defaultSource1
+    setDraft({ ...emptyLeadCoreDraft(), source1: seedSource1, source: seedSource1 })
     setFinanceDraft(emptyFinanceDraft())
     setAssigneeUid(defaultAssignee)
     setError(null)
     setDuplicateId(null)
     setBusy(false)
     queueMicrotask(() => bodyScrollRef.current?.scrollTo(0, 0))
-    if (!db) return
+  }, [open, defaultAssignee])
+
+  useEffect(() => {
+    if (!open || !db) return
     let cancelled = false
     void (async () => {
       let raw = ''
@@ -124,14 +137,18 @@ export function CreateLeadModal({
       } catch {
         /* giữ mặc định code */
       }
-      if (cancelled) return
-      const source1 = raw || defaultPublicRegistrationConfig().defaultSource1
-      setDraft((d) => (d.source1.trim() ? d : { ...d, source1, source: d.source || source1 }))
+      if (cancelled || !raw) return
+      setDraft((d) => {
+        const fallback = defaultPublicRegistrationConfig().defaultSource1
+        const stillSeed = !d.source1.trim() || d.source1.trim() === fallback
+        if (!stillSeed) return d
+        return { ...d, source1: raw, source: d.source.trim() === fallback || !d.source.trim() ? raw : d.source }
+      })
     })()
     return () => {
       cancelled = true
     }
-  }, [open, defaultAssignee, db, effectiveOrgId])
+  }, [open, db, effectiveOrgId])
 
   const handleSubmit = useCallback(async () => {
     if (!db || !profile) {
