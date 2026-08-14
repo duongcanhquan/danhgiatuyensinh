@@ -567,6 +567,11 @@ export function LeadManagement() {
     if (aiShortlistOnly) o.aiShortlistedOnly = true
     /** Cổng ĐK: `uploadedBy` đã có trên mọi hồ sơ cổng (kể cả trước khi có `intakeOrigin`). */
     if (intakeOriginTab === 'public_portal') o.uploadedByIn = ['public_portal']
+    /**
+     * Tạo tay: lọc server theo field (hồ sơ mới luôn ghi `intakeOrigin`).
+     * Tránh fullScope + keepMatch quét hàng nghìn hồ sơ chiến dịch khi tab trống.
+     */
+    if (intakeOriginTab === 'manual') o.intakeOrigin = 'manual'
     return Object.keys(o).length ? o : undefined
   }, [
     statusFilter,
@@ -598,16 +603,17 @@ export function LeadManagement() {
     uploadedDateNeedsScope
 
   /**
-   * Lọc không where được trên Firestore (chế độ hiệu lực, hàng chờ, tạo tay, chưa gắn…)
-   * → quét theo docId + chỉ giữ hồ sơ khớp (đã lọc sẵn, không chỉ trang hiện tại).
+   * Lọc không where được trên Firestore (hàng chờ, chưa gắn chương trình, ngày tải…)
+   * → quét theo docId + chỉ giữ hồ sơ khớp.
+   * Tab cổng/tạo tay: đã siết server (`uploadedBy` / `intakeOrigin`) — không keepMatch riêng
+   * (tránh quét cả kho chiến dịch khi tab trống).
    */
   const clientKeepMatchNeeded =
     programNeedsScope ||
     uploadedDateNeedsScope ||
     workModeNeedsScope ||
     callQueueNeedsScope ||
-    assigneeUnsetNeedsScope ||
-    intakeOriginTab === 'manual'
+    assigneeUnsetNeedsScope
 
   const fullScopeKeepMatch = useMemo(() => {
     if (!clientKeepMatchNeeded) return undefined
@@ -2443,15 +2449,6 @@ export function LeadManagement() {
     [bulkReassignTargets, profile?.id, hydrateAssignmentLoads],
   )
 
-  const openAssignFromFilters = useCallback(async () => {
-    const n = await selectAllMatchingFilters()
-    if (n == null || n <= 0) {
-      window.alert('Không có hồ sơ khớp bộ lọc để phân.')
-      return
-    }
-    openBulkAssignModal(n)
-  }, [selectAllMatchingFilters, openBulkAssignModal])
-
   const applyBulkCrmStatus = useCallback(async () => {
     if (!db || !profile || !selectedIds.size) return
     setBulkBusy(true)
@@ -3349,9 +3346,21 @@ export function LeadManagement() {
                 </span>
               ) : null}
             </p>
-            <div className="flex flex-wrap gap-1" role="tablist" aria-label="Nguồn nhập hồ sơ">
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Nguồn nhập hồ sơ">
               {LEAD_INTAKE_ORIGINS.map((origin) => {
                 const selected = intakeOriginTab === origin
+                const tone =
+                  origin === 'campaign_upload'
+                    ? selected
+                      ? 'border-slate-800 bg-slate-800 text-white shadow-md ring-2 ring-slate-400/50'
+                      : 'border-slate-300 bg-slate-50 text-slate-800 hover:border-slate-500 hover:bg-slate-100'
+                    : origin === 'manual'
+                      ? selected
+                        ? 'border-emerald-700 bg-emerald-600 text-white shadow-md ring-2 ring-emerald-300/60'
+                        : 'border-emerald-300 bg-emerald-50 text-emerald-950 hover:border-emerald-500 hover:bg-emerald-100'
+                      : selected
+                        ? 'border-sky-700 bg-sky-600 text-white shadow-md ring-2 ring-sky-300/60'
+                        : 'border-sky-300 bg-sky-50 text-sky-950 hover:border-sky-500 hover:bg-sky-100'
                 return (
                   <button
                     key={origin}
@@ -3361,10 +3370,8 @@ export function LeadManagement() {
                     title={leadIntakeOriginHint(origin)}
                     onClick={() => applyIntakeOriginTab(origin)}
                     className={[
-                      'min-h-8 rounded-md border px-2 py-1 text-[11px] font-semibold leading-snug transition',
-                      selected
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-800 hover:border-[var(--color-primary)]/40 hover:bg-slate-50',
+                      'min-h-9 rounded-lg border px-2.5 py-1.5 text-xs font-bold leading-snug transition',
+                      tone,
                     ].join(' ')}
                   >
                     {leadIntakeOriginLabel(origin)}
@@ -3385,17 +3392,6 @@ export function LeadManagement() {
                 Tạo mới
               </button>
             ) : null}
-            {canBulkWrite && showBulkReassign ? (
-              <button
-                type="button"
-                disabled={selectScopeBusy || loading || !filtered.length}
-                onClick={() => void openAssignFromFilters()}
-                className={`${LEAD_BTN} border-violet-500 bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40`}
-                title={`Lọc xong → chọn số lượng (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}) → phân cho TVV.`}
-              >
-                {selectScopeBusy ? 'Đang tải…' : 'Phân theo lọc'}
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={() => setWorkspaceToolsOpen((v) => !v)}
@@ -3406,7 +3402,7 @@ export function LeadManagement() {
                   : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
               ].join(' ')}
               aria-expanded={workspaceToolsOpen}
-              title="Hiện/ẩn bộ lọc, hàng chờ và chấm điểm"
+              title="Hiện/ẩn hàng chờ gọi và bộ lọc"
             >
               <ChevronDown
                 className={`h-3.5 w-3.5 shrink-0 transition ${workspaceToolsOpen ? 'rotate-180' : ''}`}
@@ -3427,50 +3423,6 @@ export function LeadManagement() {
         <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              title="Bật/tắt lọc AI Shortlist ngay"
-              onClick={() => {
-                const next = !draftFilters.aiShortlistOnly
-                setDraftFilters((prev) => ({ ...prev, aiShortlistOnly: next }))
-                setAiShortlistOnly(next)
-                setPage(1)
-              }}
-              className={[
-                LEAD_BTN,
-                draftFilters.aiShortlistOnly
-                  ? 'border-amber-400 bg-amber-400 text-amber-950'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
-              ].join(' ')}
-            >
-              <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
-              AI
-            </button>
-            <button
-              type="button"
-              onClick={() => setAiShortlistGuideOpen(true)}
-              className={`${LEAD_BTN} border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80`}
-              title="Hướng dẫn AI Shortlist"
-            >
-              <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
-              HD
-            </button>
-            {canBulkWrite && showBulkReassign ? (
-              <button
-                type="button"
-                disabled={selectScopeBusy || loading || !filtered.length}
-                onClick={() => void selectAllMatchingFilters()}
-                className={`${LEAD_BTN} border-violet-300 bg-violet-50 text-violet-950 hover:border-violet-400 hover:bg-violet-100 disabled:opacity-40`}
-                title={`Chọn mọi hồ sơ khớp lọc (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}).`}
-              >
-                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {selectScopeBusy
-                  ? 'Đang chọn…'
-                  : listNeedsFullScope
-                    ? `Chọn lọc (${filtered.length.toLocaleString('vi-VN')})`
-                    : 'Chọn theo lọc'}
-              </button>
-            ) : null}
-            <button
-              type="button"
               onClick={applyDraftFilters}
               disabled={!filtersPendingApply}
               className={[
@@ -3483,16 +3435,6 @@ export function LeadManagement() {
             >
               Áp dụng lọc
             </button>
-            {filtersPendingApply ? (
-              <button
-                type="button"
-                onClick={discardDraftFilters}
-                className={`${LEAD_BTN} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}
-                title="Hoàn tác lựa chọn về bộ lọc đang chạy"
-              >
-                Hủy chọn
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={clearQuickFilters}
@@ -3501,6 +3443,22 @@ export function LeadManagement() {
             >
               Xóa lọc
             </button>
+            {canBulkWrite && showBulkReassign ? (
+              <button
+                type="button"
+                disabled={selectScopeBusy || loading || !filtered.length}
+                onClick={() => void selectAllMatchingFilters()}
+                className={`${LEAD_BTN} border-violet-300 bg-violet-50 text-violet-950 hover:border-violet-400 hover:bg-violet-100 disabled:opacity-40`}
+                title={`Chọn hồ sơ khớp lọc rồi phân công / thao tác hàng loạt (tối đa ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')}).`}
+              >
+                <UserPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {selectScopeBusy
+                  ? 'Đang chọn…'
+                  : listNeedsFullScope
+                    ? `Chọn lọc (${filtered.length.toLocaleString('vi-VN')})`
+                    : 'Chọn theo lọc'}
+              </button>
+            ) : null}
             {canDeleteLeads && uploadedDateFilterActive ? (
               <button
                 type="button"
@@ -3765,6 +3723,34 @@ export function LeadManagement() {
             ) : null}
           </summary>
           <div className="space-y-3 border-t border-slate-200/60 px-3 pb-3 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                title="Chỉ hiện hồ sơ AI Shortlist"
+                onClick={() => {
+                  const next = !draftFilters.aiShortlistOnly
+                  patchDraftFilters({ aiShortlistOnly: next })
+                }}
+                className={[
+                  LEAD_BTN,
+                  draftFilters.aiShortlistOnly
+                    ? 'border-amber-400 bg-amber-400 text-amber-950'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
+                ].join(' ')}
+              >
+                <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                AI Shortlist
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiShortlistGuideOpen(true)}
+                className={`${LEAD_BTN} border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80`}
+                title="Hướng dẫn AI Shortlist"
+              >
+                <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
+                Hướng dẫn
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               <FilterSelect
                 compact
@@ -4281,11 +4267,23 @@ export function LeadManagement() {
                     </tr>
                   ))
                 : null}
-              {!loading && !sortedFiltered.length ? (
+              {!loading && !loadingPage && !sortedFiltered.length ? (
                 <tr>
                   <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
-                    <p>Không có hồ sơ khớp bộ lọc.</p>
-                    {programFilter === '__UNSET__' ? (
+                    <p>
+                      {intakeOriginTab === 'manual'
+                        ? 'Chưa có hồ sơ tạo tay trong phạm vi này.'
+                        : intakeOriginTab === 'public_portal'
+                          ? 'Chưa có hồ sơ từ cổng đăng ký trong phạm vi này.'
+                          : 'Không có hồ sơ khớp bộ lọc.'}
+                    </p>
+                    {intakeOriginTab === 'manual' || intakeOriginTab === 'public_portal' ? (
+                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
+                        {intakeOriginTab === 'manual'
+                          ? 'Bấm «Tạo mới» để thêm hồ sơ, hoặc chuyển sang «Tải lên / chiến dịch» nếu đang tìm data Excel.'
+                          : 'Khi sinh viên gửi form cổng ĐK, hồ sơ sẽ hiện ở đây.'}
+                      </p>
+                    ) : programFilter === '__UNSET__' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
                         Bộ lọc «Chưa gắn chương trình» tìm hồ sơ không có nhãn chương trình. Nếu trước đây đã gán
                         chương trình hoặc đã xóa lô, danh sách sẽ trống.
