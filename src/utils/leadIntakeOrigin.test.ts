@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  leadIntakeOriginHint,
   leadIntakeOriginToUrlParam,
   leadMatchesIntakeOrigin,
   leadMatchesIntakeOriginTab,
@@ -50,6 +51,14 @@ describe('leadMatchesIntakeOriginTab', () => {
     expect(leadMatchesIntakeOriginTab({}, 'public_portal')).toBe(false)
     expect(leadMatchesIntakeOriginTab({ uploadedBy: 'public_portal' }, 'campaign_upload')).toBe(false)
     expect(leadMatchesIntakeOriginTab({}, 'campaign_upload')).toBe(true)
+  })
+})
+
+describe('leadIntakeOriginHint', () => {
+  it('returns portal tab hint', () => {
+    expect(leadIntakeOriginHint('public_portal')).toBe(
+      'Form cổng và hồ sơ tạo trong app — tải đủ để thao tác',
+    )
   })
 })
 

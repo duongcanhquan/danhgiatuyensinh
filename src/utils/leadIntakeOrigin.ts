@@ -24,7 +24,7 @@ const LABELS: Record<LeadIntakeOrigin, string> = {
 const HINTS: Record<LeadIntakeOrigin, string> = {
   campaign_upload: 'Data thô / Excel — xem từng trang',
   manual: 'Hồ sơ TVV tạo trong app',
-  public_portal: 'Form công khai — tải đủ để thao tác',
+  public_portal: 'Form cổng và hồ sơ tạo trong app — tải đủ để thao tác',
 }
 
 /** URL short codes → tab */
