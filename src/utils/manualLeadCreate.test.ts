@@ -37,6 +37,7 @@ describe('validateManualLeadDraft', () => {
     expect(validateManualLeadDraft(validDraft({ motherPhone: '' }))).toMatch(/mẹ/i)
     expect(validateManualLeadDraft(validDraft({ gender: 'Khác' }))).toMatch(/giới tính/i)
     expect(validateManualLeadDraft(validDraft({ academicPerformance: '' }))).toMatch(/học lực/i)
+    expect(validateManualLeadDraft(validDraft({ source1: '', source: 'ghi chú' }))).toMatch(/Nguồn 1|nguồn/i)
   })
 
   it('accepts a full valid draft', () => {

@@ -109,7 +109,7 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
   }
   if (!norm(draft.majorInterest)) return 'Vui lòng chọn ngành học.'
   if (!norm(draft.academicPerformance)) return 'Vui lòng chọn học lực.'
-  if (!norm(draft.source1) && !norm(draft.source)) {
+  if (!norm(draft.source1)) {
     return 'Cần nguồn tiếp nhận (Nguồn 1) trước khi lưu hồ sơ mới.'
   }
   return null
