@@ -201,7 +201,7 @@ import {
 } from '../utils/leadDedupeLookup'
 import { nationalIdHashFromInput } from '../utils/leadIdentity'
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
-import { describeFinanceDepositAudit } from '../utils/leadFinanceAudit'
+import { describeFinanceDepositAuditDiff } from '../utils/leadFinanceAudit'
 import { describeLeadCorePatchAudit } from '../utils/leadCoreFieldLabels'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
@@ -6251,7 +6251,7 @@ function LeadDetailPanel({
         leadId: lead.id,
         actionType: 'SYSTEM_UPDATE',
         description:
-          describeFinanceDepositAudit(financeDraft) ??
+          describeFinanceDepositAuditDiff(lead, financeDraft) ??
           'Cập nhật tài chính / chứng từ',
         performedBy: profile.id,
         performedByName: performer,
@@ -6490,7 +6490,7 @@ function LeadDetailPanel({
     const crmChanged = crmDirty !== null && crmForForm !== lead.status
     const pipeChanged = statusDirty !== null && statusForForm !== lead.pipelineStatus
     const corePatch = buildLeadCoreFirestorePatch(lead, coreDraft)
-    const coreChanged = Object.keys(corePatch).length > 0
+    const coreChanged = leadCorePatchHasUserChanges(corePatch)
     const nextDispositionId =
       dispositionDraft && isCallDispositionId(dispositionDraft) ? dispositionDraft : null
     const dispChanged =

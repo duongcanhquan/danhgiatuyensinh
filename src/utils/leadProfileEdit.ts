@@ -237,9 +237,11 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
 
 /**
  * Chỉ các field đổi so với `before` — dùng `updateDoc` (không gửi field không đổi).
- * Chuỗi rỗng / null / undefined được coi là giống nhau (tránh dirty giả → ghi timeline thừa).
+ * So sánh với bản đã chuẩn hóa từ lead (leadToCoreDraft) để tránh dirty giả
+ * (vd. permanentAddress lấy từ address, SĐT format lại) → timeline / nút Lưu sai.
  */
 export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft): Record<string, unknown> {
+  const baseline = leadCoreDraftToFirestoreFields(leadToCoreDraft(before))
   const next = leadCoreDraftToFirestoreFields(draft)
   const patch: Record<string, unknown> = {}
   const keys = Object.keys(next)
@@ -253,18 +255,19 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
 
   for (const k of keys) {
     const nv = next[k]
-    let bv: unknown = (before as unknown as Record<string, unknown>)[k]
     if (k === 'nationalId') {
-      bv = before.nationalIdNotAvailable ? '' : String(before.nationalId ?? '').trim().toUpperCase()
+      const beforeNid = before.nationalIdNotAvailable
+        ? ''
+        : String(before.nationalId ?? '').trim().toUpperCase()
       const nn = draft.nationalIdNotAvailable ? '' : normNationalId(draft)
-      if (!sameScalar(nn, bv) || Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable) {
+      if (!sameScalar(nn, beforeNid) || Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable) {
         patch.nationalId = nn
         patch.nationalIdNotAvailable = draft.nationalIdNotAvailable
       }
       continue
     }
     if (k === 'nationalIdNotAvailable') continue
-    if (!sameScalar(bv, nv)) patch[k] = nv
+    if (!sameScalar(baseline[k], nv)) patch[k] = nv
   }
   if (
     Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable &&

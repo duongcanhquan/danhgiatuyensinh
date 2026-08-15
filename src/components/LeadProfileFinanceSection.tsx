@@ -51,8 +51,8 @@ export function LeadProfileFinanceSection({
   return (
     <div className="space-y-2 text-xs text-slate-800">
       <p className="rounded-md border border-sky-200/80 bg-sky-50/70 px-2 py-1.5 text-[11px] leading-snug text-sky-950">
-        Chứng từ lưu theo từng ứng viên trên <strong>Cloudflare R2</strong> (hoặc Drive/Firebase nếu chưa cấu hình).
-        Ảnh bill được <strong>nén tự động</strong> trước khi tải lên — tiết kiệm dung lượng, tải nhanh hơn.
+        Chọn ảnh/PDF bill rồi bấm <strong>Lưu hồ sơ</strong>. Khi lên thành công sẽ hiện «Xem bill đã lưu» ngay dưới ô chọn file.
+        Ảnh được nén tự động trước khi tải lên.
       </p>
       <div className="hidden gap-2 px-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:grid sm:grid-cols-[minmax(7rem,1fr)_1fr_1fr_minmax(6rem,0.8fr)_minmax(7rem,0.9fr)]">
         <span>Khoản thu</span>
@@ -98,6 +98,11 @@ export function LeadProfileFinanceSection({
                   disabled={disabled}
                   onChange={(e) => patchLine(key, { pendingFile: e.target.files?.[0] ?? null })}
                 />
+                {row.pendingFile ? (
+                  <span className="mt-0.5 block truncate text-[10px] text-amber-800">
+                    Chờ lưu: {row.pendingFile.name}
+                  </span>
+                ) : null}
                 {row.receiptUrl ? (
                   <a
                     href={row.receiptUrl}

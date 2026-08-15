@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { emptyFinanceDraft } from './leadFinance'
+import type { Lead } from '../types'
+import { emptyFinanceDraft, leadToFinanceDraft } from './leadFinance'
 import {
   describeAccountantPaymentAudit,
   describeFinanceDepositAudit,
+  describeFinanceDepositAuditDiff,
 } from './leadFinanceAudit'
 import { timelineAuditAction } from './leadActivityTimelineLabels'
 
@@ -13,6 +15,23 @@ describe('leadFinanceAudit', () => {
     draft.payments.deposit.collectedAt = '2026-08-15'
     expect(describeFinanceDepositAudit(draft)).toBe(
       'Nạp tiền: 1. Cọc / Ứng 5.000.000đ, ngày 2026-08-15 (chờ kế toán xác nhận)',
+    )
+  })
+
+  it('diff audit only lists slots that changed', () => {
+    const lead = {
+      id: 'L1',
+      finance: {
+        payments: {
+          deposit: { amountVnd: 5_000_000, collectedAt: '2026-08-15', receiptUrl: '', approvalStatus: '' },
+          supplementL1: { amountVnd: 1_000_000, collectedAt: '2026-08-16', receiptUrl: '', approvalStatus: '' },
+        },
+      },
+    } as Lead
+    const draft = leadToFinanceDraft(lead)
+    draft.payments.supplementL1.amount = '2.000.000'
+    expect(describeFinanceDepositAuditDiff(lead, draft)).toBe(
+      'Nạp tiền: 2. Bổ sung L1 2.000.000đ, ngày 2026-08-16 (chờ kế toán xác nhận)',
     )
   })
 

@@ -15,10 +15,10 @@ const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 const PROVIDERS: { value: ReceiptStorageProvider; label: string; hint: string }[] = [
-  { value: 'auto', label: 'Tự động', hint: 'R2 nếu có URL → Drive → Firebase Storage' },
-  { value: 'r2', label: 'Cloudflare R2', hint: 'Ưu tiên worker upload' },
+  { value: 'auto', label: 'Tự động', hint: 'Firebase trước (ổn định) → R2 → Drive' },
+  { value: 'firebase', label: 'Firebase Storage', hint: 'Khuyến nghị nếu R2 chưa chạy / hay timeout' },
+  { value: 'r2', label: 'Cloudflare R2', hint: 'Worker multipart; lỗi thì vẫn thử Firebase' },
   { value: 'drive', label: 'Google Drive (Apps Script)', hint: 'Webhook script.google.com' },
-  { value: 'firebase', label: 'Firebase Storage', hint: 'Bucket mặc định của project' },
 ]
 
 /** Nơi lưu chứng từ thu — cấu hình theo trường (không chỉ .env). */
@@ -82,9 +82,9 @@ export function ReceiptStorageSettingsPanel() {
         <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
       </div>
       <p className="text-sm text-slate-600">
-        Chọn nơi lưu bill khi TVV / kế toán tải chứng từ. Khuyến nghị VietMy: <strong>Drive</strong> (Apps Script) giống hệ
-        cũ, hoặc <strong>R2</strong> nếu đã có worker. URL trống sẽ thử biến .env. Cùng URL Drive dùng luôn cho tạo folder
-        giấy mời.
+        Chọn nơi lưu bill khi TVV / kế toán tải chứng từ. Nếu chưa thấy «Xem bill đã lưu» sau khi lưu hồ sơ, chọn{' '}
+        <strong>Firebase Storage</strong> (hoặc Tự động) — R2 chỉ dùng khi worker đã deploy và CORS đúng domain app.
+        URL trống sẽ thử biến .env. URL Drive dùng luôn cho tạo folder giấy mời.
       </p>
 
       <fieldset className="space-y-2">

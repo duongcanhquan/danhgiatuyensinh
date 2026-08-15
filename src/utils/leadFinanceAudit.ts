@@ -1,5 +1,10 @@
-import type { LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
-import { PAYMENT_SLOT_DEFS, formatAmountInput, type LeadFinanceDraft } from './leadFinance'
+import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
+import {
+  PAYMENT_SLOT_DEFS,
+  financeDirtySlotKeys,
+  formatAmountInput,
+  type LeadFinanceDraft,
+} from './leadFinance'
 
 function parseAmount(s: string): number {
   return parseInt(String(s ?? '').replace(/\D/g, ''), 10) || 0
@@ -18,8 +23,15 @@ function approvalPhrase(status: string): string {
   return s
 }
 
+function describeSlotPart(label: string, row: LeadFinanceDraft['payments'][LeadPaymentSlotKey]): string {
+  const amount = parseAmount(row.amount)
+  const money = amount > 0 ? `${formatAmountInput(amount)}đ` : row.pendingFile ? 'có chứng từ mới' : 'có chứng từ'
+  const when = row.collectedAt.trim() ? `, ngày ${row.collectedAt.trim()}` : ''
+  return `${label} ${money}${when} (${approvalPhrase(row.approvalStatus)})`
+}
+
 /**
- * Mô tả dòng thời gian khi TVV ghi nhận thu (tạo hồ sơ / lưu tài chính).
+ * Mô tả dòng thời gian khi TVV ghi nhận thu (tạo hồ sơ — liệt kê mọi khoản có dữ liệu).
  * Ví dụ: «Nạp tiền: Cọc / Ứng 5.000.000đ (chờ kế toán xác nhận)»
  */
 export function describeFinanceDepositAudit(draft: LeadFinanceDraft): string | null {
@@ -28,12 +40,28 @@ export function describeFinanceDepositAudit(draft: LeadFinanceDraft): string | n
     const row = draft.payments[key]
     const amount = parseAmount(row.amount)
     if (amount <= 0 && !row.pendingFile && !row.collectedAt.trim()) continue
-    const money = amount > 0 ? `${formatAmountInput(amount)}đ` : 'có chứng từ'
-    const when = row.collectedAt.trim() ? `, ngày ${row.collectedAt.trim()}` : ''
-    parts.push(`${label} ${money}${when} (${approvalPhrase(row.approvalStatus)})`)
+    parts.push(describeSlotPart(label, row))
   }
   if (draft.reqFullNe) {
     parts.push('Yêu cầu Full NE')
+  }
+  if (!parts.length) return null
+  return `Nạp tiền: ${parts.join('; ')}`
+}
+
+/**
+ * Chỉ các khoản / Full NE vừa đổi so với bản đã lưu — tránh ghi lại cả phần cũ trên dòng thời gian.
+ */
+export function describeFinanceDepositAuditDiff(lead: Lead, draft: LeadFinanceDraft): string | null {
+  const parts: string[] = []
+  const dirtyKeys = new Set(financeDirtySlotKeys(lead, draft))
+  for (const { key, label } of PAYMENT_SLOT_DEFS) {
+    if (!dirtyKeys.has(key)) continue
+    parts.push(describeSlotPart(label, draft.payments[key]))
+  }
+  const beforeReq = Boolean(lead.finance?.reqFullNe)
+  if (beforeReq !== draft.reqFullNe) {
+    parts.push(draft.reqFullNe ? 'Yêu cầu Full NE' : 'Huỷ yêu cầu Full NE')
   }
   if (!parts.length) return null
   return `Nạp tiền: ${parts.join('; ')}`

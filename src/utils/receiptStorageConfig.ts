@@ -8,7 +8,7 @@ export const RECEIPT_STORAGE_DOC_ID = 'receiptStorageConfig' as const
 export type ReceiptStorageProvider = 'auto' | 'r2' | 'drive' | 'firebase'
 
 export type OrgReceiptStorageConfig = {
-  /** auto = R2 nếu có URL → Drive → Firebase */
+  /** auto = Firebase → R2 (nếu có URL) → Drive */
   provider: ReceiptStorageProvider
   r2UploadUrl: string
   r2UploadToken: string

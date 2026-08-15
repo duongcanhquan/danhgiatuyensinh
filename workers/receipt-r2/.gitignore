@@ -1,1 +1,7 @@
-wrangler/.wrangler
+wrangler/
+.wrangler
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.deploy-credentials.local.env
+*.local.env

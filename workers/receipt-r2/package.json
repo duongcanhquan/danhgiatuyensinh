@@ -4,9 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --port 8787 --ip 127.0.0.1 --local",
     "deploy": "wrangler deploy",
-    "types": "wrangler types"
+    "types": "wrangler types",
+    "smoke": "node scripts/smoke-receipt-r2.mjs",
+    "test": "cd ../.. && npx vitest run workers/receipt-r2/receipt-r2.worker.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250317.0",

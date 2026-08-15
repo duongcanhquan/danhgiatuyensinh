@@ -8,11 +8,13 @@ import {
   resolveReceiptStorageRuntime,
 } from '../utils/receiptStorageConfig'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
-import { fetchWithTimeout } from '../utils/fetchWithTimeout'
+import { fetchWithTimeout, withTimeout } from '../utils/fetchWithTimeout'
 
-const RECEIPT_FETCH_TIMEOUT_MS = 20_000
+/** Timeout từng lần thử R2/Drive — ngắn để mau chuyển sang Firebase. */
+const RECEIPT_FETCH_TIMEOUT_MS = 12_000
 
-/** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */export function receiptStorageFolderName(lead: {
+/** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */
+export function receiptStorageFolderName(lead: {
   fullName: string
   systemCode?: string
   customerId?: string
@@ -21,18 +23,6 @@ const RECEIPT_FETCH_TIMEOUT_MS = 20_000
   const id = (lead.systemCode || lead.customerId || lead.id).trim()
   const name = lead.fullName.trim() || 'HoSo'
   return `${name}_${id}`.replace(/[^\w.\-()À-ỹ\s]/gi, '_').replace(/\s+/g, '_')
-}
-
-async function fileToBase64(file: File): Promise<string> {
-  const ab = await file.arrayBuffer()
-  let binary = ''
-  const bytes = new Uint8Array(ab)
-  const chunkSize = 0x8000
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize)
-    binary += String.fromCharCode(...chunk)
-  }
-  return btoa(binary)
 }
 
 async function uploadReceiptToR2(
@@ -49,28 +39,24 @@ async function uploadReceiptToR2(
     fileName: file.name || 'bill',
   })
 
-  const payload = {
-    token: runtime.r2UploadToken || undefined,
-    leadId: lead.id,
-    folderName,
-    slot,
-    fileName: file.name || 'bill',
-    contentType: file.type || 'application/octet-stream',
-    base64: await fileToBase64(file),
-  }
+  // multipart — nhanh hơn JSON base64, ít treo mạng.
+  const form = new FormData()
+  if (runtime.r2UploadToken) form.append('token', runtime.r2UploadToken)
+  form.append('leadId', lead.id)
+  form.append('folderName', folderName)
+  form.append('slot', slot)
+  form.append('fileName', file.name || 'bill')
+  form.append('file', file, file.name || 'bill')
 
   const res = await fetchWithTimeout(
     runtime.r2UploadUrl,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    },
+    { method: 'POST', body: form },
     RECEIPT_FETCH_TIMEOUT_MS,
     'Upload R2 quá lâu',
   )
   if (!res.ok) {
-    throw new Error(`Upload R2 lỗi (${res.status})`)
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `Upload R2 lỗi (${res.status})`)
   }
   const data = (await res.json()) as { ok?: boolean; fileUrl?: string; objectKey?: string; error?: string }
   if (!data.ok) {
@@ -87,6 +73,14 @@ async function uploadReceiptToDriveWebhook(
   file: File,
   runtime: ReturnType<typeof resolveReceiptStorageRuntime>,
 ): Promise<string> {
+  const ab = await file.arrayBuffer()
+  let binary = ''
+  const bytes = new Uint8Array(ab)
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+
   const payload = {
     token: runtime.driveWebhookToken || undefined,
     leadId: lead.id,
@@ -97,7 +91,7 @@ async function uploadReceiptToDriveWebhook(
     folderName: receiptStorageFolderName(lead),
     fileName: file.name || 'bill',
     contentType: file.type || 'application/octet-stream',
-    base64: await fileToBase64(file),
+    base64: btoa(binary),
   }
 
   const res = await fetchWithTimeout(
@@ -128,13 +122,17 @@ async function uploadReceiptToFirebase(
   const storage = getFirebaseStorage()
   if (!storage) {
     throw new Error(
-      'Chưa cấu hình nơi lưu chứng từ. Vào Cài đặt → Tích hợp → Chứng từ & lưu trữ (hoặc VITE_RECEIPT_* / Storage).',
+      'Chưa cấu hình Firebase Storage. Vào Cài đặt → Tích hợp → Chứng từ, chọn Firebase hoặc kiểm tra VITE_FIREBASE_STORAGE_BUCKET.',
     )
   }
   const folder = receiptStorageFolderName(lead)
   const path = buildFirebaseReceiptPath({ folderName: folder, slot, fileName: file.name || 'bill' })
   const storageRef = ref(storage, path)
-  await uploadBytes(storageRef, file, { contentType: file.type || 'application/octet-stream' })
+  await withTimeout(
+    uploadBytes(storageRef, file, { contentType: file.type || 'application/octet-stream' }),
+    RECEIPT_FETCH_TIMEOUT_MS,
+    'Upload Firebase Storage quá lâu',
+  )
   return getDownloadURL(storageRef)
 }
 
@@ -145,10 +143,8 @@ export type ReceiptUploadResult = {
 }
 
 /**
- * Upload chứng từ tài chính; trả URL + nơi lưu thật sự.
- *
- * Ưu tiên: cấu hình trường (Cài đặt) → .env → Firebase Storage.
- * Provider: auto | r2 | drive | firebase.
+ * Upload chứng từ — ưu tiên Firebase (ổn định), rồi R2, rồi Drive.
+ * Provider cố định (r2/drive/firebase) vẫn tôn trọng; lỗi thì báo rõ.
  */
 export async function uploadLeadReceiptFile(
   lead: { id: string; fullName: string; systemCode?: string; customerId?: string; orgId?: string | null },
@@ -175,12 +171,30 @@ export async function uploadLeadReceiptFile(
     return { url, provider: 'firebase' }
   }
 
-  if (runtime.provider === 'r2') return tryR2()
   if (runtime.provider === 'drive') return tryDrive()
+  if (runtime.provider === 'r2') {
+    try {
+      return await tryR2()
+    } catch (e) {
+      // R2 hỏng → vẫn cứu bằng Firebase để TVV/KT có bill xem được.
+      try {
+        const fb = await tryFirebase()
+        console.warn('[receipt] R2 fail, used Firebase', e)
+        return fb
+      } catch {
+        throw e instanceof Error ? e : new Error(String(e))
+      }
+    }
+  }
   if (runtime.provider === 'firebase') return tryFirebase()
 
-  // auto: R2 → Firebase (bỏ Drive chậm/CORS). Provider «drive» vẫn dùng Drive riêng.
+  // auto: Firebase trước (nhanh, ổn), R2 sau, Drive cuối.
   const errors: string[] = []
+  try {
+    return await tryFirebase()
+  } catch (e) {
+    errors.push(`Firebase: ${e instanceof Error ? e.message : String(e)}`)
+  }
   if (runtime.r2UploadUrl) {
     try {
       return await tryR2()
@@ -188,23 +202,16 @@ export async function uploadLeadReceiptFile(
       errors.push(`R2: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  try {
-    return await tryFirebase()
-  } catch (e) {
-    errors.push(`Firebase: ${e instanceof Error ? e.message : String(e)}`)
-    if (runtime.driveWebhookUrl) {
-      try {
-        return await tryDrive()
-      } catch (de) {
-        errors.push(`Drive: ${de instanceof Error ? de.message : String(de)}`)
-      }
+  if (runtime.driveWebhookUrl) {
+    try {
+      return await tryDrive()
+    } catch (e) {
+      errors.push(`Drive: ${e instanceof Error ? e.message : String(e)}`)
     }
-    throw new Error(
-      errors.length
-        ? `Không lưu được chứng từ. ${errors.join(' · ')}`
-        : e instanceof Error
-          ? e.message
-          : 'Không lưu được chứng từ.',
-    )
   }
+  throw new Error(
+    errors.length
+      ? `Không lưu được chứng từ. ${errors.join(' · ')}`
+      : 'Không lưu được chứng từ — chưa cấu hình Firebase/R2/Drive.',
+  )
 }

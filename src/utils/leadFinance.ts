@@ -158,7 +158,8 @@ function lineDirty(before: LeadPaymentLine | undefined, after: LeadPaymentLineDr
   const url = newReceiptUrl ?? after.receiptUrl
   if (after.pendingFile) return true
   if (parseAmount(after.amount) !== (before?.amountVnd ?? 0)) return true
-  if (dateInputToStored(after.collectedAt) !== (before?.collectedAt ?? '')) return true
+  // Chuẩn hóa về input date (yyyy-mm-dd) — Firestore có thể lưu ISO hoặc dd/MM/yyyy.
+  if (isoToDateInput(after.collectedAt) !== isoToDateInput(before?.collectedAt ?? '')) return true
   if (url.trim() !== (before?.receiptUrl ?? '').trim()) return true
   return false
 }
@@ -182,6 +183,12 @@ export function isFinanceDraftDirty(lead: Lead, draft: LeadFinanceDraft): boolea
   if (Boolean(before?.reqFullNe) !== draft.reqFullNe) return true
   if ((before?.fullNeStatus ?? '') !== draft.fullNeStatus) return true
   return false
+}
+
+/** Các khoản thu thật sự đổi so với bản đã lưu — dùng audit / n8n diff. */
+export function financeDirtySlotKeys(lead: Lead, draft: LeadFinanceDraft): LeadPaymentSlotKey[] {
+  const beforePay = lead.finance?.payments ?? {}
+  return PAYMENT_SLOT_DEFS.map((s) => s.key).filter((key) => lineDirty(beforePay[key], draft.payments[key]))
 }
 
 export type FinanceSavePlan = {

@@ -9,9 +9,9 @@ bucket_name = "vietmy-lead-receipts"
 
 [vars]
 # URL công khai trả về cho app (worker /files/… hoặc custom domain R2)
-# PUBLIC_BASE_URL = "https://vietmy-receipt-r2.<account>.workers.dev"
+PUBLIC_BASE_URL = "https://vietmy-receipt-r2.duongcanhquan.workers.dev"
 
 # CORS — domain frontend (phẩy nếu nhiều), * chỉ dev
-ALLOWED_ORIGINS = "http://localhost:5173,https://danhgiatuyensinh.vercel.app"
+ALLOWED_ORIGINS = "http://localhost:5173,https://danhgiatuyensinh.vercel.app,https://admission.vietmycollege.com"
 
 # wrangler secret put UPLOAD_TOKEN

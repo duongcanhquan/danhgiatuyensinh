@@ -1,8 +1,10 @@
 /**
  * Cloudflare Worker — lưu chứng từ tài chính lên R2 theo từng ứng viên.
  *
- * POST /upload  — JSON { token, leadId, folderName, slot, fileName, contentType, base64 }
- * GET  /files/* — phục vụ file (cache 1 năm)
+ * POST /upload
+ *   - multipart/form-data: token, leadId, folderName, slot, fileName?, file
+ *   - JSON (legacy): { token, leadId, folderName, slot, fileName, contentType, base64 }
+ * GET  /files/* — phục vụ file công khai (xem bill / Chat / kế toán)
  */
 
 export interface Env {
@@ -12,30 +14,46 @@ export interface Env {
   ALLOWED_ORIGINS?: string
 }
 
-type UploadBody = {
-  token?: string
-  leadId?: string
-  folderName?: string
-  slot?: string
-  fileName?: string
-  contentType?: string
-  base64?: string
+type UploadFields = {
+  token: string
+  leadId: string
+  folderName: string
+  slot: string
+  fileName: string
+  contentType: string
+  bytes: Uint8Array
 }
 
 const RECEIPT_ROOT = 'receipts'
+const ALLOWED_SLOTS = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4']
 
 function corsHeaders(origin: string | null, env: Env): HeadersInit {
   const allowed = (env.ALLOWED_ORIGINS ?? '*')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  const allowOrigin =
-    allowed.includes('*') || (origin && allowed.includes(origin)) ? origin ?? allowed[0] ?? '*' : allowed[0] ?? '*'
+  let allowOrigin = '*'
+  if (!allowed.includes('*')) {
+    if (origin && allowed.includes(origin)) {
+      allowOrigin = origin
+    } else if (
+      origin &&
+      allowed.some((a) => a.startsWith('https://*.') && origin.endsWith(a.slice('https://*.'.length)))
+    ) {
+      allowOrigin = origin
+    } else {
+      // Origin không khớp — không giả mạo Allow-Origin (trình duyệt sẽ chặn đúng).
+      allowOrigin = 'null'
+    }
+  } else if (origin) {
+    allowOrigin = origin
+  }
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
   }
 }
 
@@ -57,10 +75,12 @@ function sanitizeSegment(s: string, max = 80): string {
 }
 
 function sanitizeFileName(name: string): string {
-  return String(name ?? 'bill')
-    .trim()
-    .replace(/[^\w.\-()À-ỹ]+/gi, '_')
-    .slice(0, 120) || 'bill'
+  return (
+    String(name ?? 'bill')
+      .trim()
+      .replace(/[^\w.\-()À-ỹ]+/gi, '_')
+      .slice(0, 120) || 'bill'
+  )
 }
 
 export function buildObjectKey(opts: {
@@ -93,41 +113,78 @@ function publicFileUrl(request: Request, env: Env, objectKey: string): string {
   return `${base}/files/${encoded}`
 }
 
-async function handleUpload(request: Request, env: Env, cors: HeadersInit): Promise<Response> {
-  let body: UploadBody
-  try {
-    body = (await request.json()) as UploadBody
-  } catch {
-    return json({ ok: false, error: 'JSON không hợp lệ' }, 400, cors)
+async function parseUpload(request: Request): Promise<UploadFields | { error: string; status: number }> {
+  const ct = (request.headers.get('Content-Type') || '').toLowerCase()
+
+  if (ct.includes('multipart/form-data')) {
+    const form = await request.formData()
+    const token = String(form.get('token') ?? '')
+    const leadId = String(form.get('leadId') ?? '').trim()
+    const folderName = String(form.get('folderName') ?? '').trim()
+    const slot = String(form.get('slot') ?? '').trim()
+    const file = form.get('file')
+    // Workers / Node: field file là File hoặc Blob — không chỉ `instanceof File`.
+    if (!(file instanceof Blob)) {
+      return { error: 'Thiếu file (multipart field «file»)', status: 400 }
+    }
+    const fileName =
+      String(form.get('fileName') ?? (file instanceof File ? file.name : '') ?? 'bill').trim() || 'bill'
+    const buf = new Uint8Array(await file.arrayBuffer())
+    return {
+      token,
+      leadId,
+      folderName,
+      slot,
+      fileName,
+      contentType: file.type || 'application/octet-stream',
+      bytes: buf,
+    }
   }
 
-  if (!env.UPLOAD_TOKEN || body.token !== env.UPLOAD_TOKEN) {
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return { error: 'JSON không hợp lệ', status: 400 }
+  }
+  const base64 = String(body.base64 ?? '').trim()
+  if (!base64) return { error: 'Thiếu base64 hoặc multipart file', status: 400 }
+  return {
+    token: String(body.token ?? ''),
+    leadId: String(body.leadId ?? '').trim(),
+    folderName: String(body.folderName ?? '').trim(),
+    slot: String(body.slot ?? '').trim(),
+    fileName: String(body.fileName ?? 'bill').trim() || 'bill',
+    contentType: String(body.contentType ?? 'application/octet-stream').trim(),
+    bytes: decodeBase64(base64),
+  }
+}
+
+async function handleUpload(request: Request, env: Env, cors: HeadersInit): Promise<Response> {
+  const parsed = await parseUpload(request)
+  if ('error' in parsed) {
+    return json({ ok: false, error: parsed.error }, parsed.status, cors)
+  }
+
+  if (!env.UPLOAD_TOKEN || parsed.token !== env.UPLOAD_TOKEN) {
     return json({ ok: false, error: 'Token không hợp lệ' }, 401, cors)
   }
 
-  const leadId = String(body.leadId ?? '').trim()
-  const folderName = String(body.folderName ?? '').trim()
-  const slot = String(body.slot ?? '').trim()
-  const fileName = String(body.fileName ?? 'bill').trim()
-  const base64 = String(body.base64 ?? '').trim()
-
-  if (!leadId || !folderName || !slot || !base64) {
-    return json({ ok: false, error: 'Thiếu leadId, folderName, slot hoặc base64' }, 400, cors)
+  const { leadId, folderName, slot, fileName, contentType, bytes } = parsed
+  if (!leadId || !folderName || !slot) {
+    return json({ ok: false, error: 'Thiếu leadId, folderName hoặc slot' }, 400, cors)
   }
-
-  const allowedSlots = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4']
-  if (!allowedSlots.includes(slot)) {
+  if (!ALLOWED_SLOTS.includes(slot)) {
     return json({ ok: false, error: 'slot không hợp lệ' }, 400, cors)
   }
-
-  const bytes = decodeBase64(base64)
   if (bytes.length > 12 * 1024 * 1024) {
     return json({ ok: false, error: 'File quá lớn (tối đa 12 MB)' }, 413, cors)
   }
+  if (bytes.length === 0) {
+    return json({ ok: false, error: 'File rỗng' }, 400, cors)
+  }
 
   const objectKey = buildObjectKey({ leadId, folderName, slot, fileName })
-  const contentType = String(body.contentType ?? 'application/octet-stream').trim()
-
   await env.RECEIPTS_BUCKET.put(objectKey, bytes, {
     httpMetadata: { contentType },
     customMetadata: {
@@ -140,16 +197,7 @@ async function handleUpload(request: Request, env: Env, cors: HeadersInit): Prom
   })
 
   const fileUrl = publicFileUrl(request, env, objectKey)
-  return json(
-    {
-      ok: true,
-      fileUrl,
-      objectKey,
-      bytes: bytes.length,
-    },
-    200,
-    cors,
-  )
+  return json({ ok: true, fileUrl, objectKey, bytes: bytes.length }, 200, cors)
 }
 
 async function handleGetFile(pathname: string, env: Env, cors: HeadersInit): Promise<Response> {
