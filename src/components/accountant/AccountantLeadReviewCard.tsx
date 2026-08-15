@@ -16,6 +16,11 @@ function telHref(raw: string): string | null {
   return `tel:${digits.startsWith('84') ? `+${digits}` : digits}`
 }
 
+const INPUT_SM =
+  'mt-0.5 h-8 w-full rounded-md border border-slate-200 px-2 text-xs text-slate-900 disabled:bg-slate-50'
+const BTN_SM =
+  'inline-flex h-8 items-center justify-center gap-1 rounded-md px-2.5 text-xs font-bold disabled:opacity-40'
+
 function PaymentSlotActions({
   lead,
   batch,
@@ -89,91 +94,105 @@ function PaymentSlotActions({
 
   const statusCls =
     status === 'ĐỒNG Ý'
-      ? 'bg-emerald-100 text-emerald-900'
+      ? 'bg-emerald-100 text-emerald-800'
       : status === 'TỪ CHỐI'
-        ? 'bg-rose-100 text-rose-900'
-        : 'bg-amber-100 text-amber-900'
+        ? 'bg-rose-100 text-rose-800'
+        : 'bg-amber-100 text-amber-800'
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm sm:p-3.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">{slotLabel}</p>
-          <p className="mt-0.5 font-mono text-xl font-black tabular-nums text-slate-900 sm:text-2xl">
-            {amountVnd.toLocaleString('vi-VN')} đ
-          </p>
-          <p className="text-xs text-slate-500">Ngày thu: {dateVal || '—'}</p>
-        </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusCls}`}>
+    <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{slotLabel}</span>
+        <span className="font-mono text-sm font-bold tabular-nums text-slate-900">
+          {amountVnd.toLocaleString('vi-VN')}đ
+        </span>
+        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${statusCls}`}>
           {status || 'Chờ duyệt'}
         </span>
+        {line?.receiptUrl ? (
+          <AccountantReceiptPreview url={line.receiptUrl} label={`${slotLabel} — ${lead.fullName}`} />
+        ) : (
+          <span className="text-[10px] text-amber-700">Chưa bill</span>
+        )}
       </div>
 
-      {line?.receiptUrl ? (
-        <AccountantReceiptPreview url={line.receiptUrl} label={`Bill ${slotLabel}`} />
-      ) : (
-        <p className="mt-2 text-xs font-medium text-amber-800">Chưa có link bill</p>
-      )}
-
       {line?.approvalNote && status === 'TỪ CHỐI' ? (
-        <p className="mt-2 rounded-lg bg-rose-50 px-2.5 py-2 text-xs text-rose-900">Lý do: {line.approvalNote}</p>
+        <p className="mt-1 text-[11px] text-rose-800">Lý do: {line.approvalNote}</p>
       ) : null}
 
       {!isDone ? (
-        <div className="mt-3 space-y-2.5">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <label className="block text-[11px] font-semibold text-slate-600">
-              Ngày thu
+        <div className="mt-1.5 space-y-1.5 border-t border-slate-200/80 pt-1.5">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <label className="block text-[10px] font-semibold text-slate-500">
+              Ngày
               <input
                 type="date"
-                className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3 text-base"
+                className={INPUT_SM}
                 value={dateVal}
                 disabled={disabled || busy}
                 onChange={(e) => setDateVal(e.target.value)}
               />
             </label>
-            <label className="block text-[11px] font-semibold text-slate-600">
-              Số tiền (đ)
+            <label className="block text-[10px] font-semibold text-slate-500">
+              Tiền
               <input
                 inputMode="numeric"
-                className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3 text-right font-mono text-base font-bold"
+                className={`${INPUT_SM} text-right font-mono font-semibold`}
                 value={amountVnd ? amountVnd.toLocaleString('vi-VN') : ''}
                 disabled={disabled || busy}
                 onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
               />
             </label>
+            <label className="col-span-2 flex h-8 cursor-pointer items-center justify-center rounded-md border border-dashed border-slate-300 bg-white text-[11px] font-medium text-slate-600 sm:col-span-1">
+              {billFile ? billFile.name.slice(0, 16) : '+ Bill'}
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                className="sr-only"
+                disabled={disabled || busy}
+                onChange={(e) => setBillFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            {!rejectOpen ? (
+              <div className="col-span-2 flex gap-1 sm:col-span-1">
+                <button
+                  type="button"
+                  disabled={disabled || busy}
+                  onClick={() => void run('ĐỒNG Ý')}
+                  className={`${BTN_SM} flex-1 bg-emerald-600 text-white`}
+                >
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Duyệt
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || busy}
+                  onClick={() => setRejectOpen(true)}
+                  className={`${BTN_SM} flex-1 border border-rose-300 bg-white text-rose-700`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Từ chối
+                </button>
+              </div>
+            ) : null}
           </div>
 
-          <label className="flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-700 active:bg-slate-100">
-            {billFile ? billFile.name.slice(0, 28) : 'Đính kèm bill (tuỳ chọn)'}
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              className="sr-only"
-              disabled={disabled || busy}
-              onChange={(e) => setBillFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-
           {rejectOpen ? (
-            <div className="space-y-2 rounded-xl border border-rose-200 bg-rose-50/80 p-3">
-              <label className="block text-xs font-bold text-rose-900">
-                Lý do từ chối
-                <textarea
-                  rows={3}
-                  className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm text-slate-900"
-                  value={rejectReason}
-                  disabled={disabled || busy}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Ghi rõ lý do để TVV xử lý lại…"
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1 rounded-md border border-rose-200 bg-rose-50/80 p-1.5">
+              <textarea
+                rows={2}
+                className="w-full rounded-md border border-rose-200 bg-white px-2 py-1 text-xs"
+                value={rejectReason}
+                disabled={disabled || busy}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Lý do từ chối…"
+              />
+              <div className="flex gap-1">
                 <button
                   type="button"
                   disabled={disabled || busy}
                   onClick={() => setRejectOpen(false)}
-                  className="min-h-12 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700"
+                  className={`${BTN_SM} flex-1 border border-slate-300 bg-white text-slate-700`}
                 >
                   Huỷ
                 </button>
@@ -181,35 +200,14 @@ function PaymentSlotActions({
                   type="button"
                   disabled={disabled || busy || !rejectReason.trim()}
                   onClick={() => void run('TỪ CHỐI', rejectReason.trim())}
-                  className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-rose-600 text-sm font-extrabold text-white disabled:opacity-40"
+                  className={`${BTN_SM} flex-1 bg-rose-600 text-white`}
                 >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                   Xác nhận từ chối
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                disabled={disabled || busy}
-                onClick={() => void run('ĐỒNG Ý')}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-extrabold text-white shadow-sm active:bg-emerald-700 disabled:opacity-40 sm:order-1"
-              >
-                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" strokeWidth={2.5} />}
-                Duyệt
-              </button>
-              <button
-                type="button"
-                disabled={disabled || busy}
-                onClick={() => setRejectOpen(true)}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-rose-300 bg-white text-base font-extrabold text-rose-700 active:bg-rose-50 disabled:opacity-40 sm:order-2"
-              >
-                <X className="h-5 w-5" strokeWidth={2.5} />
-                Từ chối
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -232,8 +230,8 @@ function FullNeBlock({
   const fullNeAt = String(lead.finance?.fullNeAt ?? '').trim()
   if (st === 'ĐÃ FULL NE') {
     return (
-      <p className="rounded-xl bg-slate-800 px-3 py-3 text-center text-sm font-bold text-amber-200">
-        Đã xác nhận Full NE{fullNeAt ? ` · ${fullNeAt}` : ''}
+      <p className="rounded-md bg-slate-800 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-200">
+        Đã Full NE{fullNeAt ? ` · ${fullNeAt}` : ''}
       </p>
     )
   }
@@ -255,8 +253,8 @@ function FullNeBlock({
           .finally(() => setBusy(false))
       }}
       className={[
-        'min-h-12 w-full rounded-xl px-3 py-3 text-sm font-extrabold text-white disabled:opacity-40',
-        isReq ? 'animate-pulse bg-rose-600' : 'bg-violet-700 active:bg-violet-800',
+        'h-8 w-full rounded-md text-xs font-bold text-white disabled:opacity-40',
+        isReq ? 'bg-rose-600' : 'bg-violet-700',
       ].join(' ')}
     >
       {busy ? 'Đang lưu…' : isReq ? 'Xác nhận Full NE' : 'Đánh dấu Full NE'}
@@ -285,82 +283,68 @@ export function AccountantLeadReviewCard({
   return (
     <article
       className={[
-        'rounded-2xl border bg-white p-3 shadow-md sm:p-4',
-        pending ? 'border-amber-400 ring-2 ring-amber-200/80' : 'border-slate-200',
+        'rounded-xl border bg-white p-2.5 shadow-sm',
+        pending ? 'border-amber-400 ring-1 ring-amber-200' : 'border-slate-200',
       ].join(' ')}
     >
-      <header className="border-b border-slate-100 pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 flex-1 text-lg font-extrabold leading-snug text-emerald-950 sm:text-xl sm:uppercase sm:tracking-tight">
-            {summary.studentName}
-          </h3>
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold sm:px-3 sm:text-xs ${statusTagClass(summary.statusTag)}`}
-          >
-            {summary.statusTag}
-          </span>
-        </div>
-        <p className="mt-1 font-mono text-sm font-bold text-emerald-800">Mã SV: {summary.studentCode}</p>
-        <p className="mt-1 text-sm text-slate-700">
-          <strong>{summary.major}</strong>
-          {summary.educationLevel ? <span className="text-slate-500"> · {summary.educationLevel}</span> : null}
+      <header className="flex flex-wrap items-start gap-x-2 gap-y-0.5 border-b border-slate-100 pb-1.5">
+        <h3 className="min-w-0 flex-1 text-sm font-bold leading-tight text-emerald-950">
+          {summary.studentName}
+        </h3>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${statusTagClass(summary.statusTag)}`}>
+          {summary.statusTag}
+        </span>
+        <p className="w-full font-mono text-[11px] font-semibold text-emerald-800">
+          {summary.studentCode}
+          {summary.major ? <span className="font-sans font-normal text-slate-500"> · {summary.major}</span> : null}
+          {summary.counselorName ? (
+            <span className="font-sans font-normal text-slate-500"> · TVV {summary.counselorName}</span>
+          ) : null}
         </p>
-        {summary.counselorName ? (
-          <p className="mt-0.5 text-xs font-medium text-slate-600">TVV: {summary.counselorName}</p>
-        ) : null}
-        <p className="mt-0.5 text-[11px] text-slate-400">TT thu phí: {summary.statusRaw}</p>
-
-        <div className="mt-2.5 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1">
           {phoneHref ? (
             <a
               href={phoneHref}
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-900"
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-bold text-emerald-900"
             >
-              <Phone className="h-3.5 w-3.5" aria-hidden />
-              Gọi HS
+              <Phone className="h-3 w-3" aria-hidden />
+              HS
             </a>
           ) : null}
           {motherHref ? (
             <a
               href={motherHref}
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-900"
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-1.5 text-[10px] font-bold text-sky-900"
             >
-              <Phone className="h-3.5 w-3.5" aria-hidden />
-              Gọi mẹ
+              <Phone className="h-3 w-3" aria-hidden />
+              Mẹ
             </a>
           ) : null}
           {summary.nationalId ? (
-            <span className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+            <span className="inline-flex h-7 items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 text-[10px] text-slate-600">
               CCCD {summary.nationalId}
             </span>
           ) : null}
         </div>
       </header>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase text-slate-500">Đã ghi nhận</p>
-          <p className="font-mono text-base font-extrabold tabular-nums text-rose-700 sm:text-lg">
-            {summary.totalRecordedLabel}
+      <div className="mt-1.5 flex gap-2 text-[11px]">
+        <p className="rounded-md bg-slate-50 px-2 py-1 font-mono">
+          <span className="text-slate-500">Ghi </span>
+          <span className="font-bold text-rose-700">{summary.totalRecordedLabel}</span>
+        </p>
+        <p className="rounded-md bg-emerald-50 px-2 py-1 font-mono">
+          <span className="text-emerald-700">Duyệt </span>
+          <span className="font-bold text-emerald-800">{summary.totalApprovedLabel}</span>
+        </p>
+        {summary.scholarships.length ? (
+          <p className="truncate text-violet-800" title={summary.scholarships.join(', ')}>
+            {summary.scholarships.join(' · ')}
           </p>
-        </div>
-        <div className="rounded-xl bg-emerald-50/90 px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase text-emerald-800">Đã duyệt</p>
-          <p className="font-mono text-base font-extrabold tabular-nums text-emerald-800 sm:text-lg">
-            {summary.totalApprovedLabel}
-          </p>
-        </div>
+        ) : null}
       </div>
 
-      {summary.scholarships.length ? (
-        <ul className="mt-2 space-y-0.5 text-xs text-violet-900">
-          {summary.scholarships.map((s) => (
-            <li key={s}>{s}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      <div className="mt-3 space-y-3">
+      <div className="mt-1.5 space-y-1.5">
         {activePayments.map((p) => {
           const batch = PAYMENT_SLOT_DEFS.findIndex((d) => d.key === p.key) + 1
           return (
@@ -378,7 +362,7 @@ export function AccountantLeadReviewCard({
         })}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-1.5">
         <FullNeBlock lead={lead} disabled={disabled} accountantName={accountantName} onDone={onDone} />
       </div>
     </article>

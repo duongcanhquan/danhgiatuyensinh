@@ -229,7 +229,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
       ) : null}
 
       {/* Stats — cuộn ngang trên mobile */}
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-5 sm:overflow-visible sm:px-0">
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:grid sm:grid-cols-5 sm:overflow-visible sm:px-0">
         {(
           [
             ['Mới', stats.enrollment.moi, 'text-slate-700'],
@@ -241,10 +241,10 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         ).map(([label, value, cls]) => (
           <div
             key={label}
-            className="min-w-[4.75rem] shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center shadow-sm sm:min-w-0"
+            className="min-w-[3.75rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center sm:min-w-0"
           >
-            <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
-            <p className={`text-xl font-black tabular-nums ${cls}`}>{value}</p>
+            <p className="text-[9px] font-bold uppercase text-slate-500">{label}</p>
+            <p className={`text-base font-bold tabular-nums ${cls}`}>{value}</p>
           </div>
         ))}
       </div>
@@ -327,9 +327,9 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         Đang hiện <strong className="text-slate-800">{filtered.length}</strong> hồ sơ
       </p>
 
-      <div className="space-y-3 sm:space-y-4">
+      <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-500">
+          <p className="rounded-xl border border-slate-200 bg-white px-3 py-6 text-center text-sm text-slate-500">
             {financeRows.length === 0
               ? 'Chưa có hồ sơ phát sinh thu — TVV cần ghi tiền / bill trên hồ sơ.'
               : 'Không có hồ sơ phù hợp bộ lọc.'}

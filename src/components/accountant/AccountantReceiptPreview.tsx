@@ -1,19 +1,19 @@
-import { useState } from 'react'
-import { ExternalLink, FileText, ImageIcon, Loader2 } from 'lucide-react'
+import { useEffect, useId, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ExternalLink, Eye, Loader2, X } from 'lucide-react'
 
 function isProbablyImage(url: string): boolean {
   const u = url.toLowerCase().split('?')[0] ?? ''
-  return /\.(jpe?g|png|gif|webp|bmp)$/i.test(u) || u.includes('/image') || u.includes('content-type=image')
+  return /\.(jpe?g|png|gif|webp|bmp)$/i.test(u)
 }
 
 function isProbablyPdf(url: string): boolean {
   const u = url.toLowerCase().split('?')[0] ?? ''
-  return u.endsWith('.pdf') || u.includes('application/pdf')
+  return u.endsWith('.pdf')
 }
 
 /**
- * Xem chứng từ ngay trên cổng kế toán (ảnh / PDF / mở tab).
- * Dùng khi link R2 công khai mở được; nếu load lỗi vẫn còn nút mở tab mới.
+ * Nút gọn «Xem bill» → pop-up xem ảnh/PDF (tiết kiệm chỗ trên thẻ duyệt).
  */
 export function AccountantReceiptPreview({
   url,
@@ -23,73 +23,145 @@ export function AccountantReceiptPreview({
   label?: string
 }) {
   const href = url.trim()
-  const [imgFailed, setImgFailed] = useState(false)
-  const [imgLoading, setImgLoading] = useState(isProbablyImage(href))
+  const [open, setOpen] = useState(false)
+  const titleId = useId()
 
   if (!href) {
-    return <p className="mt-2 text-xs font-medium text-amber-800">Chưa có link bill</p>
+    return <span className="text-[11px] font-medium text-amber-700">Chưa có bill</span>
   }
 
-  const showImg = isProbablyImage(href) && !imgFailed
-  const showPdf = isProbablyPdf(href)
-
   return (
-    <div className="mt-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-sky-300 bg-sky-50 px-3 text-sm font-bold text-sky-900 active:bg-sky-100"
-        >
-          <ExternalLink className="h-4 w-4 shrink-0" />
-          Mở chứng từ (tab mới)
-        </a>
-      </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-8 items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 text-[11px] font-bold text-sky-900 hover:bg-sky-100"
+      >
+        <Eye className="h-3.5 w-3.5" aria-hidden />
+        Xem bill
+      </button>
+      {open ? (
+        <ReceiptLightbox url={href} label={label} titleId={titleId} onClose={() => setOpen(false)} />
+      ) : null}
+    </>
+  )
+}
 
-      {showImg ? (
-        <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-          {imgLoading ? (
-            <div className="flex min-h-[140px] items-center justify-center text-slate-500">
-              <Loader2 className="h-5 w-5 animate-spin" />
+function ReceiptLightbox({
+  url,
+  label,
+  titleId,
+  onClose,
+}: {
+  url: string
+  label: string
+  titleId: string
+  onClose: () => void
+}) {
+  const [failed, setFailed] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const asImage = isProbablyImage(url) || (!isProbablyPdf(url) && !failed)
+  const asPdf = isProbablyPdf(url)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const node = (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+          <p id={titleId} className="truncate text-sm font-bold text-slate-900">
+            {label}
+          </p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Tab mới
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+              aria-label="Đóng"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="relative min-h-[240px] flex-1 overflow-auto bg-slate-100">
+          {loading && !failed ? (
+            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+              <Loader2 className="h-6 w-6 animate-spin" />
             </div>
           ) : null}
-          <img
-            src={href}
-            alt={label}
-            className={`max-h-72 w-full object-contain ${imgLoading ? 'absolute opacity-0' : ''}`}
-            onLoad={() => setImgLoading(false)}
-            onError={() => {
-              setImgLoading(false)
-              setImgFailed(true)
-            }}
-          />
+
+          {asPdf ? (
+            <iframe
+              title={label}
+              src={url}
+              className="h-[min(70vh,640px)] w-full bg-white"
+              onLoad={() => setLoading(false)}
+            />
+          ) : null}
+
+          {!asPdf && asImage && !failed ? (
+            <img
+              src={url}
+              alt={label}
+              className="mx-auto max-h-[min(75vh,720px)] w-auto max-w-full object-contain"
+              onLoad={() => setLoading(false)}
+              onError={() => {
+                setLoading(false)
+                setFailed(true)
+              }}
+            />
+          ) : null}
+
+          {failed ? (
+            <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <p className="text-sm text-slate-700">
+                Không tải được ảnh trong pop-up (R2 có thể chặn). Thử mở tab mới.
+              </p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-600 px-3 text-sm font-bold text-white"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Mở link chứng từ
+              </a>
+            </div>
+          ) : null}
         </div>
-      ) : null}
-
-      {showPdf && !showImg ? (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <iframe title={label} src={href} className="h-64 w-full" />
-          <p className="border-t border-slate-100 px-2 py-1.5 text-[11px] text-slate-500">
-            <FileText className="mr-1 inline h-3.5 w-3.5" />
-            PDF — nếu khung trống, bấm «Mở chứng từ».
-          </p>
-        </div>
-      ) : null}
-
-      {!showImg && !showPdf ? (
-        <p className="flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
-          <ImageIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Không xem trước được trong app — dùng nút mở tab mới (link R2/Drive phải công khai).
-        </p>
-      ) : null}
-
-      {imgFailed ? (
-        <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
-          Không tải được ảnh xem trước (R2 có thể chặn trình duyệt). Vẫn mở được qua nút «Mở chứng từ»
-          nếu link công khai đúng.
-        </p>
-      ) : null}
+      </div>
     </div>
   )
+
+  return createPortal(node, document.body)
 }
