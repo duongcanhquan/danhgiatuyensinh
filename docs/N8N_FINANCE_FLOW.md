@@ -10,16 +10,17 @@ Hướng dẫn cài nhanh: [`HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md`](./HUONG-DAN-CAI-
 
 | Ô UI / field | URL mẫu VietMy | Mục đích |
 |---|---|---|
-| Giấy mời `giayMoi` | `…/webhook/giaymoits` | Tạo giấy mời; TVV nộp tiền cũng gửi (parity Apps Script) |
+| Giấy mời `giayMoi` | `…/webhook/giaymoits` | Chỉ tạo giấy mời (`create_document`) |
 | CTSV `ctsv` | `…/webhook/testctsv` | Báo thu TVV + duyệt kế toán + Full NE → Chat |
 | Báo cáo ngày `daily` | `…/webhook/baocao-ngay` | Tổng kết cuối ngày |
 | Báo cáo tháng `monthly` | `…/webhook/baocao-thang` | Tổng kết tháng |
 
 ## 1. TVV cập nhật tiền / bill
 
-**Khi:** Lưu tab Tài chính — đổi số tiền, ngày thu, upload chứng từ, hoặc lần đầu YÊU CẦU FULL NE (`persistLeadFinance`).
+**Khi:** Lưu tab Tài chính — **đổi số tiền hoặc chứng từ**, hoặc lần đầu YÊU CẦU FULL NE (`persistLeadFinance`).  
+**Không bắn** khi chỉ mở hồ sơ, chỉ sửa ngày, hoặc lưu form không có tiền/bill.
 
-**Webhook:** POST **CTSV** và **Giấy mời** (cùng payload; trùng URL thì chỉ 1 lần).
+**Webhook:** POST **CTSV** only (`event: update_profile`).
 
 **`event`:** `update_profile`  
 **`sub_event`:** `counselor_payment_submitted`

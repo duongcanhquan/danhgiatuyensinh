@@ -181,7 +181,42 @@ export type FinanceSavePlan = {
   changedSlots: LeadPaymentSlotKey[]
 }
 
-/** Giống `saveOrUpdateStudent`: đổi tiền/file → reset valid + bắn n8n */
+/** Có tiền / bill / yêu cầu Full NE → mới đáng bắn webhook báo thu (không bắn khi chỉ ngày hoặc form trống). */
+export function financeDraftNotifiesN8n(draft: LeadFinanceDraft): boolean {
+  if (draft.reqFullNe) return true
+  for (const { key } of PAYMENT_SLOT_DEFS) {
+    const row = draft.payments[key]
+    if (parseAmount(row.amount) > 0) return true
+    if (row.pendingFile || row.receiptUrl.trim()) return true
+  }
+  return false
+}
+
+function slotDraftNotifiesN8n(d: LeadPaymentLineDraft): boolean {
+  return parseAmount(d.amount) > 0 || Boolean(d.pendingFile) || Boolean(d.receiptUrl.trim())
+}
+
+/** Đổi tiền hoặc chứng từ (không tính chỉ đổi ngày). */
+function moneyOrReceiptDirty(before: LeadPaymentLine | undefined, after: LeadPaymentLineDraft): boolean {
+  if (after.pendingFile) return true
+  if (parseAmount(after.amount) !== (before?.amountVnd ?? 0)) return true
+  if (after.receiptUrl.trim() !== (before?.receiptUrl ?? '').trim()) return true
+  return false
+}
+
+function slotHadMoneyOrReceipt(line: LeadPaymentLine | undefined): boolean {
+  return (line?.amountVnd ?? 0) > 0 || Boolean(line?.receiptUrl?.trim())
+}
+
+/** Các khoản có tiền/bill trong draft — dùng khi force notify sau tạo hồ sơ. */
+export function financeNotifySlotKeys(draft: LeadFinanceDraft): LeadPaymentSlotKey[] {
+  return PAYMENT_SLOT_DEFS.map((s) => s.key).filter((key) => slotDraftNotifiesN8n(draft.payments[key]))
+}
+
+/**
+ * Lưu tài chính: reset duyệt khi đổi tiền/file; bắn n8n khi có tiền/bill mới,
+ * khi xóa tiền đã báo, hoặc lần đầu yêu cầu Full NE — không bắn khi chỉ sửa ngày / form trống.
+ */
 export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): FinanceSavePlan {
   const before = lead.finance
   const beforePay = before?.payments ?? {}
@@ -195,9 +230,14 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
     const prev = beforePay[key]
     const changed = lineDirty(prev, d)
     if (changed) {
-      triggerN8n = true
-      changedSlots.push(key)
-      if (prev?.approvalStatus) resetApprovalSlots.push(key)
+      const material = moneyOrReceiptDirty(prev, d)
+      if (material && (slotDraftNotifiesN8n(d) || slotHadMoneyOrReceipt(prev))) {
+        changedSlots.push(key)
+        triggerN8n = true
+      }
+      if (prev?.approvalStatus && material) {
+        resetApprovalSlots.push(key)
+      }
     }
     const row = lineToStored(d)
     if (row) {
@@ -205,6 +245,10 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
         row.approvalStatus = ''
         row.approvalNote = undefined
       } else if (prev?.approvalStatus && !changed) {
+        row.approvalStatus = prev.approvalStatus
+        row.approvalNote = prev.approvalNote
+      } else if (prev?.approvalStatus && changed && !resetApprovalSlots.includes(key)) {
+        // Chỉ đổi ngày → giữ trạng thái duyệt.
         row.approvalStatus = prev.approvalStatus
         row.approvalNote = prev.approvalNote
       }

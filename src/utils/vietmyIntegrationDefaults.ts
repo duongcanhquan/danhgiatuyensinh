@@ -32,8 +32,8 @@ export const N8N_WEBHOOK_FIELD_HINTS: Record<
 > = {
   giayMoi: {
     title: 'Giấy mời',
-    when: 'TVV bấm tạo giấy mời; TVV nộp tiền cũng gửi kèm (parity Apps Script).',
-    events: 'create_document · update_profile',
+    when: 'TVV bấm tạo giấy mời (create_document).',
+    events: 'create_document',
   },
   ctsv: {
     title: 'CTSV / tài chính',

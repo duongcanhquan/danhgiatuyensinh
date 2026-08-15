@@ -5,6 +5,8 @@ import { FS_COLLECTIONS } from '../types'
 import { uploadLeadReceiptFile } from '../services/leadReceiptStorage'
 import {
   buildFinanceSavePlan,
+  financeDraftNotifiesN8n,
+  financeNotifySlotKeys,
   mergeUploadedReceipts,
   PAYMENT_SLOT_DEFS,
   type LeadFinanceDraft,
@@ -30,14 +32,20 @@ export async function persistLeadFinance(opts: {
   lead: Lead
   draft: LeadFinanceDraft
   counselorName?: string
+  /**
+   * Sau tạo hồ sơ: tiền đã ghi trên setDoc nên plan có thể «không dirty».
+   * Bật để vẫn bắn báo thu khi draft có tiền/bill.
+   */
+  forceNotifyN8n?: boolean
 }): Promise<{
   finance: Lead['finance']
   updatedAt: ReturnType<typeof leadTouchPatch>['updatedAt']
   lastTouchedAt: ReturnType<typeof leadTouchPatch>['lastTouchedAt']
   /** Upload chứng từ lỗi (tiền/ngày vẫn đã lưu nếu có). */
   receiptUploadWarnings: string[]
+  n8nTriggered: boolean
 }> {
-  const { db, lead, draft, counselorName } = opts
+  const { db, lead, draft, counselorName, forceNotifyN8n } = opts
   const uploads: Partial<Record<LeadPaymentSlotKey, string>> = {}
   const receiptUploadWarnings: string[] = []
 
@@ -69,10 +77,19 @@ export async function persistLeadFinance(opts: {
     finance: financeWithEnrollment,
   })
 
-  // n8n / CORS / mạng: không làm fail «đã lưu tiền» trên Firestore.
-  if (plan.triggerN8n) {
+  const forceSlots =
+    forceNotifyN8n && financeDraftNotifiesN8n(mergedDraft) ? financeNotifySlotKeys(mergedDraft) : []
+  const changedSlots = plan.changedSlots.length ? plan.changedSlots : forceSlots
+  const shouldNotifyN8n = plan.triggerN8n || forceSlots.length > 0
+
+  // n8n: chỉ báo thu khi có tiền/bill/Full NE. CORS/mạng không rollback Firestore.
+  if (shouldNotifyN8n) {
     try {
-      const moneyChanged = Object.keys(uploads).length > 0 || plan.resetApprovalSlots.length > 0
+      const moneyChanged =
+        Object.keys(uploads).length > 0 ||
+        plan.resetApprovalSlots.length > 0 ||
+        changedSlots.some((k) => (financeWithEnrollment.payments?.[k]?.amountVnd ?? 0) > 0) ||
+        forceSlots.length > 0
       const scholarshipLabels = await resolveScholarshipLabels(db, lead)
       const counselor = await resolveCounselorForLead(db, lead)
       await triggerProfileFinanceN8n({
@@ -83,7 +100,7 @@ export async function persistLeadFinance(opts: {
         counselorEmail: counselor.email,
         scholarship1Label: scholarshipLabels.scholarship1Label,
         scholarship2Label: scholarshipLabels.scholarship2Label,
-        changedSlots: plan.changedSlots,
+        changedSlots,
         resetApprovalSlots: plan.resetApprovalSlots,
       })
     } catch (e) {
@@ -96,5 +113,6 @@ export async function persistLeadFinance(opts: {
     updatedAt: touch.updatedAt,
     lastTouchedAt: touch.lastTouchedAt,
     receiptUploadWarnings,
+    n8nTriggered: shouldNotifyN8n,
   }
 }

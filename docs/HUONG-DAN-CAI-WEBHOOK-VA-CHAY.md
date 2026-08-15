@@ -40,7 +40,7 @@ Vào app → **Cài đặt → Webhook n8n**.
 
 | Ô | URL mẫu VietMy (Apps Script cũ) | Dùng khi |
 |---|---|---|
-| Giấy mời | `https://apchn-host.lapage.vn/webhook/giaymoits` | Tạo giấy mời; TVV nộp tiền cũng gửi (parity) |
+| Giấy mời | `https://apchn-host.lapage.vn/webhook/giaymoits` | Chỉ tạo giấy mời |
 | CTSV / tài chính | `https://apchn-host.lapage.vn/webhook/testctsv` | TVV nộp tiền + KT duyệt/từ chối/Full NE → Chat |
 | Báo cáo ngày | `https://apchn-host.lapage.vn/webhook/baocao-ngay` | Gửi tay hoặc cron 23:55 |
 | Báo cáo tháng | `https://apchn-host.lapage.vn/webhook/baocao-thang` | Gửi tay hoặc ngày cuối tháng |

@@ -254,33 +254,18 @@ export async function triggerProfileFinanceN8n(opts: {
   )
   const orgId = resolveLeadOrgId(lead)
   await ensureWebhooksForOrg(orgId)
-  // Parity Main.gs: bắn cả giấy mời + CTSV (dedupe nếu cùng URL).
-  const targets = [...new Set([webhookCtsv(orgId), webhookGiayMoi(orgId)].filter((u) => u.startsWith('http')))]
-  if (!targets.length) {
-    console.warn('[n8n] Chưa cấu hình CTSV/giấy mời — bỏ qua gửi thu (đã lưu hồ sơ). Org:', orgId)
+  // Báo thu chỉ CTSV (Chat tiền). Giấy mời chỉ dùng create_document — tránh spam đôi.
+  const webhook = webhookCtsv(orgId)
+  if (!webhook) {
+    console.warn('[n8n] CTSV chưa cấu hình — bỏ qua gửi thu (đã lưu hồ sơ). Org:', orgId)
     fanOutHubQuietly(orgId, 'finance.submitted', pl as Record<string, unknown>, lead)
     return
   }
-  const results = await Promise.all(
-    targets.map(async (url) => {
-      const res = await postJson(url, pl)
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        return { ok: false as const, status: res.status, text, url }
-      }
-      return { ok: true as const, url }
-    }),
-  )
-  const anyOk = results.some((r) => r.ok)
-  if (!anyOk) {
-    const first = results.find((r) => !r.ok)
-    console.warn('n8n TVV finance:', first)
-    throw new Error(
-      (first && !first.ok && first.text) || `n8n báo thu trả về ${first && !first.ok ? first.status : '?'}`,
-    )
-  }
-  for (const r of results) {
-    if (!r.ok) console.warn('[n8n] TVV finance soft-warn một URL', r.url, r.status, r.text)
+  const res = await postJson(webhook, pl)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.warn('n8n TVV finance:', res.status, text)
+    throw new Error(text || `n8n báo thu trả về ${res.status}`)
   }
   fanOutHubQuietly(orgId, 'finance.submitted', pl as Record<string, unknown>, lead)
 }

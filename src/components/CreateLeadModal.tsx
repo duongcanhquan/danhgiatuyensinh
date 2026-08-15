@@ -21,7 +21,13 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
-import { emptyFinanceDraft, financeDraftHasContent, financeDraftToRecord, PAYMENT_SLOT_DEFS } from '../utils/leadFinance'
+import {
+  emptyFinanceDraft,
+  financeDraftHasContent,
+  financeDraftNotifiesN8n,
+  financeDraftToRecord,
+  PAYMENT_SLOT_DEFS,
+} from '../utils/leadFinance'
 import { describeFinanceDepositAudit } from '../utils/leadFinanceAudit'
 import { clearFinancePendingFiles, persistLeadFinance } from '../utils/persistLeadFinance'
 import { getDoc, doc } from 'firebase/firestore'
@@ -216,23 +222,26 @@ export function CreateLeadModal({
       createdId = id
       createdSystemCode = systemCode
 
+      // Báo thu n8n chỉ khi có tiền/bill/Full NE — không bắn khi tạo hồ sơ trống tài chính.
+      const shouldNotifyFinanceN8n = financeDraftNotifiesN8n(financeDraft)
       const hasPendingReceipt = PAYMENT_SLOT_DEFS.some((s) => Boolean(financeDraft.payments[s.key].pendingFile))
-      if (financeDraftHasContent(financeDraft) && hasPendingReceipt) {
+      if (shouldNotifyFinanceN8n || hasPendingReceipt) {
         try {
           const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, id))
-          const lead = snap.exists() ? mapDoc(id, snap.data() as Record<string, unknown>) : null
+          const leadRaw = snap.exists() ? mapDoc(id, snap.data() as Record<string, unknown>) : null
           const assignee =
             directoryUsers.find((u) => u.id === counselorId) ??
             assigneeOptions.find((u) => u.id === counselorId)
           const assigneeLabel = assignee
             ? formatStaffDirectoryLabel(assignee)
             : performer
-          if (lead) {
+          if (leadRaw) {
             const saved = await persistLeadFinance({
               db,
-              lead,
+              lead: leadRaw,
               draft: financeDraft,
               counselorName: assigneeLabel,
+              forceNotifyN8n: shouldNotifyFinanceN8n,
             })
             if (saved.receiptUploadWarnings.length) {
               postWriteWarning = [
@@ -242,13 +251,20 @@ export function CreateLeadModal({
                 .filter(Boolean)
                 .join(' ')
             }
+          } else {
+            postWriteWarning = [
+              postWriteWarning,
+              'Hồ sơ đã tạo; chưa đọc lại được để gửi tin báo thu — mở hồ sơ và Lưu tài chính lại nếu cần.',
+            ]
+              .filter(Boolean)
+              .join(' ')
           }
         } catch (fe) {
-          console.warn('[CreateLeadModal] finance receipt after create', fe)
+          console.warn('[CreateLeadModal] finance after create', fe)
           postWriteWarning =
             fe instanceof Error
-              ? `Hồ sơ và tiền đã lưu; chứng từ lỗi: ${fe.message}`
-              : 'Hồ sơ và tiền đã lưu; chứng từ chưa xong — mở hồ sơ để tải lại bill.'
+              ? `Hồ sơ và tiền đã lưu; chứng từ/n8n lỗi: ${fe.message}`
+              : 'Hồ sơ và tiền đã lưu; chứng từ hoặc tin báo thu chưa xong — mở hồ sơ để thử lại.'
         }
       }
 
