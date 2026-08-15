@@ -8,9 +8,11 @@ import {
   resolveReceiptStorageRuntime,
 } from '../utils/receiptStorageConfig'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
+import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 
-/** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */
-export function receiptStorageFolderName(lead: {
+const RECEIPT_FETCH_TIMEOUT_MS = 12_000
+
+/** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */export function receiptStorageFolderName(lead: {
   fullName: string
   systemCode?: string
   customerId?: string
@@ -57,11 +59,16 @@ async function uploadReceiptToR2(
     base64: await fileToBase64(file),
   }
 
-  const res = await fetch(runtime.r2UploadUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const res = await fetchWithTimeout(
+    runtime.r2UploadUrl,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    RECEIPT_FETCH_TIMEOUT_MS,
+    'Upload R2 quá lâu',
+  )
   if (!res.ok) {
     throw new Error(`Upload R2 lỗi (${res.status})`)
   }
@@ -93,11 +100,16 @@ async function uploadReceiptToDriveWebhook(
     base64: await fileToBase64(file),
   }
 
-  const res = await fetch(runtime.driveWebhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const res = await fetchWithTimeout(
+    runtime.driveWebhookUrl,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    RECEIPT_FETCH_TIMEOUT_MS,
+    'Upload Drive quá lâu',
+  )
   if (!res.ok) {
     throw new Error(`Upload Drive lỗi (${res.status})`)
   }
@@ -167,7 +179,7 @@ export async function uploadLeadReceiptFile(
   if (runtime.provider === 'drive') return tryDrive()
   if (runtime.provider === 'firebase') return tryFirebase()
 
-  // auto: thử lần lượt, lỗi rõ ràng nếu cả chuỗi fail
+  // auto: R2 → Firebase (bỏ Drive chậm/CORS). Provider «drive» vẫn dùng Drive riêng.
   const errors: string[] = []
   if (runtime.r2UploadUrl) {
     try {
@@ -176,17 +188,17 @@ export async function uploadLeadReceiptFile(
       errors.push(`R2: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  if (runtime.driveWebhookUrl) {
-    try {
-      return await tryDrive()
-    } catch (e) {
-      errors.push(`Drive: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
   try {
     return await tryFirebase()
   } catch (e) {
     errors.push(`Firebase: ${e instanceof Error ? e.message : String(e)}`)
+    if (runtime.driveWebhookUrl) {
+      try {
+        return await tryDrive()
+      } catch (de) {
+        errors.push(`Drive: ${de instanceof Error ? de.message : String(de)}`)
+      }
+    }
     throw new Error(
       errors.length
         ? `Không lưu được chứng từ. ${errors.join(' · ')}`

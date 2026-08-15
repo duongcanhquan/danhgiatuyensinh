@@ -202,12 +202,19 @@ export function buildN8nFullData(
   }
 }
 
+import { fetchWithTimeout } from './fetchWithTimeout'
+
 async function postJson(url: string, body: unknown): Promise<Response> {
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  return fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    8_000,
+    'Webhook n8n quá lâu',
+  )
 }
 
 /** TVV lưu tài chính — Apps Script post cả N8N_WEBHOOK + N8N_WEBHOOK_CTSV (cùng payload). */
