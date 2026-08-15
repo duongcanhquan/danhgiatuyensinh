@@ -64,7 +64,7 @@ export function PerformanceReportView() {
             ) : null}
             {showManagerPanel ? (
               <Link
-                to="/?tab=van-hanh"
+                to="/tong-ket?tab=van-hanh"
                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-900 hover:bg-indigo-100"
               >
                 <BarChart3 className="h-3.5 w-3.5" aria-hidden />
@@ -72,7 +72,7 @@ export function PerformanceReportView() {
               </Link>
             ) : null}
             <Link
-              to="/?tab=lich-goi"
+              to="/tong-ket?tab=lich-goi"
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
             >
               <Users className="h-3.5 w-3.5" aria-hidden />
@@ -80,7 +80,7 @@ export function PerformanceReportView() {
             </Link>
             {can('analytics:advanced') ? (
               <Link
-                to="/?tab=bang-diem"
+                to="/tong-ket?tab=bang-diem"
                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
               >
                 <ClipboardList className="h-3.5 w-3.5" aria-hidden />

@@ -102,13 +102,17 @@ export function SearchableMultiFilter({
       {open ? (
         <div className="absolute left-0 top-full z-50 mt-0.5 w-full min-w-[14rem] max-w-[20rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
           <input
-            type="search"
+            type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
             className="w-full border-b border-slate-200 px-2 py-1.5 text-xs outline-none"
             aria-controls={listId}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
           <ul id={listId} className="max-h-40 overflow-y-auto py-0.5 text-xs">
             {filtered.map((o) => (

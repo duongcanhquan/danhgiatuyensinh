@@ -48,6 +48,11 @@ import { useLeadProfileCatalogs } from '../hooks/useLeadProfileCatalogs'
 import { LEAD_AI_INSIGHT_AGGREGATE_ID, useLeadAiInsightTasks } from '../hooks/useLeadAiInsightTasks'
 import { useInteractions } from '../hooks/useInteractions'
 import { useConsultingPlaybooks } from '../hooks/useConsultingPlaybooks'
+import { useImeFriendlySearchInput } from '../hooks/useImeFriendlySearchInput'
+import {
+  leadSearchPlaceholderForRole,
+  leadSearchScopeHintForRole,
+} from '../utils/leadSearchScope'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
@@ -419,6 +424,7 @@ export function LeadManagement() {
   const showAdminGlobalFilters = can('leads:read:global')
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
+  const [createLeadNotice, setCreateLeadNotice] = useState<string | null>(null)
 
   const [tagFilter, setTagFilter] = useState<string>('ALL')
   const [callWorkBucketFilter, setCallWorkBucketFilter] = useState<CallWorkBucketFilter>('all')
@@ -1014,6 +1020,7 @@ export function LeadManagement() {
   const wantsCreateFromUrl = searchParams.get('create') === '1'
   useEffect(() => {
     if (!wantsCreateFromUrl || !canCreateManualLead || !configured || !db) return
+    setCreateLeadNotice(null)
     setCreateLeadOpen(true)
     setSearchParams(
       (prev) => {
@@ -1051,12 +1058,6 @@ export function LeadManagement() {
     [db, setSearchParams, captureListChromeBeforeDetail],
   )
 
-  const handleManualLeadCreated = useCallback(
-    (leadId: string) => {
-      void refetchLeads()
-      void openLeadById(leadId)
-    },
-    [refetchLeads, openLeadById],
   )
 
   const selectedWarmCount = useMemo(
@@ -1413,14 +1414,20 @@ export function LeadManagement() {
     }
   }
 
-  const setUrlQuery = (raw: string) => {
-    const next = new URLSearchParams(searchParams)
-    const t = raw.trim()
-    if (t) next.set(LWF.Q, t)
-    else next.delete(LWF.Q)
-    setSearchParams(next, { replace: true })
-    setPage(1)
-  }
+  const setUrlQuery = useCallback(
+    (raw: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (raw.trim()) next.set(LWF.Q, raw)
+        else next.delete(LWF.Q)
+        return next
+      }, { replace: true })
+      setPage(1)
+    },
+    [setSearchParams],
+  )
+
+  const listSearchInput = useImeFriendlySearchInput(searchParams.get(LWF.Q) ?? '', setUrlQuery)
 
   const mergeListFilterUrl = useCallback(
     (patch: Partial<Record<(typeof LWF)[keyof typeof LWF], string | null | undefined>>) => {
@@ -1583,6 +1590,37 @@ export function LeadManagement() {
       setPage(1)
     },
     [mergeListFilterUrl, setPage],
+  )
+
+  const handleManualLeadCreated = useCallback(
+    (
+      leadId: string,
+      meta?: { warning?: string | null; systemCode?: string; n8nOk?: boolean; n8nError?: string | null },
+    ) => {
+      applyIntakeOriginTab('public_portal')
+      const code = meta?.systemCode?.trim()
+      const warn = meta?.warning?.trim()
+      const n8nHint =
+        meta?.n8nOk === true
+          ? 'Đã gửi tin đăng ký sang n8n.'
+          : meta?.n8nOk === false
+            ? 'Hồ sơ đã lưu; tin n8n chưa gửi (xem cảnh báo).'
+            : null
+      setCreateLeadNotice(
+        [
+          code ? `Đã tạo hồ sơ — mã ${code}.` : 'Đã tạo hồ sơ thành công.',
+          n8nHint,
+          'Đang mở chi tiết · nằm tab «Cổng đăng ký».',
+          warn || null,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      )
+      void refetchLeads().finally(() => {
+        void openLeadById(leadId)
+      })
+    },
+    [applyIntakeOriginTab, refetchLeads, openLeadById],
   )
 
   /** Nhãn HOT/WARM/…: áp dụng ngay. */
@@ -3212,6 +3250,22 @@ export function LeadManagement() {
         </div>
       ) : null}
 
+      {createLeadNotice ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950 shadow-sm"
+        >
+          <p className="min-w-0 flex-1">{createLeadNotice}</p>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg border border-emerald-400/80 bg-white px-2.5 py-1 text-xs font-bold text-emerald-900"
+            onClick={() => setCreateLeadNotice(null)}
+          >
+            Đóng
+          </button>
+        </div>
+      ) : null}
+
       <BentoCell className="space-y-2 !p-2.5 sm:!p-3">
         {/* Tổng kết nhẹ — luôn hiện */}
         <div
@@ -3334,10 +3388,21 @@ export function LeadManagement() {
           <label className={`${LEAD_FILTER_LABEL} min-w-[10rem] flex-1 basis-[12rem]`}>
             <span>Tìm kiếm</span>
             <input
-              value={searchParams.get(LWF.Q) ?? ''}
-              onChange={(e) => setUrlQuery(e.target.value)}
-              placeholder="Tên, SĐT, mã KH, TVV…"
-              title="Tìm trong các thông tin hiển thị trên hồ sơ (tên, SĐT, mã KH, mô tả, TVV…)."
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={listSearchInput.value}
+              onChange={(e) => listSearchInput.onChange(e.target.value)}
+              onCompositionStart={listSearchInput.onCompositionStart}
+              onCompositionEnd={listSearchInput.onCompositionEnd}
+              onKeyDown={listSearchInput.onKeyDown}
+              onBlur={listSearchInput.onBlur}
+              placeholder={leadSearchPlaceholderForRole(profile?.role, showAdminGlobalFilters)}
+              title={leadSearchScopeHintForRole(profile?.role, showAdminGlobalFilters)}
               className={LEAD_FILTER_CONTROL}
             />
           </label>
@@ -3384,7 +3449,10 @@ export function LeadManagement() {
             {canCreateManualLead && configured && db ? (
               <button
                 type="button"
-                onClick={() => setCreateLeadOpen(true)}
+                onClick={() => {
+                  setCreateLeadNotice(null)
+                  setCreateLeadOpen(true)
+                }}
                 className={`${LEAD_BTN} border-emerald-500 bg-indigo-600 text-white hover:bg-indigo-700`}
                 title="Tạo hồ sơ ứng viên mới"
               >

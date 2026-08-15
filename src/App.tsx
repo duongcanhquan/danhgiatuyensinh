@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AuthProvider } from './contexts/AuthProvider'
 import { CallSessionConfigProvider } from './contexts/CallSessionConfigContext'
@@ -76,13 +76,19 @@ function RouteFallback() {
   )
 }
 
-/** Marketing → báo cáo tuyển sinh; `/` vẫn là Tổng kết (tab KPI/vận hành…). Đăng nhập mặc định → `/leads`. */
-function MarketingDefaultHome() {
+/** Mặc định vào Hồ sơ; Marketing → báo cáo. Link cũ `/?tab=…` chuyển sang `/tong-ket`. */
+function DefaultHomeRedirect() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   if (profile?.role === 'marketing') {
     return <Navigate to="/bao-cao-tuyen-sinh" replace />
   }
-  return <SummaryHubView />
+  const tab = searchParams.get('tab')
+  if (tab) {
+    const q = new URLSearchParams(searchParams)
+    return <Navigate to={`/tong-ket?${q.toString()}`} replace />
+  }
+  return <Navigate to="/leads" replace />
 }
 
 /** VietMy — định tuyến, xác thực và RBAC; `base` cho GitHub Pages. */
@@ -118,12 +124,8 @@ export default function App() {
                       <Route path="/login" element={<LoginView />} />
                       <Route element={<ProtectedRoute />}>
                         <Route element={<Layout />}>
-                          <Route
-                            index
-                            element={
-                              <MarketingDefaultHome />
-                            }
-                          />
+                          <Route index element={<DefaultHomeRedirect />} />
+                          <Route path="tong-ket" element={<SummaryHubView />} />
                           <Route path="leads" element={<LeadsWorkspace />} />
                           <Route path="counselor" element={<Navigate to="/leads" replace />} />
                           <Route
@@ -132,12 +134,12 @@ export default function App() {
                           />
                           <Route path="analytics" element={<AnalyticsAdvancedView />} />
                           <Route path="bao-cao-tuyen-sinh" element={<AdmissionsReportsView />} />
-                          <Route path="kpi" element={<Navigate to="/?tab=kpi-nhan-su" replace />} />
-                          <Route path="command" element={<Navigate to="/?tab=van-hanh" replace />} />
+                          <Route path="kpi" element={<Navigate to="/tong-ket?tab=kpi-nhan-su" replace />} />
+                          <Route path="command" element={<Navigate to="/tong-ket?tab=van-hanh" replace />} />
                           <Route path="my-day" element={<MyDayView />} />
                           <Route path="organizations" element={<OrganizationsView />} />
-                          <Route path="scorecard" element={<Navigate to="/?tab=bang-diem" replace />} />
-                          <Route path="call-history" element={<Navigate to="/?tab=lich-goi" replace />} />
+                          <Route path="scorecard" element={<Navigate to="/tong-ket?tab=bang-diem" replace />} />
+                          <Route path="call-history" element={<Navigate to="/tong-ket?tab=lich-goi" replace />} />
                           <Route
                             path="ai"
                             element={<Navigate to="/settings?tab=connect&sub=llm" replace />}

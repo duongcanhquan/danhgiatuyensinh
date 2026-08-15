@@ -1,9 +1,17 @@
 /**
- * URL webhook n8n mặc định hệ Apps Script VietMy (apchn-host.lapage.vn).
+ * URL webhook n8n mặc định — path APP CRM (chạy song song hệ Apps Script cũ).
  * Dùng làm gợi ý điền nhanh trong Cài đặt — không hardcode khi runtime gửi request
  * (runtime chỉ lấy orgSettings / VITE_N8N_*).
  */
 export const VIETMY_DEFAULT_N8N_WEBHOOKS = {
+  giayMoi: 'https://apchn-host.lapage.vn/webhook/giaymoits',
+  ctsv: 'https://apchn-host.lapage.vn/webhook/app-crm-ctsv',
+  daily: 'https://apchn-host.lapage.vn/webhook/app-crm-baocao-ngay',
+  monthly: 'https://apchn-host.lapage.vn/webhook/app-crm-baocao-thang',
+} as const
+
+/** Path cũ Apps Script — chỉ tham chiếu khi chạy song song, không điền mặc định. */
+export const VIETMY_LEGACY_N8N_WEBHOOKS = {
   giayMoi: 'https://apchn-host.lapage.vn/webhook/giaymoits',
   ctsv: 'https://apchn-host.lapage.vn/webhook/testctsv',
   daily: 'https://apchn-host.lapage.vn/webhook/baocao-ngay',

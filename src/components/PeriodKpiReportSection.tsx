@@ -199,7 +199,7 @@ export function PeriodKpiReportSection() {
                   <td className="px-3 py-2 text-right tabular-nums text-slate-600">{fmtKpiMinutes(r.talkSeconds)}</td>
                   <td className="px-3 py-2">
                     <Link
-                      to={`/?tab=lich-goi&from=${range.from}&to=${range.to}&counselor=${encodeURIComponent(r.counselorUid)}`}
+                      to={`/tong-ket?tab=lich-goi&from=${range.from}&to=${range.to}&counselor=${encodeURIComponent(r.counselorUid)}`}
                       className="text-xs font-semibold text-violet-800 underline"
                     >
                       Lịch sử gọi

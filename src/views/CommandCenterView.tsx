@@ -65,7 +65,7 @@ export function CommandCenterView({ embedded = false }: { embedded?: boolean }) 
       : profile?.displayName || 'Cá nhân'
 
   if (!allowed) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/leads" replace />
   }
 
   return (

@@ -35,6 +35,7 @@ export function CatalogCombobox({
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const composingRef = useRef(false)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value)
   const [busy, setBusy] = useState(false)
@@ -46,6 +47,7 @@ export function CatalogCombobox({
   })
 
   useEffect(() => {
+    if (composingRef.current) return
     setQuery(value)
   }, [value])
 
@@ -131,6 +133,7 @@ export function CatalogCombobox({
     <div ref={rootRef} className="relative min-w-0">
       <div className="flex min-w-0 items-stretch gap-0.5">
         <input
+          type="text"
           className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/25 disabled:bg-slate-50 disabled:text-slate-500"
           value={query}
           disabled={disabled || busy}
@@ -140,12 +143,21 @@ export function CatalogCombobox({
           spellCheck={false}
           placeholder={placeholder ?? 'Gõ để tìm hoặc thêm mới…'}
           onFocus={() => setOpen(true)}
+          onCompositionStart={() => {
+            composingRef.current = true
+          }}
+          onCompositionEnd={(e) => {
+            composingRef.current = false
+            setQuery(e.currentTarget.value)
+            setOpen(true)
+          }}
           onChange={(e) => {
             setQuery(e.target.value)
             setOpen(true)
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
+              if (e.nativeEvent.isComposing || composingRef.current) return
               e.preventDefault()
               void commit(query)
             }
@@ -153,6 +165,7 @@ export function CatalogCombobox({
           }}
           onBlur={() => {
             window.setTimeout(() => {
+              if (composingRef.current) return
               if (!rootRef.current?.contains(document.activeElement) && !listRef.current?.contains(document.activeElement)) {
                 void commit(query)
               }

@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ProfileSyncBlocked } from '../ProfileSyncBlocked'
+import { AuthSessionBootScreen } from '../AuthSessionBootScreen'
 import { getFirebaseAuth, isFirebaseConfigured } from '../../services/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
@@ -16,11 +17,7 @@ export function AccountantProtectedRoute() {
   }
 
   if (status === 'unknown') {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 text-slate-600">
-        <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang xác thực…</div>
-      </div>
-    )
+    return <AuthSessionBootScreen statusLabel="Đang xác thực cổng kế toán" />
   }
 
   if (!firebaseUser) {
@@ -28,11 +25,7 @@ export function AccountantProtectedRoute() {
   }
 
   if (status === 'authenticating') {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 text-slate-600">
-        <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang tải hồ sơ kế toán…</div>
-      </div>
-    )
+    return <AuthSessionBootScreen statusLabel="Đang tải hồ sơ kế toán" />
   }
 
   if (!profile) {
@@ -64,11 +57,7 @@ export function AccountantProtectedRoute() {
   }
 
   if (orgGate.state === 'loading') {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-indigo-50 text-slate-600">
-        <div className="rounded-2xl bg-white px-8 py-6 text-sm shadow-lg">Đang kiểm tra quyền truy cập…</div>
-      </div>
-    )
+    return <AuthSessionBootScreen statusLabel="Đang kiểm tra quyền truy cập trường" />
   }
 
   if (orgGate.state === 'blocked') {

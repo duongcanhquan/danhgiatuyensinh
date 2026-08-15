@@ -557,7 +557,7 @@ export function UserManualView() {
     <div className="-mx-2 -mt-2 flex min-h-[calc(100dvh-4.5rem)] flex-col overflow-hidden rounded-none border-y border-slate-200/90 bg-white shadow-none sm:-mx-3 sm:min-h-[calc(100dvh-5rem)] md:-mx-4 md:rounded-2xl md:border md:shadow-[0_8px_40px_rgba(15,23,42,0.08)]">
       <header className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 bg-white px-4 py-2.5 sm:px-6">
         <Link
-          to="/"
+          to="/leads"
           className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50/80"
         >
           <Home className="h-4 w-4 text-amber-700" strokeWidth={1.75} aria-hidden />

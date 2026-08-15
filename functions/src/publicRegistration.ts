@@ -131,9 +131,11 @@ function normIdentity(s: string): string {
 
 function normalizePhoneKey(phone: string, parentPhone?: string): string {
   const raw = phone.trim() || (parentPhone ?? '').trim()
-  const digits = raw.replace(/\D/g, '')
+  let digits = raw.replace(/\D/g, '')
   if (!digits) return ''
-  if (digits.startsWith('84') && digits.length >= 10) return `0${digits.slice(2)}`
+  if (digits.startsWith('84') && digits.length >= 10) digits = `0${digits.slice(2)}`
+  // Đồng bộ client: Excel/API đôi khi mất số 0 đầu (912… → 0912…).
+  if (digits.length === 9 && /^[35789]/.test(digits)) digits = `0${digits}`
   return digits
 }
 
@@ -427,6 +429,7 @@ function isValidDob(dob: string, now = new Date()): boolean {
 function normalizeVnPhoneDigits(raw: string): string {
   let d = raw.replace(/\D/g, '')
   if (d.startsWith('84') && d.length >= 11) d = `0${d.slice(2)}`
+  if (d.length === 9 && /^[35789]/.test(d)) d = `0${d}`
   return d
 }
 
@@ -825,6 +828,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
           systemCode,
           registeredAt: now.toDate().toISOString(),
           portalUrl: config.portalPublicUrl || null,
+          createdVia: 'public_portal',
           student: {
             fullName: str(input.fullName),
             phone: str(input.phone),
@@ -868,6 +872,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
           n8nOk,
           n8nError,
           notifiedAt: FieldValue.serverTimestamp(),
+          createdVia: 'public_portal',
         },
       },
       { merge: true },
@@ -884,5 +889,143 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     }
   })
 
-  return { getPublicRegistrationMeta, submitPublicLead }
+  /**
+   * CRM tạo hồ sơ thủ công → bắn n8n `student_registration` từ server (tránh CORS browser).
+   * Auth bắt buộc; lead phải thuộc org của caller (hoặc superadmin).
+   */
+  const notifyCrmPortalRegistration = onCall(async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Cần đăng nhập.')
+    }
+    const data = (request.data ?? {}) as {
+      leadId?: string
+      orgId?: string
+      createdByName?: string
+    }
+    const leadId = str(data.leadId)
+    const orgId = str(data.orgId)
+    if (!leadId || !orgId) {
+      throw new HttpsError('invalid-argument', 'Thiếu leadId hoặc orgId.')
+    }
+
+    const callerSnap = await db.collection('users').doc(request.auth.uid).get()
+    if (!callerSnap.exists) {
+      throw new HttpsError('permission-denied', 'Không tìm thấy tài khoản nhân sự.')
+    }
+    const caller = callerSnap.data() as {
+      role?: string
+      orgId?: string
+      displayName?: string
+      email?: string
+    }
+    const role = str(caller.role)
+    const callerOrg = str(caller.orgId)
+    const isElevated =
+      role === 'superadmin' || role === 'admin' || role === 'team_lead' || role === 'counselor' || role === 'ctv'
+    if (!isElevated) {
+      throw new HttpsError('permission-denied', 'Không có quyền gửi thông báo đăng ký.')
+    }
+    if (role !== 'superadmin' && callerOrg && callerOrg !== orgId) {
+      throw new HttpsError('permission-denied', 'Hồ sơ không thuộc trường đang làm việc.')
+    }
+
+    const leadRef = db.collection('leads').doc(leadId)
+    const leadSnap = await leadRef.get()
+    if (!leadSnap.exists) {
+      throw new HttpsError('not-found', 'Không tìm thấy hồ sơ.')
+    }
+    const lead = leadSnap.data() as Record<string, unknown>
+    const leadOrg = str(lead.orgId)
+    if (leadOrg && leadOrg !== orgId) {
+      throw new HttpsError('permission-denied', 'orgId không khớp hồ sơ.')
+    }
+
+    const config = await loadPublicRegistrationConfig(db, orgId)
+    const systemCode = str(lead.systemCode)
+    const counselorId = str(lead.assignedCounselorId) || str(lead.assignedTo)
+    let counselorName = ''
+    let counselorEmail = ''
+    if (counselorId) {
+      const u = await db.collection('users').doc(counselorId).get()
+      if (u.exists) {
+        const d = u.data() as { displayName?: string; email?: string }
+        counselorName = str(d.displayName)
+        counselorEmail = str(d.email)
+      }
+    }
+
+    let n8nOk = false
+    let n8nError: string | null = null
+    const webhook = config.n8nWebhookUrl
+    if (config.n8nEnabled && webhook.startsWith('http')) {
+      try {
+        await triggerRegistrationN8n(webhook, {
+          action: 'student_registration',
+          leadId,
+          systemCode,
+          registeredAt: new Date().toISOString(),
+          portalUrl: config.portalPublicUrl || null,
+          createdVia: 'crm_manual',
+          createdByName:
+            str(data.createdByName) ||
+            str(caller.displayName) ||
+            str(caller.email) ||
+            request.auth.uid,
+          student: {
+            fullName: str(lead.fullName),
+            phone: str(lead.phone),
+            parentPhone: str(lead.parentPhone),
+            motherPhone: str(lead.motherPhone),
+            fatherPhone: str(lead.fatherPhone),
+            email: str(lead.studentEmail),
+            dateOfBirth: str(lead.dateOfBirth),
+            gender: str(lead.gender),
+            placeOfBirth: str(lead.placeOfBirth),
+            ethnicity: str(lead.ethnicity),
+            nationalId: str(lead.nationalId),
+            address: str(lead.permanentAddress) || str(lead.address),
+            province: str(lead.province),
+            highSchool: str(lead.highSchool),
+            applicantCategory: str(lead.applicantCategory),
+            educationLevel: str(lead.studyIntention) || str(lead.educationLevel),
+            majorInterest: str(lead.majorInterest),
+            academicPerformance: str(lead.academicPerformance),
+            description: str(lead.description),
+            source1: str(lead.source1) || str(lead.source),
+          },
+          counselor: counselorId
+            ? {
+                id: counselorId,
+                name: counselorName || null,
+                email: counselorEmail || null,
+              }
+            : null,
+        })
+        n8nOk = true
+      } catch (e) {
+        n8nError = e instanceof Error ? e.message : String(e)
+        console.warn('[notifyCrmPortalRegistration] n8n error', n8nError)
+      }
+    } else {
+      n8nError = config.n8nEnabled
+        ? 'Chưa cấu hình URL webhook cổng đăng ký.'
+        : 'Webhook cổng đăng ký đang tắt.'
+    }
+
+    await leadRef.set(
+      {
+        publicRegistrationMeta: {
+          n8nOk,
+          n8nError,
+          notifiedAt: FieldValue.serverTimestamp(),
+          createdVia: 'crm_manual',
+        },
+      },
+      { merge: true },
+    )
+
+    return { ok: true, n8nOk, n8nError, systemCode, leadId }
+  })
+
+  return { getPublicRegistrationMeta, submitPublicLead, notifyCrmPortalRegistration }
 }

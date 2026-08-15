@@ -165,7 +165,7 @@ export function N8nWebhooksSettingsPanel() {
             className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-900 hover:bg-indigo-50 disabled:opacity-60"
           >
             <Sparkles className="h-4 w-4" aria-hidden />
-            Điền URL mẫu VietMy
+            Điền URL mẫu APP CRM
           </button>
           {msg ? <p className="text-sm text-slate-600">{msg}</p> : null}
         </div>

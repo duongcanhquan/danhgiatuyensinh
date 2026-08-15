@@ -286,7 +286,7 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
       .sort((a, b) => b.stats.total - a.stats.total)
   }, [filteredCalls, nameMap])
 
-  if (!allowed) return <Navigate to="/" replace />
+  if (!allowed) return <Navigate to="/leads" replace />
 
   return (
     <div className="bento-board">

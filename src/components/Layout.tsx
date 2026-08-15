@@ -41,7 +41,7 @@ type NavDef = {
   bottomPrimary?: boolean
 }
 
-const MOBILE_BOTTOM_ROUTES = ['/', '/leads', '/my-day', '/settings'] as const
+const MOBILE_BOTTOM_ROUTES = ['/leads', '/tong-ket', '/my-day', '/settings'] as const
 /** Chiều rộng thanh icon khi thu gọn / mở full (desktop). */
 const RAIL_COLLAPSED = 'lg:w-16'
 const RAIL_EXPANDED = 'lg:w-56'
@@ -53,8 +53,15 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: 
 }
 
 const mainNav: NavDef[] = [
-  { to: '/', label: 'Tổng kết', shortLabel: 'Tổng kết', icon: LayoutDashboard, group: 'work', bottomPrimary: true },
   { to: '/leads', label: 'Hồ sơ', shortLabel: 'Hồ sơ', icon: Users, group: 'work', bottomPrimary: true },
+  {
+    to: '/tong-ket',
+    label: 'Tổng kết',
+    shortLabel: 'Tổng kết',
+    icon: LayoutDashboard,
+    group: 'work',
+    bottomPrimary: true,
+  },
   {
     to: '/my-day',
     label: 'Ngày của tôi',
@@ -104,7 +111,9 @@ function sidebarLinkClass(isActive: boolean, expanded: boolean) {
 }
 
 function isNavActive(pathname: string, to: string) {
-  return to === '/' ? pathname === '/' : pathname.startsWith(to)
+  if (to === '/tong-ket') return pathname === '/tong-ket' || pathname === '/'
+  if (to === '/leads') return pathname === '/leads' || pathname.startsWith('/leads/')
+  return pathname.startsWith(to)
 }
 
 /** Giữ bộ lọc trên URL khi đang ở Hồ sơ rồi bấm lại «Hồ sơ» trên menu. */
@@ -218,7 +227,7 @@ export function Layout() {
           <NavLink
             key={to}
             to={navTarget(to, location.pathname, location.search)}
-            end={to === '/'}
+            end={to === '/leads' || to === '/tong-ket'}
             title={label}
             aria-label={label}
             className={({ isActive }) => sidebarLinkClass(isActive, showLabels)}
@@ -437,7 +446,7 @@ export function Layout() {
             <NavLink
               key={to}
               to={navTarget(to, location.pathname, location.search)}
-              end={to === '/'}
+              end={to === '/leads' || to === '/tong-ket'}
               className="app-bottom-nav-link"
               data-active={active ? 'true' : 'false'}
               aria-current={active ? 'page' : undefined}

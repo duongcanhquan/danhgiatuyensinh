@@ -92,13 +92,17 @@ export function SearchableFilterSelect({
       {open ? (
         <div className="absolute left-0 top-full z-50 mt-0.5 min-w-[12rem] max-w-[18rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
           <input
-            type="search"
+            type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
             className="w-full border-b border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none"
             aria-controls={listId}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
           <ul id={listId} className="max-h-48 overflow-y-auto py-0.5 text-xs" role="listbox">
             <li>

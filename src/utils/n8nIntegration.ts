@@ -145,7 +145,7 @@ export function buildN8nFullData(
   const scholarship2 = extras?.scholarship2Label ?? ''
 
   return {
-    id: lead.customerId || lead.id,
+    id: lead.systemCode || lead.customerId || lead.id,
     fullName: lead.fullName,
     phone: lead.phone,
     email: lead.studentEmail ?? '',
@@ -154,7 +154,8 @@ export function buildN8nFullData(
     major: lead.majorInterest ?? '',
     school: lead.highSchool,
     province: lead.province,
-    counselor: extras?.counselorName ?? lead.assignedCounselorId ?? lead.assignedTo ?? '',
+    systemCode: lead.systemCode ?? '',
+    counselor: extras?.counselorName?.trim() || '',
     father: lead.fatherName ?? '',
     fatherPhone: lead.fatherPhone ?? '',
     mother: lead.motherName ?? '',

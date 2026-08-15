@@ -9,6 +9,8 @@ import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
 import { loadFinanceDepositThresholds } from '../utils/financeThresholds'
 import { loadOrgN8nWebhooks } from '../utils/n8nWebhooksConfig'
 import { loadReceiptStorageConfig } from '../utils/receiptStorageConfig'
+import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
+import { loadCommsAutomationConfig } from '../utils/commsAutomationConfig'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
 import { readStoredActiveOrgId, writeStoredActiveOrgId } from '../tenancy/activeOrgStorage'
 
@@ -69,6 +71,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     void loadFinanceDepositThresholds(db, effectiveOrgId)
     void loadOrgN8nWebhooks(db, effectiveOrgId)
     void loadReceiptStorageConfig(db, effectiveOrgId)
+    // Hub + comms phải nạp khi vào org — không chỉ khi mở panel Cài đặt.
+    void loadOrgIntegrationHub(db, effectiveOrgId)
+    void loadCommsAutomationConfig(db, effectiveOrgId)
   }, [effectiveOrgId])
 
   useEffect(() => {

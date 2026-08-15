@@ -11,6 +11,8 @@ Dùng khi **hai hệ chạy cùng lúc**: Apps Script + Sheet giữ webhook cũ;
 | Báo cáo tháng | `https://apchn-host.lapage.vn/webhook/app-crm-baocao-thang` |
 | Giấy mời | Giữ URL cũ `…/giaymoits` **hoặc** import workflow giấy mời riêng nếu có |
 
+**Cổng đăng ký / tạo hồ sơ CRM** (`action: student_registration`): URL nằm ở **Cài đặt → Cổng đăng ký** (`n8nWebhookUrl`), không phải 3 ô CTSV/báo cáo. App bắn từ Cloud Function (cổng ngoài + tạo trong CRM) — cần workflow n8n Active nhận `student_registration`.
+
 **Không** ghi đè `testctsv` / `baocao-ngay` / `baocao-thang` — để Apps Script cũ tiếp tục chạy.
 
 Tin Chat từ app có prefix `🆕 [APP CRM]` để phân biệt với tin hệ cũ.

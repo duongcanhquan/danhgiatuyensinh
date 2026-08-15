@@ -61,6 +61,7 @@ URL trống = tắt luồng đó (không silent fallback hardcode sau khi đã l
 | `event: accountant_full_ne` | CTSV |
 | `event: daily_finance_report` | Báo cáo ngày |
 | payload tháng (`month`, `nbMonth`, …) | Báo cáo tháng |
+| `action: student_registration` | URL cổng đăng ký (`Cài đặt → Cổng đăng ký`) — CF `submitPublicLead` + `notifyCrmPortalRegistration` |
 
 **Google Chat:** trên n8n dùng `{{$json.message_vi}}` hoặc `chat_text`. App **không** gọi Chat API trực tiếp.
 

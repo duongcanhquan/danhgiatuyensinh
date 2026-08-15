@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Wallet } from 'lucide-react'
 import { AuthSessionExitBar } from '../components/AuthSessionControls'
+import { AuthSessionBootScreen } from '../components/AuthSessionBootScreen'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
@@ -59,7 +60,12 @@ export function LoginView() {
   const location = useLocation()
   const rawFrom = (location.state as { from?: string } | null)?.from
   const from =
-    rawFrom && rawFrom !== '/login' && rawFrom.startsWith('/') ? rawFrom : '/leads'
+    rawFrom &&
+    rawFrom !== '/login' &&
+    rawFrom !== '/' &&
+    rawFrom.startsWith('/')
+      ? rawFrom
+      : '/leads'
 
   const superEmailHint = defaultSuperAdminEmailFromEnv()
   const [email, setEmail] = useState(superEmailHint)
@@ -115,7 +121,7 @@ export function LoginView() {
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
-              to="/"
+              to="/leads"
               className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
             >
               Về trang chủ
@@ -132,30 +138,41 @@ export function LoginView() {
   }
 
   if (firebaseUser && (status === 'authenticating' || (status === 'authenticated' && !profile))) {
+    if (status === 'authenticating') {
+      return (
+        <AuthSessionBootScreen
+          statusLabel="Đang đồng bộ hồ sơ nhân sự"
+          detail="Đăng nhập Authentication thành công."
+          actions={
+            <button
+              type="button"
+              className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-white/15"
+              onClick={() => void signOut()}
+            >
+              Đăng xuất để thử lại
+            </button>
+          }
+        />
+      )
+    }
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[var(--vm-canvas)] px-4 py-10">
         <div className="app-surface-elevated w-full max-w-md rounded-2xl p-6 text-center sm:p-8">
-          <p className="text-sm font-semibold text-slate-900">
-            {status === 'authenticating' ? 'Đang đồng bộ hồ sơ…' : 'Chưa vào được CRM'}
-          </p>
+          <p className="text-sm font-semibold text-slate-900">Chưa vào được CRM</p>
           <p className="mt-2 text-sm text-slate-600">
-            {status === 'authenticating'
-              ? 'Đăng nhập Authentication thành công. Hệ thống đang đọc hồ sơ nhân sự.'
-              : 'Đã đăng nhập nhưng chưa đọc/ghi được hồ sơ Firestore. Đăng xuất rồi thử lại, hoặc liên hệ quản trị.'}
+            Đã đăng nhập nhưng chưa đọc/ghi được hồ sơ Firestore. Đăng xuất rồi thử lại, hoặc liên hệ quản trị.
           </p>
           <div className="mt-5 flex flex-col gap-2">
             <button type="button" className="vm-btn vm-btn-primary w-full" onClick={() => void signOut()}>
               Đăng xuất để thử lại
             </button>
-            {status === 'authenticated' && !profile ? (
-              <button
-                type="button"
-                className="vm-btn vm-btn-secondary w-full"
-                onClick={() => window.location.reload()}
-              >
-                Tải lại trang
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="vm-btn vm-btn-secondary w-full"
+              onClick={() => window.location.reload()}
+            >
+              Tải lại trang
+            </button>
           </div>
         </div>
       </div>

@@ -170,10 +170,10 @@ export function AdminPersonnelKpiPanel({ variant = 'full' }: { variant?: 'full' 
       {variant === 'full' ? (
         <div className="flex flex-wrap gap-2">
           {[
-            { to: '/?tab=van-hanh', label: 'Điều hành (ngày)', icon: BarChart3 },
-            { to: '/?tab=kpi-nhan-su', label: 'KPI kỳ', icon: PhoneCall },
-            { to: '/?tab=bang-diem', label: 'Bảng điểm tháng', icon: ClipboardList },
-            { to: '/?tab=lich-goi', label: 'Lịch sử gọi', icon: Users },
+            { to: '/tong-ket?tab=van-hanh', label: 'Điều hành (ngày)', icon: BarChart3 },
+            { to: '/tong-ket?tab=kpi-nhan-su', label: 'KPI kỳ', icon: PhoneCall },
+            { to: '/tong-ket?tab=bang-diem', label: 'Bảng điểm tháng', icon: ClipboardList },
+            { to: '/tong-ket?tab=lich-goi', label: 'Lịch sử gọi', icon: Users },
           ].map(({ to, label, icon: Icon }) => (
             <Link
               key={to}

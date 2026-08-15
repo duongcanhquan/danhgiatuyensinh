@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ProfileSyncBlocked } from './ProfileSyncBlocked'
+import { AuthSessionBootScreen } from './AuthSessionBootScreen'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
 import { isAccountantOnlyUser } from '../auth/accountantPortal'
@@ -20,11 +21,7 @@ export function ProtectedRoute() {
   }
 
   if (status === 'unknown') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-600">
-        <div className="app-surface-elevated rounded-2xl px-8 py-6 text-sm">Hệ thống đang đăng nhập…</div>
-      </div>
-    )
+    return <AuthSessionBootScreen statusLabel="Đang mở phiên làm việc" />
   }
 
   if (!firebaseUser) {
@@ -33,15 +30,19 @@ export function ProtectedRoute() {
 
   if (status === 'authenticating') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 text-slate-600">
-        <div className="app-surface-elevated max-w-md rounded-2xl px-8 py-6 text-center text-sm">
-          <p className="font-medium text-slate-800">Hệ thống đang đăng nhập…</p>
-          <p className="mt-2 text-xs text-slate-500">Đang đồng bộ hồ sơ và quyền truy cập.</p>
-          <button type="button" className="vm-btn vm-btn-secondary mt-4" onClick={() => void signOut()}>
+      <AuthSessionBootScreen
+        statusLabel="Đang đồng bộ hồ sơ và quyền truy cập"
+        detail="Đăng nhập thành công, hệ thống đang đọc hồ sơ nhân sự."
+        actions={
+          <button
+            type="button"
+            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-white/15"
+            onClick={() => void signOut()}
+          >
             Đăng xuất
           </button>
-        </div>
-      </div>
+        }
+      />
     )
   }
 
@@ -65,11 +66,7 @@ export function ProtectedRoute() {
   }
 
   if (orgGate.state === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-600">
-        <div className="app-surface-elevated rounded-2xl px-8 py-6 text-sm">Đang kiểm tra quyền truy cập…</div>
-      </div>
-    )
+    return <AuthSessionBootScreen statusLabel="Đang kiểm tra quyền truy cập trường" />
   }
 
   if (orgGate.state === 'blocked') {
@@ -91,4 +88,3 @@ export function ProtectedRoute() {
 
   return <Outlet />
 }
-

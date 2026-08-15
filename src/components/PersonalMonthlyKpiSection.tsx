@@ -101,7 +101,7 @@ export function PersonalMonthlyKpiSection() {
 
       <p className="text-xs text-slate-600">
         Xem{' '}
-        <Link to="/?tab=bang-diem" className="font-semibold text-violet-800 underline">
+        <Link to="/tong-ket?tab=bang-diem" className="font-semibold text-violet-800 underline">
           Bảng điểm tháng
         </Link>{' '}
         (nếu được phép) hoặc tab «Ngày của tôi» cho số liệu hôm nay.

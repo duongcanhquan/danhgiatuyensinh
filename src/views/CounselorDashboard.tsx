@@ -67,6 +67,11 @@ import {
 import { isFollowUpTodayLocal, isHotStaleNewSla, isStaleNewSla } from '../utils/slaLead'
 import { counselorDashboardNeedsFullScope } from '../utils/counselorDashboardLeadScope'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
+import { useImeFriendlySearchInput } from '../hooks/useImeFriendlySearchInput'
+import {
+  leadSearchPlaceholderForRole,
+  leadSearchScopeHintForRole,
+} from '../utils/leadSearchScope'
 
 const TAG_BADGE: Record<PriorityTag, string> = {
   HOT: 'bg-rose-100 text-rose-900 ring-1 ring-rose-300/80',
@@ -537,6 +542,15 @@ export function CounselorDashboard() {
   )
 
   const urlQRaw = searchParams.get(LWF.Q) ?? ''
+  const commitListSearch = useCallback(
+    (raw: string) => {
+      const t = raw.trim()
+      patchListUrl({ [LWF.Q]: t ? raw : null })
+      setPage(1)
+    },
+    [patchListUrl],
+  )
+  const listSearchInput = useImeFriendlySearchInput(urlQRaw, commitListSearch)
   const qLower = urlQRaw.trim().toLowerCase()
   const dueOnly = searchParams.get(LWF.DUE) === '1'
   const tagFilter = parsePriorityTagStrict(searchParams.get(LWF.TAG))
@@ -1175,16 +1189,25 @@ export function CounselorDashboard() {
                 <div className="relative mt-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <input
-                    type="search"
-                    value={urlQRaw}
-                    onChange={(e) => {
-                      const raw = e.target.value
-                      const t = raw.trim()
-                      patchListUrl({ [LWF.Q]: t ? raw : null })
-                      setPage(1)
-                    }}
+                    type="text"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={listSearchInput.value}
+                    onChange={(e) => listSearchInput.onChange(e.target.value)}
+                    onCompositionStart={listSearchInput.onCompositionStart}
+                    onCompositionEnd={listSearchInput.onCompositionEnd}
+                    onKeyDown={listSearchInput.onKeyDown}
+                    onBlur={listSearchInput.onBlur}
                     onFocus={() => setFiltersExpanded(true)}
-                    placeholder="Tên, SĐT, tỉnh, trường, ngành… (đồng bộ với Hồ sơ đầy đủ — tham số q)"
+                    placeholder={leadSearchPlaceholderForRole(
+                      profile?.role,
+                      can('leads:read:global'),
+                    )}
+                    title={leadSearchScopeHintForRole(profile?.role, can('leads:read:global'))}
                     className="h-9 w-full rounded-lg border border-slate-200/95 bg-white py-0 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-slate-500"
                   />
                 </div>

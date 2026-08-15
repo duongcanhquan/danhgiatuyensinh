@@ -115,3 +115,29 @@ export async function submitPublicRegistration(
     throw new Error(callableErrorMessage(e, 'Không gửi được đăng ký — thử lại sau.'), { cause: e })
   }
 }
+
+export type NotifyCrmPortalRegistrationResult = {
+  ok: boolean
+  n8nOk: boolean
+  n8nError: string | null
+  systemCode: string
+  leadId: string
+}
+
+/** CRM tạo hồ sơ → CF bắn n8n student_registration (không CORS). */
+export async function notifyCrmPortalRegistration(input: {
+  leadId: string
+  orgId: string
+  createdByName?: string
+}): Promise<NotifyCrmPortalRegistrationResult> {
+  const fn = httpsCallable<
+    { leadId: string; orgId: string; createdByName?: string },
+    NotifyCrmPortalRegistrationResult
+  >(functionsRegion(), 'notifyCrmPortalRegistration')
+  try {
+    const res = await fn(input)
+    return res.data
+  } catch (e) {
+    throw new Error(callableErrorMessage(e, 'Không gửi được tin đăng ký sang n8n.'), { cause: e })
+  }
+}

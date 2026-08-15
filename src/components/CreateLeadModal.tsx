@@ -56,7 +56,10 @@ export function CreateLeadModal({
   activeScoringProfile: ScoringProfile | null
   scoringMasterBuckets: MasterDataBuckets
   schoolTvvSignalDefs: readonly ProfileCustomScoringSignal[]
-  onCreated: (leadId: string) => void
+  onCreated: (
+    leadId: string,
+    meta?: { warning?: string | null; systemCode?: string; n8nOk?: boolean; n8nError?: string | null },
+  ) => void
   onOpenExisting?: (leadId: string) => void
 }) {
   const [draft, setDraft] = useState(emptyLeadCoreDraft)
@@ -66,6 +69,7 @@ export function CreateLeadModal({
   const [error, setError] = useState<string | null>(null)
   const [duplicateId, setDuplicateId] = useState<string | null>(null)
   const bodyScrollRef = useRef<HTMLDivElement>(null)
+  const submittingRef = useRef(false)
   const { active: leadSources } = useLeadSources()
   const { items: scholarships } = useScholarships()
   const { can } = useAuth()
@@ -115,6 +119,7 @@ export function CreateLeadModal({
     setError(null)
     setDuplicateId(null)
     setBusy(false)
+    submittingRef.current = false
     queueMicrotask(() => bodyScrollRef.current?.scrollTo(0, 0))
   }, [open, defaultAssignee])
 
@@ -160,6 +165,7 @@ export function CreateLeadModal({
   }, [open, db, effectiveOrgId])
 
   const handleSubmit = useCallback(async () => {
+    if (submittingRef.current || busy) return
     if (!db || !profile) {
       setError('Chưa kết nối Firestore hoặc chưa đăng nhập.')
       return
@@ -173,13 +179,17 @@ export function CreateLeadModal({
       setError(validationErr)
       return
     }
+    submittingRef.current = true
     setBusy(true)
     setError(null)
     setDuplicateId(null)
+    let createdId: string | null = null
+    let createdSystemCode: string | null = null
+    let postWriteWarning: string | null = null
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
       const counselorId = assigneeUid.trim() || profile.id
-      const { id } = await createManualLead(
+      const { id, systemCode, n8nOk, n8nError } = await createManualLead(
         db,
         {
           draft,
@@ -197,39 +207,81 @@ export function CreateLeadModal({
           classificationRuntime: classificationRuntime.enabled ? classificationRuntime : null,
         },
       )
+      createdId = id
+      createdSystemCode = systemCode
 
       if (financeDraftHasContent(financeDraft)) {
-        const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, id))
-        const lead = snap.exists() ? mapDoc(id, snap.data() as Record<string, unknown>) : null
-        if (lead) {
-          await persistLeadFinance({
-            db,
-            lead,
-            draft: financeDraft,
-            counselorName: performer,
-          })
+        try {
+          const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, id))
+          const lead = snap.exists() ? mapDoc(id, snap.data() as Record<string, unknown>) : null
+          const assignee =
+            directoryUsers.find((u) => u.id === counselorId) ??
+            assigneeOptions.find((u) => u.id === counselorId)
+          const assigneeLabel = assignee
+            ? formatStaffDirectoryLabel(assignee)
+            : performer
+          if (lead) {
+            await persistLeadFinance({
+              db,
+              lead,
+              draft: financeDraft,
+              counselorName: assigneeLabel,
+            })
+          }
+        } catch (fe) {
+          console.warn('[CreateLeadModal] finance after create', fe)
+          postWriteWarning =
+            fe instanceof Error
+              ? `Hồ sơ đã tạo nhưng lưu tiền lỗi: ${fe.message}`
+              : 'Hồ sơ đã tạo nhưng lưu tiền chưa xong — mở hồ sơ để cập nhật lại.'
         }
       }
-      await commitAuditLog(db, {
-        leadId: id,
-        actionType: 'SYSTEM_UPDATE',
-        description: 'Tạo hồ sơ ứng viên mới (thủ công trên màn Hồ sơ)',
-        performedBy: profile.id,
-        performedByName: performer,
-      })
-      onCreated(id)
+      try {
+        await commitAuditLog(db, {
+          leadId: id,
+          actionType: 'SYSTEM_UPDATE',
+          description: `Tạo hồ sơ ứng viên mới (thủ công trên màn Hồ sơ)${systemCode ? ` — mã ${systemCode}` : ''}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      } catch (ae) {
+        console.warn('[CreateLeadModal] audit after create', ae)
+      }
+
+      if (!n8nOk && n8nError) {
+        postWriteWarning = [
+          postWriteWarning,
+          `Tin n8n đăng ký chưa gửi được: ${n8nError}`,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      }
+
+      onCreated(id, { warning: postWriteWarning, systemCode, n8nOk, n8nError })
       onClose()
     } catch (e) {
-      if (e instanceof DuplicateLeadError) {
+      if (createdId) {
+        // Đã ghi Firestore — vẫn coi là thành công, tránh bấm lại báo trùng.
+        onCreated(createdId, {
+          warning:
+            e instanceof Error
+              ? `Hồ sơ đã tạo nhưng bước sau lỗi: ${e.message}`
+              : 'Hồ sơ đã tạo nhưng có lỗi phụ.',
+          systemCode: createdSystemCode ?? undefined,
+        })
+        onClose()
+      } else if (e instanceof DuplicateLeadError) {
         setDuplicateId(e.existingId)
         setError(e.message)
       } else {
         setError(e instanceof Error ? e.message : 'Không tạo được hồ sơ.')
       }
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }, [
+    busy,
     db,
     profile,
     effectiveOrgId,
@@ -242,6 +294,8 @@ export function CreateLeadModal({
     infoScoreRuntime,
     classificationRuntime,
     leadSources,
+    directoryUsers,
+    assigneeOptions,
     onCreated,
     onClose,
   ])

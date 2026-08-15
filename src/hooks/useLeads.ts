@@ -54,6 +54,12 @@ import { parseScoringSignalsFromFirestore } from '../utils/leadScoringSignals'
 import { resolveLeadPrimarySource } from '../utils/leadSemanticFieldValue'
 import { pickFirstFirestoreString, readLeadSemanticFieldsFromFirestore } from '../utils/leadFirestoreFieldRead'
 import { firestoreReadErrorMessage } from '../utils/firestoreReadError'
+import {
+  classifyLeadSearchQuery,
+  leadSearchScanLimitForProfile,
+  MAX_LEAD_SEARCH_SCAN_ADMIN,
+  teamLeadAssigneeScopeIds,
+} from '../utils/leadSearchScope'
 
 const PAYMENT_KEYS: LeadPaymentSlotKey[] = [
   'deposit',
@@ -118,8 +124,8 @@ function parseScoringCustomSignalsFromFirestore(raw: unknown): Record<string, bo
 /** Số hồ sơ mỗi trang Firestore / bảng. */
 export const LEADS_PAGE_SIZE = 30
 
-/** Quét tối đa khi có ô tìm (URL q) — lọc tiếp trên client (chế độ `paged`). Giữ vừa phải để tìm nhanh. */
-export const MAX_LEAD_SEARCH_SCAN = 1200
+/** Quét tối đa khi có ô tìm (URL q) — mặc định = trần admin; thực tế lấy theo vai trò. */
+export const MAX_LEAD_SEARCH_SCAN = MAX_LEAD_SEARCH_SCAN_ADMIN
 
 /** Một lần getDocs tối đa khi nhảy trang xa (thay cho nhiều vòng startAfter). */
 const MAX_LIST_BULK_FETCH = 3600
@@ -624,7 +630,7 @@ function rbacConstraint(
   }
 
   if (isTeamLeadRole(profile.role)) {
-    const team = (profile.managedCounselorIds ?? []).filter(Boolean)
+    const team = teamLeadAssigneeScopeIds(profile)
     if (team.length) {
       const chunk = team.slice(0, 30)
       return or(where('assignedTo', 'in', chunk), where('assignedCounselorId', 'in', chunk))
@@ -846,7 +852,7 @@ function applyRoleClientFilter(
   const scoped = orgId ? rows.filter((l) => leadBelongsToOrg(l, orgId)) : rows
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
   if (isTeamLeadRole(profile.role)) {
-    const team = new Set(profile.managedCounselorIds ?? [])
+    const team = new Set(teamLeadAssigneeScopeIds(profile))
     if (team.size) {
       return scoped.filter((l) => {
         const u = l.assignedTo ?? l.assignedCounselorId
@@ -882,29 +888,65 @@ export function leadMatchesClientSearch(
 ): boolean {
   const name = (l.fullName ?? '').toLowerCase()
   const phone = (l.phone ?? '').toLowerCase()
-  const email = (l.customerId ?? '').toLowerCase()
   const parent = (l.parentPhone ?? '').toLowerCase()
+  const mother = (l.motherPhone ?? '').toLowerCase()
+  const father = (l.fatherPhone ?? '').toLowerCase()
+  const systemCode = (l.systemCode ?? '').toLowerCase()
+  const customerId = (l.customerId ?? '').toLowerCase()
+  const email = (l.studentEmail ?? '').toLowerCase()
+  const nationalId = (l.nationalId ?? '').toLowerCase()
   const edu = (l.educationLevel ?? '').toLowerCase()
+  const study = (l.studyIntention ?? '').toLowerCase()
   const majorI = (l.majorInterest ?? '').toLowerCase()
   const academic = (l.academicPerformance ?? '').toLowerCase()
   const reg = (l.province ?? '').toLowerCase()
   const school = (l.highSchool ?? '').toLowerCase()
   const grade = (l.gradeClass ?? '').toLowerCase()
   const dob = (l.dateOfBirth ?? '').toLowerCase()
-  const addr = (l.address ?? '').toLowerCase()
-  const src = (l.source ?? '').toLowerCase()
+  const addr = `${l.address ?? ''} ${l.permanentAddress ?? ''}`.toLowerCase()
+  const src = `${l.source ?? ''} ${l.source1 ?? ''} ${l.source2 ?? ''}`.toLowerCase()
   const desc = (l.description ?? '').toLowerCase()
   const asp = (l.aspirations ?? '').toLowerCase()
   const hob = (l.hobbies ?? '').toLowerCase()
   const n1 = (l.profileNote1 ?? '').toLowerCase()
   const n2 = (l.profileNote2 ?? '').toLowerCase()
   const nO = (l.otherAttentionNotes ?? '').toLowerCase()
+  const category = (l.applicantCategory ?? '').toLowerCase()
   const uid = l.assignedTo ?? l.assignedCounselorId
   const tv = uid ? (directoryLabels?.get(uid) ?? '').toLowerCase() : ''
   const uploadLbl = l.uploadedBy
     ? (directoryLabels?.get(l.uploadedBy) ?? (l.uploaderName ?? '')).toLowerCase()
     : (l.uploaderName ?? '').toLowerCase()
-  const hay = `${name} ${phone} ${email} ${parent} ${edu} ${majorI} ${academic} ${reg} ${school} ${grade} ${dob} ${addr} ${src} ${desc} ${asp} ${hob} ${n1} ${n2} ${nO} ${tv} ${uploadLbl}`
+  const hay = [
+    name,
+    phone,
+    parent,
+    mother,
+    father,
+    systemCode,
+    customerId,
+    email,
+    nationalId,
+    edu,
+    study,
+    majorI,
+    academic,
+    reg,
+    school,
+    grade,
+    dob,
+    addr,
+    src,
+    desc,
+    asp,
+    hob,
+    n1,
+    n2,
+    nO,
+    category,
+    tv,
+    uploadLbl,
+  ].join(' ')
   return hay.includes(q)
 }
 
@@ -1625,6 +1667,51 @@ export function useLeads(opts?: UseLeadsOptions) {
     }
 
     const rebuildSearchBucket = async () => {
+      const scanLimit = leadSearchScanLimitForProfile(profile, canReadGlobal)
+      const classified = classifyLeadSearchQuery(searchText)
+      const byId = new Map<string, Lead>()
+
+      const ingestSnap = (snap: QuerySnapshot<DocumentData>) => {
+        snap.forEach((d) => {
+          const row = mapDoc(d.id, d.data() as Record<string, unknown>)
+          if (row) byId.set(row.id, row)
+        })
+      }
+
+      const safeExact = async (field: string, value: string) => {
+        if (!value) return
+        try {
+          const snap = await getDocsListWithOrgFallback(
+            firestore,
+            profile,
+            hoDQueryLabels,
+            serverFilters,
+            effectiveOrgId,
+            canReadGlobal,
+            (base) => query(base, where(field, '==', value), limit(40)),
+          )
+          if (!cancelled) ingestSnap(snap)
+        } catch (e) {
+          // Thiếu composite index / rule — bỏ qua, vẫn fuzzy trong RBAC.
+          console.warn('[useLeads] search exact', field, e)
+        }
+      }
+
+      // Ưu tiên khớp đúng SĐT / mã trong cùng phạm vi RBAC (ít đọc hơn quét fuzzy).
+      if (classified.kind === 'phone') {
+        await Promise.all([
+          safeExact('phone', classified.exactValue),
+          safeExact('parentPhone', classified.exactValue),
+          safeExact('motherPhone', classified.exactValue),
+          safeExact('fatherPhone', classified.exactValue),
+        ])
+      } else if (classified.kind === 'systemCode') {
+        await safeExact('systemCode', classified.exactValue)
+      } else if (classified.kind === 'customerId') {
+        await safeExact('customerId', classified.exactValue)
+      }
+
+      // Fuzzy / bổ sung: chỉ quét trong phạm vi quyền, trần theo vai trò.
       const snap = await getDocsListWithOrgFallback(
         firestore,
         profile,
@@ -1632,21 +1719,27 @@ export function useLeads(opts?: UseLeadsOptions) {
         serverFilters,
         effectiveOrgId,
         canReadGlobal,
-        (base) => query(base, orderBy('updatedAt', 'desc'), limit(MAX_LEAD_SEARCH_SCAN)),
+        (base) => query(base, orderBy('updatedAt', 'desc'), limit(scanLimit)),
       )
       if (cancelled) return
-      let mapped: Lead[] = []
-      snap.forEach((d) => {
-        const row = mapDoc(d.id, d.data() as Record<string, unknown>)
-        if (row) mapped.push(row)
-      })
-      mapped = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
-      setSearchScanTruncated(snap.docs.length >= MAX_LEAD_SEARCH_SCAN)
-      if (searchText) {
-        mapped = mapped.filter((l) => leadMatchesClientSearch(l, searchText, directoryLabels))
+      ingestSnap(snap)
+      setSearchScanTruncated(snap.docs.length >= scanLimit)
+
+      let mapped = applyRoleClientFilter(
+        [...byId.values()],
+        profile,
+        hoDQueryLabels,
+        canReadGlobal,
+        effectiveOrgId,
+      )
+      if (classified.clientNeedle) {
+        mapped = mapped.filter((l) =>
+          leadMatchesClientSearch(l, classified.clientNeedle, directoryLabels),
+        )
       }
       const pageKeep = pagedKeepMatchRef.current
       if (pageKeep) mapped = mapped.filter((l) => pageKeep(l))
+      mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       searchBucketRef.current = mapped
       setSearchHitTotal(mapped.length)
     }

@@ -330,7 +330,7 @@ export function TeamRosterSummaryView() {
   const loading = directoryLoading || leadsLoading || callsLoading
 
   if (!allowed) {
-    return <Navigate to="/?tab=tong-quan" replace />
+    return <Navigate to="/tong-ket?tab=tong-quan" replace />
   }
 
   return (

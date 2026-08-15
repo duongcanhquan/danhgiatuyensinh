@@ -482,7 +482,7 @@ export function MyDayView() {
                 Mở danh sách hồ sơ
               </Link>
               <Link
-                to="/?tab=kpi-nhan-su"
+                to="/tong-ket?tab=kpi-nhan-su"
                 className="cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
               >
                 Báo cáo đánh giá

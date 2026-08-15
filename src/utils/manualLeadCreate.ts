@@ -6,7 +6,9 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import type { Lead, LeadSourceRecord, LeadWorkMode, PriorityTag, ScoringProfile } from '../types'
-import { FS_COLLECTIONS } from '../types'
+import {
+  FS_COLLECTIONS,
+} from '../types'
 import { buildLeadFirestorePayload, type ExcelLeadRow } from './excelLeadMapper'
 import { computeLeadUniqueHash, nationalIdHashFromInput, normalizePhoneKey } from './leadIdentity'
 import {
@@ -31,6 +33,8 @@ import {
   isValidStudentEmail,
   normalizeDobToDdMmYyyy,
 } from './publicRegistrationForm'
+import { notifyCrmPortalRegistration } from '../services/publicRegistration'
+import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
 
 function norm(s: string): string {
   return s.trim()
@@ -163,22 +167,25 @@ export async function createManualLead(
     infoScoreRuntime?: InfoScoreRuntime | null
     classificationRuntime?: LeadClassificationRuntime | null
   },
-): Promise<{ id: string }> {
+): Promise<{ id: string; systemCode: string; n8nOk: boolean; n8nError: string | null }> {
   const validationErr = validateManualLeadDraft(input.draft)
   if (validationErr) throw new Error(validationErr)
 
   const motherOrContact = norm(input.draft.motherPhone) || norm(input.draft.parentPhone)
   const draft: LeadCoreDraft = {
     ...input.draft,
+    fullName: norm(input.draft.fullName).toUpperCase(),
+    fatherName: norm(input.draft.fatherName) ? norm(input.draft.fatherName).toUpperCase() : '',
+    motherName: norm(input.draft.motherName) ? norm(input.draft.motherName).toUpperCase() : '',
     motherPhone: motherOrContact,
     parentPhone: norm(input.draft.parentPhone) || motherOrContact,
   }
 
   const row = coreDraftToExcelRow(draft)
   const customerId = norm(row.customerId ?? '')
-  const systemCode = await allocateSystemCodeForNewLead(db)
   const rowWithCode = { ...row, customerId }
   const hash = computeLeadUniqueHash(rowWithCode)
+  // Chống trùng trước — tránh đốt số thứ tự mã hệ thống khi hồ sơ đã tồn tại.
   const existingId = await findExistingLeadIdByHash(db, hash, input.orgId)
   if (existingId) {
     const phoneKey = normalizePhoneKey(draft.phone, draft.parentPhone)
@@ -190,6 +197,8 @@ export async function createManualLead(
     const existingById = await findExistingLeadIdByNationalIdHash(db, nidHash, input.orgId)
     if (existingById) throw new DuplicateLeadError(existingById, 'nationalId')
   }
+
+  const systemCode = await allocateSystemCodeForNewLead(db)
 
   const record = evaluationRecordFromLeadLike({
     ...partialLeadFromExcelRow(rowWithCode),
@@ -263,6 +272,9 @@ export async function createManualLead(
   await setDoc(ref, {
     ...base,
     ...leadCoreDraftToFirestoreFields({ ...draft, customerId, systemCode }),
+    // Ép mã hệ thống luôn ghi (không phụ thuộc draft trống).
+    systemCode,
+    customerId,
     orgId: input.orgId,
     calculatedScore,
     priorityTag,
@@ -275,8 +287,45 @@ export async function createManualLead(
     lastTouchedAt: now,
   })
 
+  // Webhook cổng đăng ký qua Cloud Function (tránh CORS browser).
+  let n8nOk = false
+  let n8nError: string | null = null
+  try {
+    const notified = await notifyCrmPortalRegistration({
+      leadId: ref.id,
+      orgId: input.orgId,
+      createdByName: input.createdByName,
+    })
+    n8nOk = Boolean(notified.n8nOk)
+    n8nError = notified.n8nError ?? null
+  } catch (e) {
+    n8nError = e instanceof Error ? e.message : String(e)
+    console.warn('[createManualLead] portal n8n CF', n8nError)
+    try {
+      await setDoc(
+        doc(db, FS_COLLECTIONS.leads, ref.id),
+        {
+          publicRegistrationMeta: {
+            n8nOk: false,
+            n8nError,
+            notifiedAt: Timestamp.now(),
+            createdVia: 'crm_manual',
+          },
+        },
+        { merge: true },
+      )
+    } catch {
+      /* ignore meta write */
+    }
+  }
+
   const { dispatchOutboundEvent } = await import('../integrations/dispatchOutbound')
   const { triggerCommsAutomation } = await import('./commsAutomationDispatch')
+  try {
+    await loadOrgIntegrationHub(db, input.orgId)
+  } catch {
+    /* hub optional */
+  }
   const email =
     String(draft.studentEmail ?? '').trim() ||
     (customerId.includes('@') ? customerId : undefined)
@@ -286,12 +335,22 @@ export async function createManualLead(
     phone: draft.phone,
     email,
     assignedTo: input.assignedCounselorId,
+    systemCode,
   }
   void dispatchOutboundEvent({
     orgId: input.orgId,
     event: 'lead.created',
     payload,
   }).catch((e) => console.warn('[lead.created hub]', e))
+  void dispatchOutboundEvent({
+    orgId: input.orgId,
+    event: 'registration.public',
+    payload: {
+      ...payload,
+      intakeOrigin: 'public_portal',
+      source1,
+    },
+  }).catch((e) => console.warn('[registration.public hub]', e))
   triggerCommsAutomation(input.orgId, 'lead.created', {
     id: ref.id,
     fullName: draft.fullName,
@@ -304,5 +363,7 @@ export async function createManualLead(
     source: draft.source1 || draft.source,
   })
 
-  return { id: ref.id }
+  return { id: ref.id, systemCode, n8nOk, n8nError }
 }
+
+
