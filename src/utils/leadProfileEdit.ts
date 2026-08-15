@@ -237,27 +237,34 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
 
 /**
  * Chỉ các field đổi so với `before` — dùng `updateDoc` (không gửi field không đổi).
+ * Chuỗi rỗng / null / undefined được coi là giống nhau (tránh dirty giả → ghi timeline thừa).
  */
 export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft): Record<string, unknown> {
   const next = leadCoreDraftToFirestoreFields(draft)
   const patch: Record<string, unknown> = {}
   const keys = Object.keys(next)
+
+  const sameScalar = (a: unknown, b: unknown): boolean => {
+    if (typeof a === 'boolean' || typeof b === 'boolean') return Boolean(a) === Boolean(b)
+    const sa = a == null ? '' : typeof a === 'string' ? a.trim() : String(a)
+    const sb = b == null ? '' : typeof b === 'string' ? b.trim() : String(b)
+    return sa === sb
+  }
+
   for (const k of keys) {
     const nv = next[k]
     let bv: unknown = (before as unknown as Record<string, unknown>)[k]
     if (k === 'nationalId') {
       bv = before.nationalIdNotAvailable ? '' : String(before.nationalId ?? '').trim().toUpperCase()
       const nn = draft.nationalIdNotAvailable ? '' : normNationalId(draft)
-      if (nn !== bv || Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable) {
+      if (!sameScalar(nn, bv) || Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable) {
         patch.nationalId = nn
         patch.nationalIdNotAvailable = draft.nationalIdNotAvailable
       }
       continue
     }
     if (k === 'nationalIdNotAvailable') continue
-    const bs = typeof bv === 'string' ? bv.trim() : bv
-    const ns = typeof nv === 'string' ? nv.trim() : nv
-    if (bs !== ns) patch[k] = nv
+    if (!sameScalar(bv, nv)) patch[k] = nv
   }
   if (
     Boolean(before.nationalIdNotAvailable) !== draft.nationalIdNotAvailable &&
@@ -266,32 +273,42 @@ export function buildLeadCoreFirestorePatch(before: Lead, draft: LeadCoreDraft):
     patch.nationalIdNotAvailable = draft.nationalIdNotAvailable
   }
 
-  // Apps Script parity: cập nhật fingerprint SĐT + hash CCCD khi đổi
-  const fmt = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
-  const nextPhoneHash = computeLeadUniqueHash({
-    phone: draft.phone,
-    parentPhone: draft.parentPhone,
-    fullName: draft.fullName,
-    customerId: draft.customerId,
-    educationLevel: fmt,
-    gradeClass: draft.gradeClass,
-    dateOfBirth: draft.dateOfBirth,
-  })
-  if (nextPhoneHash && nextPhoneHash !== before.uniqueHash) {
-    patch.uniqueHash = nextPhoneHash
-  }
+  // Chỉ cập nhật hash khi có thay đổi field người dùng (tránh lưu «ảo» chỉ vì hash lệch).
+  const userChanged = Object.keys(patch).some((k) => k !== 'uniqueHash' && k !== 'nationalIdHash')
+  if (userChanged) {
+    const fmt = studyFormatFromParts(draft.studyIntention, draft.educationLevel)
+    const nextPhoneHash = computeLeadUniqueHash({
+      phone: draft.phone,
+      parentPhone: draft.parentPhone,
+      fullName: draft.fullName,
+      customerId: draft.customerId,
+      educationLevel: fmt,
+      gradeClass: draft.gradeClass,
+      dateOfBirth: draft.dateOfBirth,
+    })
+    if (nextPhoneHash && nextPhoneHash !== before.uniqueHash) {
+      patch.uniqueHash = nextPhoneHash
+    }
 
-  const nextNidHash = nationalIdHashFromInput(draft.nationalId, draft.nationalIdNotAvailable)
-  const prevNidHash = String(before.nationalIdHash ?? '').trim() || null
-  if (nextNidHash !== prevNidHash) {
-    patch.nationalIdHash = nextNidHash ?? deleteField()
+    const nextNidHash = nationalIdHashFromInput(draft.nationalId, draft.nationalIdNotAvailable)
+    const prevNidHash = String(before.nationalIdHash ?? '').trim() || null
+    if (nextNidHash !== prevNidHash) {
+      patch.nationalIdHash = nextNidHash ?? deleteField()
+    }
   }
 
   return patch
 }
 
+/** Field hệ thống — không tính là «user sửa hồ sơ» trên UI / timeline. */
+const CORE_SYSTEM_PATCH_KEYS = new Set(['uniqueHash', 'nationalIdHash'])
+
+export function leadCorePatchHasUserChanges(patch: Record<string, unknown>): boolean {
+  return Object.keys(patch).some((k) => !CORE_SYSTEM_PATCH_KEYS.has(k))
+}
+
 export function isCoreDraftDirty(before: Lead, draft: LeadCoreDraft): boolean {
-  return Object.keys(buildLeadCoreFirestorePatch(before, draft)).length > 0
+  return leadCorePatchHasUserChanges(buildLeadCoreFirestorePatch(before, draft))
 }
 
 /** Trường CRM / nhãn chấm điểm trên panel — đồng bộ với playbook & tri thức khi chưa lưu. */

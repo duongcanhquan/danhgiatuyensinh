@@ -194,7 +194,7 @@ import { LeadActivityTimeline } from '../components/LeadActivityTimeline'
 import { LeadProfileFinanceSection } from '../components/LeadProfileFinanceSection'
 import { LeadProfileInviteSection } from '../components/LeadProfileInviteSection'
 import { OmicallCallButton } from '../components/OmicallCallButton'
-import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadToCoreDraft, mergeCoreDraftIntoLead } from '../utils/leadProfileEdit'
+import { buildLeadCoreFirestorePatch, isCoreDraftDirty, leadCorePatchHasUserChanges, leadToCoreDraft, mergeCoreDraftIntoLead } from '../utils/leadProfileEdit'
 import {
   findExistingLeadIdByNationalIdHash,
   findExistingLeadIdByUniqueHash,
@@ -6363,19 +6363,19 @@ function LeadDetailPanel({
     return null
   }
 
-  const saveCoreProfile = async () => {
+  const saveCoreProfile = async (): Promise<{ ok: boolean; savedUserFields: boolean }> => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
-      return
+      return { ok: false, savedUserFields: false }
     }
     if (!showCounselorProgressForm) {
       setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này (cần Admin hoặc TVV được gán + quyền ghi hồ sơ).')
-      return
+      return { ok: false, savedUserFields: false }
     }
     const corePatch = buildLeadCoreFirestorePatch(lead, coreDraft)
-    if (Object.keys(corePatch).length === 0) {
+    if (!leadCorePatchHasUserChanges(corePatch)) {
       setMsg('Không có thay đổi thông tin hồ sơ.')
-      return
+      return { ok: true, savedUserFields: false }
     }
     setSaving(true)
     setMsg(null)
@@ -6384,7 +6384,7 @@ function LeadDetailPanel({
       if (dupMsg) {
         setMsg(dupMsg)
         setSaving(false)
-        return
+        return { ok: false, savedUserFields: false }
       }
       const coreAsPartial = corePatch as unknown as Partial<Lead>
       const mergedForScore: Partial<Lead> = { ...coreAsPartial }
@@ -6434,9 +6434,11 @@ function LeadDetailPanel({
         lastTouchedAt: touch.lastTouchedAt,
       })
       setMsg('Đã lưu thông tin hồ sơ.')
+      return { ok: true, savedUserFields: true }
     } catch (e) {
       console.error(e)
       setMsg('Không lưu được thông tin hồ sơ. Kiểm tra Firestore Rules.')
+      return { ok: false, savedUserFields: false }
     } finally {
       setSaving(false)
     }
@@ -6465,9 +6467,13 @@ function LeadDetailPanel({
       if (!fin.ok) return
     }
     if (hadCore) {
-      await saveCoreProfile()
+      const core = await saveCoreProfile()
       if (hadFinance && financeMsg) {
-        setMsg(`${financeMsg} Đã lưu thông tin hồ sơ.`)
+        setMsg(
+          core.savedUserFields
+            ? `${financeMsg} Đã lưu thông tin hồ sơ.`
+            : financeMsg,
+        )
       }
     }
   }

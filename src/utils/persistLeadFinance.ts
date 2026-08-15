@@ -20,7 +20,7 @@ import { withTimeout } from './fetchWithTimeout'
 const PAYMENT_KEYS = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
 /** Upload chứng từ tối đa / slot — quá thì báo lỗi, tiền đã lưu. */
-const RECEIPT_UPLOAD_BUDGET_MS = 12_000
+const RECEIPT_UPLOAD_BUDGET_MS = 20_000
 /** n8n báo thu tối đa. */
 const N8N_BUDGET_MS = 8_000
 

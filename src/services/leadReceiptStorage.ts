@@ -10,7 +10,7 @@ import {
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 
-const RECEIPT_FETCH_TIMEOUT_MS = 12_000
+const RECEIPT_FETCH_TIMEOUT_MS = 20_000
 
 /** Thư mục con — giống `uploadToDrive(f, họTên + "_" + mãSV)` hệ cũ. */export function receiptStorageFolderName(lead: {
   fullName: string
