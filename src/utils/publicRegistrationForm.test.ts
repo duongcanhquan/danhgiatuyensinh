@@ -84,6 +84,12 @@ describe('publicRegistrationForm', () => {
     }
     expect(validatePublicRegistrationForm(form)).toBeNull()
     expect(
+      validatePublicRegistrationForm({ ...form, motherPhone: '' }),
+    ).toBeNull()
+    expect(
+      validatePublicRegistrationForm({ ...form, phone: '' }),
+    ).toMatch(/sinh viên|điện thoại|phone/i)
+    expect(
       validatePublicRegistrationForm(form, 'vn', {
         trainingProgramLabels: ['Cao đẳng chính quy'],
         majorLabels: ['CNTT'],

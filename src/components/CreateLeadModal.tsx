@@ -112,7 +112,7 @@ export function CreateLeadModal({
     if (!justOpened) return
 
     const seedSource1 = defaultPublicRegistrationConfig().defaultSource1
-    setDraft({ ...emptyLeadCoreDraft(), source1: seedSource1, source: seedSource1 })
+    setDraft({ ...emptyLeadCoreDraft(), source1: seedSource1, source: '' })
     setFinanceDraft(emptyFinanceDraft())
     setAssigneeUid(defaultAssignee)
     assigneeTouchedRef.current = false
@@ -156,7 +156,7 @@ export function CreateLeadModal({
         const fallback = defaultPublicRegistrationConfig().defaultSource1
         const stillSeed = !d.source1.trim() || d.source1.trim() === fallback
         if (!stillSeed) return d
-        return { ...d, source1: raw, source: d.source.trim() === fallback || !d.source.trim() ? raw : d.source }
+        return { ...d, source1: raw }
       })
     })()
     return () => {

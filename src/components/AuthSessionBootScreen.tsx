@@ -1,7 +1,10 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import type { ReactNode } from 'react'
 
 const BRAND_LOGO_SRC = `${import.meta.env.BASE_URL}brand/logo-vietmy-trang.png`
+
+/** Thời gian tối thiểu giữ màn motion (ms). */
+export const AUTH_BOOT_MIN_HOLD_MS = 3000
 
 const ORBIT_DOTS = [
   { angle: 0, delay: 0, size: 10 },
@@ -10,6 +13,45 @@ const ORBIT_DOTS = [
   { angle: 216, delay: 0.36, size: 7 },
   { angle: 288, delay: 0.48, size: 8 },
 ] as const
+
+/**
+ * Giữ màn boot tối thiểu `minMs` sau khi `busy` từng bật.
+ * `skip` (vd. chưa đăng nhập → về /login): tắt hold ngay, không kéo dài.
+ */
+export function useAuthBootMinHold(
+  busy: boolean,
+  opts?: { minMs?: number; skip?: boolean },
+): boolean {
+  const minMs = opts?.minMs ?? AUTH_BOOT_MIN_HOLD_MS
+  const skip = opts?.skip ?? false
+  const [holding, setHolding] = useState(false)
+  const startedRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (skip) {
+      startedRef.current = null
+      setHolding(false)
+      return
+    }
+    if (busy) {
+      if (startedRef.current == null) startedRef.current = Date.now()
+      setHolding(true)
+      return
+    }
+    if (startedRef.current == null) {
+      setHolding(false)
+      return
+    }
+    const remain = Math.max(0, minMs - (Date.now() - startedRef.current))
+    const id = window.setTimeout(() => {
+      startedRef.current = null
+      setHolding(false)
+    }, remain)
+    return () => window.clearTimeout(id)
+  }, [busy, minMs, skip])
+
+  return busy || holding
+}
 
 /**
  * Màn đệm phiên đăng nhập — motion logo giữa màn, thay chữ «đang đăng nhập…».

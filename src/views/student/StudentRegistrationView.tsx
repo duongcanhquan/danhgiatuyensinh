@@ -470,7 +470,6 @@ export function StudentRegistrationView() {
                         value={form.motherPhone}
                         onChange={(e) => patch({ motherPhone: formatVnPhoneInput(e.target.value) })}
                         placeholder={t('phPhone')}
-                        required
                         inputMode="numeric"
                         maxLength={10}
                       />

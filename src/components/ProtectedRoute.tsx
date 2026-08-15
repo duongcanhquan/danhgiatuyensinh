@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ProfileSyncBlocked } from './ProfileSyncBlocked'
-import { AuthSessionBootScreen } from './AuthSessionBootScreen'
+import { AuthSessionBootScreen, useAuthBootMinHold } from './AuthSessionBootScreen'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from '../hooks/useAuth'
 import { isAccountantOnlyUser } from '../auth/accountantPortal'
@@ -16,34 +16,50 @@ export function ProtectedRoute() {
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
   const orgGate = useOrgAccessGate(profile)
 
+  const bootBusy =
+    status === 'unknown' ||
+    status === 'authenticating' ||
+    (Boolean(profile) && orgGate.state === 'loading')
+  const showBoot = useAuthBootMinHold(bootBusy, {
+    skip: status !== 'unknown' && !firebaseUser,
+  })
+
   if (!hasAuth) {
     return <Outlet />
   }
 
-  if (status === 'unknown') {
-    return <AuthSessionBootScreen statusLabel="Đang mở phiên làm việc" />
+  if (showBoot && (status === 'unknown' || Boolean(firebaseUser))) {
+    const label =
+      status === 'authenticating'
+        ? 'Đang đồng bộ hồ sơ và quyền truy cập'
+        : orgGate.state === 'loading'
+          ? 'Đang kiểm tra quyền truy cập trường'
+          : 'Đang mở phiên làm việc'
+    return (
+      <AuthSessionBootScreen
+        statusLabel={label}
+        detail={
+          status === 'authenticating'
+            ? 'Đăng nhập thành công, hệ thống đang đọc hồ sơ nhân sự.'
+            : undefined
+        }
+        actions={
+          status === 'authenticating' ? (
+            <button
+              type="button"
+              className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-white/15"
+              onClick={() => void signOut()}
+            >
+              Đăng xuất
+            </button>
+          ) : null
+        }
+      />
+    )
   }
 
   if (!firebaseUser) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
-  }
-
-  if (status === 'authenticating') {
-    return (
-      <AuthSessionBootScreen
-        statusLabel="Đang đồng bộ hồ sơ và quyền truy cập"
-        detail="Đăng nhập thành công, hệ thống đang đọc hồ sơ nhân sự."
-        actions={
-          <button
-            type="button"
-            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-white/15"
-            onClick={() => void signOut()}
-          >
-            Đăng xuất
-          </button>
-        }
-      />
-    )
   }
 
   if (!profile) {
@@ -63,10 +79,6 @@ export function ProtectedRoute() {
         </div>
       </div>
     )
-  }
-
-  if (orgGate.state === 'loading') {
-    return <AuthSessionBootScreen statusLabel="Đang kiểm tra quyền truy cập trường" />
   }
 
   if (orgGate.state === 'blocked') {

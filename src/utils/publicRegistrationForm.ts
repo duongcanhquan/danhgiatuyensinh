@@ -139,6 +139,47 @@ export function isValidPublicPhone(phone: string): boolean {
   return /^0\d{9}$/.test(normalizeVnPhoneDigits(phone))
 }
 
+/**
+ * SĐT sinh viên bắt buộc; SĐT mẹ / bố / người liên hệ tùy chọn (ô nào điền thì phải đúng 10 số).
+ * Không bắt buộc đủ cả ba số liên hệ khi đã có SĐT sinh viên.
+ */
+export function describeContactPhonesIssue(
+  phones: {
+    phone?: string
+    motherPhone?: string
+    fatherPhone?: string
+    parentPhone?: string
+  },
+  lang: PublicRegLang = 'vn',
+): string | null {
+  const student = String(phones.phone ?? '').trim()
+  const mother = String(phones.motherPhone ?? '').trim()
+  const father = String(phones.fatherPhone ?? '').trim()
+  const contact = String(phones.parentPhone ?? '').trim()
+
+  if (!isValidPublicPhone(student)) {
+    return lang === 'en'
+      ? 'Student phone is required (exactly 10 digits, start with 0).'
+      : 'SĐT sinh viên bắt buộc — đủ đúng 10 số (bắt đầu bằng 0).'
+  }
+  if (mother && !isValidPublicPhone(mother)) {
+    return lang === 'en'
+      ? 'Mother’s phone must be exactly 10 digits.'
+      : 'SĐT mẹ phải đủ đúng 10 số.'
+  }
+  if (father && !isValidPublicPhone(father)) {
+    return lang === 'en'
+      ? 'Father’s phone must be exactly 10 digits.'
+      : 'SĐT cha phải đủ đúng 10 số.'
+  }
+  if (contact && !isValidPublicPhone(contact)) {
+    return lang === 'en'
+      ? 'Contact phone must be exactly 10 digits.'
+      : 'SĐT người liên hệ phải đủ đúng 10 số.'
+  }
+  return null
+}
+
 /** Email bắt buộc có @ và dạng cơ bản hợp lệ. */
 export function isValidStudentEmail(email: string): boolean {
   const e = email.trim()
@@ -194,7 +235,6 @@ export function validatePublicRegistrationForm(
           phone: 'Phone must be exactly 10 digits (start with 0).',
           email: 'Email must include @ and be valid (e.g. name@school.edu.vn).',
           address: 'Please enter permanent address.',
-          motherPhone: 'Mother’s phone is required (exactly 10 digits).',
           fatherPhone: 'Father’s phone must be exactly 10 digits.',
           school: 'Please enter school attended.',
           schoolProvince: 'Please enter school province/city.',
@@ -219,7 +259,6 @@ export function validatePublicRegistrationForm(
           phone: 'Số điện thoại phải đủ đúng 10 số (bắt đầu bằng 0).',
           email: 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).',
           address: 'Vui lòng nhập địa chỉ thường trú.',
-          motherPhone: 'SĐT mẹ bắt buộc — đủ đúng 10 số.',
           fatherPhone: 'SĐT cha phải đủ đúng 10 số.',
           school: 'Vui lòng nhập trường đã theo học.',
           schoolProvince: 'Vui lòng nhập tỉnh/thành của trường.',
@@ -242,11 +281,18 @@ export function validatePublicRegistrationForm(
   if (!form.placeOfBirth.trim()) return t.pob
   if (!form.ethnicity.trim()) return t.ethnicity
   if (!isValidPublicNationalId(form.nationalId, form.nationalIdNotAvailable)) return t.id
-  if (!isValidPublicPhone(form.phone)) return t.phone
   if (!isValidStudentEmail(form.studentEmail)) return t.email
   if (!form.permanentAddress.trim()) return t.address
-  if (!isValidPublicPhone(form.motherPhone)) return t.motherPhone
-  if (form.fatherPhone.trim() && !isValidPublicPhone(form.fatherPhone)) return t.fatherPhone
+  const phoneIssue = describeContactPhonesIssue(
+    {
+      phone: form.phone,
+      motherPhone: form.motherPhone,
+      fatherPhone: form.fatherPhone,
+      parentPhone: form.parentPhone,
+    },
+    lang,
+  )
+  if (phoneIssue) return phoneIssue
   if (!form.highSchool.trim()) return t.school
   if (!form.schoolProvince.trim()) return t.schoolProvince
 

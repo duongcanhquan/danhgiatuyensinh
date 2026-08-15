@@ -34,10 +34,17 @@ describe('validateManualLeadDraft', () => {
   it('rejects empty / incomplete like portal', () => {
     expect(validateManualLeadDraft(emptyLeadCoreDraft())).toMatch(/họ tên|họ và tên/i)
     expect(validateManualLeadDraft(validDraft({ studentEmail: '' }))).toMatch(/email/i)
-    expect(validateManualLeadDraft(validDraft({ motherPhone: '' }))).toMatch(/mẹ|liên hệ/i)
+    expect(validateManualLeadDraft(validDraft({ phone: '' }))).toMatch(/sinh viên|điện thoại/i)
+    expect(validateManualLeadDraft(validDraft({ motherPhone: '', parentPhone: '' }))).toBeNull()
     expect(validateManualLeadDraft(validDraft({ gender: 'Khác' }))).toMatch(/giới tính/i)
     expect(validateManualLeadDraft(validDraft({ academicPerformance: '' }))).toMatch(/học lực/i)
     expect(validateManualLeadDraft(validDraft({ source1: '', source: 'ghi chú' }))).toMatch(/Nguồn 1|nguồn/i)
+  })
+
+  it('accepts student phone without mother or contact phone', () => {
+    expect(
+      validateManualLeadDraft(validDraft({ motherPhone: '', fatherPhone: '', parentPhone: '' })),
+    ).toBeNull()
   })
 
   it('accepts parentPhone when motherPhone is empty', () => {

@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Wallet } from 'lucide-react'
 import { AuthSessionExitBar } from '../components/AuthSessionControls'
-import { AuthSessionBootScreen } from '../components/AuthSessionBootScreen'
+import { AuthSessionBootScreen, useAuthBootMinHold } from '../components/AuthSessionBootScreen'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
@@ -132,13 +132,25 @@ export function LoginView() {
     )
   }
 
+  const bootHold = useAuthBootMinHold(Boolean(firebaseUser) && status === 'authenticating', {
+    skip: !firebaseUser,
+  })
+
   // Chỉ vào CRM khi đã có hồ sơ — tránh kẹt vòng redirect khi sync thất bại.
   if (firebaseUser && status === 'authenticated' && profile) {
+    if (bootHold) {
+      return (
+        <AuthSessionBootScreen
+          statusLabel="Đang mở phiên làm việc"
+          detail="Đăng nhập thành công."
+        />
+      )
+    }
     return <Navigate to={from} replace />
   }
 
-  if (firebaseUser && (status === 'authenticating' || (status === 'authenticated' && !profile))) {
-    if (status === 'authenticating') {
+  if (firebaseUser && (status === 'authenticating' || bootHold || (status === 'authenticated' && !profile))) {
+    if (status === 'authenticating' || bootHold) {
       return (
         <AuthSessionBootScreen
           statusLabel="Đang đồng bộ hồ sơ nhân sự"

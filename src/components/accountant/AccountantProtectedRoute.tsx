@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { ProfileSyncBlocked } from '../ProfileSyncBlocked'
-import { AuthSessionBootScreen } from '../AuthSessionBootScreen'
+import { AuthSessionBootScreen, useAuthBootMinHold } from '../AuthSessionBootScreen'
 import { getFirebaseAuth, isFirebaseConfigured } from '../../services/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
@@ -12,20 +12,30 @@ export function AccountantProtectedRoute() {
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
   const orgGate = useOrgAccessGate(profile)
 
+  const bootBusy =
+    status === 'unknown' ||
+    status === 'authenticating' ||
+    (Boolean(profile) && orgGate.state === 'loading')
+  const showBoot = useAuthBootMinHold(bootBusy, {
+    skip: status !== 'unknown' && !firebaseUser,
+  })
+
   if (!hasAuth) {
     return <Outlet />
   }
 
-  if (status === 'unknown') {
-    return <AuthSessionBootScreen statusLabel="Đang xác thực cổng kế toán" />
+  if (showBoot && (status === 'unknown' || Boolean(firebaseUser))) {
+    const label =
+      status === 'authenticating'
+        ? 'Đang tải hồ sơ kế toán'
+        : orgGate.state === 'loading'
+          ? 'Đang kiểm tra quyền truy cập trường'
+          : 'Đang xác thực cổng kế toán'
+    return <AuthSessionBootScreen statusLabel={label} />
   }
 
   if (!firebaseUser) {
     return <Navigate to="/ke-toan/login" replace state={{ from: location.pathname }} />
-  }
-
-  if (status === 'authenticating') {
-    return <AuthSessionBootScreen statusLabel="Đang tải hồ sơ kế toán" />
   }
 
   if (!profile) {
@@ -54,10 +64,6 @@ export function AccountantProtectedRoute() {
         </div>
       </div>
     )
-  }
-
-  if (orgGate.state === 'loading') {
-    return <AuthSessionBootScreen statusLabel="Đang kiểm tra quyền truy cập trường" />
   }
 
   if (orgGate.state === 'blocked') {

@@ -103,12 +103,25 @@ const PROFILE_TAB_TONE: Record<
 
 const FIXED_ACADEMIC_PERFORMANCE_OPTIONS = ['Yếu', 'Trung Bình', 'Khá', 'Giỏi'] as const
 
-function Field({ label, span = 1, children }: { label: string; span?: 1 | 2 | 3; children: ReactNode }) {
+function Field({
+  label,
+  span = 1,
+  required,
+  children,
+}: {
+  label: string
+  span?: 1 | 2 | 3
+  required?: boolean
+  children: ReactNode
+}) {
   const spanCls =
     span === 3 ? 'lg:col-span-3' : span === 2 ? 'sm:col-span-2 lg:col-span-2' : ''
   return (
     <label className={['block min-w-0', spanCls].filter(Boolean).join(' ')}>
-      <span className="text-[11px] font-semibold leading-tight text-slate-700">{label}</span>
+      <span className="text-[11px] font-semibold leading-tight text-slate-700">
+        {label}
+        {required ? <span className="text-rose-600"> *</span> : null}
+      </span>
       <div className="mt-0.5">{children}</div>
     </label>
   )
@@ -218,12 +231,14 @@ function SourceSelect({
   options,
   disabled,
   onChange,
+  required,
 }: {
   label: string
   value: string
   options: readonly LeadSourceRecord[]
   disabled: boolean
   onChange: (v: string) => void
+  required?: boolean
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -292,7 +307,7 @@ function SourceSelect({
     ) : null
 
   return (
-    <Field label={label}>
+    <Field label={label} required={required}>
       <div ref={rootRef} className="relative min-w-0">
         <button
           type="button"
@@ -448,6 +463,7 @@ function PhoneFieldWithCall({
   onChange,
   callContext,
   target,
+  required,
 }: {
   label: string
   value: string
@@ -455,9 +471,10 @@ function PhoneFieldWithCall({
   onChange: (v: string) => void
   callContext?: { leadId: string; leadName: string; workMode?: LeadWorkMode }
   target: OmicallCallTarget
+  required?: boolean
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} required={required}>
       <div className="flex min-w-0 items-start gap-2">
         <input
           className={`${INPUT_CLS} min-w-0 flex-1`}
@@ -612,7 +629,7 @@ export function LeadProfileCoreForm({
         title="Thông tin chung"
       >
         <div className={grid}>
-          <Field label="Họ tên">
+          <Field label="Họ tên" required>
             <input className={INPUT_CLS} value={draft.fullName} disabled={disabled} onChange={(e) => patch('fullName', e.target.value)} />
           </Field>
           <Field label="Mã hệ thống">
@@ -628,7 +645,7 @@ export function LeadProfileCoreForm({
           <Field label="Mã khách hàng">
             <input className={INPUT_CLS} value={draft.customerId} disabled={disabled} onChange={(e) => patch('customerId', e.target.value)} />
           </Field>
-          <Field label="Ngày sinh">
+          <Field label="Ngày sinh" required>
             <div className="space-y-1">
               <input
                 className={INPUT_CLS}
@@ -650,7 +667,7 @@ export function LeadProfileCoreForm({
               })()}
             </div>
           </Field>
-          <Field label="Giới tính">
+          <Field label="Giới tính" required>
             {isNewLead ? (
               <select
                 className={INPUT_CLS}
@@ -672,7 +689,7 @@ export function LeadProfileCoreForm({
               />
             )}
           </Field>
-          <Field label="Nơi sinh">
+          <Field label="Nơi sinh" required>
             <input
               className={INPUT_CLS}
               value={draft.placeOfBirth}
@@ -681,7 +698,7 @@ export function LeadProfileCoreForm({
               onChange={(e) => patch('placeOfBirth', e.target.value)}
             />
           </Field>
-          <Field label="CCCD / Hộ chiếu">
+          <Field label="CCCD / Hộ chiếu" required={!draft.nationalIdNotAvailable}>
             <div className="space-y-1">
               <label className="flex items-center gap-1.5 text-[10px] font-medium text-slate-700">
                 <input
@@ -720,7 +737,7 @@ export function LeadProfileCoreForm({
             </div>
           </Field>
           <TwoColRow>
-            <Field label="Email sinh viên">
+            <Field label="Email sinh viên" required>
               <input
                 type="email"
                 className={INPUT_CLS}
@@ -729,7 +746,7 @@ export function LeadProfileCoreForm({
                 onChange={(e) => patch('studentEmail', e.target.value)}
               />
             </Field>
-            <Field label="Dân tộc">
+            <Field label="Dân tộc" required>
               <CatalogCombobox
                 value={draft.ethnicity}
                 options={DEFAULT_ETHNICITY_LABELS}
@@ -743,6 +760,7 @@ export function LeadProfileCoreForm({
           <PhoneFieldsRow>
             <PhoneFieldWithCall
               label="Điện thoại sinh viên"
+              required
               value={draft.phone}
               disabled={disabled}
               onChange={(v) => patch('phone', v)}
@@ -769,7 +787,7 @@ export function LeadProfileCoreForm({
             />
           </PhoneFieldsRow>
           <TwoColRow>
-            <Field label="Địa chỉ thường trú">
+            <Field label="Địa chỉ thường trú" required>
               <input
                 className={INPUT_CLS}
                 value={draft.permanentAddress}
@@ -790,7 +808,7 @@ export function LeadProfileCoreForm({
             </Field>
           </TwoColRow>
           <TwoColRow>
-            <SourceSelect label="Nguồn 1" value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
+            <SourceSelect label="Nguồn 1" required value={draft.source1} options={leadSources} disabled={disabled} onChange={(v) => patch('source1', v)} />
             <SourceSelect label="Nguồn 2" value={draft.source2} options={leadSources} disabled={disabled} onChange={(v) => patch('source2', v)} />
           </TwoColRow>
           <Field label="Nguồn tiếp nhận (ghi chú)" span={noteSpan}>
@@ -798,7 +816,6 @@ export function LeadProfileCoreForm({
               className={INPUT_CLS}
               value={draft.source}
               disabled={disabled}
-              placeholder="Ghi chú nguồn / kênh tiếp nhận"
               onChange={(e) => patch('source', e.target.value)}
             />
           </Field>
@@ -858,7 +875,7 @@ export function LeadProfileCoreForm({
 
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Hồ sơ học tập">
         <div className={grid}>
-          <Field label="Tỉnh / TP">
+          <Field label="Tỉnh / TP" required>
             <CatalogCombobox
               value={draft.province}
               options={catalogs?.provinces ?? []}
@@ -876,7 +893,7 @@ export function LeadProfileCoreForm({
               onEnsureOption={onEnsureCatalogEntry ? ensure('hanoi_areas') : undefined}
             />
           </Field>
-          <Field label="Trường THPT">
+          <Field label="Trường THPT" required>
             <CatalogCombobox
               value={draft.highSchool}
               options={catalogs?.highSchools ?? []}
@@ -888,7 +905,7 @@ export function LeadProfileCoreForm({
           <Field label="Lớp hiện đang học">
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
           </Field>
-          <Field label="Đối tượng dự tuyển">
+          <Field label="Đối tượng dự tuyển" required>
             <CatalogCombobox
               value={draft.applicantCategory}
               options={catalogs?.applicantCategories ?? []}
@@ -927,7 +944,7 @@ export function LeadProfileCoreForm({
               placeholder="Vd. 2025–2028"
             />
           </Field>
-          <Field label="Học lực / xếp loại">
+          <Field label="Học lực / xếp loại" required>
             <select
               className={INPUT_CLS}
               value={draft.academicPerformance}
@@ -962,7 +979,7 @@ export function LeadProfileCoreForm({
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Nguyện vọng">
         <div className="space-y-2">
           <div className={grid}>
-            <Field label="Hình thức học quan tâm">
+            <Field label="Hình thức học quan tâm" required>
               <CatalogCombobox
                 value={studyFormatValue}
                 options={studyFormatOptions}
@@ -979,7 +996,7 @@ export function LeadProfileCoreForm({
                 placeholder="Chọn hoặc thêm hình thức…"
               />
             </Field>
-            <Field label="Chuyên ngành / ngành quan tâm">
+            <Field label="Chuyên ngành / ngành quan tâm" required>
               <CatalogCombobox
                 value={draft.majorInterest}
                 options={majorOptions}

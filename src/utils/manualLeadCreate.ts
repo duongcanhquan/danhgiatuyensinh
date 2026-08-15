@@ -28,8 +28,8 @@ import type { ProfileCustomScoringSignal } from '../types'
 import { resolveWorkModeForLeadIntake } from './leadWorkMode'
 import {
   describePublicDobIssue,
+  describeContactPhonesIssue,
   isValidPublicNationalId,
-  isValidPublicPhone,
   isValidStudentEmail,
   normalizeDobToDdMmYyyy,
 } from './publicRegistrationForm'
@@ -92,22 +92,19 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
   if (!isValidPublicNationalId(draft.nationalId, draft.nationalIdNotAvailable)) {
     return 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
   }
-  if (!isValidPublicPhone(draft.phone)) {
-    return 'Số điện thoại phải đủ đúng 10 số (bắt đầu bằng 0).'
-  }
   if (!isValidStudentEmail(draft.studentEmail)) {
     return 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).'
   }
   if (!norm(draft.permanentAddress) && !norm(draft.address)) {
     return 'Vui lòng nhập địa chỉ thường trú.'
   }
-  const motherOrContact = norm(draft.motherPhone) || norm(draft.parentPhone)
-  if (!isValidPublicPhone(motherOrContact)) {
-    return 'SĐT mẹ hoặc điện thoại người liên hệ bắt buộc — đủ đúng 10 số.'
-  }
-  if (norm(draft.fatherPhone) && !isValidPublicPhone(draft.fatherPhone)) {
-    return 'SĐT cha phải đủ đúng 10 số.'
-  }
+  const phoneIssue = describeContactPhonesIssue({
+    phone: draft.phone,
+    motherPhone: draft.motherPhone,
+    fatherPhone: draft.fatherPhone,
+    parentPhone: draft.parentPhone,
+  })
+  if (phoneIssue) return phoneIssue
   if (!norm(draft.highSchool)) return 'Vui lòng nhập trường đã theo học.'
   if (!norm(draft.province)) return 'Vui lòng nhập tỉnh/thành.'
   if (!norm(draft.applicantCategory)) return 'Vui lòng chọn đối tượng dự tuyển.'
@@ -171,14 +168,17 @@ export async function createManualLead(
   const validationErr = validateManualLeadDraft(input.draft)
   if (validationErr) throw new Error(validationErr)
 
-  const motherOrContact = norm(input.draft.motherPhone) || norm(input.draft.parentPhone)
   const draft: LeadCoreDraft = {
     ...input.draft,
     fullName: norm(input.draft.fullName).toUpperCase(),
     fatherName: norm(input.draft.fatherName) ? norm(input.draft.fatherName).toUpperCase() : '',
     motherName: norm(input.draft.motherName) ? norm(input.draft.motherName).toUpperCase() : '',
-    motherPhone: motherOrContact,
-    parentPhone: norm(input.draft.parentPhone) || motherOrContact,
+    motherPhone: norm(input.draft.motherPhone),
+    fatherPhone: norm(input.draft.fatherPhone),
+    parentPhone:
+      norm(input.draft.parentPhone) ||
+      norm(input.draft.motherPhone) ||
+      norm(input.draft.fatherPhone),
   }
 
   const row = coreDraftToExcelRow(draft)

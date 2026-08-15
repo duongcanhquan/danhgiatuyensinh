@@ -519,20 +519,25 @@ function validatePublicLeadInput(
   if (!isValidNationalId(nationalId, notAvailable)) {
     return 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số.'
   }
-  if (!isValidPhone(phone)) {
-    return 'Số điện thoại phải đủ đúng 10 số (bắt đầu bằng 0).'
-  }
   if (!isValidEmail(studentEmail)) {
     return 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).'
   }
   if (!str(input.permanentAddress) && !str(input.address)) {
     return 'Vui lòng nhập địa chỉ thường trú.'
   }
-  if (!motherPhone || !isValidPhone(motherPhone)) {
-    return 'SĐT mẹ bắt buộc — đủ đúng 10 số.'
+  const fatherPhone = str(input.fatherPhone)
+  const parentPhone = str(input.parentPhone)
+  if (!isValidPhone(phone)) {
+    return 'SĐT sinh viên bắt buộc — đủ đúng 10 số (bắt đầu bằng 0).'
   }
-  if (str(input.fatherPhone) && !isValidPhone(str(input.fatherPhone))) {
-    return 'SĐT cha phải đủ đúng 10 số.'
+  if (motherPhone && !isValidPhone(motherPhone)) {
+    return 'SĐT mẹ phải đủ đúng 10 số (bắt đầu bằng 0).'
+  }
+  if (fatherPhone && !isValidPhone(fatherPhone)) {
+    return 'SĐT cha phải đủ đúng 10 số (bắt đầu bằng 0).'
+  }
+  if (parentPhone && !isValidPhone(parentPhone)) {
+    return 'SĐT người liên hệ phải đủ đúng 10 số (bắt đầu bằng 0).'
   }
   if (!str(input.highSchool)) return 'Vui lòng nhập trường đã theo học.'
   if (!str(input.schoolProvince) && !str(input.province)) {
