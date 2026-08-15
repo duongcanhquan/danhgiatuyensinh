@@ -210,6 +210,8 @@ export async function createManualLead(
     uploadedBy: input.createdByUid,
     uploaderName: input.createdByName,
     uploadBatchId: `manual-${input.createdByUid.slice(0, 8)}-${Date.now()}`,
+    // Không để mặc định campaign_upload trong buildLeadFirestorePayload nuốt mất tab «Cổng đăng ký».
+    intakeOrigin: 'public_portal' as const,
   }
 
   const now = Timestamp.now()

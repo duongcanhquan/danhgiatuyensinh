@@ -686,13 +686,17 @@ export function LeadManagement() {
     fullScopeMatchKey: clientKeepMatchNeeded
       ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
       : undefined,
-    /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ. */
+    /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ.
+     * Khi đang tìm (ô tìm có chữ): không lọc origin — tránh mất hồ sơ tạo tay / cổng
+     * (vd. mã 2608150003) dù Firestore đã khớp đúng. */
     pagedKeepMatch:
-      !listNeedsFullScope && intakeOriginTab === 'campaign_upload'
+      !listNeedsFullScope && intakeOriginTab === 'campaign_upload' && !urlQuery
         ? (l: Lead) => leadMatchesIntakeOrigin(l, 'campaign_upload')
         : undefined,
     pagedKeepMatchKey:
-      !listNeedsFullScope && intakeOriginTab === 'campaign_upload' ? 'origin:campaign_upload' : undefined,
+      !listNeedsFullScope && intakeOriginTab === 'campaign_upload' && !urlQuery
+        ? 'origin:campaign_upload'
+        : undefined,
     // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
     includeScopeTagCounts: false,
     includeScopeSourceOptions: sourceCatalogRequested,
@@ -1148,7 +1152,10 @@ export function LeadManagement() {
     if (workModeFilter !== 'all') {
       rows = rows.filter((l) => leadMatchesWorkModeFilter(l, workModeFilter, leadSources))
     }
-    rows = rows.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab))
+    // Ô tìm đang mở: không cắt theo tab nguồn — tìm mã/SĐT phải thấy cả cổng lẫn chiến dịch.
+    if (!urlQuery) {
+      rows = rows.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab))
+    }
     if (programFilter === '__UNSET__') {
       rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
     } else if (programFilter !== 'ALL') {
@@ -1179,6 +1186,7 @@ export function LeadManagement() {
     dispositionFilter,
     workModeFilter,
     leadSources,
+    urlQuery,
     intakeOriginTab,
     programFilter,
     assigneeFilter,
@@ -1214,7 +1222,8 @@ export function LeadManagement() {
       if (!leadMatchesWorkModeFilter(l, workModeFilter, leadSources)) {
         return false
       }
-      if (!leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
+      // Giống danh sách: khi đang tìm theo ô tìm thì không cắt theo tab nguồn.
+      if (!urlQuery && !leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
       if (tagClientEval && tagFilter !== 'ALL' && effectiveLeadTag(l) !== tagFilter) {
         return false
       }

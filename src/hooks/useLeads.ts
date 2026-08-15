@@ -1738,7 +1738,8 @@ export function useLeads(opts?: UseLeadsOptions) {
         )
       }
       const pageKeep = pagedKeepMatchRef.current
-      if (pageKeep) mapped = mapped.filter((l) => pageKeep(l))
+      // Khớp đúng mã/SĐT: không cắt theo tab nguồn (pagedKeepMatch chiến dịch).
+      if (pageKeep && classified.kind === 'text') mapped = mapped.filter((l) => pageKeep(l))
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       searchBucketRef.current = mapped
       setSearchHitTotal(mapped.length)
@@ -1891,22 +1892,6 @@ export function useLeads(opts?: UseLeadsOptions) {
           return
         }
 
-        if (dataMode === 'fullScope') {
-          if (fkChanged || totalRef.current == null || manualRefetch) {
-            const total = await fetchTotalOnly()
-            if (cancelled) return
-            if (total === 0) {
-              applyEmptyList()
-              return
-            }
-          } else if (totalRef.current === 0) {
-            applyEmptyList()
-            return
-          }
-          await loadFullScope()
-          return
-        }
-
         if (searchText) {
           if (fkChanged || totalRef.current == null) {
             await Promise.all([fetchTotalOnly(), loadSearchBucketAndSlice(pageToLoad, fkChanged)])
@@ -1920,6 +1905,22 @@ export function useLeads(opts?: UseLeadsOptions) {
             if (manualRefetch && includeScopeSourceOptions) void fetchSourceCatalog()
             if (manualRefetch && includeScopeProgramOptions) void fetchProgramCatalog()
           }
+          return
+        }
+
+        if (dataMode === 'fullScope') {
+          if (fkChanged || totalRef.current == null || manualRefetch) {
+            const total = await fetchTotalOnly()
+            if (cancelled) return
+            if (total === 0) {
+              applyEmptyList()
+              return
+            }
+          } else if (totalRef.current === 0) {
+            applyEmptyList()
+            return
+          }
+          await loadFullScope()
           return
         }
 
