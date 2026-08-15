@@ -14,8 +14,10 @@ Cài đặt tổng: [`HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md`](./HUONG-DAN-CAI-WEBHOOK
 1. Vào [script.new](https://script.new/), tạo project mới.
 2. Dán nội dung từ `scripts/apps-script/receipt-drive-webapp.gs`.
 3. Sửa `ROOT_FOLDER_ID` nếu cần (bill).
-4. `Project Settings` → Script properties → `RECEIPT_WEBHOOK_TOKEN`.
-5. Deploy → Web app → Execute as Me → Anyone → copy URL.
+4. `Project Settings` → Script properties → `RECEIPT_WEBHOOK_TOKEN` = **value bí mật** (không phải tên key).
+5. Deploy → Web app → Execute as **Me** → Who has access **Anyone** → copy URL **`/exec`** (không dùng `/dev`).
+
+App gọi Apps Script bằng `Content-Type: text/plain` (tránh CORS preflight khi TVV bấm giấy mời trên trình duyệt).
 
 ## 2) Cấu hình trong app (ưu tiên)
 

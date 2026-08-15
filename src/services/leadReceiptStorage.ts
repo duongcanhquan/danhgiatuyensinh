@@ -98,8 +98,9 @@ async function uploadReceiptToDriveWebhook(
     runtime.driveWebhookUrl,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
+      redirect: 'follow',
     },
     RECEIPT_FETCH_TIMEOUT_MS,
     'Upload Drive quá lâu',

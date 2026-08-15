@@ -63,8 +63,9 @@ export function LeadProfileInviteSection({
         </div>
       ) : (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950">
-          Chưa có link thư mục — khi tạo giấy tờ lần đầu, n8n / Drive có thể trả link (lưu vào hồ sơ). Cấu hình thư mục
-          gốc tại <strong>Cài đặt → Giấy mời &amp; mẫu</strong>.
+          Chưa có link thư mục trên hồ sơ này. Lần đầu bấm tạo giấy tờ, hệ thống sẽ tạo folder Drive rồi hiện nút «Mở
+          ngay». Cần sẵn: <strong>Cài đặt → Chứng từ</strong> (URL Apps Script + token) và{' '}
+          <strong>Giấy mời &amp; mẫu</strong> (Điền folder VietMy → Lưu).
         </p>
       )}
 

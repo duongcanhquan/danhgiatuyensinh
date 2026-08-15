@@ -11,9 +11,11 @@ import { pickOrgWebhook, ensureOrgN8nWebhooksLoaded, getOrgN8nWebhookOverrides }
 import {
   findInviteTemplateFileId,
   getInviteDocumentsConfigCache,
+  loadInviteDocumentsConfig,
   resolveInviteDocumentGroups,
 } from './inviteDocumentsConfig'
 import { ensureInviteDriveFolder } from './ensureInviteDriveFolder'
+import { VIETMY_DEFAULT_DRIVE_FOLDERS } from './vietmyIntegrationDefaults'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { getFirestoreDb } from '../services/firebase'
 import { dispatchOutboundEvent } from '../integrations/dispatchOutbound'
@@ -383,21 +385,28 @@ export async function triggerInvitationN8n(opts: {
   const { lead, docType, scholarship, scholarship2Label } = opts
   let inviteFolderUrl = opts.inviteFolderUrl
   let folderId = inviteFolderUrl ? extractDriveFolderId(inviteFolderUrl) : ''
+
+  const orgId = resolveLeadOrgId(lead)
+  const db = getFirestoreDb()
+  if (db) {
+    try {
+      await loadInviteDocumentsConfig(db, orgId)
+    } catch {
+      /* cache fallback */
+    }
+  }
   const inviteCfg = getInviteDocumentsConfigCache().config
   const autoCreate = inviteCfg?.autoCreateFolder !== false
-  const driveRoot = String(inviteCfg?.driveRootFolderId ?? '').trim()
+  const driveRoot =
+    String(inviteCfg?.driveRootFolderId ?? '').trim() ||
+    VIETMY_DEFAULT_DRIVE_FOLDERS.inviteRootFolderId
 
   // Apps Script: nếu chưa có folder → tạo dưới FOLDER_INVITE_ROOT trước khi gửi n8n
   if (!folderId && autoCreate && driveRoot) {
-    try {
-      const ensured = await ensureInviteDriveFolder({ lead, rootFolderId: driveRoot })
-      if (ensured?.folderUrl) {
-        inviteFolderUrl = ensured.folderUrl
-        folderId = ensured.folderId || extractDriveFolderId(ensured.folderUrl)
-      }
-    } catch (e) {
-      console.warn('[triggerInvitationN8n] ensure folder', e)
-      // Vẫn gửi n8n với autoCreateFolder để workflow có thể tạo bù
+    const ensured = await ensureInviteDriveFolder({ lead, rootFolderId: driveRoot })
+    if (ensured?.folderUrl) {
+      inviteFolderUrl = ensured.folderUrl
+      folderId = ensured.folderId || extractDriveFolderId(ensured.folderUrl)
     }
   }
 
@@ -406,7 +415,6 @@ export async function triggerInvitationN8n(opts: {
   const scholarshipValue = scholarship?.amountVnd ? String(scholarship.amountVnd) : ''
   let scholarshipCondition = ''
   try {
-    const db = getFirestoreDb()
     if (db && (lead.scholarship1Id || lead.scholarship2Id)) {
       const { resolveScholarshipLabels } = await import('./scholarshipLabelResolver')
       const labels = await resolveScholarshipLabels(db, lead)
@@ -444,7 +452,6 @@ export async function triggerInvitationN8n(opts: {
     },
   }
 
-  const orgId = resolveLeadOrgId(lead)
   await ensureWebhooksForOrg(orgId)
   const webhook = webhookGiayMoi(orgId)
   if (!webhook) {

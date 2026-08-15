@@ -6325,8 +6325,12 @@ function LeadDetailPanel({
           inviteFolderUrl: folderUrl,
         })
         onUpdated({ inviteFolderUrl: folderUrl, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt })
+        setMsg('Đã tạo thư mục Drive và gửi yêu cầu giấy tờ qua n8n. Bấm «Mở ngay» để xem hồ sơ.')
+      } else {
+        setMsg(
+          'Đã gửi n8n nhưng chưa có link thư mục Drive. Kiểm tra Cài đặt → Chứng từ (URL Apps Script) và Giấy mời & mẫu (folder gốc).',
+        )
       }
-      setMsg('Đã gửi yêu cầu tạo giấy tờ qua n8n.')
     } catch (e) {
       console.error(e)
       const err = e instanceof Error ? e.message : 'Không tạo được giấy mời.'
