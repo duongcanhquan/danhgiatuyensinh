@@ -1058,8 +1058,6 @@ export function LeadManagement() {
     [db, setSearchParams, captureListChromeBeforeDetail],
   )
 
-  )
-
   const selectedWarmCount = useMemo(
     () => leads.filter((l) => selectedIds.has(l.id) && effectiveLeadTag(l) === 'WARM').length,
     [leads, selectedIds, effectiveLeadTag],
@@ -1616,9 +1614,8 @@ export function LeadManagement() {
           .filter(Boolean)
           .join(' '),
       )
-      void refetchLeads().finally(() => {
-        void openLeadById(leadId)
-      })
+      void openLeadById(leadId)
+      refetchLeads()
     },
     [applyIntakeOriginTab, refetchLeads, openLeadById],
   )
