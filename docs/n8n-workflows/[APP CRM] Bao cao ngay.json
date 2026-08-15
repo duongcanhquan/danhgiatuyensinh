@@ -1,0 +1,61 @@
+{
+  "name": "[APP CRM] Báo cáo ngày",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-crm-baocao-ngay",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-app-crm-daily",
+      "name": "Webhook Báo cáo ngày",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-720, 0],
+      "webhookId": "app-crm-daily-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nlet text = String(body.message_vi || body.chat_text || '').trim();\nif (!text) {\n  const date = body.date || '';\n  const tong = body.tongTien != null ? Number(body.tongTien).toLocaleString('vi-VN') : '0';\n  const hs = body.tongHocSinhNop != null ? body.tongHocSinhNop : '?';\n  text = `📊 BÁO CÁO THU NGÀY ${date}\\nTổng HS: ${hs}\\nTổng tiền: ${tong} VNĐ`;\n}\ntext = '🆕 [APP CRM]\\n' + text;\nreturn [{ json: { google_chat_payload: { text }, message_vi: text } }];"
+      },
+      "id": "code-normalize-daily",
+      "name": "Chuẩn hóa báo cáo ngày",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "PASTE_GOOGLE_CHAT_WEBHOOK_URL_HERE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.google_chat_payload }}",
+        "options": {}
+      },
+      "id": "http-chat-daily",
+      "name": "Gửi Google Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-240, 0],
+      "notes": "Dán URL Google Chat webhook (cùng space hệ cũ nếu muốn so sánh song song)."
+    }
+  ],
+  "connections": {
+    "Webhook Báo cáo ngày": {
+      "main": [[{ "node": "Chuẩn hóa báo cáo ngày", "type": "main", "index": 0 }]]
+    },
+    "Chuẩn hóa báo cáo ngày": {
+      "main": [[{ "node": "Gửi Google Chat", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

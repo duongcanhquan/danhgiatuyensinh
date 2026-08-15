@@ -76,7 +76,7 @@ function RouteFallback() {
   )
 }
 
-/** Marketing (Apps Script): vào app ưu tiên mở báo cáo tuyển sinh. */
+/** Marketing → báo cáo tuyển sinh; `/` vẫn là Tổng kết (tab KPI/vận hành…). Đăng nhập mặc định → `/leads`. */
 function MarketingDefaultHome() {
   const { profile } = useAuth()
   if (profile?.role === 'marketing') {
@@ -149,7 +149,7 @@ export default function App() {
                           <Route path="accountant" element={<Navigate to="/ke-toan" replace />} />
                           <Route path="settings" element={<SettingsView />} />
                           <Route path="huong-dan" element={<UserManualView />} />
-                          <Route path="*" element={<Navigate to="/" replace />} />
+                          <Route path="*" element={<Navigate to="/leads" replace />} />
                         </Route>
                       </Route>
                     </Routes>

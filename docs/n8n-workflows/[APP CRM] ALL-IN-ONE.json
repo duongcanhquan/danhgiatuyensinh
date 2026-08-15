@@ -1,0 +1,121 @@
+{
+  "name": "[APP CRM] ALL-IN-ONE — CTSV + Báo cáo ngày/tháng",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-crm-ctsv",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-app-crm-ctsv",
+      "name": "1. Webhook CTSV",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-900, -200],
+      "webhookId": "app-crm-ctsv-allinone"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-crm-baocao-ngay",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-app-crm-daily",
+      "name": "2. Webhook Báo cáo ngày",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-900, 80],
+      "webhookId": "app-crm-daily-allinone"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-crm-baocao-thang",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-app-crm-monthly",
+      "name": "3. Webhook báo cáo tháng",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-900, 360],
+      "webhookId": "app-crm-monthly-allinone"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst textRaw = String(body.message_vi || body.chat_text || '').trim();\nif (!textRaw) return [];\nconst text = '🆕 [APP CRM]\\n' + textRaw;\nreturn [{ json: { google_chat_payload: { text } } }];"
+      },
+      "id": "code-ctsv",
+      "name": "Chuẩn hóa CTSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nlet text = String(body.message_vi || body.chat_text || '').trim();\nif (!text) {\n  const date = body.date || '';\n  const tong = body.tongTien != null ? Number(body.tongTien).toLocaleString('vi-VN') : '0';\n  const hs = body.tongHocSinhNop != null ? body.tongHocSinhNop : '?';\n  text = `📊 BÁO CÁO THU NGÀY ${date}\\nTổng HS: ${hs}\\nTổng tiền: ${tong} VNĐ`;\n}\ntext = '🆕 [APP CRM]\\n' + text;\nreturn [{ json: { google_chat_payload: { text } } }];"
+      },
+      "id": "code-daily",
+      "name": "Chuẩn hóa ngày",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nlet text = String(body.message_vi || body.chat_text || '').trim();\nif (!text) {\n  const month = body.month || '';\n  text = [\n    `📆 BÁO CÁO THÁNG ${month}`,\n    `NB (chưa thu): ${body.nbMonth ?? 0}`,\n    `LPXT: ${body.lpxtMonth ?? 0}`,\n    `NE / hoàn thiện: ${body.neMonth ?? 0}`,\n    `Top TVV: ${body.topTvvName || '—'} (${body.topTvvCount ?? 0})`,\n  ].join('\\n');\n}\ntext = '🆕 [APP CRM]\\n' + text;\nreturn [{ json: { google_chat_payload: { text } } }];"
+      },
+      "id": "code-monthly",
+      "name": "Chuẩn hóa tháng",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.googleapis.com/v1/spaces/AAAAMpyq-fI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=jJ4MlN0IC0tjg_cA6CWfouLUH1kZFCWi-VeuRcM8klA",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.google_chat_payload }}",
+        "options": {}
+      },
+      "id": "http-chat",
+      "name": "Gửi Google Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-200, 80],
+      "notes": "URL Chat lấy từ workflow VietMy cũ. Đổi nếu dùng space khác."
+    }
+  ],
+  "connections": {
+    "1. Webhook CTSV": {
+      "main": [[{ "node": "Chuẩn hóa CTSV", "type": "main", "index": 0 }]]
+    },
+    "2. Webhook báo cáo ngày": {
+      "main": [[{ "node": "Chuẩn hóa ngày", "type": "main", "index": 0 }]]
+    },
+    "3. Webhook báo cáo tháng": {
+      "main": [[{ "node": "Chuẩn hóa tháng", "type": "main", "index": 0 }]]
+    },
+    "Chuẩn hóa CTSV": {
+      "main": [[{ "node": "Gửi Google Chat", "type": "main", "index": 0 }]]
+    },
+    "Chuẩn hóa ngày": {
+      "main": [[{ "node": "Gửi Google Chat", "type": "main", "index": 0 }]]
+    },
+    "Chuẩn hóa tháng": {
+      "main": [[{ "node": "Gửi Google Chat", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

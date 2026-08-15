@@ -59,7 +59,7 @@ export function LoginView() {
   const location = useLocation()
   const rawFrom = (location.state as { from?: string } | null)?.from
   const from =
-    rawFrom && rawFrom !== '/login' && rawFrom.startsWith('/') ? rawFrom : '/'
+    rawFrom && rawFrom !== '/login' && rawFrom.startsWith('/') ? rawFrom : '/leads'
 
   const superEmailHint = defaultSuperAdminEmailFromEnv()
   const [email, setEmail] = useState(superEmailHint)

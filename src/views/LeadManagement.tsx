@@ -5869,7 +5869,6 @@ function LeadDetailPanel({
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
   const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
-  const [closeDetailConfirmOpen, setCloseDetailConfirmOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
@@ -6039,22 +6038,8 @@ function LeadDetailPanel({
   }, [hasUnsavedProgress, onUnsavedChange])
 
   const requestClosePanel = useCallback(() => {
-    if (hasUnsavedProgress) {
-      setCloseDetailConfirmOpen(true)
-      return
-    }
     onClose()
-  }, [hasUnsavedProgress, onClose])
-
-  useEffect(() => {
-    if (!hasUnsavedProgress || saving) return
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [hasUnsavedProgress, saving])
+  }, [onClose])
 
   const leadMl = useMemo(() => resolveMlWinDisplay(lead, infoScoreRuntime), [lead, infoScoreRuntime])
 
@@ -6303,6 +6288,27 @@ function LeadDetailPanel({
     } finally {
       setSaving(false)
     }
+  }
+
+  /** Một nút trên tab Hồ sơ ứng viên — lưu tài chính + thông tin hồ sơ nếu có thay đổi. */
+  const saveAllProfileInfo = async () => {
+    if (!db || !profile) {
+      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      return
+    }
+    if (!showCounselorProgressForm) {
+      setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này.')
+      return
+    }
+    if (!coreDirty && !financeDirty) {
+      setMsg('Không có thay đổi để lưu.')
+      return
+    }
+    const hadFinance = financeDirty
+    const hadCore = coreDirty
+    if (hadFinance) await saveFinanceProfile()
+    if (hadCore) await saveCoreProfile()
+    if (hadFinance && hadCore) setMsg('Đã lưu thông tin.')
   }
 
   const saveUnified = async () => {
@@ -6787,11 +6793,12 @@ function LeadDetailPanel({
           <button
             type="button"
             onClick={requestClosePanel}
-            title="Đóng"
-            className="inline-flex min-h-8 min-w-8 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-amber-50"
+            title="Đóng chi tiết hồ sơ"
+            aria-label="Đóng chi tiết hồ sơ"
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border-2 border-slate-800 bg-slate-900 px-3.5 py-2 text-sm font-bold text-white shadow-md transition hover:border-slate-950 hover:bg-slate-950 sm:min-h-11 sm:px-4 sm:text-base"
           >
-            <X className="h-3.5 w-3.5" aria-hidden />
-            <span className="hidden sm:inline">Đóng</span>
+            <X className="h-5 w-5 shrink-0" strokeWidth={2.5} aria-hidden />
+            <span>Đóng</span>
           </button>
         </div>
       </header>
@@ -7030,25 +7037,17 @@ function LeadDetailPanel({
                       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-indigo-200/90 bg-white p-1.5 shadow-sm ring-1 ring-indigo-100/80 sm:p-2">
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-b border-indigo-100 pb-1.5">
                           {showCounselorProgressForm ? (
-                            <div className="flex flex-wrap items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
                               {coreDirty || financeDirty ? (
                                 <span className="text-[10px] font-semibold text-amber-800">Chưa lưu</span>
                               ) : null}
                               <button
                                 type="button"
-                                disabled={saving || financeSaving || !financeDirty}
-                                onClick={() => void saveFinanceProfile()}
-                                className="rounded-md border border-blue-600 bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={saving || financeSaving || (!coreDirty && !financeDirty)}
+                                onClick={() => void saveAllProfileInfo()}
+                                className="rounded-lg border border-rose-700 bg-rose-600 px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
                               >
-                                {financeSaving ? 'Đang lưu…' : 'Lưu tài chính'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={saving || financeSaving || !coreDirty}
-                                onClick={() => void saveCoreProfile()}
-                                className="rounded-md border border-emerald-600 bg-indigo-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                {saving ? 'Đang lưu…' : 'Lưu hồ sơ'}
+                                {saving || financeSaving ? 'Đang lưu…' : 'Lưu thông tin'}
                               </button>
                             </div>
                           ) : null}
@@ -7131,9 +7130,9 @@ function LeadDetailPanel({
                                       ) : null}
                                     </p>
                                   </div>
-                                  <div className="flex w-full min-w-0 flex-wrap items-end gap-1.5 sm:w-auto sm:max-w-[min(100%,22rem)] sm:justify-end">
+                                  <div className="flex w-full min-w-0 flex-nowrap items-end gap-1.5 sm:w-auto sm:max-w-[min(100%,24rem)] sm:justify-end">
                                     {showCounselorProgressForm ? (
-                                      <label className="block min-w-[9.5rem] flex-1 text-[10px] font-semibold text-amber-950 sm:flex-none">
+                                      <label className="block min-w-0 flex-1 basis-0 text-[10px] font-semibold text-amber-950">
                                         Tư vấn
                                         <select
                                           value={crmForForm}
@@ -7148,11 +7147,11 @@ function LeadDetailPanel({
                                         </select>
                                       </label>
                                     ) : (
-                                      <span className="rounded-md border border-amber-200 bg-white/90 px-1.5 py-1 text-[11px] font-semibold text-slate-800">
+                                      <span className="shrink-0 rounded-md border border-amber-200 bg-white/90 px-1.5 py-1 text-[11px] font-semibold text-slate-800">
                                         Tư vấn: {LEAD_COUNSELOR_STATUS_LABELS[crmForForm]}
                                       </span>
                                     )}
-                                    <label className="block min-w-[9.5rem] flex-1 text-[10px] font-semibold text-amber-950 sm:flex-none">
+                                    <label className="block min-w-0 flex-1 basis-0 text-[10px] font-semibold text-amber-950">
                                       Hồ sơ
                                       <select
                                         value={statusForForm}
@@ -7311,32 +7310,42 @@ function LeadDetailPanel({
                                   </div>
                                 </div>
 
-                                <label className="mt-3 block rounded-xl border-2 border-sky-400/80 bg-sky-50/80 p-2.5 shadow-sm sm:p-3">
-                                  <span className="text-sm font-bold tracking-tight text-sky-950">
-                                    Ghi chú TVV
-                                  </span>
-                                  <textarea
-                                    value={note}
-                                    onChange={(e) => setNote(e.target.value)}
-                                    rows={4}
-                                    placeholder="Nội dung hiện trên cột Ghi chú của danh sách hồ sơ…"
-                                    className="mt-1.5 w-full resize-y rounded-lg border-2 border-sky-300/80 bg-white px-2.5 py-2 text-sm font-semibold leading-relaxed text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-400/40"
-                                  />
-                                </label>
+                                <div className="mt-3 flex items-stretch gap-2">
+                                  <label className="flex min-w-0 flex-1 flex-col rounded-xl border-2 border-sky-400/80 bg-sky-50/80 p-2 shadow-sm sm:p-2.5">
+                                    <span className="text-sm font-bold tracking-tight text-sky-950">
+                                      Ghi chú TVV
+                                    </span>
+                                    <textarea
+                                      value={note}
+                                      onChange={(e) => setNote(e.target.value)}
+                                      rows={3}
+                                      placeholder="Nội dung hiện trên cột Ghi chú của danh sách hồ sơ…"
+                                      className="mt-1.5 min-h-[4.5rem] w-full flex-1 resize-y rounded-lg border-2 border-sky-300/80 bg-white px-2.5 py-2 text-sm font-semibold leading-relaxed text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-400/40"
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      saving ||
+                                      !db ||
+                                      (!showCounselorProgressForm && !canSaveInteraction) ||
+                                      !hasUnsavedProgress
+                                    }
+                                    onClick={() => void saveUnified()}
+                                    title="Lưu cập nhật"
+                                    className="flex h-auto w-[4.75rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-amber-700 bg-gradient-to-b from-amber-500 to-orange-600 px-1.5 text-center text-[11px] font-extrabold leading-tight text-white shadow-md transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45 sm:w-[5.25rem] sm:text-xs"
+                                  >
+                                    {saving ? (
+                                      '…'
+                                    ) : (
+                                      <>
+                                        <span>Lưu</span>
+                                        <span>cập nhật</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
                                 {msg ? <p className="mt-1 text-xs font-bold text-amber-900">{msg}</p> : null}
-                                <button
-                                  type="button"
-                                  disabled={
-                                    saving ||
-                                    !db ||
-                                    (!showCounselorProgressForm && !canSaveInteraction) ||
-                                    !hasUnsavedProgress
-                                  }
-                                  onClick={() => void saveUnified()}
-                                  className="mt-2 w-full rounded-lg border-2 border-amber-700 bg-gradient-to-r from-amber-500 to-orange-600 py-2.5 text-sm font-bold text-white shadow-md transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45"
-                                >
-                                  {saving ? 'Đang lưu…' : 'Lưu cập nhật'}
-                                </button>
                               </div>
                             </div>
                           ) : null}
@@ -7432,49 +7441,6 @@ function LeadDetailPanel({
             </div>
         </div>
       </div>
-
-      {closeDetailConfirmOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[130] bg-slate-900/50 backdrop-blur-[2px]"
-            aria-label="Đóng xác nhận"
-            onClick={() => setCloseDetailConfirmOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="close-detail-confirm-title"
-            className="fixed left-1/2 top-1/2 z-[140] w-[min(calc(100vw-1.5rem),38rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-amber-200/90 bg-white p-5 shadow-2xl sm:p-6"
-          >
-            <h2 id="close-detail-confirm-title" className="text-lg font-bold text-slate-900">
-              Có thay đổi chưa lưu
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              Bạn đang chỉnh tình trạng hồ sơ, ghi chú hoặc tình trạng TVV. Đóng chi tiết bây giờ sẽ bỏ các thay đổi chưa lưu.
-            </p>
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCloseDetailConfirmOpen(false)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Tiếp tục chỉnh
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCloseDetailConfirmOpen(false)
-                  onClose()
-                }}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700"
-              >
-                Đóng và bỏ thay đổi
-              </button>
-            </div>
-          </div>
-        </>
-      ) : null}
 
       {playbookPopupOpen ? (
         <>

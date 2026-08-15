@@ -1,0 +1,61 @@
+{
+  "name": "[APP CRM] Báo cáo tháng",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-crm-baocao-thang",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-app-crm-monthly",
+      "name": "Webhook Báo cáo tháng",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-720, 0],
+      "webhookId": "app-crm-monthly-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nlet text = String(body.message_vi || body.chat_text || '').trim();\nif (!text) {\n  const month = body.month || '';\n  text = [\n    `📆 BÁO CÁO THÁNG ${month}`,\n    `NB (chưa thu): ${body.nbMonth ?? 0}`,\n    `LPXT: ${body.lpxtMonth ?? 0}`,\n    `NE / hoàn thiện: ${body.neMonth ?? 0}`,\n    `Top TVV: ${body.topTvvName || '—'} (${body.topTvvCount ?? 0})`,\n  ].join('\\n');\n}\ntext = '🆕 [APP CRM]\\n' + text;\nreturn [{ json: { google_chat_payload: { text }, message_vi: text } }];"
+      },
+      "id": "code-normalize-monthly",
+      "name": "Chuẩn hóa báo cáo tháng",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "PASTE_GOOGLE_CHAT_WEBHOOK_URL_HERE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.google_chat_payload }}",
+        "options": {}
+      },
+      "id": "http-chat-monthly",
+      "name": "Gửi Google Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-240, 0],
+      "notes": "Dán URL Google Chat webhook."
+    }
+  ],
+  "connections": {
+    "Webhook Báo cáo tháng": {
+      "main": [[{ "node": "Chuẩn hóa báo cáo tháng", "type": "main", "index": 0 }]]
+    },
+    "Chuẩn hóa báo cáo tháng": {
+      "main": [[{ "node": "Gửi Google Chat", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

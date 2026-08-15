@@ -1,0 +1,61 @@
+{
+  "name": "[APP CRM] CTSV — Báo thu & duyệt kế toán",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-crm-ctsv",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-app-crm-ctsv",
+      "name": "Webhook CTSV App",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-720, 0],
+      "webhookId": "app-crm-ctsv-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst event = String(body.event || '');\nconst textRaw = String(body.message_vi || body.chat_text || '').trim();\nif (!textRaw) {\n  return [];\n}\nconst text = '🆕 [APP CRM]\\n' + textRaw;\nreturn [{\n  json: {\n    event,\n    google_chat_payload: { text },\n    message_vi: text,\n  },\n}];"
+      },
+      "id": "code-normalize-ctsv",
+      "name": "Chuẩn hóa message_vi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "PASTE_GOOGLE_CHAT_WEBHOOK_URL_HERE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.google_chat_payload }}",
+        "options": {}
+      },
+      "id": "http-chat-ctsv",
+      "name": "Gửi Google Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-240, 0],
+      "notes": "Copy URL Chat từ workflow cũ (node HTTP Request / testctsv). Không dùng path webhook n8n."
+    }
+  ],
+  "connections": {
+    "Webhook CTSV App": {
+      "main": [[{ "node": "Chuẩn hóa message_vi", "type": "main", "index": 0 }]]
+    },
+    "Chuẩn hóa message_vi": {
+      "main": [[{ "node": "Gửi Google Chat", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
