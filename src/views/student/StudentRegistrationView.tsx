@@ -48,6 +48,27 @@ export function StudentRegistrationView() {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState(emptyPublicRegistrationForm)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const prev = document.title
+    document.title = 'VIETMY COLLEGE'
+    const desc = 'Cổng đăng ký tuyển sinh của Trường Cao đẳng Việt Mỹ Hà Nội.'
+    const upsertMeta = (attr: 'name' | 'property', key: string, content: string) => {
+      let el = document.head.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attr, key)
+        document.head.appendChild(el)
+      }
+      el.content = content
+    }
+    upsertMeta('name', 'description', desc)
+    upsertMeta('property', 'og:title', 'VIETMY COLLEGE')
+    upsertMeta('property', 'og:description', desc)
+    return () => {
+      document.title = prev
+    }
+  }, [])
   const [portalClosed, setPortalClosed] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
 
