@@ -6230,7 +6230,7 @@ function LeadDetailPanel({
     setMsg(null)
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
-      const { finance, updatedAt, lastTouchedAt } = await persistLeadFinance({
+      const { finance, updatedAt, lastTouchedAt, receiptUploadWarnings } = await persistLeadFinance({
         db,
         lead,
         draft: financeDraft,
@@ -6248,7 +6248,11 @@ function LeadDetailPanel({
       const nextLead: Lead = { ...lead, finance, updatedAt, lastTouchedAt }
       setFinanceDraft(leadToFinanceDraft(nextLead))
       onUpdated({ finance, updatedAt, lastTouchedAt })
-      setMsg('Đã lưu tài chính.')
+      setMsg(
+        receiptUploadWarnings.length
+          ? `Đã lưu số tiền; chứng từ chưa lên: ${receiptUploadWarnings.join('; ')}`
+          : 'Đã lưu tài chính.',
+      )
     } catch (e) {
       console.error(e)
       const err = e instanceof Error ? e.message : 'Không lưu được tài chính.'

@@ -5,7 +5,14 @@ import {
   Timestamp,
   type Firestore,
 } from 'firebase/firestore'
-import type { Lead, LeadSourceRecord, LeadWorkMode, PriorityTag, ScoringProfile } from '../types'
+import type {
+  Lead,
+  LeadFinanceRecord,
+  LeadSourceRecord,
+  LeadWorkMode,
+  PriorityTag,
+  ScoringProfile,
+} from '../types'
 import {
   FS_COLLECTIONS,
 } from '../types'
@@ -139,6 +146,8 @@ export type CreateManualLeadInput = {
   workMode?: LeadWorkMode
   /** Catalog used when workMode is not passed explicitly. */
   leadSources?: readonly Pick<LeadSourceRecord, 'label' | 'defaultWorkMode'>[]
+  /** Tài chính đã có lúc tạo (số tiền/ngày — không gồm file upload). */
+  finance?: LeadFinanceRecord | null
 }
 
 async function findExistingLeadIdByHash(db: Firestore, hash: string, orgId: string): Promise<string | null> {
@@ -275,6 +284,14 @@ export async function createManualLead(
     ...pillarPatch,
     ...(workMode ? { workMode } : {}),
     ...manualLeadCreatedOriginFields(),
+    ...(input.finance
+      ? {
+          finance: {
+            ...input.finance,
+            enrollmentStatus: input.finance.enrollmentStatus ?? 'MỚI',
+          },
+        }
+      : {}),
     createdAt: now,
     updatedAt: now,
     uploadedAt: now,

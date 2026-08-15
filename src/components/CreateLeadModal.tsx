@@ -21,9 +21,9 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
-import { emptyFinanceDraft, financeDraftHasContent } from '../utils/leadFinance'
+import { emptyFinanceDraft, financeDraftHasContent, financeDraftToRecord, PAYMENT_SLOT_DEFS } from '../utils/leadFinance'
 import { describeFinanceDepositAudit } from '../utils/leadFinanceAudit'
-import { persistLeadFinance } from '../utils/persistLeadFinance'
+import { clearFinancePendingFiles, persistLeadFinance } from '../utils/persistLeadFinance'
 import { getDoc, doc } from 'firebase/firestore'
 import {
   defaultPublicRegistrationConfig,
@@ -190,6 +190,10 @@ export function CreateLeadModal({
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
       const counselorId = assigneeUid.trim() || profile.id
+      const financeOnCreate =
+        financeDraftHasContent(financeDraft)
+          ? financeDraftToRecord(clearFinancePendingFiles(financeDraft))
+          : null
       const { id, systemCode, n8nOk, n8nError } = await createManualLead(
         db,
         {
@@ -199,6 +203,7 @@ export function CreateLeadModal({
           createdByName: performer,
           orgId: effectiveOrgId,
           leadSources,
+          finance: financeOnCreate,
         },
         {
           profile: activeScoringProfile,
@@ -211,7 +216,8 @@ export function CreateLeadModal({
       createdId = id
       createdSystemCode = systemCode
 
-      if (financeDraftHasContent(financeDraft)) {
+      const hasPendingReceipt = PAYMENT_SLOT_DEFS.some((s) => Boolean(financeDraft.payments[s.key].pendingFile))
+      if (financeDraftHasContent(financeDraft) && hasPendingReceipt) {
         try {
           const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, id))
           const lead = snap.exists() ? mapDoc(id, snap.data() as Record<string, unknown>) : null
@@ -222,35 +228,44 @@ export function CreateLeadModal({
             ? formatStaffDirectoryLabel(assignee)
             : performer
           if (lead) {
-            await persistLeadFinance({
+            const saved = await persistLeadFinance({
               db,
               lead,
               draft: financeDraft,
               counselorName: assigneeLabel,
             })
-            const financeAudit = describeFinanceDepositAudit(financeDraft)
-            if (financeAudit) {
-              try {
-                await commitAuditLog(db, {
-                  leadId: id,
-                  actionType: 'SYSTEM_UPDATE',
-                  description: financeAudit,
-                  performedBy: profile.id,
-                  performedByName: performer,
-                })
-              } catch (ae) {
-                console.warn('[CreateLeadModal] finance audit', ae)
-              }
+            if (saved.receiptUploadWarnings.length) {
+              postWriteWarning = [
+                postWriteWarning,
+                `Đã ghi số tiền; chứng từ chưa lên được: ${saved.receiptUploadWarnings.join('; ')}`,
+              ]
+                .filter(Boolean)
+                .join(' ')
             }
-          } else {
-            postWriteWarning = 'Hồ sơ đã tạo nhưng chưa đọc lại được để lưu tiền — mở hồ sơ và cập nhật lại.'
           }
         } catch (fe) {
-          console.warn('[CreateLeadModal] finance after create', fe)
+          console.warn('[CreateLeadModal] finance receipt after create', fe)
           postWriteWarning =
             fe instanceof Error
-              ? `Hồ sơ đã tạo nhưng lưu tiền lỗi: ${fe.message}`
-              : 'Hồ sơ đã tạo nhưng lưu tiền chưa xong — mở hồ sơ để cập nhật lại.'
+              ? `Hồ sơ và tiền đã lưu; chứng từ lỗi: ${fe.message}`
+              : 'Hồ sơ và tiền đã lưu; chứng từ chưa xong — mở hồ sơ để tải lại bill.'
+        }
+      }
+
+      if (financeOnCreate) {
+        const financeAudit = describeFinanceDepositAudit(financeDraft)
+        if (financeAudit) {
+          try {
+            await commitAuditLog(db, {
+              leadId: id,
+              actionType: 'SYSTEM_UPDATE',
+              description: financeAudit,
+              performedBy: profile.id,
+              performedByName: performer,
+            })
+          } catch (ae) {
+            console.warn('[CreateLeadModal] finance audit', ae)
+          }
         }
       }
       // Audit «Tạo hồ sơ» + n8n đã ghi trong createManualLead.
