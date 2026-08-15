@@ -84,12 +84,12 @@ export function normalizeNationalIdInput(nationalId: string, notAvailable: boole
   return v.replace(/[^A-Z0-9]/g, '')
 }
 
-/** CCCD/CMND 9–12 số; hộ chiếu 7–15 chữ+số. Rỗng được phép trên form CRM (không bắt buộc). */
+/** CCCD/CMND đúng 9 hoặc 12 số; hộ chiếu 7–15 chữ+số. Rỗng được phép trên form CRM (không bắt buộc). */
 export function validateNationalIdInput(nationalId: string, notAvailable: boolean): string | null {
   if (notAvailable) return null
   const v = normalizeNationalIdInput(nationalId, false)
   if (!v) return null
-  if (/^\d+$/.test(v) && (v.length === 9 || v.length === 10 || v.length === 12)) return null
+  if (/^\d+$/.test(v) && (v.length === 9 || v.length === 12)) return null
   if (/^[A-Z0-9]{7,15}$/.test(v) && !/^\d+$/.test(v)) return null
-  return 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu: 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
+  return 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu: 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
 }

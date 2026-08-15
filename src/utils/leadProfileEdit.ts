@@ -2,6 +2,7 @@ import type { Lead, LeadCounselorStatus, LeadPipelineStatus, PriorityTag } from 
 import { deleteField } from 'firebase/firestore'
 import { studyFormatFromParts } from './studyFormatMerge'
 import { computeLeadUniqueHash, nationalIdHashFromInput } from './leadIdentity'
+import { formatVnPhoneInput, normalizeDobToDdMmYyyy } from './publicRegistrationForm'
 
 /** Trường chỉnh trên panel chi tiết — đồng bộ Firestore + chấm điểm qua `leadToEvaluationRecord`. */
 export type LeadCoreDraft = {
@@ -109,11 +110,11 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     fullName: lead.fullName ?? '',
     systemCode: lead.systemCode ?? '',
     customerId: lead.customerId ?? '',
-    dateOfBirth: lead.dateOfBirth ?? '',
+    dateOfBirth: normalizeDobToDdMmYyyy(lead.dateOfBirth ?? ''),
     gender: lead.gender ?? '',
     placeOfBirth: lead.placeOfBirth ?? '',
-    phone: lead.phone ?? '',
-    parentPhone: lead.parentPhone ?? '',
+    phone: formatVnPhoneInput(lead.phone ?? '') || (lead.phone ?? ''),
+    parentPhone: formatVnPhoneInput(lead.parentPhone ?? '') || (lead.parentPhone ?? ''),
     source: lead.source1 ?? lead.source ?? '',
     province: lead.province ?? '',
     address: lead.permanentAddress?.trim() || lead.address || '',
@@ -148,9 +149,9 @@ export function leadToCoreDraft(lead: Lead): LeadCoreDraft {
     source1: lead.source1 ?? lead.source ?? '',
     source2: lead.source2 ?? '',
     fatherName: lead.fatherName ?? '',
-    fatherPhone: lead.fatherPhone ?? '',
+    fatherPhone: formatVnPhoneInput(lead.fatherPhone ?? '') || (lead.fatherPhone ?? ''),
     motherName: lead.motherName ?? '',
-    motherPhone: lead.motherPhone ?? '',
+    motherPhone: formatVnPhoneInput(lead.motherPhone ?? '') || (lead.motherPhone ?? ''),
     guardian: lead.guardian ?? '',
     scholarship1Id: lead.scholarship1Id ?? '',
     scholarship2Id: lead.scholarship2Id ?? '',
@@ -177,9 +178,9 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
     fullName: norm(draft.fullName),
     customerId: norm(draft.customerId),
     ...(norm(draft.systemCode) ? { systemCode: norm(draft.systemCode) } : {}),
-    dateOfBirth: norm(draft.dateOfBirth),
-    phone: norm(draft.phone),
-    parentPhone: norm(draft.parentPhone),
+    dateOfBirth: normalizeDobToDdMmYyyy(draft.dateOfBirth) || norm(draft.dateOfBirth),
+    phone: formatVnPhoneInput(draft.phone) || norm(draft.phone),
+    parentPhone: formatVnPhoneInput(draft.parentPhone) || norm(draft.parentPhone),
     source: sourcePrimary,
     province: norm(draft.province),
     address: norm(draft.permanentAddress) || norm(draft.address),
@@ -195,9 +196,9 @@ export function leadCoreDraftToFirestoreFields(draft: LeadCoreDraft): Record<str
     source1,
     source2: norm(draft.source2),
     fatherName: norm(draft.fatherName),
-    fatherPhone: norm(draft.fatherPhone),
+    fatherPhone: formatVnPhoneInput(draft.fatherPhone) || norm(draft.fatherPhone),
     motherName: norm(draft.motherName),
-    motherPhone: norm(draft.motherPhone),
+    motherPhone: formatVnPhoneInput(draft.motherPhone) || norm(draft.motherPhone),
     guardian: norm(draft.guardian),
     scholarship1Id: norm(draft.scholarship1Id),
     scholarship2Id: norm(draft.scholarship2Id),

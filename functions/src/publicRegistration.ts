@@ -424,15 +424,27 @@ function isValidDob(dob: string, now = new Date()): boolean {
   return ageYears >= 12 && ageYears <= 70
 }
 
+function normalizeVnPhoneDigits(raw: string): string {
+  let d = raw.replace(/\D/g, '')
+  if (d.startsWith('84') && d.length >= 11) d = `0${d.slice(2)}`
+  return d
+}
+
 function isValidPhone(phone: string): boolean {
-  return /^(0\d{9}|\+\d{9,15})$/.test(phone)
+  return /^0\d{9}$/.test(normalizeVnPhoneDigits(phone))
 }
 
 function isValidNationalId(raw: string, notAvailable: boolean): boolean {
   if (notAvailable || raw === 'CHƯA CÓ') return true
-  if (/^\d+$/.test(raw) && (raw.length === 9 || raw.length === 10 || raw.length === 12)) return true
+  if (/^\d+$/.test(raw) && (raw.length === 9 || raw.length === 12)) return true
   if (/^[A-Z0-9]{7,15}$/.test(raw) && !/^\d+$/.test(raw)) return true
   return false
+}
+
+function isValidEmail(email: string): boolean {
+  const e = email.trim()
+  if (!e.includes('@')) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 }
 
 function isValidCustomScore(raw: string): boolean {
@@ -495,27 +507,29 @@ function validatePublicLeadInput(
   const score = str(input.academicPerformance)
 
   if (!fullName) return 'Vui lòng nhập họ và tên.'
-  if (!dob || !isValidDob(dob)) return 'Ngày sinh cần đúng DD/MM/YYYY và tuổi hợp lý (12–70).'
+  if (!dob || !isValidDob(dob)) {
+    return 'Ngày sinh dạng DD/MM/YYYY — ví dụ gõ 25021984 → 25/02/1984 (tháng phải từ 01–12).'
+  }
   if (!ALLOWED_GENDERS.has(str(input.gender))) return 'Vui lòng chọn giới tính.'
   if (!str(input.placeOfBirth)) return 'Vui lòng nhập nơi sinh.'
   if (!str(input.ethnicity)) return 'Vui lòng nhập dân tộc.'
   if (!isValidNationalId(nationalId, notAvailable)) {
-    return 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số.'
+    return 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số.'
   }
   if (!isValidPhone(phone)) {
-    return 'SĐT Việt Nam 10 số (bắt đầu 0) hoặc quốc tế bắt đầu bằng +.'
+    return 'Số điện thoại phải đủ đúng 10 số (bắt đầu bằng 0).'
   }
-  if (!studentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) {
-    return 'Email không hợp lệ — cần email để nhận thông báo.'
+  if (!isValidEmail(studentEmail)) {
+    return 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).'
   }
   if (!str(input.permanentAddress) && !str(input.address)) {
     return 'Vui lòng nhập địa chỉ thường trú.'
   }
   if (!motherPhone || !isValidPhone(motherPhone)) {
-    return 'SĐT mẹ bắt buộc (10 số VN hoặc + quốc tế).'
+    return 'SĐT mẹ bắt buộc — đủ đúng 10 số.'
   }
   if (str(input.fatherPhone) && !isValidPhone(str(input.fatherPhone))) {
-    return 'SĐT cha không hợp lệ.'
+    return 'SĐT cha phải đủ đúng 10 số.'
   }
   if (!str(input.highSchool)) return 'Vui lòng nhập trường đã theo học.'
   if (!str(input.schoolProvince) && !str(input.province)) {

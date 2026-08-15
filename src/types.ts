@@ -398,7 +398,7 @@ export interface Lead {
   /** Nội dung lưu ý khác — targetField: otherAttentionNotes */
   otherAttentionNotes?: string
 
-  /** CCCD / CMND (9–12 số) hoặc hộ chiếu — bỏ qua khi `nationalIdNotAvailable` */
+  /** CCCD / CMND (đúng 9 hoặc 12 số) hoặc hộ chiếu — bỏ qua khi `nationalIdNotAvailable` */
   nationalId?: string
   /** Tick «chưa có» trên form — không bắt buộc nhập CCCD */
   nationalIdNotAvailable?: boolean

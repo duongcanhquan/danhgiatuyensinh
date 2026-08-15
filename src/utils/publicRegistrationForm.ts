@@ -34,20 +34,36 @@ export function emptyPublicRegistrationForm(): PublicRegistrationFormInput {
   }
 }
 
+/** Gõ 25021984 → 25/02/1984 (DD/MM/YYYY). Nhận cả paste ISO YYYY-MM-DD. */
 export function formatDobInput(raw: string): string {
-  let v = raw.replace(/\D/g, '')
+  const trimmed = raw.trim()
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
+  let v = trimmed.replace(/\D/g, '')
   if (v.length > 8) v = v.slice(0, 8)
   if (v.length >= 5) return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`
   if (v.length >= 3) return `${v.slice(0, 2)}/${v.slice(2)}`
   return v
 }
 
-export function isValidPublicDob(dob: string, now = new Date()): boolean {
-  const m = dob.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (!m) return false
-  const day = Number(m[1])
-  const month = Number(m[2])
-  const year = Number(m[3])
+/**
+ * Chuẩn hoá ngày sinh về DD/MM/YYYY khi load hồ sơ (ISO / DD-MM-YYYY / digits).
+ * Chuỗi rỗng hoặc không nhận diện được → trả về trim gốc (không phá dữ liệu lạ).
+ */
+export function normalizeDobToDdMmYyyy(raw: string): string {
+  const t = raw.trim()
+  if (!t) return ''
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(t)) return t
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
+  const dmyDash = t.match(/^(\d{2})-(\d{2})-(\d{4})$/)
+  if (dmyDash) return `${dmyDash[1]}/${dmyDash[2]}/${dmyDash[3]}`
+  const digits = t.replace(/\D/g, '')
+  if (digits.length === 8) return formatDobInput(digits)
+  return t
+}
+
+function daysInMonth(year: number, month: number): number {
   const dim = [
     31,
     year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
@@ -62,31 +78,79 @@ export function isValidPublicDob(dob: string, now = new Date()): boolean {
     30,
     31,
   ]
-  if (year < 1950 || month < 1 || month > 12 || day < 1 || day > dim[month - 1]!) return false
+  return dim[month - 1] ?? 0
+}
+
+/** Lý do ngày sinh sai — dùng cho thông báo form (VD tháng 25). */
+export function describePublicDobIssue(dob: string, now = new Date()): string | null {
+  const t = normalizeDobToDdMmYyyy(dob)
+  if (!t) return 'Vui lòng nhập ngày sinh (DD/MM/YYYY).'
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(t)) {
+    return 'Ngày sinh dạng DD/MM/YYYY — ví dụ gõ 25021984 sẽ thành 25/02/1984.'
+  }
+  const m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)!
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  if (month < 1 || month > 12) {
+    return `Tháng không hợp lệ (${m[2]}). Ngày/tháng/năm theo DD/MM/YYYY (vd 25/02/1984).`
+  }
+  const maxDay = daysInMonth(year, month)
+  if (day < 1 || day > maxDay) {
+    return `Ngày không hợp lệ (${m[1]}/${m[2]}/${m[3]}).`
+  }
+  if (year < 1950) return 'Năm sinh không hợp lệ.'
   const birth = new Date(year, month - 1, day)
   if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) {
-    return false
+    return 'Ngày sinh không hợp lệ.'
   }
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  if (birth > today) return false
+  if (birth > today) return 'Ngày sinh không được ở tương lai.'
   const ageYears =
     today.getFullYear() -
     year -
     (today.getMonth() < month - 1 || (today.getMonth() === month - 1 && today.getDate() < day)
       ? 1
       : 0)
-  if (ageYears < 12 || ageYears > 70) return false
-  return true
+  if (ageYears < 12 || ageYears > 70) {
+    return 'Tuổi cần trong khoảng 12–70.'
+  }
+  return null
 }
 
+export function isValidPublicDob(dob: string, now = new Date()): boolean {
+  return describePublicDobIssue(dob, now) === null
+}
+
+/** Chuẩn hoá SĐT VN → 10 số bắt đầu 0 (84xxxxxxxxx → 0xxxxxxxxx). */
+export function normalizeVnPhoneDigits(raw: string): string {
+  let d = raw.replace(/\D/g, '')
+  if (d.startsWith('84') && d.length >= 11) d = `0${d.slice(2)}`
+  return d
+}
+
+/** Gõ SĐT chỉ giữ tối đa 10 số. */
+export function formatVnPhoneInput(raw: string): string {
+  return normalizeVnPhoneDigits(raw).slice(0, 10)
+}
+
+/** Điện thoại VN đủ đúng 10 số (bắt đầu 0). */
 export function isValidPublicPhone(phone: string): boolean {
-  return /^(0\d{9}|\+\d{9,15})$/.test(phone.trim())
+  return /^0\d{9}$/.test(normalizeVnPhoneDigits(phone))
 }
 
+/** Email bắt buộc có @ và dạng cơ bản hợp lệ. */
+export function isValidStudentEmail(email: string): boolean {
+  const e = email.trim()
+  if (!e.includes('@')) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
+}
+
+/** CCCD/CMND: đúng 9 hoặc 12 số; hộ chiếu chữ+số 7–15. */
 export function isValidPublicNationalId(raw: string, notAvailable: boolean): boolean {
   const v = raw.trim().toUpperCase()
   if (notAvailable || v === 'CHƯA CÓ') return true
-  if (/^\d+$/.test(v) && (v.length === 9 || v.length === 10 || v.length === 12)) return true
+  if (/^\d+$/.test(v) && (v.length === 9 || v.length === 12)) return true
   if (/^[A-Z0-9]{7,15}$/.test(v) && !/^\d+$/.test(v)) return true
   return false
 }
@@ -122,16 +186,16 @@ export function validatePublicRegistrationForm(
     lang === 'en'
       ? {
           name: 'Please enter full name.',
-          dob: 'Date of birth must be DD/MM/YYYY and a realistic age (12–70).',
+          dob: 'Date of birth must be DD/MM/YYYY (e.g. type 25021984 → 25/02/1984).',
           gender: 'Please select gender.',
           pob: 'Please enter place of birth.',
           ethnicity: 'Please enter ethnicity.',
-          id: 'ID must be 9, 10 or 12 digits; passport 7–15 alphanumeric characters.',
-          phone: 'VN phone: 10 digits starting with 0. Int’l: start with +.',
-          email: 'Invalid email address.',
+          id: 'National ID must be exactly 9 or 12 digits; passport 7–15 alphanumeric.',
+          phone: 'Phone must be exactly 10 digits (start with 0).',
+          email: 'Email must include @ and be valid (e.g. name@school.edu.vn).',
           address: 'Please enter permanent address.',
-          motherPhone: 'Mother’s phone is required (VN 10 digits or +int’l).',
-          fatherPhone: 'Father’s phone is invalid.',
+          motherPhone: 'Mother’s phone is required (exactly 10 digits).',
+          fatherPhone: 'Father’s phone must be exactly 10 digits.',
           school: 'Please enter school attended.',
           schoolProvince: 'Please enter school province/city.',
           situation: 'Please select applicant category.',
@@ -147,16 +211,16 @@ export function validatePublicRegistrationForm(
         }
       : {
           name: 'Vui lòng nhập họ và tên.',
-          dob: 'Ngày sinh cần đúng DD/MM/YYYY và tuổi hợp lý (12–70).',
+          dob: 'Ngày sinh dạng DD/MM/YYYY — ví dụ gõ 25021984 → 25/02/1984.',
           gender: 'Vui lòng chọn giới tính.',
           pob: 'Vui lòng nhập nơi sinh.',
           ethnicity: 'Vui lòng nhập dân tộc.',
-          id: 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số.',
-          phone: 'SĐT Việt Nam 10 số (bắt đầu 0) hoặc quốc tế bắt đầu bằng +.',
-          email: 'Email không hợp lệ.',
+          id: 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số.',
+          phone: 'Số điện thoại phải đủ đúng 10 số (bắt đầu bằng 0).',
+          email: 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).',
           address: 'Vui lòng nhập địa chỉ thường trú.',
-          motherPhone: 'SĐT mẹ bắt buộc (10 số VN hoặc + quốc tế).',
-          fatherPhone: 'SĐT cha không hợp lệ.',
+          motherPhone: 'SĐT mẹ bắt buộc — đủ đúng 10 số.',
+          fatherPhone: 'SĐT cha phải đủ đúng 10 số.',
           school: 'Vui lòng nhập trường đã theo học.',
           schoolProvince: 'Vui lòng nhập tỉnh/thành của trường.',
           situation: 'Vui lòng chọn đối tượng dự tuyển.',
@@ -172,15 +236,14 @@ export function validatePublicRegistrationForm(
         }
 
   if (!form.fullName.trim()) return t.name
-  if (!isValidPublicDob(form.dateOfBirth)) return t.dob
+  const dobIssue = describePublicDobIssue(form.dateOfBirth)
+  if (dobIssue) return lang === 'en' ? t.dob : dobIssue
   if (!ALLOWED_GENDERS.has(form.gender.trim())) return t.gender
   if (!form.placeOfBirth.trim()) return t.pob
   if (!form.ethnicity.trim()) return t.ethnicity
   if (!isValidPublicNationalId(form.nationalId, form.nationalIdNotAvailable)) return t.id
   if (!isValidPublicPhone(form.phone)) return t.phone
-  if (!form.studentEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.studentEmail.trim())) {
-    return t.email
-  }
+  if (!isValidStudentEmail(form.studentEmail)) return t.email
   if (!form.permanentAddress.trim()) return t.address
   if (!isValidPublicPhone(form.motherPhone)) return t.motherPhone
   if (form.fatherPhone.trim() && !isValidPublicPhone(form.fatherPhone)) return t.fatherPhone

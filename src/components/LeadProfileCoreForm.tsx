@@ -6,12 +6,17 @@ import type { LeadCoreDraft } from '../utils/leadProfileEdit'
 import type { LeadSourceRecord, LeadWorkMode, MasterDataEntry, OmicallCallTarget, ScholarshipApplySlot, ScholarshipCategoryId, ScholarshipRecord } from '../types'
 import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
-import { scholarshipSelectLabel } from '../utils/leadProfileCatalog'
+import { scholarshipSelectLabel, validateNationalIdInput } from '../utils/leadProfileCatalog'
 import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
 import { CatalogCombobox } from './CatalogCombobox'
 import { DEFAULT_ETHNICITY_LABELS } from '../utils/ethnicityOptions'
 import { labelsFromEntries, majorsForTrainingProgram, resolveTrainingProgramId } from '../utils/masterDataCatalogOps'
 import { mergedStudyFormatLabels, studyFormatFromParts } from '../utils/studyFormatMerge'
+import {
+  describePublicDobIssue,
+  formatDobInput,
+  formatVnPhoneInput,
+} from '../utils/publicRegistrationForm'
 
 const INPUT_CLS = 'vm-input'
 
@@ -456,10 +461,12 @@ function PhoneFieldWithCall({
       <div className="flex min-w-0 items-start gap-2">
         <input
           className={`${INPUT_CLS} min-w-0 flex-1`}
-          inputMode="tel"
+          inputMode="numeric"
+          maxLength={10}
+          placeholder="10 số (vd 0912345678)"
           value={value}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(formatVnPhoneInput(e.target.value))}
         />
         {callContext ? (
           <OmicallCallButton
@@ -622,7 +629,26 @@ export function LeadProfileCoreForm({
             <input className={INPUT_CLS} value={draft.customerId} disabled={disabled} onChange={(e) => patch('customerId', e.target.value)} />
           </Field>
           <Field label="Ngày sinh">
-            <input className={INPUT_CLS} value={draft.dateOfBirth} disabled={disabled} onChange={(e) => patch('dateOfBirth', e.target.value)} />
+            <div className="space-y-1">
+              <input
+                className={INPUT_CLS}
+                value={draft.dateOfBirth}
+                disabled={disabled}
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="Gõ 25021984 → 25/02/1984"
+                onChange={(e) => patch('dateOfBirth', formatDobInput(e.target.value))}
+              />
+              {(() => {
+                const dobIssue =
+                  draft.dateOfBirth.trim().length >= 10 ? describePublicDobIssue(draft.dateOfBirth) : null
+                return dobIssue ? (
+                  <p className="text-[10px] font-medium text-rose-700">{dobIssue}</p>
+                ) : (
+                  <p className="text-[10px] text-slate-500">Định dạng DD/MM/YYYY — tháng phải từ 01–12.</p>
+                )
+              })()}
+            </div>
           </Field>
           <Field label="Giới tính">
             {isNewLead ? (
@@ -674,16 +700,22 @@ export function LeadProfileCoreForm({
                 Chưa có CCCD
               </label>
               {!draft.nationalIdNotAvailable ? (
-                <input
-                  className={INPUT_CLS}
-                  maxLength={15}
-                  placeholder="9–12 số hoặc hộ chiếu"
-                  value={draft.nationalId}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    patch('nationalId', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15))
-                  }
-                />
+                <div className="space-y-1">
+                  <input
+                    className={INPUT_CLS}
+                    maxLength={15}
+                    placeholder="CCCD 9 hoặc 12 số / hộ chiếu"
+                    value={draft.nationalId}
+                    disabled={disabled}
+                    onChange={(e) =>
+                      patch('nationalId', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15))
+                    }
+                  />
+                  {(() => {
+                    const idErr = validateNationalIdInput(draft.nationalId, false)
+                    return idErr ? <p className="text-[10px] font-medium text-rose-700">{idErr}</p> : null
+                  })()}
+                </div>
               ) : null}
             </div>
           </Field>

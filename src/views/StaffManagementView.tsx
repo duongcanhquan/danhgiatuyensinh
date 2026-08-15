@@ -622,6 +622,13 @@ export function StaffManagementView({
               ))}
             </select>
           </label>
+          {role === 'accountant' ? (
+            <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs leading-snug text-emerald-950">
+              Tài khoản <strong>Kế toán</strong> đăng nhập tại{' '}
+              <strong>/ke-toan/login</strong> (không vào CRM tuyển sinh). Giao email + mật khẩu tạm cho kế
+              toán; có thể đổi MK sau bằng «Gửi email đặt lại mật khẩu» khi sửa nhân sự.
+            </p>
+          ) : null}
           {canOwnFieldStaffTeam(role) && canStaffAll
             ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create')
             : null}
@@ -857,6 +864,11 @@ export function StaffManagementView({
                 </select>
                 {selfUid === editing.id ? (
                   <span className="mt-1 block text-xs text-amber-800">Không đổi vai trò trên chính bạn từ đây.</span>
+                ) : null}
+                {editRole === 'accountant' ? (
+                  <span className="mt-1 block text-xs text-emerald-800">
+                    Kế toán đăng nhập tại <strong>/ke-toan/login</strong>.
+                  </span>
                 ) : null}
               </label>
               {canOwnFieldStaffTeam(editRole) && canStaffAll

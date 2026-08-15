@@ -79,11 +79,18 @@ try {
   }
 }
 
+const orgId = (
+  process.env.SEED_ACCOUNTANT_ORG_ID ||
+  readDotenvValue('VITE_DEFAULT_ORG_ID') ||
+  'vietmy'
+).trim()
+
 await db.doc(`users/${uid}`).set(
   {
     email,
     displayName: 'Kế toán VietMy',
     role: 'accountant',
+    orgId,
     isActive: true,
     createdAt: now,
     updatedAt: now,
@@ -91,5 +98,5 @@ await db.doc(`users/${uid}`).set(
   { merge: true },
 )
 
-console.log('Hoàn tất. Đăng nhập tại /ke-toan/login')
+console.log('Hoàn tất. Đăng nhập tại /ke-toan/login · orgId=', orgId)
 process.exit(0)

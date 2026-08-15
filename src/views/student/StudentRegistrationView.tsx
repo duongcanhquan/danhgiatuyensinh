@@ -12,6 +12,8 @@ import {
 import {
   emptyPublicRegistrationForm,
   formatDobInput,
+  formatVnPhoneInput,
+  describePublicDobIssue,
   PUBLIC_REG_INPUT_CLS,
   resolveAcademicPerformance,
   validatePublicRegistrationForm,
@@ -313,6 +315,17 @@ export function StudentRegistrationView() {
                         required
                         inputMode="numeric"
                       />
+                      {(() => {
+                        const dobIssue =
+                          form.dateOfBirth.trim().length >= 10
+                            ? describePublicDobIssue(form.dateOfBirth)
+                            : null
+                        return dobIssue ? (
+                          <p className="mt-1 text-[11px] font-medium text-rose-700">{dobIssue}</p>
+                        ) : (
+                          <p className="mt-1 text-[11px] text-slate-500">VD: 25021984 → 25/02/1984</p>
+                        )
+                      })()}
                     </label>
                     <label className="sm:col-span-3">
                       <span className="mb-2 block text-xs font-semibold text-slate-600">{t('gender')}</span>
@@ -354,14 +367,16 @@ export function StudentRegistrationView() {
                           onChange={(e) => {
                             if (form.nationalIdNotAvailable) return
                             patch({
-                              nationalId: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase(),
+                              nationalId: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15),
                             })
                           }}
                           placeholder={t('phCccd')}
+                          maxLength={15}
                           readOnly={form.nationalIdNotAvailable}
                           required={!form.nationalIdNotAvailable}
                         />
                       </label>
+                      <p className="mt-1 text-[11px] text-slate-500">CCCD: đúng 9 hoặc 12 số</p>
                       <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs font-semibold text-rose-700">
                         <input
                           type="checkbox"
@@ -383,10 +398,11 @@ export function StudentRegistrationView() {
                       <input
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.phone}
-                        onChange={(e) => patch({ phone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        onChange={(e) => patch({ phone: formatVnPhoneInput(e.target.value) })}
                         placeholder={t('phPhone')}
                         required
-                        inputMode="tel"
+                        inputMode="numeric"
+                        maxLength={10}
                         autoComplete="tel"
                       />
                     </label>
@@ -432,9 +448,10 @@ export function StudentRegistrationView() {
                       <input
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.fatherPhone}
-                        onChange={(e) => patch({ fatherPhone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        onChange={(e) => patch({ fatherPhone: formatVnPhoneInput(e.target.value) })}
                         placeholder={t('phPhone')}
-                        inputMode="tel"
+                        inputMode="numeric"
+                        maxLength={10}
                       />
                     </label>
                     <label>
@@ -451,10 +468,11 @@ export function StudentRegistrationView() {
                       <input
                         className={PUBLIC_REG_INPUT_CLS}
                         value={form.motherPhone}
-                        onChange={(e) => patch({ motherPhone: e.target.value.replace(/[^0-9+]/g, '') })}
+                        onChange={(e) => patch({ motherPhone: formatVnPhoneInput(e.target.value) })}
                         placeholder={t('phPhone')}
                         required
-                        inputMode="tel"
+                        inputMode="numeric"
+                        maxLength={10}
                       />
                     </label>
                   </div>

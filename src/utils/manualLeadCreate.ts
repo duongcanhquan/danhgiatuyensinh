@@ -25,9 +25,11 @@ import type { MasterDataBuckets } from './scoring'
 import type { ProfileCustomScoringSignal } from '../types'
 import { resolveWorkModeForLeadIntake } from './leadWorkMode'
 import {
-  isValidPublicDob,
+  describePublicDobIssue,
   isValidPublicNationalId,
   isValidPublicPhone,
+  isValidStudentEmail,
+  normalizeDobToDdMmYyyy,
 } from './publicRegistrationForm'
 
 function norm(s: string): string {
@@ -39,7 +41,7 @@ export function coreDraftToExcelRow(draft: LeadCoreDraft): Partial<ExcelLeadRow>
   return {
     customerId: norm(draft.customerId),
     fullName: norm(draft.fullName),
-    dateOfBirth: norm(draft.dateOfBirth),
+    dateOfBirth: normalizeDobToDdMmYyyy(draft.dateOfBirth),
     gender: norm(draft.gender),
     phone: norm(draft.phone),
     parentPhone: norm(draft.parentPhone),
@@ -77,30 +79,30 @@ export function manualLeadCreatedOriginFields(): {
 
 export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
   if (!norm(draft.fullName)) return 'Vui lòng nhập họ và tên.'
-  if (!isValidPublicDob(draft.dateOfBirth)) {
-    return 'Ngày sinh cần đúng DD/MM/YYYY và tuổi hợp lý (12–70).'
-  }
+  const dobIssue = describePublicDobIssue(normalizeDobToDdMmYyyy(draft.dateOfBirth) || draft.dateOfBirth)
+  if (dobIssue) return dobIssue
   const gender = norm(draft.gender)
   if (gender !== 'Nam' && gender !== 'Nữ') return 'Vui lòng chọn giới tính Nam hoặc Nữ.'
   if (!norm(draft.placeOfBirth)) return 'Vui lòng nhập nơi sinh.'
   if (!norm(draft.ethnicity)) return 'Vui lòng nhập dân tộc.'
   if (!isValidPublicNationalId(draft.nationalId, draft.nationalIdNotAvailable)) {
-    return 'CCCD/CMND: 9, 10 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
+    return 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
   }
   if (!isValidPublicPhone(draft.phone)) {
-    return 'SĐT Việt Nam 10 số (bắt đầu 0) hoặc quốc tế bắt đầu bằng +.'
+    return 'Số điện thoại phải đủ đúng 10 số (bắt đầu bằng 0).'
   }
-  const email = norm(draft.studentEmail)
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Email không hợp lệ.'
+  if (!isValidStudentEmail(draft.studentEmail)) {
+    return 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).'
+  }
   if (!norm(draft.permanentAddress) && !norm(draft.address)) {
     return 'Vui lòng nhập địa chỉ thường trú.'
   }
   const motherOrContact = norm(draft.motherPhone) || norm(draft.parentPhone)
   if (!isValidPublicPhone(motherOrContact)) {
-    return 'SĐT mẹ hoặc điện thoại người liên hệ bắt buộc (10 số VN hoặc + quốc tế).'
+    return 'SĐT mẹ hoặc điện thoại người liên hệ bắt buộc — đủ đúng 10 số.'
   }
   if (norm(draft.fatherPhone) && !isValidPublicPhone(draft.fatherPhone)) {
-    return 'SĐT cha không hợp lệ.'
+    return 'SĐT cha phải đủ đúng 10 số.'
   }
   if (!norm(draft.highSchool)) return 'Vui lòng nhập trường đã theo học.'
   if (!norm(draft.province)) return 'Vui lòng nhập tỉnh/thành.'
