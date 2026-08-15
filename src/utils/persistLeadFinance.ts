@@ -43,11 +43,12 @@ export async function persistLeadFinance(opts: {
     finance: financeWithEnrollment,
   })
 
+  // n8n / CORS / mạng: không làm fail «đã lưu tiền» trên Firestore.
   if (plan.triggerN8n) {
-    const moneyChanged = Object.keys(uploads).length > 0 || plan.resetApprovalSlots.length > 0
-    const scholarshipLabels = await resolveScholarshipLabels(db, lead)
-    const counselor = await resolveCounselorForLead(db, lead)
     try {
+      const moneyChanged = Object.keys(uploads).length > 0 || plan.resetApprovalSlots.length > 0
+      const scholarshipLabels = await resolveScholarshipLabels(db, lead)
+      const counselor = await resolveCounselorForLead(db, lead)
       await triggerProfileFinanceN8n({
         lead: { ...lead, finance: financeWithEnrollment },
         finance: financeWithEnrollment,

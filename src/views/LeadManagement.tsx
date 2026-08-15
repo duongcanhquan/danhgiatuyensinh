@@ -1037,7 +1037,14 @@ export function LeadManagement() {
       if (!db) return
       try {
         const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, leadId))
-        if (!snap.exists()) return
+        if (!snap.exists()) {
+          setCreateLeadNotice((prev) =>
+            [prev, `Không đọc được hồ sơ vừa tạo (id ${leadId.slice(0, 8)}…). Thử tìm theo mã hệ thống.`]
+              .filter(Boolean)
+              .join(' '),
+          )
+          return
+        }
         const row = mapDoc(leadId, snap.data() as Record<string, unknown>)
         if (row) {
           captureListChromeBeforeDetail()
@@ -1053,6 +1060,8 @@ export function LeadManagement() {
         }
       } catch (e) {
         console.error(e)
+        const msg = e instanceof Error ? e.message : 'Không mở được hồ sơ.'
+        setCreateLeadNotice((prev) => [prev, `Không mở được chi tiết: ${msg}`].filter(Boolean).join(' '))
       }
     },
     [db, setSearchParams, captureListChromeBeforeDetail],
@@ -1595,7 +1604,7 @@ export function LeadManagement() {
       leadId: string,
       meta?: { warning?: string | null; systemCode?: string; n8nOk?: boolean; n8nError?: string | null },
     ) => {
-      applyIntakeOriginTab('public_portal')
+      setIntakeOriginTab('public_portal')
       const code = meta?.systemCode?.trim()
       const warn = meta?.warning?.trim()
       const n8nHint =
@@ -1614,10 +1623,21 @@ export function LeadManagement() {
           .filter(Boolean)
           .join(' '),
       )
+      // Một lần cập nhật URL: tab cổng + open — tránh race xóa `open` khi đổi origin.
+      setSearchParams(
+        (prev) => {
+          const next = mergeLeadFiltersIntoSearchParams(prev, {
+            [LWF.ORIGIN]: leadIntakeOriginToUrlParam('public_portal'),
+          })
+          next.set('open', leadId)
+          return next
+        },
+        { replace: true },
+      )
       void openLeadById(leadId)
       refetchLeads()
     },
-    [applyIntakeOriginTab, refetchLeads, openLeadById],
+    [refetchLeads, openLeadById, setSearchParams],
   )
 
   /** Nhãn HOT/WARM/…: áp dụng ngay. */

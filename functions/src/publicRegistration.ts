@@ -896,7 +896,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
 
   /**
    * CRM tạo hồ sơ thủ công → bắn n8n `student_registration` từ server (tránh CORS browser).
-   * Auth bắt buộc; lead phải thuộc org của caller (hoặc superadmin).
+   * Auth bắt buộc; lead phải thuộc org của caller (hoặc super_admin).
    */
   const notifyCrmPortalRegistration = onCall(async (request) => {
     if (!request.auth?.uid) {
@@ -923,14 +923,21 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       displayName?: string
       email?: string
     }
-    const role = str(caller.role)
+    // Khớp `USER_ROLES` / authClaims: `super_admin` (gạch dưới), không phải `superadmin`.
+    let role = str(caller.role)
+    if (role === 'head_of_profession' || role === 'head_of_department') role = 'team_lead'
+    if (role === 'superadmin') role = 'super_admin'
     const callerOrg = str(caller.orgId)
-    const isElevated =
-      role === 'superadmin' || role === 'admin' || role === 'team_lead' || role === 'counselor' || role === 'ctv'
-    if (!isElevated) {
+    const canNotify =
+      role === 'super_admin' ||
+      role === 'admin' ||
+      role === 'team_lead' ||
+      role === 'counselor' ||
+      role === 'ctv'
+    if (!canNotify) {
       throw new HttpsError('permission-denied', 'Không có quyền gửi thông báo đăng ký.')
     }
-    if (role !== 'superadmin' && callerOrg && callerOrg !== orgId) {
+    if (role !== 'super_admin' && callerOrg && callerOrg !== orgId) {
       throw new HttpsError('permission-denied', 'Hồ sơ không thuộc trường đang làm việc.')
     }
 
