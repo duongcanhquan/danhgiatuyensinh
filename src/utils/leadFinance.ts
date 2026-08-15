@@ -262,12 +262,12 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
       if (resetApprovalSlots.includes(key)) {
         row.approvalStatus = ''
         delete row.approvalNote
-      } else if (prev?.approvalStatus && (!changed || !resetApprovalSlots.includes(key))) {
+        delete row.approvedAt
+      } else if (prev?.approvalStatus && (!changed || !moneyOrReceiptDirty(prev, d))) {
         // Giữ duyệt khi không đổi tiền/file (kể cả chỉ đổi ngày).
-        if (!changed || !moneyOrReceiptDirty(prev, d)) {
-          row.approvalStatus = prev.approvalStatus
-          if (prev.approvalNote) row.approvalNote = prev.approvalNote
-        }
+        row.approvalStatus = prev.approvalStatus
+        if (prev.approvalNote) row.approvalNote = prev.approvalNote
+        if (prev.approvedAt) row.approvedAt = prev.approvedAt
       }
       nextPayments[key] = row
     }
@@ -301,6 +301,13 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
     declaredTotalVnd: sumFinanceDraft(draft),
     enrollmentStatus: before?.enrollmentStatus?.trim() || 'MỚI',
     reqFullNe: draft.reqFullNe,
+  }
+  // TVV bổ sung sau từ chối → đưa về «đang hoàn thiện» để KT thấy đúng ngữ cảnh.
+  if (
+    resetApprovalSlots.length &&
+    String(firestoreFinance.enrollmentStatus ?? '').trim() === 'KIỂM TRA LẠI'
+  ) {
+    firestoreFinance.enrollmentStatus = 'ĐANG HOÀN THIỆN'
   }
   if (fullNeStatus) firestoreFinance.fullNeStatus = fullNeStatus
   else if (before?.fullNeStatus) firestoreFinance.fullNeStatus = before.fullNeStatus

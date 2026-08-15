@@ -81,11 +81,48 @@ function patchReceiptUrlsOntoFinance(
   return { ...finance, payments }
 }
 
+/** Xóa trạng thái duyệt trên slot — đưa lại hàng chờ KT. */
+function clearSlotApprovalOnFinance(
+  finance: LeadFinanceRecord,
+  slots: LeadPaymentSlotKey[],
+): LeadFinanceRecord {
+  if (!slots.length) return finance
+  const payments = { ...(finance.payments ?? {}) }
+  for (const key of slots) {
+    const line = payments[key]
+    if (!line) continue
+    const next = { ...line }
+    delete next.approvalStatus
+    delete next.approvalNote
+    delete next.approvedAt
+    next.approvalStatus = ''
+    payments[key] = next
+  }
+  let enrollmentStatus = finance.enrollmentStatus
+  if (String(enrollmentStatus ?? '').trim() === 'KIỂM TRA LẠI') {
+    enrollmentStatus = 'ĐANG HOÀN THIỆN'
+  }
+  return { ...finance, payments, enrollmentStatus }
+}
+
+function clearDraftApprovals(draft: LeadFinanceDraft, slots: LeadPaymentSlotKey[]): LeadFinanceDraft {
+  if (!slots.length) return draft
+  const payments = { ...draft.payments }
+  for (const key of slots) {
+    payments[key] = {
+      ...payments[key]!,
+      approvalStatus: '',
+      approvalNote: '',
+    }
+  }
+  return { ...draft, payments }
+}
+
 /**
  * Lưu tài chính nhanh:
- * 1) Ghi tiền/ngày Firestore ngay (không chờ upload)
+ * 1) Ghi tiền/ngày Firestore ngay (không chờ upload) — reset duyệt nếu TVV đổi tiền/file
  * 2) Upload chứng từ có timeout
- * 3) Ghi URL bill nếu upload ok
+ * 3) Ghi URL bill + reset duyệt nếu chỉ đổi bill sau từ chối
  * 4) n8n có timeout (soft-fail)
  */
 export async function persistLeadFinance(opts: {
@@ -97,14 +134,30 @@ export async function persistLeadFinance(opts: {
 }): Promise<PersistLeadFinanceResult> {
   const { db, lead, draft, counselorName, forceNotifyN8n } = opts
 
+  // Intent plan WITH pendingFile — phát hiện «đổi bill» sau từ chối trước khi strip file.
+  const intentPlan = buildFinanceSavePlan(lead, draft)
+
   // --- 1) Ghi tiền ngay (bỏ pendingFile khỏi bản ghi, giữ file local để upload sau) ---
   const moneyDraft = clearFinancePendingFiles(draft)
   const moneyPlan = buildFinanceSavePlan(lead, moneyDraft)
   const touch = leadTouchPatch()
-  let financeWithEnrollment: LeadFinanceRecord = {
-    ...moneyPlan.firestoreFinance,
-    enrollmentStatus:
-      moneyPlan.firestoreFinance.enrollmentStatus ?? lead.finance?.enrollmentStatus ?? 'MỚI',
+  const resetSlotsEarly = [
+    ...new Set([...intentPlan.resetApprovalSlots, ...moneyPlan.resetApprovalSlots]),
+  ]
+  let financeWithEnrollment: LeadFinanceRecord = clearSlotApprovalOnFinance(
+    {
+      ...moneyPlan.firestoreFinance,
+      enrollmentStatus:
+        moneyPlan.firestoreFinance.enrollmentStatus ?? lead.finance?.enrollmentStatus ?? 'MỚI',
+    },
+    resetSlotsEarly,
+  )
+  // Nếu intent có reset (file mới) nhưng money plan chưa clear — ưu tiên intent enrollment.
+  if (intentPlan.resetApprovalSlots.length && intentPlan.firestoreFinance.enrollmentStatus) {
+    financeWithEnrollment = {
+      ...financeWithEnrollment,
+      enrollmentStatus: intentPlan.firestoreFinance.enrollmentStatus,
+    }
   }
 
   const leadRef = doc(db, FS_COLLECTIONS.leads, lead.id)
@@ -155,9 +208,15 @@ export async function persistLeadFinance(opts: {
     }
   }
 
-  // --- 3) Patch URL bill nếu có (nhanh, không chặn nếu fail) ---
-  if (Object.keys(uploads).length) {
+  // --- 3) Patch URL bill + đảm bảo slot vừa upload (sau từ chối) về chờ duyệt ---
+  const uploadedKeys = Object.keys(uploads) as LeadPaymentSlotKey[]
+  if (uploadedKeys.length) {
     financeWithEnrollment = patchReceiptUrlsOntoFinance(financeWithEnrollment, uploads)
+    const mustResetAfterUpload = uploadedKeys.filter((key) => {
+      const prev = lead.finance?.payments?.[key]
+      return Boolean(prev?.approvalStatus)
+    })
+    financeWithEnrollment = clearSlotApprovalOnFinance(financeWithEnrollment, mustResetAfterUpload)
     try {
       await updateDoc(leadRef, { finance: financeWithEnrollment, ...leadTouchPatch() })
     } catch (e) {
@@ -168,14 +227,39 @@ export async function persistLeadFinance(opts: {
     }
   }
 
-  const mergedDraft = clearPendingOnlySucceeded(mergeUploadedReceipts(draft, uploads), uploads)
+  const mergedDraft = clearDraftApprovals(
+    clearPendingOnlySucceeded(mergeUploadedReceipts(draft, uploads), uploads),
+    [
+      ...new Set([
+        ...intentPlan.resetApprovalSlots,
+        ...moneyPlan.resetApprovalSlots,
+        ...uploadedKeys.filter((key) => Boolean(lead.finance?.payments?.[key]?.approvalStatus)),
+      ]),
+    ],
+  )
   // Plan cho n8n: so với lead trước khi lưu (có thể đã có tiền).
   const notifyPlan = buildFinanceSavePlan(lead, mergedDraft)
   const forceSlots =
     forceNotifyN8n && financeDraftNotifiesN8n(mergedDraft) ? financeNotifySlotKeys(mergedDraft) : []
-  const changedSlots = notifyPlan.changedSlots.length ? notifyPlan.changedSlots : forceSlots
+  const changedSlots = notifyPlan.changedSlots.length
+    ? notifyPlan.changedSlots
+    : intentPlan.changedSlots.length
+      ? intentPlan.changedSlots
+      : forceSlots
+  const resetApprovalSlots = [
+    ...new Set([
+      ...intentPlan.resetApprovalSlots,
+      ...moneyPlan.resetApprovalSlots,
+      ...notifyPlan.resetApprovalSlots,
+      ...uploadedKeys.filter((key) => Boolean(lead.finance?.payments?.[key]?.approvalStatus)),
+    ]),
+  ]
   const shouldNotifyN8n =
-    moneyPlan.triggerN8n || notifyPlan.triggerN8n || forceSlots.length > 0 || Object.keys(uploads).length > 0
+    moneyPlan.triggerN8n ||
+    intentPlan.triggerN8n ||
+    notifyPlan.triggerN8n ||
+    forceSlots.length > 0 ||
+    Object.keys(uploads).length > 0
 
   let n8nAttempted = false
   let n8nOk = false
@@ -186,8 +270,7 @@ export async function persistLeadFinance(opts: {
     try {
       const moneyChanged =
         Object.keys(uploads).length > 0 ||
-        notifyPlan.resetApprovalSlots.length > 0 ||
-        moneyPlan.resetApprovalSlots.length > 0 ||
+        resetApprovalSlots.length > 0 ||
         changedSlots.some((k) => (financeWithEnrollment.payments?.[k]?.amountVnd ?? 0) > 0) ||
         forceSlots.length > 0
       const [scholarshipLabels, counselor] = await withTimeout(
@@ -205,9 +288,7 @@ export async function persistLeadFinance(opts: {
           scholarship1Label: scholarshipLabels.scholarship1Label,
           scholarship2Label: scholarshipLabels.scholarship2Label,
           changedSlots,
-          resetApprovalSlots: notifyPlan.resetApprovalSlots.length
-            ? notifyPlan.resetApprovalSlots
-            : moneyPlan.resetApprovalSlots,
+          resetApprovalSlots,
         }),
         N8N_BUDGET_MS,
         'Gửi tin báo thu n8n quá lâu',

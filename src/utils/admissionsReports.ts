@@ -103,7 +103,7 @@ function moneyApprovedInPeriod(finance: LeadFinanceRecord | undefined, period: A
     if (str(line.approvalStatus).toUpperCase() !== 'ĐỒNG Ý') continue
     const amt = line.amountVnd ?? 0
     if (amt <= 0) continue
-    const ts = parseReportDateTs(line.collectedAt)
+    const ts = parseReportDateTs(line.approvedAt || line.collectedAt)
     if (ts >= period.startMs && ts <= period.endMs) sum += amt
   }
   return sum

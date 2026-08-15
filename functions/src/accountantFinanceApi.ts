@@ -187,6 +187,7 @@ export function registerAccountantFinanceCallables() {
         collectedAt,
         receiptUrl: receiptUrl || prevLine.receiptUrl || '',
         approvalStatus: decision,
+        approvedAt: ictToday(),
       }
       if (decision === 'TỪ CHỐI') nextLine.approvalNote = approvalNote
       else delete nextLine.approvalNote
@@ -241,6 +242,7 @@ export function registerAccountantFinanceCallables() {
             ...line,
             approvalStatus: 'ĐỒNG Ý',
             collectedAt: str(line.collectedAt) || todayStr,
+            approvedAt: todayStr,
           }
           autoApproved += line.amountVnd
         }

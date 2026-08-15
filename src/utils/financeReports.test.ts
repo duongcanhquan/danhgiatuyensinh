@@ -64,4 +64,37 @@ describe('buildDailyFinanceReportPayload Full NE by day (Apps Script parity)', (
     expect(payload.dailyDetailHtml).not.toMatch(/Đã là NE:[\s\S]*?<b>2<\/b>/)
     expect(payload.dailyDetailHtml).not.toMatch(/Đã là NE:[\s\S]*?<b>3<\/b>/)
   })
+
+  it('cộng tiền ĐỒNG Ý theo ngày KT duyệt (approvedAt), không theo ngày TVV nộp', () => {
+    const today = new Date(2026, 7, 16, 12, 0, 0) // 16/08/2026
+    const approvedToday = baseLead({
+      id: 'p1',
+      finance: {
+        payments: {
+          deposit: {
+            amountVnd: 1_500_000,
+            collectedAt: '15/08/2026', // nộp hôm trước
+            approvalStatus: 'ĐỒNG Ý',
+            approvedAt: '16/08/2026', // duyệt hôm nay
+          },
+        },
+      },
+    })
+    const pending = baseLead({
+      id: 'p2',
+      customerId: 'KH2',
+      finance: {
+        payments: {
+          deposit: {
+            amountVnd: 2_000_000,
+            collectedAt: '16/08/2026',
+            approvalStatus: '',
+          },
+        },
+      },
+    })
+    const payload = buildDailyFinanceReportPayload([approvedToday, pending], today)
+    expect(payload.tongTien).toBe(1_500_000)
+    expect(payload.dailyDetailHtml).toContain('1.500.000')
+  })
 })

@@ -273,12 +273,17 @@ export type LeadPaymentSlotKey = 'deposit' | 'supplementL1' | 'supplementL2' | '
 
 export interface LeadPaymentLine {
   amountVnd?: number
-  /** dd/MM/yyyy hoặc YYYY-MM-DD */
+  /** dd/MM/yyyy hoặc YYYY-MM-DD — ngày thu do TVV khai */
   collectedAt?: string
   receiptUrl?: string
   approvalStatus?: LeadPaymentApprovalStatus
   /** Lý do từ chối / ghi chú kế toán (hiển thị cho TVV). */
   approvalNote?: string
+  /**
+   * Ngày kế toán duyệt / từ chối (`dd/MM/yyyy` ICT).
+   * Báo cáo ngày chỉ cộng tiền «ĐỒNG Ý» theo ngày này (không theo ngày TVV nộp).
+   */
+  approvedAt?: string
 }
 
 export interface LeadFinanceRecord {

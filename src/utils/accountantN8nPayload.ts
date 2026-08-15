@@ -254,11 +254,15 @@ export function buildProfileFinanceUpdateWebhookBody(
     .map((s) => `L${s.batch} ${s.slot_label}: ${s.amount_formatted}${s.receipt_url ? ' 📎' : ''}`)
     .join(' · ')
 
+  const isResubmit = resetApprovalSlots.length > 0
   const lines: string[] = [
-    `💰 ${chatBold('TVV BÁO THU')}`,
+    isResubmit ? `🔄 ${chatBold('TVV BỔ SUNG — chờ KT duyệt lại')}` : `💰 ${chatBold('TVV BÁO THU')}`,
     `👤 ${chatBold(studentName)}${studentCode ? ` (${studentCode})` : ''}${studentPhone ? ` — ${studentPhone}` : ''}`,
     `🧑‍💼 TVV: ${chatBold(counselorName)}${counselorEmail ? ` (${counselorEmail})` : ''}`,
   ]
+  if (isResubmit) {
+    lines.push(`📌 Hồ sơ đã chỉnh tiền/chứng từ sau phản hồi kế toán — vui lòng duyệt lại.`)
+  }
   for (const s of slotChanges) {
     lines.push('')
     lines.push(
@@ -269,11 +273,17 @@ export function buildProfileFinanceUpdateWebhookBody(
     } else {
       lines.push(`⚠️ Chưa có link chứng từ (TVV cần tải lại bill trên hồ sơ)`)
     }
-    if (s.pending_accountant) lines.push(`⏳ ${chatBold('Chờ kế toán duyệt')}`)
+    if (s.pending_accountant) {
+      lines.push(
+        resetApprovalSlots.includes(s.slot_key)
+          ? `⏳ ${chatBold('Đã bổ sung — chờ kế toán duyệt lại')}`
+          : `⏳ ${chatBold('Chờ kế toán duyệt')}`,
+      )
+    }
   }
   lines.push('')
-  lines.push(`📊 Tổng khai báo: ${chatBold(formatVnd(totalRecorded))}`)
-  lines.push(`✅ Tổng đã duyệt: ${chatBold(formatVnd(totalApproved))}`)
+  lines.push(`📊 Tổng đã đóng đến nay (khai báo): ${chatBold(formatVnd(totalRecorded))}`)
+  lines.push(`✅ Tổng đã được KT duyệt: ${chatBold(formatVnd(totalApproved))}`)
   if (ctx.scholarship1Label) lines.push(`🎓 Học bổng 1: ${ctx.scholarship1Label}`)
   if (ctx.scholarship2Label) lines.push(`🎓 Học bổng 2: ${ctx.scholarship2Label}`)
   lines.push(
@@ -281,14 +291,19 @@ export function buildProfileFinanceUpdateWebhookBody(
   )
 
   const messageVi = lines.join('\n')
-  const notificationTitle = primary
-    ? `💰 Báo thu — ${studentName} (${primary.slot_label})`
-    : `💰 Cập nhật tài chính — ${studentName}`
+  const notificationTitle = isResubmit
+    ? `🔄 Bổ sung — ${studentName}${primary ? ` (${primary.slot_label})` : ''}`
+    : primary
+      ? `💰 Báo thu — ${studentName} (${primary.slot_label})`
+      : `💰 Cập nhật tài chính — ${studentName}`
 
   const cardRows: Array<{ label: string; value: string }> = [
     { label: 'Học sinh', value: `${studentName}${studentCode ? ` (${studentCode})` : ''}` },
     { label: 'TVV', value: counselorName },
   ]
+  if (isResubmit) {
+    cardRows.push({ label: 'Loại', value: 'Đã bổ sung — duyệt lại' })
+  }
   for (const s of slotChanges) {
     cardRows.push({
       label: `Lần ${s.batch} — ${s.slot_label}`,
@@ -317,6 +332,9 @@ export function buildProfileFinanceUpdateWebhookBody(
     event: 'update_profile',
     sub_event: 'counselor_payment_submitted',
     is_money_changed: ctx.isMoneyChanged,
+    is_resubmit: isResubmit,
+    da_bo_sung: isResubmit,
+    resubmit_slots: resetApprovalSlots,
     awaiting_accountant: slotChanges.some((s) => s.pending_accountant),
     studentId: studentCode || lead.id,
     student_firestore_id: lead.id,

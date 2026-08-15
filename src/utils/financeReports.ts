@@ -125,7 +125,8 @@ export function buildDailyFinanceReportPayload(leads: Lead[], at = new Date()) {
       const line = pay[key]
       const amt = line?.amountVnd ?? 0
       const status = String(line?.approvalStatus ?? '').trim().toUpperCase()
-      const pTs = parseCollectedTs(line?.collectedAt)
+      // Chỉ cộng tiền ĐỒNG Ý theo ngày KT duyệt (approvedAt); thiếu thì fallback collectedAt (dữ liệu cũ).
+      const pTs = parseCollectedTs(line?.approvedAt || line?.collectedAt)
       if (status === 'ĐỒNG Ý' && amt > 0 && pTs >= start && pTs <= end) {
         hasMoneyToday = true
         moneyTodayOfStudent += amt

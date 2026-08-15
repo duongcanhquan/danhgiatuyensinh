@@ -102,4 +102,34 @@ describe('buildFinanceSavePlan triggerN8n', () => {
     expect(plan.firestoreFinance.fullNeAt).toBe('10/08/2026')
     expect(plan.firestoreFinance.fullNeStatus).toBe('ĐÃ FULL NE')
   })
+
+  it('resets approval when TVV re-uploads bill after TỪ CHỐI', () => {
+    const draft = emptyFinanceDraft()
+    draft.payments.deposit.amount = '1.000.000'
+    draft.payments.deposit.collectedAt = '2026-08-15'
+    draft.payments.deposit.receiptUrl = 'https://old/bill.jpg'
+    draft.payments.deposit.pendingFile = new File([new Uint8Array([1])], 'new.jpg', {
+      type: 'image/jpeg',
+    })
+    const plan = buildFinanceSavePlan(
+      leadStub({
+        payments: {
+          deposit: {
+            amountVnd: 1_000_000,
+            collectedAt: '15/08/2026',
+            receiptUrl: 'https://old/bill.jpg',
+            approvalStatus: 'TỪ CHỐI',
+            approvalNote: 'Sai bill',
+            approvedAt: '15/08/2026',
+          },
+        },
+        enrollmentStatus: 'KIỂM TRA LẠI',
+      }),
+      draft,
+    )
+    expect(plan.resetApprovalSlots).toContain('deposit')
+    expect(plan.firestoreFinance.payments?.deposit?.approvalStatus).toBe('')
+    expect(plan.firestoreFinance.payments?.deposit?.approvedAt).toBeUndefined()
+    expect(plan.firestoreFinance.enrollmentStatus).toBe('ĐANG HOÀN THIỆN')
+  })
 })

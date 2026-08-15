@@ -18,7 +18,7 @@ type LeadFinanceLite = {
     fullNeAt?: string
     payments?: Record<
       string,
-      { amountVnd?: number; approvalStatus?: string; collectedAt?: string }
+      { amountVnd?: number; approvalStatus?: string; collectedAt?: string; approvedAt?: string }
     >
   }
 }
@@ -189,7 +189,7 @@ export function buildDailyPayload(
       const line = pay[key]
       const amt = line?.amountVnd ?? 0
       const status = str(line?.approvalStatus).toUpperCase()
-      const pTs = parseCollectedTs(line?.collectedAt)
+      const pTs = parseCollectedTs(line?.approvedAt || line?.collectedAt)
       if (status === 'ĐỒNG Ý' && amt > 0 && pTs >= start && pTs <= end) {
         hasMoneyToday = true
         moneyToday += amt
@@ -280,7 +280,7 @@ export function buildMonthlyPayload(
     const pay = lead.finance?.payments ?? {}
     for (const key of SLOT_KEYS) {
       const line = pay[key]
-      const pTs = parseCollectedTs(line?.collectedAt)
+      const pTs = parseCollectedTs(line?.approvedAt || line?.collectedAt)
       const amt = line?.amountVnd ?? 0
       const status = str(line?.approvalStatus).toUpperCase()
       if (status === 'ĐỒNG Ý' && amt > 0 && pTs >= startTs && pTs <= endTs) hasPaymentThisMonth = true

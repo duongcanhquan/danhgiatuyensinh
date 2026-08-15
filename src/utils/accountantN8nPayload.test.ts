@@ -124,4 +124,39 @@ describe('accountantN8nPayload', () => {
     expect(String(gcp.text)).toContain('📎')
     expect(Array.isArray(body.changed_slots)).toBe(true)
   })
+
+  it('marks resubmit after reject with bổ sung wording and totals', () => {
+    const finance = {
+      payments: {
+        deposit: {
+          amountVnd: 1_500_000,
+          collectedAt: '28/05/2026',
+          receiptUrl: 'https://cdn.example/bill2.jpg',
+          approvalStatus: '' as const,
+        },
+        supplementL1: {
+          amountVnd: 500_000,
+          approvalStatus: 'ĐỒNG Ý' as const,
+        },
+      },
+      declaredTotalVnd: 2_000_000,
+    }
+    const body = buildProfileFinanceUpdateWebhookBody(
+      {
+        lead,
+        finance,
+        isMoneyChanged: true,
+        counselorName: 'Tran TVV',
+        changedSlots: ['deposit'],
+        resetApprovalSlots: ['deposit'],
+      },
+      {},
+    )
+    expect(body.is_resubmit).toBe(true)
+    expect(body.da_bo_sung).toBe(true)
+    expect(String(body.message_vi)).toContain('BỔ SUNG')
+    expect(String(body.message_vi)).toContain('Tổng đã đóng đến nay')
+    expect(body.total_recorded_vnd).toBe(2_000_000)
+    expect(body.total_approved_vnd).toBe(500_000)
+  })
 })

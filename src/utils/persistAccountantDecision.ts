@@ -130,6 +130,9 @@ export async function persistAccountantPaymentDecision(opts: {
     collectedAt: collectedAt || undefined,
     receiptUrl: receiptUrl || undefined,
     approvalStatus: decision,
+    approvedAt: dateInputToStored(
+      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }),
+    ) || undefined,
     approvalNote:
       decision === 'TỪ CHỐI'
         ? String(approvalNote ?? '').trim() || 'Kế toán từ chối — chưa ghi lý do.'
