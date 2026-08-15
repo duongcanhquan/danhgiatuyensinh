@@ -572,11 +572,12 @@ export function LeadManagement() {
     }
     if (aiShortlistOnly) o.aiShortlistedOnly = true
     /**
-     * Không gắn portalIntakeGroup ở đây:
-     * - OR portal × OR team-lead `in` dễ vượt 30 disjunction Firestore.
-     * - Server OR cũng bỏ sót legacy `uploadBatchId: manual-…` (không có intakeOrigin).
-     * Tab cổng dùng fullScope + keepMatch origin (dưới).
+     * Tab cổng: lọc server khi không phải team-lead roster lớn (filterConstraints tự bỏ OR nếu N lớn).
+     * Kết hợp keepMatch client để bắt legacy `uploadBatchId: manual-…`.
      */
+    if (intakeOriginTab === 'public_portal') {
+      o.portalIntakeGroup = true
+    }
     return Object.keys(o).length ? o : undefined
   }, [
     statusFilter,
@@ -593,6 +594,7 @@ export function LeadManagement() {
     aiShortlistOnly,
     tagClientEval,
     can,
+    intakeOriginTab,
   ])
 
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
@@ -665,6 +667,8 @@ export function LeadManagement() {
     totalPages: firestoreTotalPages,
     setPage,
     scopeFetchTruncated,
+    searchScanTruncated,
+    searchHitTotal,
     scopeTagCounts,
     scopeSourceOptions,
     fetchScopeSourceOptions,
@@ -678,14 +682,17 @@ export function LeadManagement() {
     serverFilters: leadServerFilters,
     searchText: urlQuery,
     directoryLabels: counselorDirectoryLabelById,
-    dataMode: listNeedsFullScope ? 'fullScope' : 'paged',
-    maxFullScopeLeads: listNeedsFullScope ? LEADS_UI_FULL_SCOPE_MAX : undefined,
-    fullScopeOrderMode: clientKeepMatchNeeded ? 'docId' : undefined,
-    maxFullScopeScanDocs: clientKeepMatchNeeded ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
-    fullScopeKeepMatch,
-    fullScopeMatchKey: clientKeepMatchNeeded
-      ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
-      : undefined,
+    dataMode: listNeedsFullScope && !urlQuery ? 'fullScope' : 'paged',
+    maxFullScopeLeads: listNeedsFullScope && !urlQuery ? LEADS_UI_FULL_SCOPE_MAX : undefined,
+    /** Tab cổng: updatedAt (mới trước) — docId ASC quét hồ sơ cũ trước nên mất hồ sơ vừa tạo. */
+    fullScopeOrderMode:
+      clientKeepMatchNeeded && !urlQuery && intakeOriginTab !== 'public_portal' ? 'docId' : undefined,
+    maxFullScopeScanDocs: clientKeepMatchNeeded && !urlQuery ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
+    fullScopeKeepMatch: urlQuery ? undefined : fullScopeKeepMatch,
+    fullScopeMatchKey:
+      !urlQuery && clientKeepMatchNeeded
+        ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
+        : undefined,
     /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ.
      * Khi đang tìm (ô tìm có chữ): không lọc origin — tránh mất hồ sơ tạo tay / cổng
      * (vd. mã 2608150003) dù Firestore đã khớp đúng. */
@@ -1341,8 +1348,8 @@ export function LeadManagement() {
    * fullScope (lọc nhãn theo profile / ca gọi) trả cả tập — phải cắt trang trên client
    * để «Chọn tất cả trên trang» không chọn hàng nghìn hồ sơ một lúc.
    */
-  /** fullScope trả về cả mảng — luôn phân trang client để không mount hàng nghìn dòng. */
-  const clientPagingActive = listNeedsFullScope
+  /** fullScope trả về cả mảng — phân trang client. Khi đang tìm, useLeads đã cắt trang. */
+  const clientPagingActive = listNeedsFullScope && !urlQuery
   const clientPageSlice = useMemo(
     () =>
       clientPagingActive
@@ -1362,6 +1369,7 @@ export function LeadManagement() {
 
   const filterMatchCount = useMemo(() => {
     // Khi fullScope / hàng chờ / chương trình: `listNeedsFullScope` đã true → đếm client.
+    if (urlQuery && searchHitTotal != null) return searchHitTotal
     if (listNeedsFullScope || clientPagingActive) return sortedFiltered.length
     const q = (searchParams.get(LWF.Q) ?? '').trim()
     // Tab nguồn / lọc client — không dùng totalLeadCount thô (gồm cổng…).
@@ -1384,6 +1392,8 @@ export function LeadManagement() {
     clientPagingActive,
     sortedFiltered.length,
     searchParams,
+    searchHitTotal,
+    urlQuery,
     scoreMinInput,
     scoreMaxInput,
     dispositionFilter,
@@ -4133,6 +4143,16 @@ export function LeadManagement() {
                 {clientKeepMatchNeeded
                   ? `Đã quét tối đa ${LEADS_UI_PROGRAM_SCAN_MAX.toLocaleString('vi-VN')} hồ sơ hoặc đủ ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} kết quả khớp — có thể còn hồ sơ phía sau.`
                   : `Đã đạt giới hạn tải (${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một phần ở đuôi danh sách.`}
+              </p>
+            ) : null}
+            {urlQuery && searchScanTruncated ? (
+              <p className="text-xs font-medium text-amber-900">
+                Đã quét một phần hồ sơ gần nhất — nếu không thấy mã vừa tạo, thử lại sau vài giây hoặc bỏ lọc phụ.
+              </p>
+            ) : null}
+            {urlQuery && searchHitTotal === 0 && !loading && !loadingPage ? (
+              <p className="text-xs font-medium text-rose-800">
+                Không thấy hồ sơ khớp «{urlQuery}» trong trường đang chọn. Kiểm tra đúng mã / SĐT, hoặc đổi trường (Siêu quản trị).
               </p>
             ) : null}
           </div>

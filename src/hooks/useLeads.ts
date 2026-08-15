@@ -1285,7 +1285,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     setCurrentPageState(() => Math.max(1, Math.floor(p)))
   }, [])
 
-  const pagedFirestoreDep = dataMode === 'paged' ? currentPage : 0
+  const pagedFirestoreDep = dataMode === 'paged' || Boolean(searchText) ? currentPage : 0
 
   useLayoutEffect(() => {
     currentPageRef.current = currentPage
@@ -1670,6 +1670,11 @@ export function useLeads(opts?: UseLeadsOptions) {
       const scanLimit = leadSearchScanLimitForProfile(profile, canReadGlobal)
       const classified = classifyLeadSearchQuery(searchText)
       const byId = new Map<string, Lead>()
+      // Tìm mã/SĐT: bỏ chip lọc UI (trạng thái, nguồn…) — chỉ RBAC + org.
+      const exactListFilters =
+        classified.kind === 'phone' || classified.kind === 'systemCode' || classified.kind === 'customerId'
+          ? undefined
+          : serverFilters
 
       const ingestSnap = (snap: QuerySnapshot<DocumentData>) => {
         snap.forEach((d) => {
@@ -1685,15 +1690,23 @@ export function useLeads(opts?: UseLeadsOptions) {
             firestore,
             profile,
             hoDQueryLabels,
-            serverFilters,
+            exactListFilters,
             effectiveOrgId,
             canReadGlobal,
             (base) => query(base, where(field, '==', value), limit(40)),
           )
           if (!cancelled) ingestSnap(snap)
+          return
         } catch (e) {
-          // Thiếu composite index / rule — bỏ qua, vẫn fuzzy trong RBAC.
-          console.warn('[useLeads] search exact', field, e)
+          console.warn('[useLeads] search exact (scoped)', field, e)
+        }
+        // Fallback: chỉ equality field (thường không cần composite) rồi lọc RBAC/org client.
+        try {
+          const col = collection(firestore, FS_COLLECTIONS.leads)
+          const snap = await getDocs(query(col, where(field, '==', value), limit(40)))
+          if (!cancelled) ingestSnap(snap)
+        } catch (e2) {
+          console.warn('[useLeads] search exact (bare)', field, e2)
         }
       }
 
@@ -1712,18 +1725,23 @@ export function useLeads(opts?: UseLeadsOptions) {
       }
 
       // Fuzzy / bổ sung: chỉ quét trong phạm vi quyền, trần theo vai trò.
-      const snap = await getDocsListWithOrgFallback(
-        firestore,
-        profile,
-        hoDQueryLabels,
-        serverFilters,
-        effectiveOrgId,
-        canReadGlobal,
-        (base) => query(base, orderBy('updatedAt', 'desc'), limit(scanLimit)),
-      )
-      if (cancelled) return
-      ingestSnap(snap)
-      setSearchScanTruncated(snap.docs.length >= scanLimit)
+      // Exact đã có kết quả → bỏ fuzzy nặng (tránh nuốt thời gian / lọc nhầm).
+      if (byId.size === 0 || classified.kind === 'text') {
+        const snap = await getDocsListWithOrgFallback(
+          firestore,
+          profile,
+          hoDQueryLabels,
+          exactListFilters,
+          effectiveOrgId,
+          canReadGlobal,
+          (base) => query(base, orderBy('updatedAt', 'desc'), limit(scanLimit)),
+        )
+        if (cancelled) return
+        ingestSnap(snap)
+        setSearchScanTruncated(snap.docs.length >= scanLimit)
+      } else {
+        setSearchScanTruncated(false)
+      }
 
       let mapped = applyRoleClientFilter(
         [...byId.values()],
