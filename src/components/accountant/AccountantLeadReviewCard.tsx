@@ -7,6 +7,7 @@ import { getFirestoreDb } from '../../services/firebase'
 import { persistAccountantFullNe, persistAccountantPaymentDecision } from '../../utils/persistAccountantDecision'
 import { useState } from 'react'
 import { leadHasPendingAccountantReview } from '../../utils/accountantFinanceFilter'
+import { useAuth } from '../../hooks/useAuth'
 
 function telHref(raw: string): string | null {
   const digits = raw.replace(/\D/g, '')
@@ -40,6 +41,7 @@ function PaymentSlotActions({
   const [busy, setBusy] = useState(false)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState(line?.approvalNote ?? '')
+  const { profile } = useAuth()
 
   if (amt <= 0 && !line?.receiptUrl?.trim() && !status) return null
 
@@ -72,6 +74,7 @@ function PaymentSlotActions({
         newFile: billFile,
         approvalNote: note,
         accountantName,
+        accountantUid: profile?.id,
       })
       setBillFile(null)
       setRejectOpen(false)

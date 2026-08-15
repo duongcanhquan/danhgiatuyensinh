@@ -22,6 +22,7 @@ import { useScholarships } from '../hooks/useScholarships'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { emptyFinanceDraft, financeDraftHasContent } from '../utils/leadFinance'
+import { describeFinanceDepositAudit } from '../utils/leadFinanceAudit'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { getDoc, doc } from 'firebase/firestore'
 import {
@@ -227,6 +228,22 @@ export function CreateLeadModal({
               draft: financeDraft,
               counselorName: assigneeLabel,
             })
+            const financeAudit = describeFinanceDepositAudit(financeDraft)
+            if (financeAudit) {
+              try {
+                await commitAuditLog(db, {
+                  leadId: id,
+                  actionType: 'SYSTEM_UPDATE',
+                  description: financeAudit,
+                  performedBy: profile.id,
+                  performedByName: performer,
+                })
+              } catch (ae) {
+                console.warn('[CreateLeadModal] finance audit', ae)
+              }
+            }
+          } else {
+            postWriteWarning = 'Hồ sơ đã tạo nhưng chưa đọc lại được để lưu tiền — mở hồ sơ và cập nhật lại.'
           }
         } catch (fe) {
           console.warn('[CreateLeadModal] finance after create', fe)
@@ -236,17 +253,7 @@ export function CreateLeadModal({
               : 'Hồ sơ đã tạo nhưng lưu tiền chưa xong — mở hồ sơ để cập nhật lại.'
         }
       }
-      try {
-        await commitAuditLog(db, {
-          leadId: id,
-          actionType: 'SYSTEM_UPDATE',
-          description: `Tạo hồ sơ ứng viên mới (thủ công trên màn Hồ sơ)${systemCode ? ` — mã ${systemCode}` : ''}`,
-          performedBy: profile.id,
-          performedByName: performer,
-        })
-      } catch (ae) {
-        console.warn('[CreateLeadModal] audit after create', ae)
-      }
+      // Audit «Tạo hồ sơ» + n8n đã ghi trong createManualLead.
 
       if (!n8nOk && n8nError) {
         postWriteWarning = [

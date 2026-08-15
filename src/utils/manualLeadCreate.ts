@@ -35,6 +35,8 @@ import {
 } from './publicRegistrationForm'
 import { notifyCrmPortalRegistration } from '../services/publicRegistration'
 import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
+import { commitAuditLog } from '../services/auditLog'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 function norm(s: string): string {
   return s.trim()
@@ -87,16 +89,12 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
   if (dobIssue) return dobIssue
   const gender = norm(draft.gender)
   if (gender !== 'Nam' && gender !== 'Nữ') return 'Vui lòng chọn giới tính Nam hoặc Nữ.'
-  if (!norm(draft.placeOfBirth)) return 'Vui lòng nhập nơi sinh.'
   if (!norm(draft.ethnicity)) return 'Vui lòng nhập dân tộc.'
   if (!isValidPublicNationalId(draft.nationalId, draft.nationalIdNotAvailable)) {
     return 'CCCD/CMND phải đủ đúng 9 hoặc 12 số; hộ chiếu 7–15 ký tự chữ và số (hoặc tick «Chưa có CCCD»).'
   }
   if (!isValidStudentEmail(draft.studentEmail)) {
     return 'Email phải có @ và hợp lệ (vd: ten@truong.edu.vn).'
-  }
-  if (!norm(draft.permanentAddress) && !norm(draft.address)) {
-    return 'Vui lòng nhập địa chỉ thường trú.'
   }
   const phoneIssue = describeContactPhonesIssue({
     phone: draft.phone,
@@ -105,14 +103,7 @@ export function validateManualLeadDraft(draft: LeadCoreDraft): string | null {
     parentPhone: draft.parentPhone,
   })
   if (phoneIssue) return phoneIssue
-  if (!norm(draft.highSchool)) return 'Vui lòng nhập trường đã theo học.'
-  if (!norm(draft.province)) return 'Vui lòng nhập tỉnh/thành.'
-  if (!norm(draft.applicantCategory)) return 'Vui lòng chọn đối tượng dự tuyển.'
-  if (!norm(draft.studyIntention) && !norm(draft.educationLevel)) {
-    return 'Vui lòng chọn hệ đào tạo.'
-  }
-  if (!norm(draft.majorInterest)) return 'Vui lòng chọn ngành học.'
-  if (!norm(draft.academicPerformance)) return 'Vui lòng chọn học lực.'
+  // Nơi sinh, địa chỉ, Học tập, Nguyện vọng (hình thức/ngành): không bắt buộc khi tạo tay trên CRM.
   if (!norm(draft.source1)) {
     return 'Cần nguồn tiếp nhận (Nguồn 1) trước khi lưu hồ sơ mới.'
   }
@@ -181,12 +172,13 @@ export async function createManualLead(
       norm(input.draft.fatherPhone),
   }
 
+  const orgId = (input.orgId ?? '').trim() || DEFAULT_ORG_ID
   const row = coreDraftToExcelRow(draft)
   const customerId = norm(row.customerId ?? '')
   const rowWithCode = { ...row, customerId }
   const hash = computeLeadUniqueHash(rowWithCode)
   // Chống trùng trước — tránh đốt số thứ tự mã hệ thống khi hồ sơ đã tồn tại.
-  const existingId = await findExistingLeadIdByHash(db, hash, input.orgId)
+  const existingId = await findExistingLeadIdByHash(db, hash, orgId)
   if (existingId) {
     const phoneKey = normalizePhoneKey(draft.phone, draft.parentPhone)
     throw new DuplicateLeadError(existingId, phoneKey.length >= 9 ? 'phone' : 'fingerprint')
@@ -194,7 +186,7 @@ export async function createManualLead(
 
   const nidHash = nationalIdHashFromInput(draft.nationalId, draft.nationalIdNotAvailable)
   if (nidHash) {
-    const existingById = await findExistingLeadIdByNationalIdHash(db, nidHash, input.orgId)
+    const existingById = await findExistingLeadIdByNationalIdHash(db, nidHash, orgId)
     if (existingById) throw new DuplicateLeadError(existingById, 'nationalId')
   }
 
@@ -275,7 +267,7 @@ export async function createManualLead(
     // Ép mã hệ thống luôn ghi (không phụ thuộc draft trống).
     systemCode,
     customerId,
-    orgId: input.orgId,
+    orgId,
     calculatedScore,
     priorityTag,
     ...pillarPatch,
@@ -287,13 +279,26 @@ export async function createManualLead(
     lastTouchedAt: now,
   })
 
+  // Dòng thời gian: ghi ngay sau khi tạo (không phụ thuộc bước n8n / modal).
+  try {
+    await commitAuditLog(db, {
+      leadId: ref.id,
+      actionType: 'SYSTEM_UPDATE',
+      description: `Tạo hồ sơ ứng viên mới (thủ công trên màn Hồ sơ)${systemCode ? ` — mã ${systemCode}` : ''}`,
+      performedBy: input.createdByUid,
+      performedByName: input.createdByName,
+    })
+  } catch (ae) {
+    console.warn('[createManualLead] audit create', ae)
+  }
+
   // Webhook cổng đăng ký qua Cloud Function (tránh CORS browser).
   let n8nOk = false
   let n8nError: string | null = null
   try {
     const notified = await notifyCrmPortalRegistration({
       leadId: ref.id,
-      orgId: input.orgId,
+      orgId,
       createdByName: input.createdByName,
     })
     n8nOk = Boolean(notified.n8nOk)
@@ -319,10 +324,24 @@ export async function createManualLead(
     }
   }
 
+  try {
+    await commitAuditLog(db, {
+      leadId: ref.id,
+      actionType: 'SYSTEM_UPDATE',
+      description: n8nOk
+        ? 'Đã gửi tin đăng ký sang n8n.'
+        : `Tin n8n đăng ký chưa gửi được${n8nError ? `: ${n8nError}` : '.'}`,
+      performedBy: input.createdByUid,
+      performedByName: input.createdByName,
+    })
+  } catch {
+    /* soft */
+  }
+
   const { dispatchOutboundEvent } = await import('../integrations/dispatchOutbound')
   const { triggerCommsAutomation } = await import('./commsAutomationDispatch')
   try {
-    await loadOrgIntegrationHub(db, input.orgId)
+    await loadOrgIntegrationHub(db, orgId)
   } catch {
     /* hub optional */
   }
@@ -338,12 +357,12 @@ export async function createManualLead(
     systemCode,
   }
   void dispatchOutboundEvent({
-    orgId: input.orgId,
+    orgId,
     event: 'lead.created',
     payload,
   }).catch((e) => console.warn('[lead.created hub]', e))
   void dispatchOutboundEvent({
-    orgId: input.orgId,
+    orgId,
     event: 'registration.public',
     payload: {
       ...payload,
@@ -351,7 +370,7 @@ export async function createManualLead(
       source1,
     },
   }).catch((e) => console.warn('[registration.public hub]', e))
-  triggerCommsAutomation(input.orgId, 'lead.created', {
+  triggerCommsAutomation(orgId, 'lead.created', {
     id: ref.id,
     fullName: draft.fullName,
     phone: draft.phone,

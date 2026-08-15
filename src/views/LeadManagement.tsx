@@ -201,6 +201,7 @@ import {
 } from '../utils/leadDedupeLookup'
 import { nationalIdHashFromInput } from '../utils/leadIdentity'
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
+import { describeFinanceDepositAudit } from '../utils/leadFinanceAudit'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
 import { BulkLeadActionBar, BULK_PRIORITY_TAG_OPTIONS } from '../components/bulk/BulkLeadActionBar'
@@ -6209,7 +6210,9 @@ function LeadDetailPanel({
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'SYSTEM_UPDATE',
-        description: 'Cập nhật tài chính / chứng từ (upload + n8n nếu đổi tiền hoặc file)',
+        description:
+          describeFinanceDepositAudit(financeDraft) ??
+          'Cập nhật tài chính / chứng từ (upload + n8n nếu đổi tiền hoặc file)',
         performedBy: profile.id,
         performedByName: performer,
       })

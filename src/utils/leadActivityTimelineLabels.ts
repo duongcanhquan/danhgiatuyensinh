@@ -17,6 +17,21 @@ export function auditActionLabelVi(actionType: string): string {
 }
 
 /**
+ * Tiêu đề mốc trên dòng thời gian — ưu tiên nội dung đời thường từ mô tả
+ * (tạo hồ sơ / nạp tiền / kế toán xác nhận) thay vì gộp hết thành «Cập nhật hồ sơ».
+ */
+export function timelineAuditAction(actionType: string, description?: string | null): string {
+  const d = (description ?? '').trim()
+  if (/^tạo hồ sơ/i.test(d)) return 'Tạo hồ sơ'
+  if (/kế toán xác nhận tiền/i.test(d)) return 'Kế toán xác nhận tiền'
+  if (/kế toán từ chối tiền/i.test(d)) return 'Kế toán từ chối tiền'
+  if (/^nạp tiền/i.test(d) || /nạp tiền:/i.test(d)) return 'Nạp tiền'
+  if (/cập nhật tài chính/i.test(d)) return 'Cập nhật tài chính'
+  if (/tin n8n|đăng ký sang n8n/i.test(d)) return 'Thông báo n8n'
+  return auditActionLabelVi(actionType)
+}
+
+/**
  * Tên người thao tác trên dòng thời gian.
  * Ưu tiên tên đã lưu; uid → labelUid; không có → «Chưa rõ người».
  */

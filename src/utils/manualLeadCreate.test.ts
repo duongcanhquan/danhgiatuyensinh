@@ -37,8 +37,26 @@ describe('validateManualLeadDraft', () => {
     expect(validateManualLeadDraft(validDraft({ phone: '' }))).toMatch(/sinh viên|điện thoại/i)
     expect(validateManualLeadDraft(validDraft({ motherPhone: '', parentPhone: '' }))).toBeNull()
     expect(validateManualLeadDraft(validDraft({ gender: 'Khác' }))).toMatch(/giới tính/i)
-    expect(validateManualLeadDraft(validDraft({ academicPerformance: '' }))).toMatch(/học lực/i)
     expect(validateManualLeadDraft(validDraft({ source1: '', source: 'ghi chú' }))).toMatch(/Nguồn 1|nguồn/i)
+  })
+
+  it('allows empty place of birth, address, study and aspiration fields', () => {
+    expect(
+      validateManualLeadDraft(
+        validDraft({
+          placeOfBirth: '',
+          permanentAddress: '',
+          address: '',
+          highSchool: '',
+          province: '',
+          applicantCategory: '',
+          academicPerformance: '',
+          studyIntention: '',
+          educationLevel: '',
+          majorInterest: '',
+        }),
+      ),
+    ).toBeNull()
   })
 
   it('accepts student phone without mother or contact phone', () => {

@@ -8,10 +8,10 @@ import { useLeadOmicallCalls } from '../hooks/useLeadOmicallCalls'
 import { TagBadge } from './TagBadge'
 import { resolveCallIsValid } from '../utils/kpiCallValidity'
 import {
-  auditActionLabelVi,
   callActionTitle,
   groupTimelineByDay,
   timelineActorName,
+  timelineAuditAction,
   timelineHeadline,
   timelineTimeLabel,
 } from '../utils/leadActivityTimelineLabels'
@@ -279,7 +279,7 @@ export function LeadActivityTimeline({
                     uid: log.performedBy,
                     labelUid,
                   })
-                  const action = auditActionLabelVi(log.actionType)
+                  const action = timelineAuditAction(log.actionType, log.description)
                   return (
                     <TimelineMilestone
                       key={row.id}

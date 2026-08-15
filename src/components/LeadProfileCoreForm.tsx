@@ -689,7 +689,7 @@ export function LeadProfileCoreForm({
               />
             )}
           </Field>
-          <Field label="Nơi sinh" required>
+          <Field label="Nơi sinh">
             <input
               className={INPUT_CLS}
               value={draft.placeOfBirth}
@@ -787,7 +787,7 @@ export function LeadProfileCoreForm({
             />
           </PhoneFieldsRow>
           <TwoColRow>
-            <Field label="Địa chỉ thường trú" required>
+            <Field label="Địa chỉ thường trú">
               <input
                 className={INPUT_CLS}
                 value={draft.permanentAddress}
@@ -875,7 +875,7 @@ export function LeadProfileCoreForm({
 
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'geo'} title="Hồ sơ học tập">
         <div className={grid}>
-          <Field label="Tỉnh / TP" required>
+          <Field label="Tỉnh / TP">
             <CatalogCombobox
               value={draft.province}
               options={catalogs?.provinces ?? []}
@@ -893,7 +893,7 @@ export function LeadProfileCoreForm({
               onEnsureOption={onEnsureCatalogEntry ? ensure('hanoi_areas') : undefined}
             />
           </Field>
-          <Field label="Trường THPT" required>
+          <Field label="Trường THPT">
             <CatalogCombobox
               value={draft.highSchool}
               options={catalogs?.highSchools ?? []}
@@ -905,7 +905,7 @@ export function LeadProfileCoreForm({
           <Field label="Lớp hiện đang học">
             <input className={INPUT_CLS} value={draft.gradeClass} disabled={disabled} onChange={(e) => patch('gradeClass', e.target.value)} />
           </Field>
-          <Field label="Đối tượng dự tuyển" required>
+          <Field label="Đối tượng dự tuyển">
             <CatalogCombobox
               value={draft.applicantCategory}
               options={catalogs?.applicantCategories ?? []}
@@ -944,7 +944,7 @@ export function LeadProfileCoreForm({
               placeholder="Vd. 2025–2028"
             />
           </Field>
-          <Field label="Học lực / xếp loại" required>
+          <Field label="Học lực / xếp loại">
             <select
               className={INPUT_CLS}
               value={draft.academicPerformance}
@@ -979,7 +979,7 @@ export function LeadProfileCoreForm({
       <FormSection tabMode={tabMode} visible={!tabMode || activeTab === 'study'} title="Nguyện vọng">
         <div className="space-y-2">
           <div className={grid}>
-            <Field label="Hình thức học quan tâm" required>
+            <Field label="Hình thức học quan tâm">
               <CatalogCombobox
                 value={studyFormatValue}
                 options={studyFormatOptions}
@@ -996,7 +996,7 @@ export function LeadProfileCoreForm({
                 placeholder="Chọn hoặc thêm hình thức…"
               />
             </Field>
-            <Field label="Chuyên ngành / ngành quan tâm" required>
+            <Field label="Chuyên ngành / ngành quan tâm">
               <CatalogCombobox
                 value={draft.majorInterest}
                 options={majorOptions}

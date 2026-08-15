@@ -13,6 +13,8 @@ import {
   callAccountantApplyPaymentDecision,
   callAccountantConfirmFullNe,
 } from '../services/accountantFinanceCallable'
+import { commitAuditLog } from '../services/auditLog'
+import { describeAccountantPaymentAudit } from './leadFinanceAudit'
 
 const SLOT_BY_BATCH: LeadPaymentSlotKey[] = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
@@ -34,10 +36,34 @@ export async function persistAccountantPaymentDecision(opts: {
   newFile?: File | null
   approvalNote?: string
   accountantName?: string
+  /** UID kế toán — ghi dòng thời gian. */
+  accountantUid?: string
 }): Promise<{ lead: Lead; finance: LeadFinanceRecord }> {
-  const { db, lead, batch, decision, amountVnd, collectedAtIso, newFile, approvalNote, accountantName } = opts
+  const { db, lead, batch, decision, amountVnd, collectedAtIso, newFile, approvalNote, accountantName, accountantUid } =
+    opts
   const slotKey = SLOT_BY_BATCH[batch - 1]
   if (!slotKey) throw new Error('Đợt thu không hợp lệ (1–5).')
+
+  const writeDecisionAudit = async (collectedAtLabel: string) => {
+    const uid = (accountantUid ?? '').trim()
+    if (!uid) return
+    try {
+      await commitAuditLog(db, {
+        leadId: lead.id,
+        actionType: 'SYSTEM_UPDATE',
+        description: describeAccountantPaymentAudit({
+          slotKey,
+          decision,
+          amountVnd,
+          collectedAt: collectedAtLabel,
+        }),
+        performedBy: uid,
+        performedByName: accountantName?.trim() || uid,
+      })
+    } catch (e) {
+      console.warn('[persistAccountantPaymentDecision] audit soft-fail', e)
+    }
+  }
 
   const prev = lead.finance ?? { payments: {} }
   const payments = { ...(prev.payments ?? {}) }
@@ -95,6 +121,7 @@ export async function persistAccountantPaymentDecision(opts: {
     } catch (e) {
       console.warn('[persistAccountantPaymentDecision] n8n soft-fail', e)
     }
+    await writeDecisionAudit(String(finance.payments?.[slotKey]?.collectedAt ?? collectedAt))
     return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
   }
 
@@ -146,6 +173,7 @@ export async function persistAccountantPaymentDecision(opts: {
     console.warn('[persistAccountantPaymentDecision] n8n soft-fail', e)
   }
 
+  await writeDecisionAudit(collectedAt)
   return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
 }
 
