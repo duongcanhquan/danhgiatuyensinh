@@ -5968,6 +5968,13 @@ function LeadDetailPanel({
     setFinanceDraft(leadToFinanceDraft(lead))
   }, [lead.id])
 
+  useEffect(() => {
+    setFinanceDraft((prev) => {
+      if (isFinanceDraftDirty(lead, prev)) return prev
+      return leadToFinanceDraft(lead)
+    })
+  }, [lead.finance])
+
   const [note, setNote] = useState(() => (lead.lastCounselorNote ?? '').trim())
   const [dispositionDraft, setDispositionDraft] = useState<CallDispositionId | ''>(() =>
     lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
@@ -6214,30 +6221,32 @@ function LeadDetailPanel({
     [pickListUsers, counselorUsers],
   )
 
-  const saveFinanceProfile = async (): Promise<boolean> => {
+  const saveFinanceProfile = async (): Promise<{ ok: boolean; message: string }> => {
     if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
-      return false
+      const message = 'Chưa có kết nối hoặc chưa đăng nhập.'
+      setMsg(message)
+      return { ok: false, message }
     }
     if (!showCounselorProgressForm) {
-      setMsg('Bạn không có quyền chỉnh tài chính hồ sơ này.')
-      return false
+      const message = 'Bạn không có quyền chỉnh tài chính hồ sơ này.'
+      setMsg(message)
+      return { ok: false, message }
     }
     if (!financeDirty) {
-      setMsg('Không có thay đổi tài chính.')
-      return false
+      const message = 'Không có thay đổi tài chính.'
+      setMsg(message)
+      return { ok: false, message }
     }
     setFinanceSaving(true)
     setMsg(null)
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
-      const { finance, updatedAt, lastTouchedAt, receiptUploadWarnings, n8nTriggered } =
-        await persistLeadFinance({
-          db,
-          lead,
-          draft: financeDraft,
-          counselorName: performer,
-        })
+      const saved = await persistLeadFinance({
+        db,
+        lead,
+        draft: financeDraft,
+        counselorName: performer,
+      })
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'SYSTEM_UPDATE',
@@ -6247,28 +6256,40 @@ function LeadDetailPanel({
         performedBy: profile.id,
         performedByName: performer,
       })
-      const nextLead: Lead = { ...lead, finance, updatedAt, lastTouchedAt }
-      setFinanceDraft(leadToFinanceDraft(nextLead))
-      onUpdated({ finance, updatedAt, lastTouchedAt })
-      const receiptOk = Object.values(finance?.payments ?? {}).some((p) => Boolean(p?.receiptUrl?.trim()))
-      const parts = ['Đã lưu tài chính.']
-      if (receiptUploadWarnings.length) {
-        parts.push(`Chứng từ chưa lên được: ${receiptUploadWarnings.join('; ')}`)
-      } else if (receiptOk) {
-        parts.push('Chứng từ đã lưu (R2/Drive/Storage).')
+      setFinanceDraft(saved.draftAfterSave)
+      onUpdated({
+        finance: saved.finance,
+        updatedAt: saved.updatedAt,
+        lastTouchedAt: saved.lastTouchedAt,
+      })
+      const parts: string[] = []
+      if (saved.firestoreVerified) {
+        parts.push('Đã lưu số tiền trên hệ thống (đã kiểm tra lại).')
       }
-      if (n8nTriggered) {
-        parts.push('Đã gửi tin báo thu sang n8n.')
-      } else {
-        parts.push('Chưa gửi n8n (không đổi tiền/bill).')
+      if (saved.receiptsUploaded.length) {
+        const byProvider = [...new Set(saved.receiptsUploaded.map((r) => r.provider))]
+        parts.push(
+          `Chứng từ đã lên ${byProvider.map((p) => (p === 'r2' ? 'R2' : p === 'drive' ? 'Drive' : 'Firebase')).join('/')} (${saved.receiptsUploaded.length} file).`,
+        )
       }
-      setMsg(parts.join(' '))
-      return true
+      if (saved.receiptUploadWarnings.length) {
+        parts.push(`Chứng từ lỗi — giữ file để lưu lại: ${saved.receiptUploadWarnings.join('; ')}`)
+      }
+      if (saved.n8nAttempted) {
+        parts.push(
+          saved.n8nOk
+            ? 'Đã gửi tin báo thu sang n8n.'
+            : `Tiền đã lưu; tin n8n chưa gửi: ${saved.n8nError || 'lỗi không rõ'}.`,
+        )
+      }
+      const message = parts.join(' ') || 'Đã lưu tài chính.'
+      setMsg(message)
+      return { ok: saved.firestoreVerified, message }
     } catch (e) {
       console.error(e)
-      const err = e instanceof Error ? e.message : 'Không lưu được tài chính.'
-      setMsg(err)
-      return false
+      const message = e instanceof Error ? e.message : 'Không lưu được tài chính.'
+      setMsg(message)
+      return { ok: false, message }
     } finally {
       setFinanceSaving(false)
     }
@@ -6437,13 +6458,18 @@ function LeadDetailPanel({
     }
     const hadFinance = financeDirty
     const hadCore = coreDirty
-    let financeOk = true
+    let financeMsg = ''
     if (hadFinance) {
-      financeOk = await saveFinanceProfile()
-      if (!financeOk) return
+      const fin = await saveFinanceProfile()
+      financeMsg = fin.message
+      if (!fin.ok) return
     }
-    if (hadCore) await saveCoreProfile()
-    if (hadFinance && hadCore && financeOk) setMsg('Đã lưu thông tin hồ sơ và tài chính.')
+    if (hadCore) {
+      await saveCoreProfile()
+      if (hadFinance && financeMsg) {
+        setMsg(`${financeMsg} Đã lưu thông tin hồ sơ.`)
+      }
+    }
   }
 
   const saveUnified = async () => {

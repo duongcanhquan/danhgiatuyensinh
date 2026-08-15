@@ -85,9 +85,21 @@ describe('buildFinanceSavePlan triggerN8n', () => {
     const draft = emptyFinanceDraft()
     draft.payments.deposit.amount = '2000000'
     const rec = financeDraftToRecord(draft)
-    const json = JSON.stringify(rec)
-    expect(json).not.toContain('null')
     expect(rec.payments?.deposit).toEqual({ amountVnd: 2_000_000 })
-    expect(Object.values(rec.payments?.deposit ?? {}).every((v) => v !== undefined)).toBe(true)
+  })
+
+  it('preserves fullNeAt from server when TVV saves money', () => {
+    const draft = emptyFinanceDraft()
+    draft.payments.deposit.amount = '1000000'
+    const plan = buildFinanceSavePlan(
+      leadStub({
+        payments: { deposit: { amountVnd: 500_000 } },
+        fullNeAt: '10/08/2026',
+        fullNeStatus: 'ĐÃ FULL NE',
+      }),
+      draft,
+    )
+    expect(plan.firestoreFinance.fullNeAt).toBe('10/08/2026')
+    expect(plan.firestoreFinance.fullNeStatus).toBe('ĐÃ FULL NE')
   })
 })

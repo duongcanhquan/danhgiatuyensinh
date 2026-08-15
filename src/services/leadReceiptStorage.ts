@@ -126,8 +126,14 @@ async function uploadReceiptToFirebase(
   return getDownloadURL(storageRef)
 }
 
+export type ReceiptUploadResult = {
+  url: string
+  /** r2 | drive | firebase */
+  provider: 'r2' | 'drive' | 'firebase'
+}
+
 /**
- * Upload chứng từ tài chính; trả URL lưu vào Firestore `receiptUrl`.
+ * Upload chứng từ tài chính; trả URL + nơi lưu thật sự.
  *
  * Ưu tiên: cấu hình trường (Cài đặt) → .env → Firebase Storage.
  * Provider: auto | r2 | drive | firebase.
@@ -136,27 +142,57 @@ export async function uploadLeadReceiptFile(
   lead: { id: string; fullName: string; systemCode?: string; customerId?: string; orgId?: string | null },
   slot: LeadPaymentSlotKey,
   file: File,
-): Promise<string> {
+): Promise<ReceiptUploadResult> {
   const orgId = String(lead.orgId ?? '').trim() || DEFAULT_ORG_ID
   await ensureReceiptStorageConfigLoaded(getFirestoreDb(), orgId)
   const prepared = await optimizeReceiptFile(file)
   const runtime = resolveReceiptStorageRuntime()
 
-  const tryR2 = async () => {
+  const tryR2 = async (): Promise<ReceiptUploadResult> => {
     if (!runtime.r2UploadUrl) throw new Error('Chưa có URL upload R2.')
-    return uploadReceiptToR2(lead, slot, prepared, runtime)
+    const url = await uploadReceiptToR2(lead, slot, prepared, runtime)
+    return { url, provider: 'r2' }
   }
-  const tryDrive = async () => {
+  const tryDrive = async (): Promise<ReceiptUploadResult> => {
     if (!runtime.driveWebhookUrl) throw new Error('Chưa có URL Apps Script Drive.')
-    return uploadReceiptToDriveWebhook(lead, slot, prepared, runtime)
+    const url = await uploadReceiptToDriveWebhook(lead, slot, prepared, runtime)
+    return { url, provider: 'drive' }
+  }
+  const tryFirebase = async (): Promise<ReceiptUploadResult> => {
+    const url = await uploadReceiptToFirebase(lead, slot, prepared)
+    return { url, provider: 'firebase' }
   }
 
   if (runtime.provider === 'r2') return tryR2()
   if (runtime.provider === 'drive') return tryDrive()
-  if (runtime.provider === 'firebase') return uploadReceiptToFirebase(lead, slot, prepared)
+  if (runtime.provider === 'firebase') return tryFirebase()
 
-  // auto
-  if (runtime.r2UploadUrl) return tryR2()
-  if (runtime.driveWebhookUrl) return tryDrive()
-  return uploadReceiptToFirebase(lead, slot, prepared)
+  // auto: thử lần lượt, lỗi rõ ràng nếu cả chuỗi fail
+  const errors: string[] = []
+  if (runtime.r2UploadUrl) {
+    try {
+      return await tryR2()
+    } catch (e) {
+      errors.push(`R2: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  if (runtime.driveWebhookUrl) {
+    try {
+      return await tryDrive()
+    } catch (e) {
+      errors.push(`Drive: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  try {
+    return await tryFirebase()
+  } catch (e) {
+    errors.push(`Firebase: ${e instanceof Error ? e.message : String(e)}`)
+    throw new Error(
+      errors.length
+        ? `Không lưu được chứng từ. ${errors.join(' · ')}`
+        : e instanceof Error
+          ? e.message
+          : 'Không lưu được chứng từ.',
+    )
+  }
 }

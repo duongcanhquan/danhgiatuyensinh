@@ -257,9 +257,8 @@ export async function triggerProfileFinanceN8n(opts: {
   // Báo thu chỉ CTSV (Chat tiền). Giấy mời chỉ dùng create_document — tránh spam đôi.
   const webhook = webhookCtsv(orgId)
   if (!webhook) {
-    console.warn('[n8n] CTSV chưa cấu hình — bỏ qua gửi thu (đã lưu hồ sơ). Org:', orgId)
     fanOutHubQuietly(orgId, 'finance.submitted', pl as Record<string, unknown>, lead)
-    return
+    throw new Error('Chưa cấu hình webhook CTSV — vào Cài đặt → Webhook n8n.')
   }
   const res = await postJson(webhook, pl)
   if (!res.ok) {

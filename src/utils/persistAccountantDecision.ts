@@ -69,7 +69,7 @@ export async function persistAccountantPaymentDecision(opts: {
   const payments = { ...(prev.payments ?? {}) }
   let receiptUrl = payments[slotKey]?.receiptUrl ?? ''
   if (newFile) {
-    receiptUrl = await uploadLeadReceiptFile(lead, slotKey, newFile)
+    receiptUrl = (await uploadLeadReceiptFile(lead, slotKey, newFile)).url
   }
 
   const collectedAt = dateInputToStored(collectedAtIso) || collectedAtIso

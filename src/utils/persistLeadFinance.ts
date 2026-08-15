@@ -1,8 +1,8 @@
 import type { Firestore } from 'firebase/firestore'
-import { doc, updateDoc } from 'firebase/firestore'
-import type { Lead, LeadPaymentSlotKey } from '../types'
+import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
 import { FS_COLLECTIONS } from '../types'
-import { uploadLeadReceiptFile } from '../services/leadReceiptStorage'
+import { uploadLeadReceiptFile, type ReceiptUploadResult } from '../services/leadReceiptStorage'
 import {
   buildFinanceSavePlan,
   financeDraftNotifiesN8n,
@@ -18,13 +18,64 @@ import { leadTouchPatch } from './leadTouch'
 
 const PAYMENT_KEYS = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
-/** Bỏ file tạm — dùng khi upload lỗi nhưng vẫn muốn ghi số tiền / ngày. */
+function readFinanceFromSnap(data: Record<string, unknown> | undefined): LeadFinanceRecord | undefined {
+  const raw = data?.finance
+  if (!raw || typeof raw !== 'object') return undefined
+  return raw as LeadFinanceRecord
+}
+
+export type PersistLeadFinanceResult = {
+  finance: LeadFinanceRecord
+  updatedAt: ReturnType<typeof leadTouchPatch>['updatedAt']
+  lastTouchedAt: ReturnType<typeof leadTouchPatch>['lastTouchedAt']
+  /** Firestore đã ghi và đọc lại khớp tiền/bill. */
+  firestoreVerified: boolean
+  /** Slot upload thành công lần này (có URL mới). */
+  receiptsUploaded: Array<{ slot: LeadPaymentSlotKey; label: string; url: string; provider: string }>
+  /** Slot chọn file nhưng upload lỗi — pendingFile vẫn giữ trên draft trả về. */
+  receiptUploadWarnings: string[]
+  receiptFailedSlots: LeadPaymentSlotKey[]
+  /** Draft sau lưu (giữ file lỗi để thử lại). */
+  draftAfterSave: LeadFinanceDraft
+  n8nAttempted: boolean
+  n8nOk: boolean
+  n8nError: string | null
+}
+
+function slotLabel(key: LeadPaymentSlotKey): string {
+  return PAYMENT_SLOT_DEFS.find((s) => s.key === key)?.label ?? key
+}
+
+function clearPendingOnlySucceeded(
+  draft: LeadFinanceDraft,
+  succeeded: Partial<Record<LeadPaymentSlotKey, string>>,
+): LeadFinanceDraft {
+  const payments = { ...draft.payments }
+  for (const key of PAYMENT_KEYS) {
+    if (succeeded[key]) {
+      payments[key] = { ...payments[key]!, pendingFile: null, receiptUrl: succeeded[key]! }
+    }
+  }
+  return { ...draft, payments }
+}
+
+/** Bỏ file tạm — dùng khi tạo hồ sơ chỉ ghi tiền (không upload). */
 export function clearFinancePendingFiles(draft: LeadFinanceDraft): LeadFinanceDraft {
   const payments = { ...draft.payments }
   for (const key of PAYMENT_KEYS) {
     payments[key] = { ...payments[key]!, pendingFile: null }
   }
   return { ...draft, payments }
+}
+
+function financeHasExpectedMoney(finance: LeadFinanceRecord | undefined, draft: LeadFinanceDraft): boolean {
+  for (const key of PAYMENT_KEYS) {
+    const want = Number.parseInt(String(draft.payments[key]?.amount ?? '').replace(/\D/g, ''), 10) || 0
+    if (want <= 0) continue
+    const got = finance?.payments?.[key]?.amountVnd ?? 0
+    if (got !== want) return false
+  }
+  return true
 }
 
 export async function persistLeadFinance(opts: {
@@ -37,53 +88,84 @@ export async function persistLeadFinance(opts: {
    * Bật để vẫn bắn báo thu khi draft có tiền/bill.
    */
   forceNotifyN8n?: boolean
-}): Promise<{
-  finance: Lead['finance']
-  updatedAt: ReturnType<typeof leadTouchPatch>['updatedAt']
-  lastTouchedAt: ReturnType<typeof leadTouchPatch>['lastTouchedAt']
-  /** Upload chứng từ lỗi (tiền/ngày vẫn đã lưu nếu có). */
-  receiptUploadWarnings: string[]
-  n8nTriggered: boolean
-}> {
+}): Promise<PersistLeadFinanceResult> {
   const { db, lead, draft, counselorName, forceNotifyN8n } = opts
   const uploads: Partial<Record<LeadPaymentSlotKey, string>> = {}
+  const receiptsUploaded: PersistLeadFinanceResult['receiptsUploaded'] = []
   const receiptUploadWarnings: string[] = []
+  const receiptFailedSlots: LeadPaymentSlotKey[] = []
 
   for (const key of PAYMENT_KEYS) {
     const file = draft.payments[key]?.pendingFile
     if (!file) continue
     try {
-      uploads[key] = await uploadLeadReceiptFile(lead, key, file)
+      const up: ReceiptUploadResult = await uploadLeadReceiptFile(lead, key, file)
+      uploads[key] = up.url
+      receiptsUploaded.push({
+        slot: key,
+        label: slotLabel(key),
+        url: up.url,
+        provider: up.provider,
+      })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      const label = PAYMENT_SLOT_DEFS.find((s) => s.key === key)?.label ?? key
       console.warn('[persistLeadFinance] receipt upload', key, e)
-      receiptUploadWarnings.push(`${label}: ${msg}`)
+      receiptFailedSlots.push(key)
+      receiptUploadWarnings.push(`${slotLabel(key)}: ${msg}`)
     }
   }
 
-  // Luôn ghi tiền/ngày dù một phần bill upload fail.
-  const mergedDraft = clearFinancePendingFiles(mergeUploadedReceipts(draft, uploads))
+  // Giữ pendingFile ở slot lỗi — chỉ gắn URL + xóa file tạm khi upload ok.
+  const mergedDraft = clearPendingOnlySucceeded(mergeUploadedReceipts(draft, uploads), uploads)
   const plan = buildFinanceSavePlan(lead, mergedDraft)
   const touch = leadTouchPatch()
 
-  const financeWithEnrollment = {
+  const financeWithEnrollment: LeadFinanceRecord = {
     ...plan.firestoreFinance,
-    enrollmentStatus: plan.firestoreFinance.enrollmentStatus ?? lead.finance?.enrollmentStatus ?? 'MỚI',
+    enrollmentStatus:
+      plan.firestoreFinance.enrollmentStatus ?? lead.finance?.enrollmentStatus ?? 'MỚI',
   }
 
-  await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
+  const leadRef = doc(db, FS_COLLECTIONS.leads, lead.id)
+  await updateDoc(leadRef, {
     ...touch,
     finance: financeWithEnrollment,
   })
+
+  // Đọc lại để chắc Firestore đã nhận tiền (không tin mù local).
+  let firestoreVerified = false
+  try {
+    const snap = await getDoc(leadRef)
+    const verified = snap.exists()
+      ? readFinanceFromSnap(snap.data() as Record<string, unknown>)
+      : undefined
+    firestoreVerified = Boolean(verified && financeHasExpectedMoney(verified, mergedDraft))
+    if (!firestoreVerified) {
+      throw new Error(
+        'Đã gửi lưu nhưng đọc lại hồ sơ không thấy đúng số tiền. Thử Lưu lại hoặc kiểm tra mạng/Firestore.',
+      )
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('đọc lại')) throw e
+    console.warn('[persistLeadFinance] verify read', e)
+    throw new Error(
+      e instanceof Error
+        ? `Lưu tài chính nhưng không xác minh được: ${e.message}`
+        : 'Lưu tài chính nhưng không xác minh được trên máy chủ.',
+    )
+  }
 
   const forceSlots =
     forceNotifyN8n && financeDraftNotifiesN8n(mergedDraft) ? financeNotifySlotKeys(mergedDraft) : []
   const changedSlots = plan.changedSlots.length ? plan.changedSlots : forceSlots
   const shouldNotifyN8n = plan.triggerN8n || forceSlots.length > 0
 
-  // n8n: chỉ báo thu khi có tiền/bill/Full NE. CORS/mạng không rollback Firestore.
+  let n8nAttempted = false
+  let n8nOk = false
+  let n8nError: string | null = null
+
   if (shouldNotifyN8n) {
+    n8nAttempted = true
     try {
       const moneyChanged =
         Object.keys(uploads).length > 0 ||
@@ -103,7 +185,10 @@ export async function persistLeadFinance(opts: {
         changedSlots,
         resetApprovalSlots: plan.resetApprovalSlots,
       })
+      n8nOk = true
     } catch (e) {
+      n8nOk = false
+      n8nError = e instanceof Error ? e.message : String(e)
       console.warn('[persistLeadFinance] n8n soft-fail', e)
     }
   }
@@ -112,7 +197,13 @@ export async function persistLeadFinance(opts: {
     finance: financeWithEnrollment,
     updatedAt: touch.updatedAt,
     lastTouchedAt: touch.lastTouchedAt,
+    firestoreVerified,
+    receiptsUploaded,
     receiptUploadWarnings,
-    n8nTriggered: shouldNotifyN8n,
+    receiptFailedSlots,
+    draftAfterSave: mergedDraft,
+    n8nAttempted,
+    n8nOk,
+    n8nError,
   }
 }

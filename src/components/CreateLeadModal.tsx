@@ -243,13 +243,22 @@ export function CreateLeadModal({
               counselorName: assigneeLabel,
               forceNotifyN8n: shouldNotifyFinanceN8n,
             })
+            const bits: string[] = []
             if (saved.receiptUploadWarnings.length) {
-              postWriteWarning = [
-                postWriteWarning,
-                `Đã ghi số tiền; chứng từ chưa lên được: ${saved.receiptUploadWarnings.join('; ')}`,
-              ]
-                .filter(Boolean)
-                .join(' ')
+              bits.push(`Chứng từ chưa lên: ${saved.receiptUploadWarnings.join('; ')}`)
+            } else if (saved.receiptsUploaded.length) {
+              const prov = [...new Set(saved.receiptsUploaded.map((r) => r.provider))]
+                .map((p) => (p === 'r2' ? 'R2' : p === 'drive' ? 'Drive' : 'Firebase'))
+                .join('/')
+              bits.push(`Chứng từ đã lên ${prov}.`)
+            }
+            if (saved.n8nAttempted && !saved.n8nOk) {
+              bits.push(`Tin báo thu n8n chưa gửi: ${saved.n8nError || 'lỗi'}`)
+            } else if (saved.n8nOk) {
+              bits.push('Đã gửi tin báo thu sang n8n.')
+            }
+            if (bits.length) {
+              postWriteWarning = [postWriteWarning, ...bits].filter(Boolean).join(' ')
             }
           } else {
             postWriteWarning = [

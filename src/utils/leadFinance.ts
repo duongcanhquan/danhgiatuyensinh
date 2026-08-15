@@ -74,6 +74,15 @@ export function isoToDateInput(raw?: string): string {
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  // Timestamp / Date ISO đầy đủ
+  const t = Date.parse(s)
+  if (!Number.isNaN(t)) {
+    const d = new Date(t)
+    const y = d.getFullYear()
+    const mo = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${mo}-${day}`
+  }
   return ''
 }
 
@@ -287,7 +296,10 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
     reqFullNe: draft.reqFullNe,
   }
   if (fullNeStatus) firestoreFinance.fullNeStatus = fullNeStatus
+  else if (before?.fullNeStatus) firestoreFinance.fullNeStatus = before.fullNeStatus
   if (n8nStatus) firestoreFinance.n8nStatus = n8nStatus
+  // Giữ ngày Full NE do kế toán ghi — không xóa khi TVV lưu tiền.
+  if (before?.fullNeAt) firestoreFinance.fullNeAt = before.fullNeAt
 
   return { firestoreFinance, triggerN8n, resetApprovalSlots, changedSlots }
 }
