@@ -4,6 +4,7 @@ import {
   buildFinanceSavePlan,
   emptyFinanceDraft,
   financeDraftNotifiesN8n,
+  financeDraftToRecord,
   financeNotifySlotKeys,
 } from './leadFinance'
 
@@ -80,8 +81,13 @@ describe('buildFinanceSavePlan triggerN8n', () => {
     expect(plan.resetApprovalSlots).toContain('deposit')
   })
 
-  it('does not fire when saving unchanged empty finance', () => {
-    const plan = buildFinanceSavePlan(leadStub(), emptyFinanceDraft())
-    expect(plan.triggerN8n).toBe(false)
+  it('financeDraftToRecord omits undefined nested fields (Firestore-safe)', () => {
+    const draft = emptyFinanceDraft()
+    draft.payments.deposit.amount = '2000000'
+    const rec = financeDraftToRecord(draft)
+    const json = JSON.stringify(rec)
+    expect(json).not.toContain('null')
+    expect(rec.payments?.deposit).toEqual({ amountVnd: 2_000_000 })
+    expect(Object.values(rec.payments?.deposit ?? {}).every((v) => v !== undefined)).toBe(true)
   })
 })

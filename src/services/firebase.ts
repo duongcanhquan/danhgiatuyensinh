@@ -128,10 +128,9 @@ export function getFirestoreDb(): Firestore | null {
   if (db && firestoreCacheKey === cacheKey) return db
 
   const localCache = persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  const settings = { localCache, ignoreUndefinedProperties: true as const }
   try {
-    db = customId
-      ? initializeFirestore(a, { localCache }, customId)
-      : initializeFirestore(a, { localCache })
+    db = customId ? initializeFirestore(a, settings, customId) : initializeFirestore(a, settings)
   } catch {
     // Đã khởi tạo Firestore trước đó (vd. getFirestore ở module khác) — dùng instance đã cấu hình.
     db = customId ? getFirestore(a, customId) : getFirestore(a)

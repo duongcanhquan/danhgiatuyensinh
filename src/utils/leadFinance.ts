@@ -115,13 +115,13 @@ function lineToStored(d: LeadPaymentLineDraft): LeadPaymentLine | undefined {
   const approvalStatus = d.approvalStatus
   const approvalNote = d.approvalNote.trim()
   if (!amountVnd && !collectedAt && !receiptUrl && !approvalStatus && !approvalNote) return undefined
-  return {
-    amountVnd: amountVnd || undefined,
-    collectedAt: collectedAt || undefined,
-    receiptUrl: receiptUrl || undefined,
-    approvalStatus: approvalStatus || undefined,
-    approvalNote: approvalNote || undefined,
-  }
+  const row: LeadPaymentLine = {}
+  if (amountVnd) row.amountVnd = amountVnd
+  if (collectedAt) row.collectedAt = collectedAt
+  if (receiptUrl) row.receiptUrl = receiptUrl
+  if (approvalStatus) row.approvalStatus = approvalStatus
+  if (approvalNote) row.approvalNote = approvalNote
+  return row
 }
 
 export function financeDraftToRecord(draft: LeadFinanceDraft): LeadFinanceRecord {
@@ -134,13 +134,15 @@ export function financeDraftToRecord(draft: LeadFinanceDraft): LeadFinanceRecord
   if (draft.reqFullNe && !fullNeStatus.includes('ĐÃ FULL NE')) {
     fullNeStatus = fullNeStatus || 'YÊU CẦU FULL NE'
   }
-  return {
+  const out: LeadFinanceRecord = {
     payments,
     declaredTotalVnd: sumFinanceDraft(draft),
     reqFullNe: draft.reqFullNe,
-    fullNeStatus: fullNeStatus || undefined,
-    n8nStatus: draft.n8nStatus.trim() || undefined,
   }
+  if (fullNeStatus) out.fullNeStatus = fullNeStatus
+  const n8n = draft.n8nStatus.trim()
+  if (n8n) out.n8nStatus = n8n
+  return out
 }
 
 function lineDirty(before: LeadPaymentLine | undefined, after: LeadPaymentLineDraft, newReceiptUrl?: string): boolean {
@@ -243,14 +245,13 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
     if (row) {
       if (resetApprovalSlots.includes(key)) {
         row.approvalStatus = ''
-        row.approvalNote = undefined
-      } else if (prev?.approvalStatus && !changed) {
-        row.approvalStatus = prev.approvalStatus
-        row.approvalNote = prev.approvalNote
-      } else if (prev?.approvalStatus && changed && !resetApprovalSlots.includes(key)) {
-        // Chỉ đổi ngày → giữ trạng thái duyệt.
-        row.approvalStatus = prev.approvalStatus
-        row.approvalNote = prev.approvalNote
+        delete row.approvalNote
+      } else if (prev?.approvalStatus && (!changed || !resetApprovalSlots.includes(key))) {
+        // Giữ duyệt khi không đổi tiền/file (kể cả chỉ đổi ngày).
+        if (!changed || !moneyOrReceiptDirty(prev, d)) {
+          row.approvalStatus = prev.approvalStatus
+          if (prev.approvalNote) row.approvalNote = prev.approvalNote
+        }
       }
       nextPayments[key] = row
     }
@@ -284,9 +285,9 @@ export function buildFinanceSavePlan(lead: Lead, draft: LeadFinanceDraft): Finan
     declaredTotalVnd: sumFinanceDraft(draft),
     enrollmentStatus: before?.enrollmentStatus?.trim() || 'MỚI',
     reqFullNe: draft.reqFullNe,
-    fullNeStatus: fullNeStatus || undefined,
-    n8nStatus: n8nStatus || undefined,
   }
+  if (fullNeStatus) firestoreFinance.fullNeStatus = fullNeStatus
+  if (n8nStatus) firestoreFinance.n8nStatus = n8nStatus
 
   return { firestoreFinance, triggerN8n, resetApprovalSlots, changedSlots }
 }

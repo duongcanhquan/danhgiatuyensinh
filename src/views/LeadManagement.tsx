@@ -202,6 +202,7 @@ import {
 import { nationalIdHashFromInput } from '../utils/leadIdentity'
 import { isFinanceDraftDirty, leadToFinanceDraft } from '../utils/leadFinance'
 import { describeFinanceDepositAudit } from '../utils/leadFinanceAudit'
+import { describeLeadCorePatchAudit } from '../utils/leadCoreFieldLabels'
 import { persistLeadFinance } from '../utils/persistLeadFinance'
 import { triggerInvitationN8n } from '../utils/n8nIntegration'
 import { BulkLeadActionBar, BULK_PRIORITY_TAG_OPTIONS } from '../components/bulk/BulkLeadActionBar'
@@ -6213,50 +6214,61 @@ function LeadDetailPanel({
     [pickListUsers, counselorUsers],
   )
 
-  const saveFinanceProfile = async () => {
+  const saveFinanceProfile = async (): Promise<boolean> => {
     if (!db || !profile) {
       setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
-      return
+      return false
     }
     if (!showCounselorProgressForm) {
       setMsg('Bạn không có quyền chỉnh tài chính hồ sơ này.')
-      return
+      return false
     }
     if (!financeDirty) {
       setMsg('Không có thay đổi tài chính.')
-      return
+      return false
     }
     setFinanceSaving(true)
     setMsg(null)
     try {
       const performer = profile.displayName?.trim() || profile.email || profile.id
-      const { finance, updatedAt, lastTouchedAt, receiptUploadWarnings } = await persistLeadFinance({
-        db,
-        lead,
-        draft: financeDraft,
-        counselorName: performer,
-      })
+      const { finance, updatedAt, lastTouchedAt, receiptUploadWarnings, n8nTriggered } =
+        await persistLeadFinance({
+          db,
+          lead,
+          draft: financeDraft,
+          counselorName: performer,
+        })
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'SYSTEM_UPDATE',
         description:
           describeFinanceDepositAudit(financeDraft) ??
-          'Cập nhật tài chính / chứng từ (upload + n8n nếu đổi tiền hoặc file)',
+          'Cập nhật tài chính / chứng từ',
         performedBy: profile.id,
         performedByName: performer,
       })
       const nextLead: Lead = { ...lead, finance, updatedAt, lastTouchedAt }
       setFinanceDraft(leadToFinanceDraft(nextLead))
       onUpdated({ finance, updatedAt, lastTouchedAt })
-      setMsg(
-        receiptUploadWarnings.length
-          ? `Đã lưu số tiền; chứng từ chưa lên: ${receiptUploadWarnings.join('; ')}`
-          : 'Đã lưu tài chính.',
-      )
+      const receiptOk = Object.values(finance?.payments ?? {}).some((p) => Boolean(p?.receiptUrl?.trim()))
+      const parts = ['Đã lưu tài chính.']
+      if (receiptUploadWarnings.length) {
+        parts.push(`Chứng từ chưa lên được: ${receiptUploadWarnings.join('; ')}`)
+      } else if (receiptOk) {
+        parts.push('Chứng từ đã lưu (R2/Drive/Storage).')
+      }
+      if (n8nTriggered) {
+        parts.push('Đã gửi tin báo thu sang n8n.')
+      } else {
+        parts.push('Chưa gửi n8n (không đổi tiền/bill).')
+      }
+      setMsg(parts.join(' '))
+      return true
     } catch (e) {
       console.error(e)
       const err = e instanceof Error ? e.message : 'Không lưu được tài chính.'
       setMsg(err)
+      return false
     } finally {
       setFinanceSaving(false)
     }
@@ -6370,9 +6382,7 @@ function LeadDetailPanel({
       await commitAuditLog(db, {
         leadId: lead.id,
         actionType: 'SYSTEM_UPDATE',
-        description: `Cập nhật thông tin hồ sơ (${Object.keys(corePatch).length} trường): ${Object.keys(corePatch)
-          .slice(0, 12)
-          .join(', ')}${Object.keys(corePatch).length > 12 ? '…' : ''}`,
+        description: describeLeadCorePatchAudit(corePatch),
         performedBy: profile.id,
         performedByName: performer,
       })
@@ -6427,9 +6437,13 @@ function LeadDetailPanel({
     }
     const hadFinance = financeDirty
     const hadCore = coreDirty
-    if (hadFinance) await saveFinanceProfile()
+    let financeOk = true
+    if (hadFinance) {
+      financeOk = await saveFinanceProfile()
+      if (!financeOk) return
+    }
     if (hadCore) await saveCoreProfile()
-    if (hadFinance && hadCore) setMsg('Đã lưu thông tin.')
+    if (hadFinance && hadCore && financeOk) setMsg('Đã lưu thông tin hồ sơ và tài chính.')
   }
 
   const saveUnified = async () => {
@@ -6585,9 +6599,7 @@ function LeadDetailPanel({
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'SYSTEM_UPDATE',
-          description: `Cập nhật thông tin hồ sơ (${Object.keys(corePatch).length} trường): ${Object.keys(corePatch)
-            .slice(0, 12)
-            .join(', ')}${Object.keys(corePatch).length > 12 ? '…' : ''}`,
+          description: describeLeadCorePatchAudit(corePatch),
           performedBy: profile.id,
           performedByName: performer,
         })
