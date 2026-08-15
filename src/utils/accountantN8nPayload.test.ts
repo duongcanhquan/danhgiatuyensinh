@@ -116,7 +116,12 @@ describe('accountantN8nPayload', () => {
     expect(body.awaiting_accountant).toBe(true)
     expect(String(body.message_vi)).toContain('Nguyen Van A')
     expect(String(body.message_vi)).toContain('bill.jpg')
-    expect(String(body.chat_text)).toContain('Chờ kế toán')
+    expect(String(body.message_vi)).toContain('Chờ kế toán')
+    expect(String(body.message_vi)).toContain('💰')
+    expect(body.google_chat_payload).toBeTruthy()
+    const gcp = body.google_chat_payload as { cardsV2?: unknown[]; text?: string }
+    expect(Array.isArray(gcp.cardsV2)).toBe(true)
+    expect(String(gcp.text)).toContain('📎')
     expect(Array.isArray(body.changed_slots)).toBe(true)
   })
 })

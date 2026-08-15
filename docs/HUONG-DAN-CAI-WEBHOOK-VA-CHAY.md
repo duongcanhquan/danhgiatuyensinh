@@ -63,7 +63,7 @@ URL trống = tắt luồng đó (không silent fallback hardcode sau khi đã l
 | payload tháng (`month`, `nbMonth`, …) | Báo cáo tháng |
 | `action: student_registration` | URL cổng đăng ký (`Cài đặt → Cổng đăng ký`) — CF `submitPublicLead` + `notifyCrmPortalRegistration` |
 
-**Google Chat:** trên n8n dùng `{{$json.message_vi}}` hoặc `chat_text`. App **không** gọi Chat API trực tiếp.
+**Google Chat:** app gửi sẵn `google_chat_payload` (text *in đậm* + cardsV2 nút xem bill). Trên n8n ưu tiên forward payload này; fallback `message_vi` / `chat_text`.
 
 ---
 

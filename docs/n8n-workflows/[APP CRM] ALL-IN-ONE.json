@@ -45,7 +45,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst textRaw = String(body.message_vi || body.chat_text || '').trim();\nif (!textRaw) return [];\nconst text = '🆕 [APP CRM]\\n' + textRaw;\nreturn [{ json: { google_chat_payload: { text } } }];"
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst fromApp = body.google_chat_payload && typeof body.google_chat_payload === 'object' ? body.google_chat_payload : null;\nif (fromApp && (fromApp.text || fromApp.cardsV2)) {\n  const text = String(fromApp.text || body.message_vi || body.chat_text || '').trim();\n  const payload = {\n    ...fromApp,\n    text: text ? (text.startsWith('🆕') ? text : '🆕 [APP CRM]\\n' + text) : fromApp.text,\n  };\n  return [{ json: { google_chat_payload: payload } }];\n}\nconst textRaw = String(body.message_vi || body.chat_text || '').trim();\nif (!textRaw) return [];\nconst text = '🆕 [APP CRM]\\n' + textRaw;\nreturn [{ json: { google_chat_payload: { text } } }];"
       },
       "id": "code-ctsv",
       "name": "Chuẩn hóa CTSV",

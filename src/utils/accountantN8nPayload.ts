@@ -3,6 +3,7 @@ import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
 import { resolveStudentDisplayCode } from './studentDisplayCode'
+import { buildGoogleChatPayload, chatBold } from './googleChatFinanceMessage'
 
 export function formatVnd(n: number): string {
   if (!n || Number.isNaN(n)) return '0 đ'
@@ -102,18 +103,20 @@ export function buildAccountantDecisionWebhookBody(
   const rejectReason = decision === 'TỪ CHỐI' ? String(approvalNote ?? line?.approvalNote ?? '').trim() : ''
 
   const decisionVi = decision === 'ĐỒNG Ý' ? 'DUYỆT' : 'TỪ CHỐI'
+  const decisionIcon = decision === 'ĐỒNG Ý' ? '✅' : '❌'
   const lines: string[] = [
-    `[KẾ TOÁN] ${decisionVi} — Lần ${batch}: ${slotLabel}`,
-    `Học sinh: ${studentName}${studentCode ? ` (${studentCode})` : ''}${studentPhone ? ` — ${studentPhone}` : ''}`,
-    `TVV: ${counselor.name}${counselor.email ? ` (${counselor.email})` : counselor.id ? ` [${counselor.id}]` : ''}`,
-    `Khoản này: ${formatVnd(amountVnd)}${collectedAt ? ` — ngày thu ${collectedAt}` : ''}`,
+    `${decisionIcon} ${chatBold(`KẾ TOÁN ${decisionVi}`)} — Lần ${batch}: ${slotLabel}`,
+    `👤 ${chatBold(studentName)}${studentCode ? ` (${studentCode})` : ''}${studentPhone ? ` — ${studentPhone}` : ''}`,
+    `🧑‍💼 TVV: ${counselor.name}${counselor.email ? ` (${counselor.email})` : counselor.id ? ` [${counselor.id}]` : ''}`,
+    `💵 Khoản này: ${chatBold(formatVnd(amountVnd))}${collectedAt ? ` — 📅 ${collectedAt}` : ''}`,
   ]
-  if (receiptUrl) lines.push(`Minh chứng (bill): ${receiptUrl}`)
-  if (rejectReason) lines.push(`Lý do từ chối: ${rejectReason}`)
-  lines.push(`Tổng đã ghi nhận trên hồ sơ: ${formatVnd(totalRecorded)}`)
-  lines.push(`Tổng kế toán đã duyệt (ĐỒNG Ý): ${formatVnd(totalApproved)}`)
-  if (ctx.scholarship1Label) lines.push(`Học bổng 1: ${ctx.scholarship1Label}`)
-  if (ctx.scholarship2Label) lines.push(`Học bổng 2: ${ctx.scholarship2Label}`)
+  if (receiptUrl) lines.push(`📎 Chứng từ: ${receiptUrl}`)
+  else lines.push(`⚠️ Không có link chứng từ trên hồ sơ`)
+  if (rejectReason) lines.push(`📝 Lý do từ chối: ${chatBold(rejectReason)}`)
+  lines.push(`📊 Tổng đã ghi nhận: ${chatBold(formatVnd(totalRecorded))}`)
+  lines.push(`✅ Tổng đã duyệt: ${chatBold(formatVnd(totalApproved))}`)
+  if (ctx.scholarship1Label) lines.push(`🎓 Học bổng 1: ${ctx.scholarship1Label}`)
+  if (ctx.scholarship2Label) lines.push(`🎓 Học bổng 2: ${ctx.scholarship2Label}`)
   const messageVi = lines.join('\n')
 
   const notificationTitle =
@@ -129,6 +132,21 @@ export function buildAccountantDecisionWebhookBody(
   ]
     .filter(Boolean)
     .join(' · ')
+
+  const googleChatPayload = buildGoogleChatPayload({
+    text: messageVi,
+    title: notificationTitle,
+    subtitle: `${slotLabel}: ${formatVnd(amountVnd)}`,
+    rows: [
+      { label: 'Học sinh', value: studentName },
+      { label: 'Quyết định', value: decisionVi },
+      { label: 'Số tiền', value: formatVnd(amountVnd) },
+      { label: 'TVV', value: counselor.name },
+    ],
+    buttons: receiptUrl.startsWith('http')
+      ? [{ label: '📎 Xem chứng từ', url: receiptUrl }]
+      : [],
+  })
 
   return {
     event: 'accountant_decision',
@@ -171,6 +189,7 @@ export function buildAccountantDecisionWebhookBody(
     chat_text: messageVi,
     notification_title: notificationTitle,
     notification_body: notificationBody,
+    google_chat_payload: googleChatPayload,
     full_data: fullData,
   }
 }
@@ -236,26 +255,63 @@ export function buildProfileFinanceUpdateWebhookBody(
     .join(' · ')
 
   const lines: string[] = [
-    `[TVV BÁO THU] ${studentName}${studentCode ? ` (${studentCode})` : ''}${studentPhone ? ` — ${studentPhone}` : ''}`,
-    `TVV: ${counselorName}${counselorEmail ? ` (${counselorEmail})` : ''}`,
+    `💰 ${chatBold('TVV BÁO THU')}`,
+    `👤 ${chatBold(studentName)}${studentCode ? ` (${studentCode})` : ''}${studentPhone ? ` — ${studentPhone}` : ''}`,
+    `🧑‍💼 TVV: ${chatBold(counselorName)}${counselorEmail ? ` (${counselorEmail})` : ''}`,
   ]
   for (const s of slotChanges) {
+    lines.push('')
     lines.push(
-      `• Lần ${s.batch} — ${s.slot_label}: ${s.amount_formatted}${s.collected_at ? ` (ngày ${s.collected_at})` : ''}`,
+      `💵 ${chatBold(`Lần ${s.batch} — ${s.slot_label}`)}: ${chatBold(s.amount_formatted)}${s.collected_at ? ` · 📅 ${s.collected_at}` : ''}`,
     )
-    if (s.receipt_url) lines.push(`  Bill: ${s.receipt_url}`)
-    if (s.pending_accountant) lines.push(`  ⏳ Chờ kế toán duyệt`)
+    if (s.receipt_url) {
+      lines.push(`📎 Chứng từ: ${s.receipt_url}`)
+    } else {
+      lines.push(`⚠️ Chưa có link chứng từ (TVV cần tải lại bill trên hồ sơ)`)
+    }
+    if (s.pending_accountant) lines.push(`⏳ ${chatBold('Chờ kế toán duyệt')}`)
   }
-  lines.push(`Tổng khai báo trên hồ sơ: ${formatVnd(totalRecorded)}`)
-  lines.push(`Tổng kế toán đã duyệt: ${formatVnd(totalApproved)}`)
-  if (ctx.scholarship1Label) lines.push(`Học bổng 1: ${ctx.scholarship1Label}`)
-  if (ctx.scholarship2Label) lines.push(`Học bổng 2: ${ctx.scholarship2Label}`)
-  lines.push(`Hệ: ${String(lead.educationLevel ?? '—')} · Ngành: ${String(lead.majorInterest ?? '—')}`)
+  lines.push('')
+  lines.push(`📊 Tổng khai báo: ${chatBold(formatVnd(totalRecorded))}`)
+  lines.push(`✅ Tổng đã duyệt: ${chatBold(formatVnd(totalApproved))}`)
+  if (ctx.scholarship1Label) lines.push(`🎓 Học bổng 1: ${ctx.scholarship1Label}`)
+  if (ctx.scholarship2Label) lines.push(`🎓 Học bổng 2: ${ctx.scholarship2Label}`)
+  lines.push(
+    `🏫 Hệ: ${String(lead.educationLevel ?? '—')} · Ngành: ${String(lead.majorInterest ?? '—')}`,
+  )
 
   const messageVi = lines.join('\n')
   const notificationTitle = primary
     ? `💰 Báo thu — ${studentName} (${primary.slot_label})`
     : `💰 Cập nhật tài chính — ${studentName}`
+
+  const cardRows: Array<{ label: string; value: string }> = [
+    { label: 'Học sinh', value: `${studentName}${studentCode ? ` (${studentCode})` : ''}` },
+    { label: 'TVV', value: counselorName },
+  ]
+  for (const s of slotChanges) {
+    cardRows.push({
+      label: `Lần ${s.batch} — ${s.slot_label}`,
+      value: `${s.amount_formatted}${s.collected_at ? ` · ${s.collected_at}` : ''}${s.pending_accountant ? ' · Chờ duyệt' : ''}`,
+    })
+  }
+  cardRows.push({ label: 'Tổng khai báo', value: formatVnd(totalRecorded) })
+  cardRows.push({ label: 'Tổng đã duyệt', value: formatVnd(totalApproved) })
+
+  const cardButtons = slotChanges
+    .filter((s) => s.receipt_url.startsWith('http'))
+    .map((s) => ({
+      label: `📎 Xem bill L${s.batch}`,
+      url: s.receipt_url,
+    }))
+
+  const googleChatPayload = buildGoogleChatPayload({
+    text: messageVi,
+    title: notificationTitle,
+    subtitle: batchSummary || undefined,
+    rows: cardRows,
+    buttons: cardButtons,
+  })
 
   return {
     event: 'update_profile',
@@ -290,6 +346,7 @@ export function buildProfileFinanceUpdateWebhookBody(
     chat_text: messageVi,
     notification_title: notificationTitle,
     notification_body: batchSummary || messageVi.split('\n').slice(0, 3).join(' · '),
+    google_chat_payload: googleChatPayload,
     full_data: fullData,
   }
 }

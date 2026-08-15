@@ -8,6 +8,7 @@ import { persistAccountantFullNe, persistAccountantPaymentDecision } from '../..
 import { useState } from 'react'
 import { leadHasPendingAccountantReview } from '../../utils/accountantFinanceFilter'
 import { useAuth } from '../../hooks/useAuth'
+import { AccountantReceiptPreview } from './AccountantReceiptPreview'
 
 function telHref(raw: string): string | null {
   const digits = raw.replace(/\D/g, '')
@@ -109,14 +110,7 @@ function PaymentSlotActions({
       </div>
 
       {line?.receiptUrl ? (
-        <a
-          href={line.receiptUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-sky-300 bg-sky-50 text-sm font-bold text-sky-900 active:bg-sky-100"
-        >
-          Xem minh chứng (bill)
-        </a>
+        <AccountantReceiptPreview url={line.receiptUrl} label={`Bill ${slotLabel}`} />
       ) : (
         <p className="mt-2 text-xs font-medium text-amber-800">Chưa có link bill</p>
       )}
