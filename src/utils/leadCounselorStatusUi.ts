@@ -3,16 +3,21 @@ import { LEAD_COUNSELOR_STATUS_LABELS, LEAD_COUNSELOR_STATUS_ORDER } from '../ty
 import { foldFinanceStatusText } from './paymentApprovalStatus'
 
 /**
- * Hồ sơ đã ghi danh / đã hoàn thiện phí — ẩn khỏi danh sách mặc định;
+ * Hồ sơ đã đủ tiền / bàn giao — ẩn khỏi danh sách TVV mặc định;
  * chỉ hiện khi lọc Tình trạng / Thu phí tương ứng, hoặc đang tìm mã/SĐT, hoặc xuất Excel.
- * «Đã cọc» vẫn hiện để TVV ưu tiên đẩy phí / hồ sơ mới.
+ * Gồm: CỌC THÀNH CÔNG, ĐÃ HOÀN THIỆN, Full NE, ENROLLED.
  */
 export const LEAD_COUNSELOR_STATUS_HIDDEN_BY_DEFAULT: readonly LeadCounselorStatus[] = [
   'ENROLLED',
 ] as const
 
-/** Lọc «Thu phí» mà cần thấy hồ sơ đã bàn giao. */
-const ENROLLMENT_FILTERS_SHOW_HANDOVER = new Set(['DA_HOAN_THIEN', 'GHI_DANH', 'FULL_NE'])
+/** Lọc «Thu phí» mà cần thấy hồ sơ đã bàn giao / đã cọc. */
+const ENROLLMENT_FILTERS_SHOW_HANDOVER = new Set([
+  'COC_THANH_CONG',
+  'DA_HOAN_THIEN',
+  'GHI_DANH',
+  'FULL_NE',
+])
 
 /** Trạng thái còn hiện khi lọc «Tất cả». */
 export const LEAD_COUNSELOR_STATUS_DEFAULT_VISIBLE: readonly LeadCounselorStatus[] =
@@ -25,7 +30,7 @@ function leadIsHandoverForList(lead: Pick<Lead, 'status' | 'pipelineStatus' | 'f
   const fn = foldFinanceStatusText(String(finance.fullNeStatus ?? ''))
   if (fn.includes('DA FULL')) return true
   const es = foldFinanceStatusText(String(finance.enrollmentStatus ?? ''))
-  return es.includes('DA HOAN THIEN')
+  return es.includes('DA HOAN THIEN') || es.includes('COC THANH CONG')
 }
 
 /** @deprecated dùng leadIsHandoverHiddenByDefault — giữ tên cũ cho import cũ. */
@@ -44,7 +49,7 @@ export function leadIsHandoverHiddenByDefault(
 /**
  * @param crmFilter — lọc Tình trạng CRM (`ALL` | LeadCounselorStatus)
  * @param searching — đang tìm theo ô tìm (mã/SĐT) → vẫn hiện hồ sơ đã bàn giao nếu khớp
- * @param enrollmentFilter — lọc Thu phí; khi chọn Đã hoàn thiện / Ghi danh / Full NE thì không ẩn mặc định
+ * @param enrollmentFilter — lọc Thu phí; khi chọn Cọc / Đã hoàn thiện / Ghi danh / Full NE thì không ẩn mặc định
  */
 export function leadMatchesCrmListVisibility(
   lead: Pick<Lead, 'status' | 'pipelineStatus' | 'finance'> | { status?: LeadCounselorStatus | string | null },
@@ -69,7 +74,7 @@ export function leadMatchesCrmListVisibility(
 export const LEAD_COUNSELOR_STATUS_HINTS: Record<LeadCounselorStatus, string> = {
   NEW: 'Chưa nộp / mới vào',
   INTERESTED: 'Nộp tiền xét tuyển (LPXT)',
-  DEPOSIT_PAID: 'Đã cọc — còn theo dõi học phí kỳ 1',
+  DEPOSIT_PAID: 'Đã cọc — đủ tiền theo Sheet (ẩn danh sách mặc định)',
   ENROLLED: 'Đã nhập học / hoàn thiện — bàn giao',
   SUMMER_MELT: 'Rút / hủy sau khi đã tiến xa',
   DEAD: 'Không còn theo đuổi',

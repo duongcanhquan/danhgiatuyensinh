@@ -5,6 +5,7 @@ export type SettingsSubTabId =
   | 'intake_staff'
   | 'master'
   | 'lead_profile'
+  | 'tuition'
   | 'scoring_profiles'
   | 'scoring'
   | 'classification'
@@ -99,6 +100,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   intake_staff: 'Nhập tư vấn viên',
   master: 'Danh mục nâng cao',
   lead_profile: 'Danh mục hồ sơ',
+  tuition: 'Học phí kỳ 1',
   scoring_profiles: 'Profile chấm điểm',
   scoring: 'Điểm thông tin',
   classification: 'Phân loại nhãn',
@@ -113,7 +115,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   omicall: 'Gọi điện',
   webhooks: 'Tự động hóa (n8n)',
   invite_docs: 'Giấy mời & mẫu',
-  receipts: 'Chứng từ & ngưỡng cọc',
+  receipts: 'Ngưỡng cọc & chứng từ',
   public_registration: 'Cổng đăng ký SV',
   comms: 'Email & tin nhắn',
 }
@@ -123,7 +125,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
  * Tư vấn tách riêng; Kênh chỉ lưới đầu nối (+ URL sâu).
  */
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
-  data: ['intake', 'intake_staff', 'lead_profile', 'master'],
+  data: ['intake', 'intake_staff', 'lead_profile', 'tuition', 'master'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
   advise: ['consulting'],
   connect: ['hub'],
@@ -167,6 +169,9 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   master: { main: 'data', sub: 'master' },
   lead_profile: { main: 'data', sub: 'lead_profile' },
   scholarships: { main: 'data', sub: 'lead_profile' },
+  tuition: { main: 'data', sub: 'tuition' },
+  hoc_phi: { main: 'data', sub: 'tuition' },
+  bang_hoc_phi: { main: 'data', sub: 'tuition' },
   catalog_profile: { main: 'data', sub: 'master' },
   scoring_profiles: { main: 'rules', sub: 'scoring_profiles' },
   scoring: { main: 'rules', sub: 'scoring' },
@@ -221,6 +226,7 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
       return ctx.canStaff
     case 'master':
     case 'lead_profile':
+    case 'tuition':
       return ctx.canMaster
     case 'scoring_profiles':
       return ctx.canScoringRules || ctx.canScoringProfilesTeam || ctx.canScoringProfilesOwn

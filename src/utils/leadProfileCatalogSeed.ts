@@ -21,6 +21,8 @@ export type ScholarshipSavePayload = {
   isActive: boolean
   /** Bắt buộc khi tạo mới — query danh mục theo trường. */
   orgId?: string
+  /** Liên kết `training_programs` — quyết định số kỳ & lọc trên hồ sơ. */
+  trainingProgramId?: string
   validFrom?: string
   validTo?: string
   applySlots?: ScholarshipApplySlot[]
@@ -193,6 +195,9 @@ export async function saveScholarshipRow(
   if (payload.termAllocationsVnd?.length) {
     body.termAllocationsVnd = payload.termAllocationsVnd.map((n) => Math.max(0, Math.round(Number(n) || 0)))
   } else if (id) body.termAllocationsVnd = null
+  const trainingProgramId = String(payload.trainingProgramId ?? '').trim()
+  if (trainingProgramId) body.trainingProgramId = trainingProgramId
+  else if (id) body.trainingProgramId = null
   await setDoc(ref, body, { merge: true })
   return ref.id
 }

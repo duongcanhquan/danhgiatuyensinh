@@ -158,9 +158,18 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Danh mục trên form hồ sơ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Chỉnh nguồn, học bổng, hệ đào tạo, cơ sở, niên khóa, ngành, tỉnh… theo tab dễ đọc.{' '}
-            <strong>Cùng dữ liệu</strong> với «Danh mục (nâng cao)» — chỉ khác cách hiển thị. TVV hàng ngày dùng tab này;
-            admin kỹ thuật có thể mở tab nâng cao.
+            Chỉnh nguồn, học bổng, hệ đào tạo, cơ sở, niên khóa, ngành, tỉnh… theo tab dễ đọc. Bảng giá học phí kỳ 1 nằm ở
+            tab riêng <strong>Học phí kỳ 1</strong> (cùng nhóm Hồ sơ).
+          </p>
+        </>
+      )
+    case 'tuition':
+      return (
+        <>
+          <p className="font-semibold text-slate-900">Học phí kỳ 1 theo ngành</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Khai mức học phí kỳ đầu theo tên ngành trên hồ sơ. Hệ thống trừ học bổng kỳ 1 để tính phải đóng và hoàn thiện
+            phí.
           </p>
         </>
       )
@@ -325,10 +334,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'receipts':
       return (
         <>
-          <p className="font-semibold text-slate-900">Chứng từ &amp; ngưỡng cọc</p>
+          <p className="font-semibold text-slate-900">Ngưỡng cọc &amp; chứng từ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Nơi lưu bill, ngưỡng cọc / LPXT, và bảng học phí kỳ 1 theo ngành — dùng khi kế toán duyệt và tính hoàn thiện
-            phí.
+            Ngưỡng cọc / LPXT và nơi lưu bill. <strong>Bảng học phí kỳ 1 theo ngành</strong> nằm ở nhóm{' '}
+            <strong>Hồ sơ → Danh mục hồ sơ → Học phí kỳ 1</strong>.
           </p>
         </>
       )
@@ -1187,6 +1196,16 @@ export function SettingsView() {
         </div>
       ) : null}
 
+      {db && activeSubTab === 'tuition' && canMaster ? (
+        <div role="tabpanel" aria-label="Học phí kỳ 1" className="bento-cell min-w-0 max-w-full space-y-3 !p-3 sm:!p-4">
+          <p className="text-sm text-slate-600">
+            Mỗi ngành một mức học phí kỳ đầu (khớp tên ngành trên hồ sơ). Dùng khi kế toán / TVV tính còn thiếu bao nhiêu
+            sau trừ học bổng.
+          </p>
+          <FinanceTuitionCatalogPanel />
+        </div>
+      ) : null}
+
       {db && activeSubTab === 'rule_templates' ? (
         <section
           role="tabpanel"
@@ -1360,13 +1379,25 @@ export function SettingsView() {
       {db && activeSubTab === 'receipts' && (canMaster || canOmicall) ? (
         <div role="tabpanel" aria-labelledby="tab-receipts" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
           <div className="mx-auto w-full max-w-7xl space-y-4">
-            <ConnectDetailBack title="Chứng từ & ngưỡng cọc" onBack={backToConnectHub} />
-            <ReceiptStorageSettingsPanel hideTitle />
+            <ConnectDetailBack title="Ngưỡng cọc & chứng từ" onBack={backToConnectHub} />
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-sm text-indigo-950">
+              <p className="font-semibold">Bảng học phí kỳ 1 nằm ở đâu?</p>
+              <p className="mt-1 text-xs leading-relaxed text-indigo-900/90">
+                Vào <strong>Cài đặt → Hồ sơ → Học phí kỳ 1</strong> (tab ngang cạnh Danh mục hồ sơ). Trang này chỉ còn
+                ngưỡng cọc và nơi lưu bill.
+              </p>
+              <Link
+                to="/settings?tab=data&sub=tuition"
+                className="mt-2 inline-flex text-xs font-semibold text-indigo-800 underline underline-offset-2 hover:text-indigo-950"
+              >
+                Mở bảng học phí kỳ 1 →
+              </Link>
+            </div>
             <div className="border-t border-slate-200 pt-4">
               <FinanceThresholdsSettingsPanel />
             </div>
             <div className="border-t border-slate-200 pt-4">
-              <FinanceTuitionCatalogPanel />
+              <ReceiptStorageSettingsPanel hideTitle />
             </div>
           </div>
         </div>

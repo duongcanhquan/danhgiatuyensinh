@@ -6,6 +6,7 @@ export type PublicCatalogOption = {
   id: string
   label: string
   departmentId?: string
+  departmentIds?: string[]
   labelEn?: string
 }
 

@@ -342,10 +342,11 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
   },
   {
     id: 'receipt_r2',
-    name: 'Lưu chứng từ (R2 / Drive)',
+    name: 'Ngưỡng cọc & chứng từ',
     group: 'storage',
     maturity: 'live',
-    summary: 'Upload bill qua Cloudflare R2 hoặc Drive Apps Script (cấu hình theo trường).',
+    summary:
+      'Ngưỡng cọc / LPXT và nơi lưu bill. Bảng học phí kỳ 1: Cài đặt → Hồ sơ → Học phí kỳ 1.',
     settingsHref: '/settings?tab=connect&sub=receipts',
     fields: [],
   },

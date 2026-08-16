@@ -69,13 +69,52 @@ export function labelsFromEntries(entries: readonly MasterDataEntry[] | undefine
     .sort((a, b) => a.localeCompare(b, 'vi'))
 }
 
+/** Id hệ gắn với chuyên ngành (gộp `departmentIds` + legacy `departmentId`). */
+export function majorLinkedProgramIds(
+  entry: Pick<MasterDataEntry, 'departmentId' | 'departmentIds'> | null | undefined,
+): string[] {
+  if (!entry) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of [...(entry.departmentIds ?? []), entry.departmentId]) {
+    const id = String(raw ?? '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
+}
+
+export function majorBelongsToTrainingProgram(
+  entry: Pick<MasterDataEntry, 'departmentId' | 'departmentIds'>,
+  trainingProgramId: string | null | undefined,
+): boolean {
+  const want = String(trainingProgramId ?? '').trim()
+  if (!want) return true
+  const linked = majorLinkedProgramIds(entry)
+  if (linked.length === 0) return true
+  return linked.includes(want)
+}
+
 export function majorsForTrainingProgram(
   majors: readonly MasterDataEntry[] | undefined,
   trainingProgramId: string | null,
 ): MasterDataEntry[] {
   const active = activeMasterEntries(majors)
   if (!trainingProgramId) return active
-  return active.filter((m) => !m.departmentId || m.departmentId === trainingProgramId)
+  return active.filter((m) => majorBelongsToTrainingProgram(m, trainingProgramId))
+}
+
+/** Ghi patch khi admin chọn nhiều hệ cho ngành. */
+export function patchMajorTrainingPrograms(programIds: readonly string[]): Pick<
+  MasterDataEntry,
+  'departmentId' | 'departmentIds'
+> {
+  const ids = [...new Set(programIds.map((x) => String(x).trim()).filter(Boolean))]
+  if (ids.length === 0) {
+    return { departmentId: undefined, departmentIds: undefined }
+  }
+  return { departmentIds: ids, departmentId: ids[0] }
 }
 
 export function resolveTrainingProgramId(

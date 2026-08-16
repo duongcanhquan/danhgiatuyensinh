@@ -123,9 +123,11 @@ export function StudentRegistrationView() {
   const majorOptions = useMemo(() => {
     const list = meta?.majors ?? []
     if (!selectedProgram) return []
-    return list.filter(
-      (m) => !m.departmentId || m.departmentId === selectedProgram.id,
-    )
+    return list.filter((m) => {
+      const linked = [...(m.departmentIds ?? []), m.departmentId].filter(Boolean).map(String)
+      if (linked.length === 0) return true
+      return linked.includes(selectedProgram.id)
+    })
   }, [meta?.majors, selectedProgram])
 
   const applicantCategoryOptions = useMemo((): ApplicantCategoryOption[] => {

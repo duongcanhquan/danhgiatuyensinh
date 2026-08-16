@@ -49,6 +49,9 @@ function parseScholarshipDoc(id: string, data: Record<string, unknown>): Scholar
     isActive: data.isActive === false ? false : true,
     ...(termCount ? { termCount } : {}),
     ...(termAllocationsVnd?.length ? { termAllocationsVnd } : {}),
+    ...(String(data.trainingProgramId ?? '').trim()
+      ? { trainingProgramId: String(data.trainingProgramId).trim() }
+      : {}),
     eligibilityNotes: data.eligibilityNotes != null ? String(data.eligibilityNotes) : undefined,
     applicationMethod: data.applicationMethod != null ? String(data.applicationMethod) : undefined,
     targetAudience: data.targetAudience != null ? String(data.targetAudience) : undefined,

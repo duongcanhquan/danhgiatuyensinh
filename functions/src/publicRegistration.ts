@@ -79,7 +79,13 @@ type CounselorLite = {
   showOnPublicRegistrationPortal: boolean
 }
 
-type CatalogOption = { id: string; label: string; departmentId?: string; labelEn?: string }
+type CatalogOption = {
+  id: string
+  label: string
+  departmentId?: string
+  departmentIds?: string[]
+  labelEn?: string
+}
 
 function str(v: unknown): string {
   return String(v ?? '').trim()
@@ -326,11 +332,23 @@ function parseCatalogEntries(data: Record<string, unknown> | undefined): Catalog
     if (!label) continue
     const id = str(o.id) || label
     const departmentId = str(o.departmentId) || undefined
+    const departmentIdsRaw = Array.isArray(o.departmentIds)
+      ? o.departmentIds.map((x) => str(x)).filter(Boolean)
+      : []
+    const departmentIds =
+      departmentIdsRaw.length > 0
+        ? departmentIdsRaw
+        : departmentId
+          ? [departmentId]
+          : undefined
     const labelEn = str(o.labelEn) || undefined
     out.push({
       id,
       label,
-      ...(departmentId ? { departmentId } : {}),
+      ...(departmentId || departmentIds?.[0]
+        ? { departmentId: departmentId || departmentIds![0] }
+        : {}),
+      ...(departmentIds?.length ? { departmentIds } : {}),
       ...(labelEn ? { labelEn } : {}),
     })
   }
@@ -564,7 +582,14 @@ function validatePublicLeadInput(
     const majorOk = catalogs.majors.some((m) => {
       if (m.label !== major && m.id !== major) return false
       if (!program?.id) return true
-      return !m.departmentId || m.departmentId === program.id
+      const linked = [
+        ...(Array.isArray(m.departmentIds) ? m.departmentIds : []),
+        m.departmentId,
+      ]
+        .map((x) => String(x || '').trim())
+        .filter(Boolean)
+      if (linked.length === 0) return true
+      return linked.includes(program.id)
     })
     if (!majorOk) return 'Ngành học không khớp hệ đào tạo đã chọn.'
   }

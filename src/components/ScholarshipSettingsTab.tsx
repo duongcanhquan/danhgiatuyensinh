@@ -15,6 +15,7 @@ import {
 } from '../types'
 import { useScholarships } from '../hooks/useScholarships'
 import { useOrg } from '../contexts/OrgProvider'
+import { useMasterData } from '../hooks/useMasterData'
 import {
   saveScholarshipRow,
   seedDefaultScholarships,
@@ -29,6 +30,13 @@ import {
   SCHOLARSHIP_SCHEDULE_STATUS_LABELS,
 } from '../utils/scholarshipEligibility'
 import { equalSplitTermAllocations } from '../utils/financeObligation'
+import {
+  findTrainingProgramEntry,
+  resolveTrainingProgramTermCount,
+  scholarshipCategoryFromTrainingLabel,
+} from '../utils/scholarshipTrainingLink'
+import { activeMasterEntries } from '../utils/masterDataCatalogOps'
+import type { MasterDataEntry } from '../types'
 
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30 disabled:bg-slate-50'
@@ -56,6 +64,7 @@ function emptyDraft(sortOrder: number): Draft {
     adminNotes: '',
     applicationMethod: '',
     quantityLimit: undefined,
+    trainingProgramId: undefined,
     termCount: undefined,
     termAllocationsVnd: undefined,
   }
@@ -78,6 +87,7 @@ function draftFromRow(row: ScholarshipRecord): Draft {
     adminNotes: row.adminNotes ?? '',
     applicationMethod: row.applicationMethod ?? '',
     quantityLimit: row.quantityLimit,
+    trainingProgramId: row.trainingProgramId,
     termCount: row.termCount,
     termAllocationsVnd: row.termAllocationsVnd,
   }
@@ -91,6 +101,7 @@ function payloadFromDraft(d: Draft, orgId?: string): ScholarshipSavePayload {
     sortOrder: d.sortOrder,
     isActive: d.isActive,
     ...(orgId ? { orgId } : {}),
+    trainingProgramId: d.trainingProgramId?.trim() || undefined,
     validFrom: d.validFrom?.trim() || undefined,
     validTo: d.validTo?.trim() || undefined,
     applySlots: d.applySlots?.length ? d.applySlots : ['slot1', 'slot2'],
@@ -124,6 +135,8 @@ function statusBadgeClass(status: ReturnType<typeof scholarshipScheduleStatus>):
 export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit: boolean }) {
   const { items, loading, error } = useScholarships()
   const { effectiveOrgId } = useOrg()
+  const { byKind } = useMasterData()
+  const trainingPrograms = useMemo(() => activeMasterEntries(byKind.training_programs), [byKind.training_programs])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
@@ -174,9 +187,8 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
       <header className="space-y-1">
         <h3 className="text-sm font-bold uppercase tracking-wide text-violet-900">Cài đặt học bổng</h3>
         <p className="text-sm text-slate-600">
-          Quản lý bảng học bổng theo <strong>Hệ</strong>, <strong>thời gian áp dụng</strong>,{' '}
-          <strong>hình thức trừ học phí</strong>, <strong>đối tượng</strong> và <strong>số lượng suất</strong>. TVV chọn
-          trên hồ sơ (Học bổng 1 / 2) — chỉ hiện mục đang trong hạn.
+          Gắn học bổng với <strong>hệ đào tạo</strong> trong danh mục (Cao đẳng 6 kỳ, Trung cấp, Sơ cấp…). Chọn hệ → tự
+          hiện đủ ô phân bổ theo số kỳ. Trên hồ sơ, TVV chỉ thấy HB đúng hệ và trừ ngay vào phải đóng kỳ 1.
         </p>
       </header>
 
@@ -234,6 +246,7 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
           title="Thêm học bổng mới"
           draft={newDraft}
           busy={busy}
+          trainingPrograms={trainingPrograms}
           onChange={setNewDraft}
           onCancel={() => setEditingId(null)}
           onSubmit={onCreate}
@@ -255,8 +268,14 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
                       {SCHOLARSHIP_SCHEDULE_STATUS_LABELS[status]}
                     </span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                      {SCHOLARSHIP_CATEGORY_LABELS[row.category]}
+                      {findTrainingProgramEntry(trainingPrograms, row.trainingProgramId)?.label ??
+                        SCHOLARSHIP_CATEGORY_LABELS[row.category]}
                     </span>
+                    {row.termCount ? (
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-900">
+                        {row.termCount} kỳ
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-sm font-semibold text-violet-900">{formatVnd(row.amountVnd)}</p>
                   <p className="mt-1 text-xs text-slate-600">
@@ -311,6 +330,7 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
                     row={row}
                     busy={busy}
                     orgId={effectiveOrgId}
+                    trainingPrograms={trainingPrograms}
                     onCancel={() => setEditingId(null)}
                     onSave={(payload) =>
                       run(async () => {
@@ -339,19 +359,26 @@ function ScholarshipEditorInline({
   row,
   busy,
   orgId,
+  trainingPrograms,
   onCancel,
   onSave,
 }: {
   row: ScholarshipRecord
   busy: boolean
   orgId: string
+  trainingPrograms: readonly MasterDataEntry[]
   onCancel: () => void
   onSave: (payload: ScholarshipSavePayload) => void
 }) {
   const [draft, setDraft] = useState(() => draftFromRow(row))
   return (
     <>
-      <ScholarshipFormFields draft={draft} busy={busy} onChange={setDraft} />
+      <ScholarshipFormFields
+        draft={draft}
+        busy={busy}
+        trainingPrograms={trainingPrograms}
+        onChange={setDraft}
+      />
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
@@ -378,6 +405,7 @@ function ScholarshipEditorCard({
   title,
   draft,
   busy,
+  trainingPrograms,
   onChange,
   onCancel,
   onSubmit,
@@ -386,6 +414,7 @@ function ScholarshipEditorCard({
   title: string
   draft: Draft
   busy: boolean
+  trainingPrograms: readonly MasterDataEntry[]
   onChange: (d: Draft) => void
   onCancel: () => void
   onSubmit: (e: FormEvent) => void
@@ -394,7 +423,12 @@ function ScholarshipEditorCard({
   return (
     <form onSubmit={onSubmit} className="rounded-xl border border-violet-100 bg-violet-50/40 p-4">
       <h4 className="text-sm font-bold text-violet-900">{title}</h4>
-      <ScholarshipFormFields draft={draft} busy={busy} onChange={onChange} />
+      <ScholarshipFormFields
+        draft={draft}
+        busy={busy}
+        trainingPrograms={trainingPrograms}
+        onChange={onChange}
+      />
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="submit"
@@ -419,10 +453,12 @@ function ScholarshipEditorCard({
 function ScholarshipFormFields({
   draft,
   busy,
+  trainingPrograms,
   onChange,
 }: {
   draft: Draft
   busy: boolean
+  trainingPrograms: readonly MasterDataEntry[]
   onChange: (d: Draft) => void
 }) {
   const patch = <K extends keyof Draft>(key: K, value: Draft[K]) => onChange({ ...draft, [key]: value })
@@ -438,14 +474,50 @@ function ScholarshipFormFields({
     patch('audienceTags', cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag])
   }
 
+  const applyTrainingProgram = (programId: string) => {
+    if (!programId) {
+      onChange({ ...draft, trainingProgramId: undefined })
+      return
+    }
+    const entry = findTrainingProgramEntry(trainingPrograms, programId)
+    const n = resolveTrainingProgramTermCount(entry)
+    onChange({
+      ...draft,
+      trainingProgramId: programId,
+      category: scholarshipCategoryFromTrainingLabel(entry?.label ?? ''),
+      termCount: n,
+      termAllocationsVnd: equalSplitTermAllocations(draft.amountVnd, n),
+    })
+  }
+
   return (
     <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">
         Tên học bổng
         <input className={`${INPUT} mt-0.5`} value={draft.label} disabled={busy} onChange={(e) => patch('label', e.target.value)} required />
       </label>
+      <label className="text-xs font-semibold sm:col-span-2">
+        Hệ đào tạo (danh mục)
+        <select
+          className={`${INPUT} mt-0.5`}
+          value={draft.trainingProgramId ?? ''}
+          disabled={busy}
+          onChange={(e) => applyTrainingProgram(e.target.value)}
+        >
+          <option value="">— Chọn hệ để gắn số kỳ —</option>
+          {trainingPrograms.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+              {p.termCount ? ` · ${p.termCount} kỳ` : ` · gợi ý ${resolveTrainingProgramTermCount(p)} kỳ`}
+            </option>
+          ))}
+        </select>
+        <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
+          Thêm hệ (Trung cấp, Sơ cấp…) ở tab «Hệ đào tạo» và khai số kỳ — chọn ở đây để tự hiện đủ ô phân bổ.
+        </span>
+      </label>
       <label className="text-xs font-semibold">
-        Hệ đào tạo
+        Nhóm hiển thị (cũ)
         <select
           className={`${INPUT} mt-0.5`}
           value={draft.category}
@@ -467,7 +539,15 @@ function ScholarshipFormFields({
           value={draft.amountVnd || ''}
           disabled={busy}
           min={0}
-          onChange={(e) => patch('amountVnd', Number(e.target.value) || 0)}
+          onChange={(e) => {
+            const amountVnd = Number(e.target.value) || 0
+            const n = draft.termCount
+            onChange({
+              ...draft,
+              amountVnd,
+              termAllocationsVnd: n && n > 0 ? equalSplitTermAllocations(amountVnd, n) : draft.termAllocationsVnd,
+            })
+          }}
         />
       </label>
       <label className="text-xs font-semibold">
@@ -479,13 +559,10 @@ function ScholarshipFormFields({
           disabled={busy}
           min={0}
           max={20}
-          placeholder="VD: 5"
+          placeholder="VD: 6"
           onChange={(e) => {
             const n = e.target.value === '' ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0))
-            const nextAlloc =
-              n && n > 0
-                ? equalSplitTermAllocations(draft.amountVnd, n)
-                : undefined
+            const nextAlloc = n && n > 0 ? equalSplitTermAllocations(draft.amountVnd, n) : undefined
             onChange({ ...draft, termCount: n, termAllocationsVnd: nextAlloc })
           }}
         />
@@ -493,7 +570,9 @@ function ScholarshipFormFields({
       {draft.termCount && draft.termCount > 0 ? (
         <div className="sm:col-span-2 lg:col-span-3 space-y-2 rounded-lg border border-violet-100 bg-violet-50/40 p-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-violet-950">Tiền từng kỳ (kỳ 1 trừ vào học phí đầu)</p>
+            <p className="text-xs font-semibold text-violet-950">
+              Tiền từng kỳ ({draft.termCount} kỳ — kỳ 1 trừ vào học phí đầu)
+            </p>
             <button
               type="button"
               disabled={busy}
@@ -508,7 +587,7 @@ function ScholarshipFormFields({
               Chia đều
             </button>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {Array.from({ length: draft.termCount }, (_, i) => (
               <label key={i} className="text-xs font-medium text-slate-700">
                 Kỳ {i + 1}

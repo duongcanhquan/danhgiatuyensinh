@@ -1,5 +1,5 @@
 import type { LeadSourceRecord, ScholarshipRecord } from '../types'
-import { formatScholarshipOptionLabel } from './leadProfileCatalogDefaults'
+import { formatScholarshipOptionLabel, formatVnd } from './leadProfileCatalogDefaults'
 import { parseLeadWorkMode } from './leadWorkMode'
 import {
   isScholarshipCurrentlyValid,
@@ -50,6 +50,7 @@ export function mapScholarshipDoc(id: string, data: Record<string, unknown>): Sc
     applicationMethod: String(data.applicationMethod ?? '').trim() || undefined,
     quantityLimit:
       data.quantityLimit != null && Number(data.quantityLimit) >= 0 ? Number(data.quantityLimit) : undefined,
+    trainingProgramId: String(data.trainingProgramId ?? '').trim() || undefined,
     termCount:
       data.termCount != null && Number(data.termCount) > 0 ? Math.round(Number(data.termCount)) : undefined,
     termAllocationsVnd: Array.isArray(data.termAllocationsVnd)
@@ -77,8 +78,19 @@ export function activeScholarships(items: readonly ScholarshipRecord[]): Scholar
     )
 }
 
-export function scholarshipSelectLabel(s: Pick<ScholarshipRecord, 'label' | 'amountVnd'>): string {
-  return formatScholarshipOptionLabel(s.label, s.amountVnd)
+export function scholarshipSelectLabel(
+  s: Pick<ScholarshipRecord, 'label' | 'amountVnd' | 'termAllocationsVnd' | 'termCount'>,
+): string {
+  const base = formatScholarshipOptionLabel(s.label, s.amountVnd)
+  const alloc = Array.isArray(s.termAllocationsVnd) ? s.termAllocationsVnd : []
+  let term1 = alloc.length > 0 ? Math.round(Number(alloc[0]) || 0) : 0
+  if (term1 <= 0) {
+    const terms = Math.round(Number(s.termCount) || 0)
+    const total = Math.round(Number(s.amountVnd) || 0)
+    if (terms >= 1 && total > 0) term1 = Math.round(total / terms)
+  }
+  if (term1 > 0) return `${base} · trừ kỳ 1 ${formatVnd(term1)}`
+  return base
 }
 
 export function normalizeNationalIdInput(nationalId: string, notAvailable: boolean): string {

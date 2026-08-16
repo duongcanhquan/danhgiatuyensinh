@@ -4115,11 +4115,11 @@ export function LeadManagement() {
                 <FilterSelect
                   compact
                   label="Tình trạng"
-                  title="Tình trạng tư vấn. Đã ghi danh / đã hoàn thiện phí ẩn mặc định — lọc để xem lại hoặc xuất Excel."
+                  title="Tình trạng tư vấn. Cọc thành công / hoàn thiện / ghi danh ẩn mặc định — lọc Thu phí hoặc Tình trạng để xem lại."
                   value={draftFilters.crm}
                   onChange={(v) => patchDraftFilters({ crm: v })}
                   options={[
-                    { v: 'ALL', t: 'Tất cả (ẩn Đã cọc)' },
+                    { v: 'ALL', t: 'Tất cả (ẩn đã cọc / hoàn thiện)' },
                     ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({
                       v: k,
                       t: LEAD_COUNSELOR_STATUS_LABELS[k],

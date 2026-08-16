@@ -17,7 +17,7 @@
 |---|---|---|
 | 0 | MỚI | Yes |
 | > 0 và &lt; ngưỡng cọc | ĐANG HOÀN THIỆN | Yes |
-| ≥ ngưỡng cọc và &lt; phải đóng kỳ 1 | CỌC THÀNH CÔNG | Yes |
+| ≥ ngưỡng cọc và &lt; phải đóng kỳ 1 | CỌC THÀNH CÔNG | No (Sheet: đã xong) |
 | ≥ phải đóng kỳ 1 và đủ field | ĐÃ HOÀN THIỆN | No (handover) |
 | CRM ENROLLED | — | No (handover) |
 
@@ -39,10 +39,12 @@ phải đóng kỳ 1 = max(0, học phí ngành kỳ 1 − HB1[kỳ1] − HB2[k�
 
 ## Surfaces
 
-- Accountant queue: pending = unpaid approvals OR approved &lt; dueTerm1 (includes deposit-only).
-- Lead list / TVV: hide ĐÃ HOÀN THIỆN + ENROLLED by default.
+- Accountant queue: pending = unpaid approvals OR in-progress (chưa CỌC / chưa hoàn thiện). Sheet `CỌC THÀNH CÔNG` = out of queue (unless new unpaid slot).
+- Lead list / TVV: hide CỌC THÀNH CÔNG + ĐÃ HOÀN THIỆN + Full NE + ENROLLED by default (lọc Thu phí để xem lại).
+- Full NE confirm = đánh dấu đủ tiền → ĐÃ HOÀN THIỆN (tương đương đóng hết).
 - Cards: show học phí · HB kỳ 1 · phải đóng · đã duyệt · còn thiếu.
 - Excel handover: add obligation columns.
+- Admin: **Cài đặt → Hồ sơ → Học phí kỳ 1** (tab ngang). Ngưỡng cọc / chứng từ: **Kênh → Ngưỡng cọc & chứng từ**.
 
 ## Non-goals (v1)
 

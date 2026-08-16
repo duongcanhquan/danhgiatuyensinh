@@ -30,6 +30,8 @@ import { MasterCatalogEditor } from './MasterCatalogEditor'
 
 import { ScholarshipSettingsTab } from './ScholarshipSettingsTab'
 
+import { FinanceTuitionCatalogPanel } from './FinanceTuitionCatalogPanel'
+
 
 
 const INPUT =
@@ -41,6 +43,7 @@ const INPUT =
 export type LeadProfileSettingsSubTab =
   | 'sources'
   | 'scholarships'
+  | 'tuition'
   | 'training'
   | 'majors'
   | 'applicants'
@@ -51,8 +54,9 @@ export type LeadProfileSettingsSubTab =
 const SUB_TABS: { id: LeadProfileSettingsSubTab; label: string; hint: string }[] = [
   { id: 'sources', label: 'Nguồn', hint: 'Nguồn 1 / 2 trên hồ sơ' },
   { id: 'scholarships', label: 'Học bổng', hint: 'Bảng học bổng — khớp tên khi import Sheet cũ' },
+  { id: 'tuition', label: 'Học phí kỳ 1', hint: 'Giá ngành — trừ HB để tính phải đóng / hoàn thiện' },
   { id: 'training', label: 'Hệ đào tạo', hint: 'Danh sách hệ — học sinh chọn trên hồ sơ' },
-  { id: 'majors', label: 'Chuyên ngành', hint: 'Gắn với hệ đào tạo (departmentId)' },
+  { id: 'majors', label: 'Chuyên ngành', hint: 'Một ngành gắn được nhiều hệ đào tạo' },
   { id: 'applicants', label: 'Đối tượng', hint: 'Đối tượng dự tuyển — cổng đăng ký & hồ sơ' },
   { id: 'campus', label: 'Cơ sở & niên khóa', hint: 'Cơ sở học + niên khóa — import Sheet + form hồ sơ' },
   { id: 'geo', label: 'Địa lý & THPT', hint: 'Tỉnh, quận/huyện, trường THPT' },
@@ -63,6 +67,7 @@ function parseProfileSub(raw: string | null): LeadProfileSettingsSubTab | null {
   if (
     raw === 'sources' ||
     raw === 'scholarships' ||
+    raw === 'tuition' ||
     raw === 'training' ||
     raw === 'majors' ||
     raw === 'applicants' ||
@@ -130,18 +135,42 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
         <h2 className="text-base font-bold text-slate-900">Hồ sơ &amp; danh mục tuyển sinh</h2>
 
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
-
-          Quản lý danh mục dùng trên form hồ sơ: nguồn, học bổng, hệ đào tạo, cơ sở, niên khóa, chuyên ngành, địa lý… TVV có thể
-
-          gõ tìm hoặc thêm giá trị mới trực tiếp khi nhập hồ sơ.
-
+          Quản lý danh mục trên form hồ sơ: nguồn, học bổng, hệ, ngành… Bảng{' '}
+          <strong>học phí kỳ 1</strong> nằm ở tab ngang <strong>Hồ sơ → Học phí kỳ 1</strong> (cạnh «Danh mục hồ sơ»).
         </p>
+
+        <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          <p className="font-semibold">Cần khai học phí theo ngành?</p>
+          <p className="mt-0.5 text-xs text-emerald-900/90">
+            Bấm tab <strong>Học phí kỳ 1</strong> trên thanh điều hướng nhóm Hồ sơ (cùng hàng với Nhập liệu / Danh mục hồ
+            sơ), hoặc nút bên dưới.
+          </p>
+          <button
+            type="button"
+            className="mt-2 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
+            onClick={() =>
+              setSearchParams(
+                (prev) => {
+                  const n = new URLSearchParams(prev)
+                  n.set('tab', 'data')
+                  n.set('sub', 'tuition')
+                  n.delete('profileSub')
+                  return n
+                },
+                { replace: true },
+              )
+            }
+          >
+            Mở Học phí kỳ 1
+          </button>
+        </div>
 
         <nav className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Nhóm cài đặt hồ sơ">
 
           {SUB_TABS.map((t) => {
 
             const selected = sub === t.id
+            const isTuition = t.id === 'tuition'
 
             return (
 
@@ -157,7 +186,22 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
                 title={t.hint}
 
-                onClick={() => setSub(t.id)}
+                onClick={() => {
+                  if (isTuition) {
+                    setSearchParams(
+                      (prev) => {
+                        const n = new URLSearchParams(prev)
+                        n.set('tab', 'data')
+                        n.set('sub', 'tuition')
+                        n.delete('profileSub')
+                        return n
+                      },
+                      { replace: true },
+                    )
+                    return
+                  }
+                  setSub(t.id)
+                }}
 
                 className={[
 
@@ -167,7 +211,9 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
                     ? 'bg-indigo-700 text-white shadow-sm'
 
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                    : isTuition
+                      ? 'border-2 border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100'
+                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
 
                 ].join(' ')}
 
@@ -191,26 +237,46 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
       {sub === 'scholarships' ? <ScholarshipSettingsTab db={db} canEdit={canEdit} /> : null}
 
+      {sub === 'tuition' ? (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            Khai mức học phí kỳ đầu theo ngành (khớp tên ngành trên hồ sơ). Hệ thống trừ học bổng kỳ 1 để biết phải đóng
+            bao nhiêu và khi nào hoàn thiện phí.
+          </p>
+          <FinanceTuitionCatalogPanel />
+        </div>
+      ) : null}
+
       {sub === 'training' ? (
-
         <MasterCatalogEditor
-
           catalogId="training_programs"
-
           title="Hệ đào tạo"
-
-          description="Ví dụ: PHCD, CD CQ, 9+4, Liên thông — học sinh chọn trên tab Học tập của hồ sơ."
-
+          description="Ví dụ: Cao đẳng, Trung cấp, Sơ cấp — học sinh chọn trên tab Học tập. Cột «Số kỳ» dùng khi tạo học bổng (phân bổ tiền theo kỳ)."
           entries={trainingPrograms}
-
           loading={mdLoading}
-
           db={db}
-
           canEdit={canEdit}
-
+          extraColumn={{
+            label: 'Số kỳ',
+            render: (entry, onPatch, disabled) => (
+              <input
+                type="number"
+                min={1}
+                max={20}
+                className={INPUT}
+                value={entry.termCount ?? ''}
+                disabled={disabled}
+                placeholder="VD: 6"
+                title="Số kỳ học / kỳ phân bổ học bổng"
+                onChange={(e) =>
+                  onPatch({
+                    termCount: e.target.value === '' ? undefined : Math.max(1, Math.round(Number(e.target.value) || 0)),
+                  })
+                }
+              />
+            ),
+          }}
         />
-
       ) : null}
 
       {sub === 'majors' ? (
@@ -221,7 +287,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
           title="Chuyên ngành"
 
-          description="Chọn hệ đào tạo tương ứng để lọc ngành trên form hồ sơ. Mục không gắn hệ sẽ hiện với mọi hệ."
+          description="Một ngành có thể thuộc nhiều hệ (cao đẳng, trung cấp, sơ cấp…). Không chọn hệ nào = hiện với mọi hệ."
 
           entries={byKind.majors ?? []}
 
@@ -233,37 +299,54 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
           extraColumn={{
 
-            label: 'Thuộc hệ',
+            label: 'Thuộc hệ (nhiều)',
 
-            render: (entry, onPatch, disabled) => (
+            render: (entry, onPatch, disabled) => {
 
-              <select
+              const selected = new Set(
+                [...(entry.departmentIds ?? []), entry.departmentId].filter(Boolean).map(String),
+              )
 
-                className={INPUT}
-
-                value={entry.departmentId ?? ''}
-
-                disabled={disabled}
-
-                onChange={(e) => onPatch({ departmentId: e.target.value || undefined })}
-
-              >
-
-                <option value="">— Mọi hệ —</option>
-
-                {trainingPrograms.map((p) => (
-
-                  <option key={p.id} value={p.id}>
-
-                    {p.label}
-
-                  </option>
-
-                ))}
-
-              </select>
-
-            ),
+              return (
+                <div className="max-h-28 min-w-[10rem] space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-white px-2 py-1.5">
+                  {trainingPrograms.length === 0 ? (
+                    <p className="text-xs text-slate-500">Chưa có hệ — tạo ở tab Hệ đào tạo.</p>
+                  ) : (
+                    trainingPrograms.map((p) => {
+                      const checked = selected.has(p.id)
+                      return (
+                        <label
+                          key={p.id}
+                          className="flex cursor-pointer items-start gap-1.5 text-xs text-slate-800"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            disabled={disabled}
+                            checked={checked}
+                            onChange={() => {
+                              const next = new Set(selected)
+                              if (checked) next.delete(p.id)
+                              else next.add(p.id)
+                              const ids = [...next]
+                              if (ids.length === 0) {
+                                onPatch({ departmentId: undefined, departmentIds: undefined })
+                              } else {
+                                onPatch({ departmentIds: ids, departmentId: ids[0] })
+                              }
+                            }}
+                          />
+                          <span>{p.label}</span>
+                        </label>
+                      )
+                    })
+                  )}
+                  {selected.size === 0 ? (
+                    <p className="pt-0.5 text-[10px] text-slate-500">Đang: mọi hệ</p>
+                  ) : null}
+                </div>
+              )
+            },
 
           }}
 

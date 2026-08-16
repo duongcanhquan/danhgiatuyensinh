@@ -81,10 +81,10 @@ export function FinanceTuitionCatalogPanel() {
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900">Học phí kỳ 1 theo ngành</h3>
-        <p className="mt-0.5 text-xs text-slate-600">
+        <h3 className="text-base font-semibold text-slate-900">Bảng học phí kỳ 1 theo ngành</h3>
+        <p className="mt-0.5 text-sm text-slate-600">
           Mỗi ngành (và hệ, nếu cần) có một mức học phí kỳ đầu. Hệ thống trừ học bổng kỳ 1 rồi so với tổng đã duyệt
-          để biết còn thiếu bao nhiêu / khi nào hoàn thiện phí. Trường: {currentOrgLabel || effectiveOrgId}.
+          để biết còn thiếu bao nhiêu. Trường: {currentOrgLabel || effectiveOrgId}.
         </p>
       </div>
 

@@ -837,10 +837,17 @@ export interface MasterDataEntry {
   numericMin?: number
   /** Biên trên (lte, between). */
   numericMax?: number
-  /** For majors: owning department */
+  /** For majors: owning department (legacy — một hệ). Ưu tiên `departmentIds`. */
   departmentId?: DocumentId
+  /** Chuyên ngành thuộc nhiều hệ đào tạo (cao đẳng, trung cấp, sơ cấp…). */
+  departmentIds?: DocumentId[]
   /** Program capacity planning (Head of Department dashboards) */
   annualCapacity?: number
+  /**
+   * Số kỳ học / kỳ phân bổ học bổng — dùng cho `training_programs`
+   * (vd. Cao đẳng = 6, Trung cấp = 4).
+   */
+  termCount?: number
   isActive?: boolean
 }
 
@@ -1395,6 +1402,11 @@ export interface ScholarshipRecord {
   id: DocumentId
   label: string
   category: ScholarshipCategoryId
+  /**
+   * Liên kết danh mục Hệ đào tạo (`masterData/training_programs`).
+   * Quyết định số kỳ mặc định và lọc HB trên hồ sơ theo hệ của SV.
+   */
+  trainingProgramId?: DocumentId
   /** Số tiền VNĐ (hiển thị trên nhãn) */
   amountVnd: number
   sortOrder: number
@@ -1416,7 +1428,7 @@ export interface ScholarshipRecord {
   applicationMethod?: string
   /**
    * Số kỳ phân bổ học bổng (admin). Kỳ 1 dùng khi tính «phải đóng kỳ 1».
-   * Bỏ trống / 0 = không trừ theo kỳ (fallback: không trừ vào nghĩa vụ trừ khi có `termAllocationsVnd`).
+   * Nên khớp `termCount` của hệ đào tạo đã liên kết.
    */
   termCount?: number
   /**

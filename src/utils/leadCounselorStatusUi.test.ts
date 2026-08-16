@@ -15,12 +15,23 @@ describe('leadMatchesCrmListVisibility', () => {
     expect(leadMatchesCrmListVisibility(lead, 'ALL', false)).toBe(false)
   })
 
-  it('shows DEPOSIT_PAID / chỉ cọc on ALL', () => {
+  it('hides CỌC THÀNH CÔNG on ALL (đủ tiền theo Sheet)', () => {
     expect(
       leadMatchesCrmListVisibility(
         { status: 'DEPOSIT_PAID', finance: { enrollmentStatus: 'CỌC THÀNH CÔNG' } } as Lead,
         'ALL',
         false,
+      ),
+    ).toBe(false)
+  })
+
+  it('shows CỌC when lọc Thu phí = Cọc thành công', () => {
+    expect(
+      leadMatchesCrmListVisibility(
+        { status: 'DEPOSIT_PAID', finance: { enrollmentStatus: 'CỌC THÀNH CÔNG' } } as Lead,
+        'ALL',
+        false,
+        'COC_THANH_CONG',
       ),
     ).toBe(true)
   })

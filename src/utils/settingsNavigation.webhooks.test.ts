@@ -67,13 +67,12 @@ describe('settingsNavigation five groups', () => {
     expect(resolveSettingsRoute('integrations', null, fullAccess).sub).toBe('hub')
   })
 
-  it('hides hub without master/omicall', () => {
-    expect(
-      isSettingsSubEnabled('hub', {
-        ...fullAccess,
-        canMaster: false,
-        canOmicall: false,
-      }),
-    ).toBe(false)
+  it('Hồ sơ includes Học phí kỳ 1 tab', () => {
+    expect(enabledSubsForMain('data', fullAccess)).toContain('tuition')
+    expect(resolveSettingsRoute('data', 'tuition', fullAccess)).toEqual({
+      main: 'data',
+      sub: 'tuition',
+    })
+    expect(resolveSettingsRoute('hoc_phi', null, fullAccess).sub).toBe('tuition')
   })
 })

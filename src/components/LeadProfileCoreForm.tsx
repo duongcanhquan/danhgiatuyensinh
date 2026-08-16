@@ -8,6 +8,7 @@ import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
 import { scholarshipSelectLabel, validateNationalIdInput } from '../utils/leadProfileCatalog'
 import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
+import { filterScholarshipsForLeadEducation } from '../utils/scholarshipTrainingLink'
 import { CatalogCombobox } from './CatalogCombobox'
 import { DEFAULT_ETHNICITY_LABELS } from '../utils/ethnicityOptions'
 import { labelsFromEntries, majorsForTrainingProgram, resolveTrainingProgramId } from '../utils/masterDataCatalogOps'
@@ -332,6 +333,8 @@ function ScholarshipSelect({
   scholarships,
   slot,
   disabled,
+  educationLevel,
+  trainingPrograms,
   onChange,
 }: {
   label: string
@@ -339,6 +342,8 @@ function ScholarshipSelect({
   scholarships: readonly ScholarshipRecord[]
   slot: ScholarshipApplySlot
   disabled: boolean
+  educationLevel?: string
+  trainingPrograms?: readonly MasterDataEntry[]
   onChange: (v: string) => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
@@ -356,10 +361,32 @@ function ScholarshipSelect({
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
-  const cats = Object.keys(SCHOLARSHIP_CATEGORY_LABELS) as ScholarshipCategoryId[]
-  const options = activeScholarshipsForSlot(scholarships, slot, new Date(), value ? [value] : [])
+  const forLead = filterScholarshipsForLeadEducation(
+    scholarships,
+    educationLevel || '',
+    trainingPrograms,
+  )
+  const options = activeScholarshipsForSlot(forLead, slot, new Date(), value ? [value] : [])
   const selected = options.find((s) => s.id === value) ?? scholarships.find((s) => s.id === value)
   const display = selected ? scholarshipSelectLabel(selected) : '— Không có học bổng —'
+
+  const groupKeys = useMemo(() => {
+    const keys: string[] = []
+    const seen = new Set<string>()
+    for (const s of options) {
+      const k = String(s.trainingProgramId ?? s.category)
+      if (seen.has(k)) continue
+      seen.add(k)
+      keys.push(k)
+    }
+    return keys
+  }, [options])
+
+  const groupLabel = (key: string) => {
+    const byProg = trainingPrograms?.find((p) => p.id === key)
+    if (byProg) return byProg.label
+    return SCHOLARSHIP_CATEGORY_LABELS[key as ScholarshipCategoryId] ?? key
+  }
 
   const listPanel =
     open && !disabled ? (
@@ -387,13 +414,13 @@ function ScholarshipSelect({
             — Không có học bổng —
           </button>
         </li>
-        {cats.map((cat) => {
-          const rows = options.filter((s) => s.category === cat)
+        {groupKeys.map((key) => {
+          const rows = options.filter((s) => String(s.trainingProgramId ?? s.category) === key)
           if (!rows.length) return null
           return (
-            <li key={cat}>
+            <li key={key}>
               <div className="px-3 pb-0.5 pt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                {SCHOLARSHIP_CATEGORY_LABELS[cat]}
+                {groupLabel(key)}
               </div>
               {rows.map((s) => (
                 <button
@@ -859,6 +886,8 @@ export function LeadProfileCoreForm({
             slot="slot1"
             value={draft.scholarship1Id}
             scholarships={scholarships}
+            educationLevel={draft.educationLevel}
+            trainingPrograms={catalogs?.trainingPrograms}
             disabled={disabled}
             onChange={(v) => patch('scholarship1Id', v)}
           />
@@ -867,6 +896,8 @@ export function LeadProfileCoreForm({
             slot="slot2"
             value={draft.scholarship2Id}
             scholarships={scholarships}
+            educationLevel={draft.educationLevel}
+            trainingPrograms={catalogs?.trainingPrograms}
             disabled={disabled}
             onChange={(v) => patch('scholarship2Id', v)}
           />
@@ -1004,7 +1035,7 @@ export function LeadProfileCoreForm({
                 onChange={(v) => patch('majorInterest', v)}
                 onEnsureOption={
                   onEnsureCatalogEntry
-                    ? ensure('majors', trainingProgramId ? { departmentId: trainingProgramId } : undefined)
+                    ? ensure('majors', trainingProgramId ? { departmentIds: [trainingProgramId], departmentId: trainingProgramId } : undefined)
                     : undefined
                 }
                 placeholder={studyFormatValue.trim() ? 'Chọn ngành thuộc hình thức đã chọn…' : 'Chọn hình thức học trước'}

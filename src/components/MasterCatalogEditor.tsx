@@ -177,11 +177,16 @@ function CatalogRow({
   const [draft, setDraft] = useState(row)
   useEffect(() => setDraft(row), [row])
 
+  const linkedKey = (e: MasterDataEntry) =>
+    [...(e.departmentIds ?? []), e.departmentId].filter(Boolean).map(String).sort().join('|')
+
   const dirty =
     draft.label !== row.label ||
     draft.isActive !== row.isActive ||
     draft.departmentId !== row.departmentId ||
-    (draft.labelEn ?? '') !== (row.labelEn ?? '')
+    linkedKey(draft) !== linkedKey(row) ||
+    (draft.labelEn ?? '') !== (row.labelEn ?? '') ||
+    draft.termCount !== row.termCount
 
   return (
     <tr className="border-t border-slate-100">

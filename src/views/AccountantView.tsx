@@ -19,15 +19,20 @@ import { canAccessAccountantPortal } from '../auth/accountantPortal'
 
 type QueueFilter = 'pending' | 'done' | 'all'
 
-const STATUS_FILTER_OPTIONS: AccountantStatusTag[] = [
-  'Mới',
-  'Đang hoàn thiện',
-  'Cọc',
-  'Ghi danh',
-  'Hoàn thiện phí',
-  'Kiểm tra lại',
-  'Chờ Full NE',
-  'Full NE',
+/** Nhãn Sheet trên bộ lọc nhanh — map sang tag thẻ kế toán. */
+const QUICK_STATUS_FILTERS: { sheetLabel: string; tag: AccountantStatusTag }[] = [
+  { sheetLabel: 'ĐANG HOÀN THIỆN', tag: 'Đang hoàn thiện' },
+  { sheetLabel: 'CỌC THÀNH CÔNG', tag: 'Cọc' },
+  { sheetLabel: 'KIỂM TRA LẠI', tag: 'Kiểm tra lại' },
+]
+
+const STATUS_FILTER_OPTIONS: { sheetLabel: string; tag: AccountantStatusTag }[] = [
+  ...QUICK_STATUS_FILTERS,
+  { sheetLabel: 'MỚI', tag: 'Mới' },
+  { sheetLabel: 'ĐÃ HOÀN THIỆN', tag: 'Hoàn thiện phí' },
+  { sheetLabel: 'Ghi danh', tag: 'Ghi danh' },
+  { sheetLabel: 'Chờ Full NE', tag: 'Chờ Full NE' },
+  { sheetLabel: 'Full NE', tag: 'Full NE' },
 ]
 
 function normalizeSearch(s: string): string {
@@ -96,15 +101,26 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
     return { pending, done, total: financeRows.length, enrollment: countEnrollmentStatusStats(financeRows) }
   }, [financeRows])
 
+  const applyStatusFilter = (tag: AccountantStatusTag | '') => {
+    setFilterTag(tag)
+    // CỌC / KIỂM TRA LẠI nằm ngoài «Cần duyệt» — mở «Tất cả» để thấy ngay.
+    if (tag) setQueueFilter('all')
+  }
+
   const filtered = useMemo(() => {
     const q = normalizeSearch(search)
     return financeRows
       .filter((lead) => {
-        if (queueFilter === 'pending' && !leadBelongsInAccountantWorkQueue(lead)) return false
-        if (queueFilter === 'done' && leadBelongsInAccountantWorkQueue(lead)) return false
-        const summary = summaryByLeadId.get(lead.id)
-        if (filterTag && summary && summary.statusTag !== filterTag) return false
+        // Khi chọn trạng thái Sheet → hiện toàn bộ khớp tag (kể cả CỌC ngoài Cần duyệt).
+        if (filterTag) {
+          const summary = summaryByLeadId.get(lead.id)
+          if (!summary || summary.statusTag !== filterTag) return false
+        } else {
+          if (queueFilter === 'pending' && !leadBelongsInAccountantWorkQueue(lead)) return false
+          if (queueFilter === 'done' && leadBelongsInAccountantWorkQueue(lead)) return false
+        }
         if (!q) return true
+        const summary = summaryByLeadId.get(lead.id)
         const hay = [
           lead.fullName,
           lead.systemCode,
@@ -136,27 +152,83 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
     )
   }
 
+  const enrollmentChipActive = (tag: AccountantStatusTag) => filterTag === tag
+
   const summaryBlock = (
     <div className="flex flex-wrap items-stretch gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm text-sm">
+      <button
+        type="button"
+        onClick={() => {
+          setFilterTag('')
+          setQueueFilter('pending')
+        }}
+        className={[
+          'min-w-[4.5rem] flex-1 rounded-lg border px-2 py-1.5 text-center',
+          !filterTag && queueFilter === 'pending'
+            ? 'border-amber-400 bg-amber-100 text-amber-900 ring-1 ring-amber-300'
+            : 'border-amber-200 bg-amber-50 text-amber-800',
+        ].join(' ')}
+      >
+        <p className="font-semibold opacity-80">Cần duyệt</p>
+        <p className="font-semibold tabular-nums leading-tight">{stats.pending}</p>
+      </button>
       {(
         [
-          ['Chờ duyệt', stats.pending, 'text-amber-800 bg-amber-50 border-amber-200'],
-          ['Mới', stats.enrollment.moi, 'text-slate-700 bg-white border-slate-200'],
-          ['Đang HT', stats.enrollment.dang, 'text-sky-700 bg-white border-slate-200'],
-          ['Cọc', stats.enrollment.coc, 'text-emerald-700 bg-white border-slate-200'],
-          ['Hoàn thiện', stats.enrollment.hoanThien, 'text-violet-700 bg-white border-slate-200'],
-          ['Kiểm tra lại', stats.enrollment.kiemTra, 'text-rose-700 bg-white border-slate-200'],
-          ['Đã xong', stats.done, 'text-slate-600 bg-slate-50 border-slate-200'],
+          {
+            sheetLabel: 'ĐANG HOÀN THIỆN',
+            tag: 'Đang hoàn thiện' as const,
+            count: stats.enrollment.dang,
+            idle: 'text-sky-700 bg-white border-slate-200',
+            active: 'border-sky-400 bg-sky-100 text-sky-900 ring-1 ring-sky-300',
+          },
+          {
+            sheetLabel: 'CỌC THÀNH CÔNG',
+            tag: 'Cọc' as const,
+            count: stats.enrollment.coc,
+            idle: 'text-emerald-700 bg-white border-slate-200',
+            active: 'border-emerald-400 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300',
+          },
+          {
+            sheetLabel: 'KIỂM TRA LẠI',
+            tag: 'Kiểm tra lại' as const,
+            count: stats.enrollment.kiemTra,
+            idle: 'text-rose-700 bg-white border-slate-200',
+            active: 'border-rose-400 bg-rose-100 text-rose-950 ring-1 ring-rose-300',
+          },
         ] as const
-      ).map(([label, value, cls]) => (
-        <div
-          key={label}
-          className={`min-w-[4.5rem] flex-1 rounded-lg border px-2 py-1.5 text-center ${cls}`}
+      ).map((chip) => (
+        <button
+          key={chip.sheetLabel}
+          type="button"
+          onClick={() =>
+            applyStatusFilter(enrollmentChipActive(chip.tag) ? '' : chip.tag)
+          }
+          title={`Lọc ${chip.sheetLabel}`}
+          className={[
+            'min-w-[4.5rem] flex-1 rounded-lg border px-2 py-1.5 text-center',
+            enrollmentChipActive(chip.tag) ? chip.active : chip.idle,
+          ].join(' ')}
         >
-          <p className="font-semibold opacity-80">{label}</p>
-          <p className="font-semibold tabular-nums leading-tight">{value}</p>
-        </div>
+          <p className="font-semibold opacity-80 leading-tight">{chip.sheetLabel}</p>
+          <p className="font-semibold tabular-nums leading-tight">{chip.count}</p>
+        </button>
       ))}
+      <button
+        type="button"
+        onClick={() => {
+          setFilterTag('')
+          setQueueFilter('done')
+        }}
+        className={[
+          'min-w-[4.5rem] flex-1 rounded-lg border px-2 py-1.5 text-center',
+          !filterTag && queueFilter === 'done'
+            ? 'border-slate-400 bg-slate-200 text-slate-800 ring-1 ring-slate-300'
+            : 'border-slate-200 bg-slate-50 text-slate-600',
+        ].join(' ')}
+      >
+        <p className="font-semibold opacity-80">Đã xong</p>
+        <p className="font-semibold tabular-nums leading-tight">{stats.done}</p>
+      </button>
       <button
         type="button"
         onClick={() => void reload()}
@@ -179,13 +251,15 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
       {!portalMode ? (
         <header className="rounded-2xl border border-emerald-200/80 bg-white px-3 py-3 shadow-sm sm:px-4">
           <h1 className="text-sm font-semibold text-emerald-800">Hàng đợi duyệt</h1>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Cần duyệt = tiền mới về + ĐANG HOÀN THIỆN. Bấm ô trạng thái để xem CỌC / KIỂM TRA LẠI.
+          </p>
           <div className="mt-2">{summaryBlock}</div>
         </header>
       ) : (
         summaryBlock
       )}
 
-      {/* Lọc: trái = tab gọn · phải = tìm + bộ lọc (2 dòng) */}
       <div className="sticky top-[calc(env(safe-area-inset-top)+2.75rem)] z-20 rounded-xl border border-slate-200/90 bg-white/95 p-2 shadow-md backdrop-blur sm:static sm:shadow-sm">
         <div className="grid gap-2 sm:grid-cols-[minmax(0,auto)_minmax(0,1fr)] sm:items-stretch sm:gap-3">
           <div
@@ -195,7 +269,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
           >
             {(
               [
-                ['pending', 'Cần xử lý', stats.pending],
+                ['pending', 'Cần duyệt', stats.pending],
                 ['done', 'Đã xong', stats.done],
                 ['all', 'Tất cả', stats.total],
               ] as const
@@ -204,18 +278,23 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
                 key={id}
                 type="button"
                 role="tab"
-                aria-selected={queueFilter === id}
-                onClick={() => setQueueFilter(id)}
+                aria-selected={!filterTag && queueFilter === id}
+                onClick={() => {
+                  setFilterTag('')
+                  setQueueFilter(id)
+                }}
                 className={[
                   'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-semibold',
-                  queueFilter === id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-white',
+                  !filterTag && queueFilter === id
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-white',
                 ].join(' ')}
               >
                 <span>{label}</span>
                 <span
                   className={[
                     'rounded px-1.5 py-px font-semibold tabular-nums',
-                    queueFilter === id ? 'bg-white/20' : 'bg-white text-slate-500',
+                    !filterTag && queueFilter === id ? 'bg-white/20' : 'bg-white text-slate-500',
                   ].join(' ')}
                 >
                   {count}
@@ -242,15 +321,37 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
               />
             </label>
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {QUICK_STATUS_FILTERS.map(({ sheetLabel, tag }) => (
+                <button
+                  key={sheetLabel}
+                  type="button"
+                  onClick={() => applyStatusFilter(filterTag === tag ? '' : tag)}
+                  className={[
+                    'h-8 rounded-lg border px-2 text-xs font-semibold sm:text-sm',
+                    filterTag === tag
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                  ].join(' ')}
+                >
+                  {sheetLabel}
+                </button>
+              ))}
               <select
                 className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-sm font-semibold"
                 value={filterTag}
-                onChange={(e) => setFilterTag(e.target.value as AccountantStatusTag | '')}
+                onChange={(e) => {
+                  const v = e.target.value as AccountantStatusTag | ''
+                  if (!v) {
+                    setFilterTag('')
+                    return
+                  }
+                  applyStatusFilter(v)
+                }}
               >
                 <option value="">Trạng thái: tất cả</option>
-                {STATUS_FILTER_OPTIONS.map((tag) => (
+                {STATUS_FILTER_OPTIONS.map(({ sheetLabel, tag }) => (
                   <option key={tag} value={tag}>
-                    {tag}
+                    {sheetLabel}
                   </option>
                 ))}
               </select>
@@ -268,6 +369,13 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
 
       <p className="text-sm text-slate-500">
         Đang hiện <strong className="font-semibold text-slate-800">{filtered.length}</strong> hồ sơ
+        {filterTag
+          ? ` · lọc ${STATUS_FILTER_OPTIONS.find((o) => o.tag === filterTag)?.sheetLabel ?? filterTag}`
+          : queueFilter === 'pending'
+            ? ' · Cần duyệt'
+            : queueFilter === 'done'
+              ? ' · Đã xong'
+              : ''}
       </p>
 
       <div className="space-y-1.5">

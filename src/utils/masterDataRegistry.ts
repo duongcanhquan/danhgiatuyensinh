@@ -39,6 +39,11 @@ export function masterDataEntriesForFirestore(entries: MasterDataEntry[]): Recor
     }
     if (e.labelEn?.trim()) row.labelEn = e.labelEn.trim()
     if (e.departmentId) row.departmentId = e.departmentId
+    if (Array.isArray(e.departmentIds) && e.departmentIds.length > 0) {
+      row.departmentIds = e.departmentIds.map(String).filter(Boolean)
+      // Giữ departmentId = phần tử đầu để code cũ / Sheet vẫn đọc được.
+      if (!row.departmentId) row.departmentId = row.departmentIds[0]
+    }
     if (e.annualCapacity !== undefined && Number.isFinite(Number(e.annualCapacity))) {
       row.annualCapacity = Number(e.annualCapacity)
     }
@@ -48,6 +53,9 @@ export function masterDataEntriesForFirestore(entries: MasterDataEntry[]): Recor
     }
     if (e.numericMax !== undefined && Number.isFinite(Number(e.numericMax))) {
       row.numericMax = Number(e.numericMax)
+    }
+    if (e.termCount !== undefined && Number.isFinite(Number(e.termCount)) && Number(e.termCount) > 0) {
+      row.termCount = Math.round(Number(e.termCount))
     }
     return row
   })
@@ -72,6 +80,16 @@ export function parseEntriesFromDoc(data: Record<string, unknown>): MasterDataEn
               : undefined
           const numericMin = o.numericMin !== undefined ? Number(o.numericMin) : undefined
           const numericMax = o.numericMax !== undefined ? Number(o.numericMax) : undefined
+          const departmentIdsRaw = Array.isArray(o.departmentIds)
+            ? o.departmentIds.map((x) => String(x).trim()).filter(Boolean)
+            : []
+          const departmentId = o.departmentId ? String(o.departmentId) : undefined
+          const departmentIds =
+            departmentIdsRaw.length > 0
+              ? departmentIdsRaw
+              : departmentId
+                ? [departmentId]
+                : undefined
           return {
             id: String(o.id ?? crypto.randomUUID()),
             label: String(o.label ?? ''),
@@ -80,8 +98,13 @@ export function parseEntriesFromDoc(data: Record<string, unknown>): MasterDataEn
             matchMode,
             numericMin: Number.isFinite(numericMin) ? numericMin : undefined,
             numericMax: Number.isFinite(numericMax) ? numericMax : undefined,
-            departmentId: o.departmentId ? String(o.departmentId) : undefined,
+            departmentId: departmentIds?.[0] ?? departmentId,
+            ...(departmentIds?.length ? { departmentIds } : {}),
             annualCapacity: o.annualCapacity !== undefined ? Number(o.annualCapacity) : undefined,
+            termCount:
+              o.termCount !== undefined && Number.isFinite(Number(o.termCount)) && Number(o.termCount) > 0
+                ? Math.round(Number(o.termCount))
+                : undefined,
             isActive: o.isActive !== false,
           } as MasterDataEntry
         }

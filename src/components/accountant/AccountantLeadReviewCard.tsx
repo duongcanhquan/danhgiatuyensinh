@@ -257,7 +257,7 @@ function FullNeBlock({
     )
   }
   const isReq = stFolded.includes('YEU CAU') || Boolean(lead.finance?.reqFullNe)
-  // Đã bàn giao (hoàn thiện / ghi danh): không bắt xác nhận Full NE trên thẻ.
+  // CỌC / hoàn thiện / ghi danh: không bắt xác nhận Full NE trên thẻ.
   if (leadIsFeeHandoverDone(lead)) return null
   if (!isReq && (lead.finance?.declaredTotalVnd ?? 0) <= 0) return null
   return (
@@ -265,7 +265,7 @@ function FullNeBlock({
       type="button"
       disabled={disabled || busy}
       onClick={() => {
-        if (!window.confirm(`Xác nhận ${lead.fullName} đã nộp đủ Full NE?`)) return
+        if (!window.confirm(`Xác nhận ${lead.fullName} đã nộp đủ tiền (Full NE)? Hồ sơ sẽ ghi ĐÃ HOÀN THIỆN.`)) return
         const db = getFirestoreDb()
         if (!db) return
         setBusy(true)
@@ -279,7 +279,7 @@ function FullNeBlock({
         isReq ? 'bg-rose-600' : 'bg-violet-700',
       ].join(' ')}
     >
-      {busy ? 'Đang lưu…' : isReq ? 'Xác nhận Full NE' : 'Đánh dấu Full NE'}
+      {busy ? 'Đang lưu…' : isReq ? 'Xác nhận đủ tiền (Full NE)' : 'Đánh dấu đủ tiền (Full NE)'}
     </button>
   )
 }

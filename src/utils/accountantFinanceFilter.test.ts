@@ -80,7 +80,7 @@ describe('accountantFinanceFilter', () => {
     expect(leadBelongsInAccountantWorkQueue(legacy)).toBe(false)
   })
 
-  it('CỌC THÀNH CÔNG vẫn trong Cần xử lý (chỉ cọc còn theo dõi)', () => {
+  it('CỌC THÀNH CÔNG ra khỏi Cần xử lý (Sheet: đã xong)', () => {
     const coc = {
       ...base,
       finance: {
@@ -89,12 +89,12 @@ describe('accountantFinanceFilter', () => {
       },
     } as Lead
     expect(leadIsSettledCocOrComplete(coc)).toBe(true)
-    expect(leadIsFeeHandoverDone(coc)).toBe(false)
-    expect(leadBelongsInAccountantWorkQueue(coc)).toBe(true)
-    expect(leadPassesShowDoneFilter(coc, false, false)).toBe(true)
+    expect(leadIsFeeHandoverDone(coc)).toBe(true)
+    expect(leadBelongsInAccountantWorkQueue(coc)).toBe(false)
+    expect(leadPassesShowDoneFilter(coc, false, false)).toBe(false)
   })
 
-  it('CỌC + khoản bổ sung chưa duyệt → pending', () => {
+  it('CỌC + khoản bổ sung chưa duyệt → vẫn pending', () => {
     const cocPending = {
       ...base,
       finance: {
@@ -136,7 +136,7 @@ describe('accountantFinanceFilter', () => {
     expect(leadBelongsInAccountantWorkQueue(enrolled)).toBe(false)
   })
 
-  it('flags incomplete tuition when approved below deposit threshold', () => {
+  it('ĐANG HOÀN THIỆN (đã nộp chưa đủ) nằm trong Cần duyệt', () => {
     const partial = {
       ...base,
       educationLevel: 'Cao đẳng',
@@ -147,6 +147,17 @@ describe('accountantFinanceFilter', () => {
     } as Lead
     expect(leadHasIncompleteTuitionProgress(partial)).toBe(true)
     expect(leadBelongsInAccountantWorkQueue(partial)).toBe(true)
+  })
+
+  it('MỚI đủ duyệt nhưng không phải ĐANG HT → không vào Cần duyệt', () => {
+    const moi = {
+      ...base,
+      finance: {
+        enrollmentStatus: 'MỚI',
+        payments: { deposit: { amountVnd: 300_000, approvalStatus: 'ĐỒNG Ý' } },
+      },
+    } as Lead
+    expect(leadBelongsInAccountantWorkQueue(moi)).toBe(false)
   })
 
   it('after reject with all slots terminal, not in work queue', () => {
@@ -163,7 +174,7 @@ describe('accountantFinanceFilter', () => {
     expect(leadBelongsInAccountantWorkQueue(rejected)).toBe(false)
   })
 
-  it('CỌC + yêu cầu Full NE vẫn trong hàng đợi', () => {
+  it('CỌC + yêu cầu Full NE không còn trong hàng đợi / không bắt xác nhận', () => {
     const req = {
       ...base,
       finance: {
@@ -173,7 +184,21 @@ describe('accountantFinanceFilter', () => {
         payments: { deposit: { amountVnd: 2_000_000, approvalStatus: 'ĐỒNG Ý' } },
       },
     } as Lead
-    expect(leadHasPendingAccountantReview(req)).toBe(true)
+    expect(leadIsFeeHandoverDone(req)).toBe(true)
+    expect(leadHasPendingAccountantReview(req)).toBe(false)
+    expect(leadBelongsInAccountantWorkQueue(req)).toBe(false)
+  })
+
+  it('ĐANG HOÀN THIỆN nằm trong Cần duyệt (kể cả kèm Full NE)', () => {
+    const req = {
+      ...base,
+      finance: {
+        enrollmentStatus: 'ĐANG HOÀN THIỆN',
+        reqFullNe: true,
+        fullNeStatus: 'YÊU CẦU FULL NE',
+        payments: { deposit: { amountVnd: 500_000, approvalStatus: 'ĐỒNG Ý' } },
+      },
+    } as Lead
     expect(leadBelongsInAccountantWorkQueue(req)).toBe(true)
   })
 
