@@ -12,19 +12,19 @@ export function AccountantProtectedRoute() {
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
   const orgGate = useOrgAccessGate(profile)
 
-  const bootBusy =
-    status === 'unknown' ||
-    status === 'authenticating' ||
-    (Boolean(profile) && orgGate.state === 'loading')
+  const settling = status === 'unknown' || status === 'authenticating'
+  const bootBusy = settling || (Boolean(profile) && orgGate.state === 'loading')
+  const trulyLoggedOut = status === 'unauthenticated' && !firebaseUser
   const showBoot = useAuthBootMinHold(bootBusy, {
-    skip: status !== 'unknown' && !firebaseUser,
+    skip: trulyLoggedOut,
+    minMs: status === 'unknown' ? 900 : 0,
   })
 
   if (!hasAuth) {
     return <Outlet />
   }
 
-  if (showBoot && (status === 'unknown' || Boolean(firebaseUser))) {
+  if (showBoot && (settling || Boolean(firebaseUser))) {
     const label =
       status === 'authenticating'
         ? 'Đang tải hồ sơ kế toán'
@@ -35,6 +35,9 @@ export function AccountantProtectedRoute() {
   }
 
   if (!firebaseUser) {
+    if (!trulyLoggedOut) {
+      return <AuthSessionBootScreen statusLabel="Đang xác nhận phiên đăng nhập" />
+    }
     return <Navigate to="/ke-toan/login" replace state={{ from: location.pathname }} />
   }
 

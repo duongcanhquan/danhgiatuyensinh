@@ -134,7 +134,27 @@ export function LoginView() {
 
   const bootHold = useAuthBootMinHold(Boolean(firebaseUser) && status === 'authenticating', {
     skip: !firebaseUser,
+    minMs: 0,
   })
+
+  // Đang khôi phục phiên (grace / sync) — đừng hiện form đăng nhập rồi nhảy lại CRM.
+  if (firebaseUser && (status === 'unknown' || status === 'authenticating')) {
+    return (
+      <AuthSessionBootScreen
+        statusLabel="Đang đồng bộ hồ sơ nhân sự"
+        detail="Đăng nhập Authentication thành công."
+        actions={
+          <button
+            type="button"
+            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-white/15"
+            onClick={() => void signOut()}
+          >
+            Đăng xuất để thử lại
+          </button>
+        }
+      />
+    )
+  }
 
   // Chỉ vào CRM khi đã có hồ sơ — tránh kẹt vòng redirect khi sync thất bại.
   if (firebaseUser && status === 'authenticated' && profile) {
@@ -149,24 +169,7 @@ export function LoginView() {
     return <Navigate to={from} replace />
   }
 
-  if (firebaseUser && (status === 'authenticating' || bootHold || (status === 'authenticated' && !profile))) {
-    if (status === 'authenticating' || bootHold) {
-      return (
-        <AuthSessionBootScreen
-          statusLabel="Đang đồng bộ hồ sơ nhân sự"
-          detail="Đăng nhập Authentication thành công."
-          actions={
-            <button
-              type="button"
-              className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-white/15"
-              onClick={() => void signOut()}
-            >
-              Đăng xuất để thử lại
-            </button>
-          }
-        />
-      )
-    }
+  if (firebaseUser && status === 'authenticated' && !profile) {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[var(--vm-canvas)] px-4 py-10">
         <div className="app-surface-elevated w-full max-w-md rounded-2xl p-6 text-center sm:p-8">

@@ -122,3 +122,51 @@ export function buildLeadContextualRagBlock(
   const picked = relevant.length >= 2 ? relevant : sorted
   return concatDocs(picked, maxChars)
 }
+
+export type KnowledgeSearchHit = {
+  doc: KnowledgeDocument
+  score: number
+  snippet: string
+}
+
+/**
+ * Tìm tài liệu tri thức theo lời khách / từ khóa TVV gõ — không gọi LLM.
+ */
+export function searchKnowledgeByQuery(
+  docs: readonly KnowledgeDocument[],
+  query: string,
+  opts?: { lead?: Lead | null; limit?: number },
+): KnowledgeSearchHit[] {
+  const q = query.trim().toLowerCase()
+  if (!q || q.length < 2 || !docs.length) return []
+  const limit = opts?.limit ?? 5
+  const leadBlob = opts?.lead ? leadSearchBlob(opts.lead) : ''
+  const scored: KnowledgeSearchHit[] = []
+  for (const doc of docs) {
+    const title = doc.title.toLowerCase()
+    const content = doc.content.toLowerCase()
+    let score = 0
+    if (title.includes(q)) score += 80
+    if (content.includes(q)) score += 40
+    for (const word of q.split(/\s+/).filter((w) => w.length >= 2)) {
+      if (title.includes(word)) score += 22
+      if (content.includes(word)) score += 10
+    }
+    if (leadBlob) score += docRelevanceScore(leadBlob, doc) * 2
+    if (score <= 0) continue
+    const idx = content.indexOf(q.split(/\s+/).find((w) => w.length >= 3 && content.includes(w)) ?? q)
+    const start = Math.max(0, idx > 0 ? idx - 40 : 0)
+    const snippet = doc.content.trim().slice(start, start + 160).replace(/\s+/g, ' ')
+    scored.push({ doc, score, snippet: snippet + (snippet.length >= 160 ? '…' : '') })
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, limit)
+}
+
+/** Ghép đoạn tri thức từ kết quả tìm (đưa vào prompt AI). */
+export function formatKnowledgeHitsForPrompt(hits: readonly KnowledgeSearchHit[], maxChars = 4_000): string {
+  if (!hits.length) return ''
+  return concatDocs(
+    hits.map((h) => h.doc),
+    maxChars,
+  )
+}

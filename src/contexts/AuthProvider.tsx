@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   createUserWithEmailAndPassword,
   EmailAuthProvider,
@@ -18,6 +18,7 @@ import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
 import { canOwnFieldStaffTeam, canAppearOnPublicRegistrationPortal, normalizeUserRole } from '../auth/roleUtils'
 import { isUserInExplicitTeamRoster } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
+import { decideAuthNullEvent, shouldSoftRefreshAuthSession } from '../auth/authSessionStability'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
 import { ensureDefaultFirestoreData } from '../services/firestoreBootstrap'
 import { ensureDefaultCounselingAiTask } from '../services/ensureDefaultCounselingAiTask'
@@ -259,6 +260,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthState['status']>('unknown')
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<VietMyUserProfile | null>(null)
+  const sessionRef = useRef<{
+    uid: string | null
+    status: AuthState['status']
+    hasProfile: boolean
+  }>({ uid: null, status: 'unknown', hasProfile: false })
+
+  useEffect(() => {
+    sessionRef.current = {
+      uid: firebaseUser?.uid ?? null,
+      status,
+      hasProfile: Boolean(profile),
+    }
+  }, [firebaseUser, status, profile])
 
   useEffect(() => {
     const auth = getFirebaseAuth()
@@ -279,30 +293,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user)
-      if (!user) {
-        setProfile(null)
-        setStatus('unauthenticated')
-        return
+    let gen = 0
+    let nullTimer: number | null = null
+    let authReady = false
+    let cancelled = false
+
+    const clearNullTimer = () => {
+      if (nullTimer != null) {
+        window.clearTimeout(nullTimer)
+        nullTimer = null
       }
+    }
+
+    const applyLogout = () => {
+      setFirebaseUser(null)
+      setProfile(null)
+      setStatus('unauthenticated')
+    }
+
+    const runProfilePipeline = async (user: User, myGen: number, soft: boolean) => {
       if (!db) {
+        if (myGen !== gen || cancelled) return
         setProfile(null)
         setStatus('authenticated')
         return
       }
-      setStatus('authenticating')
+      if (!soft) setStatus('authenticating')
       try {
         const p = await withTimeout(syncUserProfileWithRetry(db, user), 22_000, 'Đồng bộ users/{uid}')
+        if (myGen !== gen || cancelled) return
         setProfile(p)
         if (p.isActive === false) {
-          const auth = getFirebaseAuth()
-          if (auth) await auth.signOut()
+          const a = getFirebaseAuth()
+          if (a) await a.signOut()
+          if (myGen !== gen || cancelled) return
           setProfile(null)
           setStatus('unauthenticated')
           return
         }
-        // Đồng bộ Auth claims (orgId/role) trước khi mở shell — tránh permission-denied Rules.
         try {
           await Promise.race([
             ensureAuthClaimsFresh(user, p),
@@ -313,6 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (e) {
           console.warn('[ensureAuthClaimsFresh]', e)
         }
+        if (myGen !== gen || cancelled) return
         setStatus('authenticated')
         if (p.role === 'admin' || p.role === 'super_admin') {
           void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
@@ -324,11 +353,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
-        setProfile(null)
+        if (myGen !== gen || cancelled) return
+        if (!soft) setProfile(null)
         setStatus('authenticated')
       }
+    }
+
+    void auth.authStateReady().then(() => {
+      authReady = true
     })
-    return () => unsub()
+
+    const unsub = onAuthStateChanged(auth, (user) => {
+      const myGen = ++gen
+      clearNullTimer()
+
+      if (!user) {
+        const decision = decideAuthNullEvent({
+          hadSession: Boolean(sessionRef.current.uid),
+          authReady,
+          currentUserPresent: Boolean(auth.currentUser),
+        })
+        if (decision.action === 'ignore') return
+        if (decision.action === 'logout_now') {
+          applyLogout()
+          return
+        }
+        // Giữ firebaseUser/profile hiện tại trong lúc grace — tránh ProtectedRoute đẩy /login.
+        nullTimer = window.setTimeout(() => {
+          if (myGen !== gen || cancelled) return
+          if (auth.currentUser) return
+          applyLogout()
+        }, decision.ms)
+        return
+      }
+
+      setFirebaseUser(user)
+
+      const soft = shouldSoftRefreshAuthSession({
+        incomingUid: user.uid,
+        currentUid: sessionRef.current.uid,
+        status: sessionRef.current.status,
+        hasProfile: sessionRef.current.hasProfile,
+      })
+
+      void runProfilePipeline(user, myGen, soft)
+    })
+
+    return () => {
+      cancelled = true
+      clearNullTimer()
+      unsub()
+    }
   }, [])
 
   /** Cập nhật quyền (allowLlmAndAiTasks, role…) ngay khi Quản lý sửa users/{uid} — không cần đăng xuất. */

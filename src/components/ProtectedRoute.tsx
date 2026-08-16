@@ -16,19 +16,21 @@ export function ProtectedRoute() {
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
   const orgGate = useOrgAccessGate(profile)
 
-  const bootBusy =
-    status === 'unknown' ||
-    status === 'authenticating' ||
-    (Boolean(profile) && orgGate.state === 'loading')
+  const settling = status === 'unknown' || status === 'authenticating'
+  const bootBusy = settling || (Boolean(profile) && orgGate.state === 'loading')
+  /** Chỉ bỏ hold khi đã chắc chưa đăng nhập — không redirect khi đang grace / sync. */
+  const trulyLoggedOut = status === 'unauthenticated' && !firebaseUser
   const showBoot = useAuthBootMinHold(bootBusy, {
-    skip: status !== 'unknown' && !firebaseUser,
+    skip: trulyLoggedOut,
+    // Cold start giữ motion ngắn; re-sync không kéo 3s.
+    minMs: status === 'unknown' ? 900 : 0,
   })
 
   if (!hasAuth) {
     return <Outlet />
   }
 
-  if (showBoot && (status === 'unknown' || Boolean(firebaseUser))) {
+  if (showBoot && (settling || Boolean(firebaseUser))) {
     const label =
       status === 'authenticating'
         ? 'Đang đồng bộ hồ sơ và quyền truy cập'
@@ -59,6 +61,9 @@ export function ProtectedRoute() {
   }
 
   if (!firebaseUser) {
+    if (!trulyLoggedOut) {
+      return <AuthSessionBootScreen statusLabel="Đang xác nhận phiên đăng nhập" />
+    }
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 

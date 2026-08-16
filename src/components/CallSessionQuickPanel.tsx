@@ -24,8 +24,9 @@ import {
 } from '../utils/callSessionFormVariant'
 import { behaviorScoreFromSelections, formatBehaviorDelta } from '../utils/callSessionBehaviorScore'
 import { CALL_DISPOSITIONS, isCallDispositionId } from '../utils/callWorkQueue'
-import type { CallAiAssessment, LeadWorkMode } from '../types'
+import type { CallAiAssessment, Lead, LeadWorkMode } from '../types'
 import { CallSessionEvaluationBoard } from './CallSessionEvaluationBoard'
+import { ConsultingCallLiveStrip } from './ConsultingCallLiveStrip'
 
 type Props = {
   call: OmicallActiveCall
@@ -160,6 +161,21 @@ export function CallSessionQuickPanel({
 
   return (
     <div className="space-y-3 border-t border-white/10 pt-3">
+      {call.leadId && !isWrapup ? (
+        <ConsultingCallLiveStrip
+          lead={
+            {
+              id: call.leadId,
+              fullName: call.leadName || call.phone || 'Hồ sơ',
+              phone: call.phone,
+              educationLevel: 'Khác',
+              priorityTag: 'WARM',
+            } as Lead
+          }
+          canUseLlm={showAiOption}
+        />
+      ) : null}
+
       <div className="flex items-start gap-2">
         <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" aria-hidden />
         <div>

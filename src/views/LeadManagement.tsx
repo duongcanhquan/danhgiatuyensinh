@@ -1,8 +1,8 @@
-import type { MouseEvent, ReactNode } from 'react'
+import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
-import { BookOpen, Bot, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, Library, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
+import { ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -68,9 +68,8 @@ import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
-import { LeadPlaybookPanel } from '../components/LeadPlaybookPanel'
+import { LeadDetailAssistRail } from '../components/LeadDetailAssistRail'
 import { LlmAccessHelpPanel } from '../components/LlmAccessHelpPanel'
-import { LeadKnowledgePanel } from '../components/LeadKnowledgePanel'
 import {
   evaluateLead,
   leadToEvaluationRecord,
@@ -95,9 +94,6 @@ import {
 import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
 import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
-import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
-import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
-import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 import {
   formatLeadCounselorNotePreview,
   formatLeadLatestInteractionLine,
@@ -203,8 +199,6 @@ import { SearchableFilterSelect } from '../components/SearchableFilterSelect'
 import { ScoringViewModeHint } from '../components/ScoringViewModeHint'
 import { resolveLeadPrimarySource } from '../utils/leadSemanticFieldValue'
 import { profileHasActiveRules } from '../utils/scoringProfileUtils'
-import { useScriptSnippets } from '../hooks/useScriptSnippets'
-import { ConsultingAssistantPanel } from '../components/ConsultingAssistantPanel'
 import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
 import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
 import { LeadActivityTimeline } from '../components/LeadActivityTimeline'
@@ -872,12 +866,6 @@ export function LeadManagement() {
     // Ước lượng từ dữ liệu đã tải — không gọi 4× getCount mỗi lần mở Hồ sơ.
     return tagCountsFromLoadedLeads
   }, [urlQuery, tagClientEval, scopeTagCounts, tagCountsFromLoadedLeads])
-
-  const {
-    snippets: scriptSnippets,
-    loading: scriptSnippetsLoading,
-    error: scriptSnippetsErr,
-  } = useScriptSnippets()
 
   const reassignPickList = useMemo(() => {
     const base = fieldStaffUsers
@@ -5518,16 +5506,6 @@ export function LeadManagement() {
               canDeleteLead={canDeleteLeads}
               scoringMasterBuckets={scoringMasterBuckets}
               schoolTvvSignalDefs={schoolTvvSignalDefs}
-              dynamicAssistantSlot={
-                <ConsultingAssistantPanel
-                  variant="embedded"
-                  showHeader={false}
-                  lead={selected}
-                  snippets={scriptSnippets}
-                  loading={scriptSnippetsLoading}
-                  error={scriptSnippetsErr}
-                />
-              }
               onClose={closeLeadDetailPanel}
               onUnsavedChange={(dirty) => {
                 leadDetailUnsavedRef.current = dirty
@@ -6048,7 +6026,6 @@ function LeadDetailPanel({
   onUnsavedChange,
   onUpdated,
   onDeleted,
-  dynamicAssistantSlot,
 }: {
   lead: Lead
   activeScoringProfile: ScoringProfile | null
@@ -6074,8 +6051,6 @@ function LeadDetailPanel({
   onUpdated: (patch: Partial<Lead>) => void
   /** Sau khi xóa thành công — parent đóng panel và bỏ khỏi danh sách. */
   onDeleted?: (leadId: string) => void
-  /** Trợ lý kịch bản (nhúng trong layout fullscreen). */
-  dynamicAssistantSlot?: ReactNode
 }) {
   const { profile, can, canRunLlmAnalysis } = useAuth()
   const { effectiveOrgId } = useOrg()
@@ -6209,50 +6184,31 @@ function LeadDetailPanel({
   const statusForForm = statusDirty ?? lead.pipelineStatus
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [llmAccessHelpOpen, setLlmAccessHelpOpen] = useState(false)
-  const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
-  const [assistantMounted, setAssistantMounted] = useState(false)
-  const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
   const [playbookDataEnabled, setPlaybookDataEnabled] = useState(false)
   const [llmDataEnabled, setLlmDataEnabled] = useState(false)
-  const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
-  const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('assign')
+  const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history' | 'assist'>('assist')
   const [statusQuickBusy, setStatusQuickBusy] = useState(false)
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
 
-  const consultingDataOn = playbookPopupOpen || playbookDataEnabled
-  const llmDataOn = canRunLlmAnalysis && (llmPopupOpen || llmDataEnabled)
+  const consultingDataOn = detailRightTab === 'assist' || playbookDataEnabled
+  const llmDataOn = canRunLlmAnalysis && (detailRightTab === 'assist' || llmDataEnabled)
   const { playbooks } = useConsultingPlaybooks({ enabled: consultingDataOn })
-  const { documents: knowledgeDocuments } = useKnowledgeDocuments({ enabled: consultingDataOn })
-  const { categories: knowledgeCategories } = useKnowledgeCategories({ enabled: consultingDataOn })
   const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(llmDataOn ? lead.id : null)
 
-  const consultingInsights = useMemo(() => {
-    if (!consultingDataOn) {
-      return { quickSearchTerms: [] as string[] }
-    }
-    return buildLeadConsultingInsights(lead, playbooks, knowledgeDocuments, {
-      infoScoreRuntime,
-      priorityTag: detailScoringPreview?.priorityTag,
-      calculatedScore: detailScoringPreview?.calculatedScore,
-    })
-  }, [consultingDataOn, lead, playbooks, knowledgeDocuments, infoScoreRuntime, detailScoringPreview])
-
   useEffect(() => {
-    setAssistantMounted(false)
     setPlaybookDataEnabled(false)
     setLlmDataEnabled(false)
-    return scheduleIdleAttach(
-      () => {
-        setAssistantMounted(true)
-      },
-      { timeoutMs: 450 },
-    )
+    setDetailRightTab('assist')
   }, [lead.id])
 
+  const openAssistRail = useCallback(() => {
+    setPlaybookDataEnabled(true)
+    setLlmDataEnabled(true)
+    setDetailRightTab('assist')
+  }, [])
 
   const noteBaseline = (lead.lastCounselorNote ?? '').trim()
   const noteChanged = note.trim() !== noteBaseline
@@ -6290,7 +6246,6 @@ function LeadDetailPanel({
     setCrmDirty(null)
     setStatusDirty(null)
     setMsg(null)
-    setPlaybookPopupTab('consulting')
     setDetailLeftTab(
       leadWorkModePrimaryFocus(effectiveWorkMode) === 'care_dossier' ? 'profile' : 'counselor',
     )
@@ -6312,19 +6267,9 @@ function LeadDetailPanel({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (e.defaultPrevented) return
-      if (playbookPopupOpen) {
+      if (llmAccessHelpOpen) {
         e.preventDefault()
-        setPlaybookPopupOpen(false)
-        return
-      }
-      if (llmPopupOpen) {
-        e.preventDefault()
-        setLlmPopupOpen(false)
-        return
-      }
-      if (assistantPopupOpen) {
-        e.preventDefault()
-        setAssistantPopupOpen(false)
+        setLlmAccessHelpOpen(false)
         return
       }
       const help = signalsHelpRef.current
@@ -6338,7 +6283,7 @@ function LeadDetailPanel({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [playbookPopupOpen, llmPopupOpen, assistantPopupOpen, onClose])
+  }, [llmAccessHelpOpen, onClose])
 
   const { orgConfig } = useOrgAiIntegration()
   const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks({
@@ -6489,8 +6434,6 @@ function LeadDetailPanel({
     onClose()
   }, [onClose])
 
-  const leadMl = useMemo(() => resolveMlWinDisplay(lead, infoScoreRuntime), [lead, infoScoreRuntime])
-
   const [aiSelTaskId, setAiSelTaskId] = useState('')
   const [aiRunning, setAiRunning] = useState(false)
   const [aiErr, setAiErr] = useState<string | null>(null)
@@ -6520,19 +6463,6 @@ function LeadDetailPanel({
     if (r && typeof r === 'object' && !Array.isArray(r)) return r as Record<string, unknown>
     return null
   }, [aiPreview, storedAiInsight])
-
-  useEffect(() => {
-    if (!llmPopupOpen && !assistantPopupOpen && !playbookPopupOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setLlmPopupOpen(false)
-        setAssistantPopupOpen(false)
-        setPlaybookPopupOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [llmPopupOpen, assistantPopupOpen, playbookPopupOpen])
 
   const canSaveInteraction = can('interactions:create:self_assigned')
   const canRunAi = canRunLlmAnalysis
@@ -7235,54 +7165,29 @@ function LeadDetailPanel({
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1">
           <button
             type="button"
-            onClick={() => {
-              setPlaybookDataEnabled(true)
-              setPlaybookPopupOpen(true)
-            }}
-            title="Playbook"
-            className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-amber-400/70 bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-amber-600"
+            onClick={openAssistRail}
+            title="AI tư vấn — cột phải: chat gợi ý, mẫu, tri thức, phân tích"
+            className={[
+              'inline-flex min-h-8 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold shadow-sm transition',
+              detailRightTab === 'assist'
+                ? 'border-emerald-600 bg-emerald-600 text-white'
+                : 'border-emerald-400/70 bg-emerald-50 text-emerald-950 hover:bg-emerald-100',
+            ].join(' ')}
           >
-            <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-            <span className="hidden sm:inline">Playbook</span>
+            <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
+            <span className="hidden sm:inline">AI tư vấn</span>
           </button>
-          {dynamicAssistantSlot ? (
-            <button
-              type="button"
-              onClick={() => {
-                setAssistantMounted(true)
-                setAssistantPopupOpen(true)
-              }}
-              title="Trợ lý"
-              className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-sky-300/80 bg-sky-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-sky-700"
-            >
-              <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              <span className="hidden sm:inline">Trợ lý</span>
-            </button>
-          ) : null}
-          {canRunAi ? (
-            <button
-              type="button"
-              onClick={() => {
-                setLlmDataEnabled(true)
-                setLlmPopupOpen(true)
-              }}
-              title="LLM"
-              className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[var(--color-primary)]/50 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:brightness-110"
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-              <span className="hidden sm:inline">LLM</span>
-            </button>
-          ) : (
+          {!canRunAi ? (
             <button
               type="button"
               onClick={() => setLlmAccessHelpOpen(true)}
               title="Cần bật quyền AI trên tài khoản"
               className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-violet-300/80 bg-violet-100 px-2 py-1 text-[11px] font-semibold text-violet-900 shadow-sm transition hover:bg-violet-200"
             >
-              <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={1.75} />
-              <span className="hidden sm:inline">LLM (khóa)</span>
+              <CircleHelp className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden strokeWidth={1.75} />
+              <span className="hidden sm:inline">Quyền AI</span>
             </button>
-          )}
+          ) : null}
           {canDeleteThisLead ? (
             <button
               type="button"
@@ -7930,378 +7835,200 @@ function LeadDetailPanel({
               </div>
 
               <aside className="flex min-h-0 flex-col gap-1.5 border-b border-slate-200/80 p-1.5 sm:p-2 lg:col-span-4 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
-                {crmQuickBlockVisible && db ? (
-                  <>
-                    <nav
-                      className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-md"
-                      role="tablist"
-                      aria-label="Phân công và lịch sử"
+                <nav
+                  className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-md"
+                  role="tablist"
+                  aria-label="Cột phải hồ sơ"
+                >
+                  {crmQuickBlockVisible && db ? (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={detailRightTab === 'assign'}
+                      onClick={() => setDetailRightTab('assign')}
+                      className={[
+                        'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
+                        detailRightTab === 'assign'
+                          ? 'border-violet-700 bg-gradient-to-r from-violet-600 to-indigo-700 text-white shadow-md ring-2 ring-violet-300/40'
+                          : 'border-violet-200 bg-violet-50 text-violet-950 hover:border-violet-400 hover:bg-violet-100',
+                      ].join(' ')}
                     >
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={detailRightTab === 'assign'}
-                        onClick={() => setDetailRightTab('assign')}
-                        className={[
-                          'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
-                          detailRightTab === 'assign'
-                            ? 'border-violet-700 bg-gradient-to-r from-violet-600 to-indigo-700 text-white shadow-md ring-2 ring-violet-300/40'
-                            : 'border-violet-200 bg-violet-50 text-violet-950 hover:border-violet-400 hover:bg-violet-100',
-                        ].join(' ')}
-                      >
-                        Phân công
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={detailRightTab === 'history'}
-                        onClick={() => setDetailRightTab('history')}
-                        className={[
-                          'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
-                          detailRightTab === 'history'
-                            ? 'border-teal-700 bg-gradient-to-r from-teal-600 to-cyan-700 text-white shadow-md ring-2 ring-teal-300/40'
-                            : 'border-teal-200 bg-teal-50 text-teal-950 hover:border-teal-400 hover:bg-teal-100',
-                        ].join(' ')}
-                      >
-                        Lịch sử
-                      </button>
-                    </nav>
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                      {detailRightTab === 'assign' ? (
-                        <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                          <LeadCrmQuickBlock
-                            key={lead.id}
-                            lead={lead}
-                            db={db}
-                            counselorUsers={counselorUsers}
-                            pickListUsers={pickListUsers}
-                            counselorsLoading={counselorsLoading}
-                            reassignElevated={reassignElevated}
-                            onUpdated={onUpdated}
-                            compact
-                            leadScoringContext={{
-                              profile: activeScoringProfile,
-                              buckets: scoringMasterBuckets,
-                              schoolDefs: schoolTvvSignalDefs ?? null,
-                              scoringOpts: detailScoringOpts,
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{interactionsHistorySection}</div>
-                      )}
+                      Phân công
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailRightTab === 'history'}
+                    onClick={() => setDetailRightTab('history')}
+                    className={[
+                      'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
+                      detailRightTab === 'history'
+                        ? 'border-teal-700 bg-gradient-to-r from-teal-600 to-cyan-700 text-white shadow-md ring-2 ring-teal-300/40'
+                        : 'border-teal-200 bg-teal-50 text-teal-950 hover:border-teal-400 hover:bg-teal-100',
+                    ].join(' ')}
+                  >
+                    Lịch sử
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailRightTab === 'assist'}
+                    onClick={openAssistRail}
+                    className={[
+                      'min-h-8 flex-1 rounded-lg border-2 px-2 py-1.5 text-left text-xs font-bold tracking-tight transition',
+                      detailRightTab === 'assist'
+                        ? 'border-emerald-700 bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md ring-2 ring-emerald-300/40'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-950 hover:border-emerald-400 hover:bg-emerald-100',
+                    ].join(' ')}
+                  >
+                    AI tư vấn
+                  </button>
+                </nav>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  {detailRightTab === 'assign' && crmQuickBlockVisible && db ? (
+                    <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                      <LeadCrmQuickBlock
+                        key={lead.id}
+                        lead={lead}
+                        db={db}
+                        counselorUsers={counselorUsers}
+                        pickListUsers={pickListUsers}
+                        counselorsLoading={counselorsLoading}
+                        reassignElevated={reassignElevated}
+                        onUpdated={onUpdated}
+                        compact
+                        leadScoringContext={{
+                          profile: activeScoringProfile,
+                          buckets: scoringMasterBuckets,
+                          schoolDefs: schoolTvvSignalDefs ?? null,
+                          scoringOpts: detailScoringOpts,
+                        }}
+                      />
                     </div>
-                  </>
-                ) : (
-                  interactionsHistorySection
-                )}
+                  ) : null}
+                  {detailRightTab === 'history' ? (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{interactionsHistorySection}</div>
+                  ) : null}
+                  {detailRightTab === 'assist' ? (
+                    <LeadDetailAssistRail
+                      lead={lead}
+                      playbooks={playbooks}
+                      canRunAssistant={canRunLlmAnalysis}
+                      infoScoreRuntime={infoScoreRuntime}
+                      priorityTag={detailScoringPreview?.priorityTag}
+                      calculatedScore={detailScoringPreview?.calculatedScore}
+                      onGoToProfile={() => setDetailLeftTab('profile')}
+                      analyzePanel={
+                        canRunAi ? (
+                          <div className="space-y-3 text-sm">
+                            <p className="text-[11px] leading-snug text-slate-600">{llmDialogHint}</p>
+                            {aiTasksErr ? <p className="text-rose-700">{aiTasksErr}</p> : null}
+                            {!aiIntegrationDiag.apiKeyPresent ? (
+                              <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs text-rose-950">
+                                <p className="font-medium">Chưa cấu hình khóa AI</p>
+                                <p className="mt-1 leading-relaxed">
+                                  Siêu quản trị vào{' '}
+                                  <Link
+                                    to="/settings?tab=advise&sub=consulting&adviseStep=ai"
+                                    className="font-semibold underline"
+                                  >
+                                    Cài đặt → Tư vấn → AI
+                                  </Link>{' '}
+                                  để lưu khóa.
+                                </p>
+                              </div>
+                            ) : null}
+                            {!aiTasksLoading && !aiTasks.length ? (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-2.5 text-xs text-amber-950">
+                                <p className="font-medium">Chưa có tác vụ phân tích</p>
+                                <p className="mt-1 leading-relaxed">
+                                  Tạo ở{' '}
+                                  <Link
+                                    to="/settings?tab=advise&sub=consulting&adviseStep=ai"
+                                    className="font-semibold underline"
+                                  >
+                                    Cài đặt → AI
+                                  </Link>
+                                  .
+                                </p>
+                              </div>
+                            ) : null}
+                            <label className="block text-xs font-medium text-slate-700">
+                              Tác vụ phân tích
+                              <select
+                                value={resolvedAiTaskId}
+                                onChange={(e) => {
+                                  setAiSelTaskId(e.target.value)
+                                  setAiErr(null)
+                                  setAiPreview(null)
+                                }}
+                                disabled={aiTasksLoading || !aiTasks.length}
+                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-50"
+                              >
+                                {!aiTasks.length ? (
+                                  <option value="">Chưa có tác vụ</option>
+                                ) : (
+                                  aiTasks.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </label>
+                            {storedAiInsight && formatAiRunAt(storedAiInsight.runAt) ? (
+                              <p className="text-[11px] text-slate-500">
+                                Lần chạy gần nhất: {formatAiRunAt(storedAiInsight.runAt)}
+                              </p>
+                            ) : null}
+                            <button
+                              type="button"
+                              disabled={aiRunning || aiTasksLoading || !selectedAITask || !aiTasks.length || !db}
+                              onClick={() => void runAiLlmAnalysis()}
+                              className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-45"
+                            >
+                              <Wand2 className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                              {aiRunning ? 'Đang phân tích…' : 'Chạy phân tích AI'}
+                            </button>
+                            {aiErr ? <p className="text-xs text-rose-700">{aiErr}</p> : null}
+                            {aiRunning ? (
+                              <div className="space-y-2">
+                                <div className="h-8 rounded-xl ai-skeleton-shimmer" />
+                                <div className="h-16 rounded-xl ai-skeleton-shimmer" style={{ animationDelay: '0.15s' }} />
+                              </div>
+                            ) : displayAiResult ? (
+                              <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-2">
+                                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                                  Kết quả
+                                </p>
+                                <AiInsightsGrid data={displayAiResult} />
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-slate-500">Chọn tác vụ rồi bấm chạy.</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-950">
+                            <p className="font-semibold">Chưa bật quyền AI trên hồ sơ</p>
+                            <button
+                              type="button"
+                              className="mt-2 font-semibold underline"
+                              onClick={() => setLlmAccessHelpOpen(true)}
+                            >
+                              Xem hướng dẫn quyền
+                            </button>
+                          </div>
+                        )
+                      }
+                    />
+                  ) : null}
+                </div>
               </aside>
 
             </div>
         </div>
       </div>
-
-      {playbookPopupOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="Đóng cửa sổ playbook"
-            onClick={() => setPlaybookPopupOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-playbook-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex h-[min(96dvh,calc(100dvh-0.75rem))] max-h-[min(96dvh,calc(100dvh-0.75rem))] w-[min(calc(100vw-0.75rem),100rem)] max-w-[calc(100vw-0.75rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl"
-          >
-            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-amber-50/90 to-white px-4 py-3 sm:px-6 sm:py-4">
-              <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white shadow-sm sm:h-11 sm:w-11">
-                    <BookOpen className="h-5 w-5 text-amber-700 sm:h-6 sm:w-6" strokeWidth={1.75} aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <h2 id="lead-playbook-dialog-title" className="text-base font-semibold text-slate-900 sm:text-xl">
-                      Tư vấn & tra cứu
-                    </h2>
-                    <p className="mt-0.5 text-xs text-slate-600 sm:text-sm">
-                      {lead.fullName || 'Hồ sơ'} — kịch bản tham vấn và thông tin nhà trường
-                    </p>
-                  </div>
-                </div>
-                <div
-                  className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-sm"
-                  role="tablist"
-                  aria-label="Loại tra cứu"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={playbookPopupTab === 'consulting'}
-                    onClick={() => setPlaybookPopupTab('consulting')}
-                    className={[
-                      'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm',
-                      playbookPopupTab === 'consulting'
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'text-slate-700 hover:bg-slate-50',
-                    ].join(' ')}
-                  >
-                    <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-                    Tham vấn trả lời
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={playbookPopupTab === 'general'}
-                    onClick={() => setPlaybookPopupTab('general')}
-                    className={[
-                      'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm',
-                      playbookPopupTab === 'general'
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'text-slate-700 hover:bg-slate-50',
-                    ].join(' ')}
-                  >
-                    <Library className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={1.75} />
-                    Thông tin chung
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPlaybookPopupOpen(false)}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                <X className="h-4 w-4" aria-hidden />
-                Đóng
-              </button>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-5">
-              {playbookPopupTab === 'consulting' ? (
-                <LeadPlaybookPanel
-                  lead={lead}
-                  playbooks={playbooks}
-                  quickSearchTerms={consultingInsights.quickSearchTerms}
-                />
-              ) : (
-                <LeadKnowledgePanel
-                  lead={lead}
-                  documents={knowledgeDocuments}
-                  categories={knowledgeCategories}
-                  quickSearchTerms={consultingInsights.quickSearchTerms}
-                />
-              )}
-            </div>
-          </div>
-        </>
-      ) : null}
-
-      {canRunAi && llmPopupOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[110] cursor-default bg-slate-900/40"
-            aria-label="Đóng cửa sổ phân tích AI"
-            onClick={() => setLlmPopupOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-llm-dialog-title"
-            className={[
-              'fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,880px)] max-h-[92dvh] w-[94vw] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-amber-200/90 bg-white text-slate-900 shadow-2xl sm:w-[min(96vw,56rem)] lg:w-[min(92vw,72rem)]',
-              aiRunning ? 'ring-2 ring-amber-400/50 ring-inset' : '',
-            ].join(' ')}
-          >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-violet-50/90 to-amber-50/80 px-4 py-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white shadow-sm">
-                  <Sparkles className="h-4 w-4 text-amber-600" strokeWidth={1.75} aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <h2 id="lead-llm-dialog-title" className="text-base font-semibold text-slate-900 sm:text-lg">
-                    Phân tích AI
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-snug text-slate-600 sm:text-sm">{llmDialogHint}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLlmPopupOpen(false)}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                <X className="h-4 w-4" aria-hidden />
-                Đóng
-              </button>
-            </div>
-
-            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
-              {aiTasksErr ? <p className="text-sm text-rose-700">{aiTasksErr}</p> : null}
-
-              {!aiIntegrationDiag.apiKeyPresent ? (
-                <div className="mt-1 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-sm text-rose-950">
-                  <p className="font-medium">Chưa cấu hình khóa AI</p>
-                  <p className="mt-1 text-xs leading-relaxed">
-                    Siêu quản trị vào{' '}
-                    <Link
-                      to="/settings?tab=advise&sub=consulting&adviseStep=ai"
-                      className="font-semibold underline"
-                      onClick={() => setLlmPopupOpen(false)}
-                    >
-                      Cài đặt → Tích hợp → AI & LLM
-                    </Link>{' '}
-                    để lưu khóa Gemini, OpenAI hoặc DeepSeek.
-                  </p>
-                </div>
-              ) : null}
-
-              {!aiTasksLoading && !aiTasks.length ? (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-950">
-                  <p className="font-medium">Chưa có tác vụ phân tích</p>
-                  <p className="mt-1 text-xs leading-relaxed">
-                    Quản trị vào{' '}
-                    <Link
-                      to="/settings?tab=advise&sub=consulting&adviseStep=ai"
-                      className="font-semibold underline"
-                      onClick={() => setLlmPopupOpen(false)}
-                    >
-                      Cài đặt → Tích hợp → AI & LLM
-                    </Link>{' '}
-                    và bấm «Tạo tác vụ mẫu tư vấn» (hoặc thêm tác vụ mới). Hệ thống cũng tự tạo tác vụ mẫu khi Quản trị
-                    đăng nhập lần đầu sau cập nhật.
-                  </p>
-                </div>
-              ) : null}
-
-              <label className="mt-3 block text-sm font-medium text-slate-700">
-                Tác vụ phân tích
-                <select
-                  value={resolvedAiTaskId}
-                  onChange={(e) => {
-                    setAiSelTaskId(e.target.value)
-                    setAiErr(null)
-                    setAiPreview(null)
-                  }}
-                  disabled={aiTasksLoading || !aiTasks.length}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-50"
-                >
-                  {!aiTasks.length ? (
-                    <option value="">Chưa có tác vụ — tạo trong Cài đặt</option>
-                  ) : (
-                    aiTasks.map((t) => (
-                      <option key={t.id} value={t.id} className="bg-white">
-                        {t.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-
-              {storedAiInsight && formatAiRunAt(storedAiInsight.runAt) ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  Lần chạy gần nhất: {formatAiRunAt(storedAiInsight.runAt)}
-                </p>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={aiRunning || aiTasksLoading || !selectedAITask || !aiTasks.length || !db}
-                onClick={() => void runAiLlmAnalysis()}
-                className="group relative mt-4 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-amber-400/45 bg-gradient-to-r from-violet-600/95 via-fuchsia-600/90 to-amber-600/95 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:opacity-45"
-              >
-                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition group-hover:translate-x-full group-hover:opacity-100 group-hover:duration-700" />
-                <Wand2 className="relative h-4 w-4 shrink-0 text-amber-100" strokeWidth={1.75} />
-                <span className="relative">{aiRunning ? 'Đang phân tích…' : 'Chạy phân tích AI'}</span>
-              </button>
-
-              {aiErr ? <p className="mt-2 text-sm text-rose-700">{aiErr}</p> : null}
-
-              {aiRunning ? (
-                <div className="mt-4 space-y-2">
-                  <p className="text-xs text-slate-400">Đang suy luận…</p>
-                  <div className="h-10 rounded-xl ai-skeleton-shimmer" />
-                  <div className="h-10 rounded-xl ai-skeleton-shimmer" style={{ animationDelay: '0.15s' }} />
-                  <div className="h-24 rounded-xl ai-skeleton-shimmer" style={{ animationDelay: '0.3s' }} />
-                </div>
-              ) : displayAiResult ? (
-                <div className="mt-4 rounded-2xl border border-rose-200/60 bg-gradient-to-br from-white to-rose-50/50 p-3 shadow-inner">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Kết quả</p>
-                  <AiInsightsGrid data={displayAiResult} />
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-slate-500">
-                  {!aiTasks.length
-                    ? 'Tạo tác vụ trong Cài đặt → AI & LLM trước khi chạy.'
-                    : !aiIntegrationDiag.apiKeyPresent
-                      ? 'Cần khóa API trong Cài đặt → LLM trước khi chạy.'
-                      : 'Chọn tác vụ và bấm chạy.'}
-                </p>
-              )}
-            </div>
-          </div>
-        </>
-      ) : null}
-
-      {dynamicAssistantSlot && assistantMounted ? (
-        <>
-          {assistantPopupOpen ? (
-            <button
-              type="button"
-              className="fixed inset-0 z-[110] cursor-default bg-slate-900/40"
-              aria-label="Đóng cửa sổ trợ lý kịch bản"
-              onClick={() => setAssistantPopupOpen(false)}
-            />
-          ) : null}
-          <div
-            role="dialog"
-            aria-modal={assistantPopupOpen}
-            aria-labelledby="lead-assistant-dialog-title"
-            aria-hidden={!assistantPopupOpen}
-            className={[
-              'fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,88dvh)] max-h-[92dvh] w-[min(calc(100vw-1rem),85rem)] max-w-[min(96vw,85rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl sm:h-[min(92dvh,76dvh)]',
-              assistantPopupOpen ? '' : 'pointer-events-none hidden',
-            ].join(' ')}
-          >
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-sky-50/90 to-white px-4 py-3 sm:px-5 sm:py-4">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-200/80 bg-white shadow-sm">
-                  <Bot className="h-5 w-5 text-sky-700" strokeWidth={1.75} aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <h2 id="lead-assistant-dialog-title" className="text-lg font-semibold text-slate-900 sm:text-xl">
-                    Trợ lý kịch bản
-                  </h2>
-                  <p className="text-sm text-slate-600 sm:text-base">Luồng Script Hub theo hồ sơ</p>
-                </div>
-                <div
-                  className="flex cursor-help items-center gap-2 rounded-xl border border-[var(--color-primary)]/25 bg-[var(--color-primary-soft)]/60 px-2.5 py-1.5 shadow-sm"
-                  title={buildMlWinHoverText(leadMl)}
-                >
-                  <MlWinGauge value={leadMl.mlWinProbability} title={buildMlWinHoverText(leadMl)} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[var(--color-primary)]">Điểm thông tin</p>
-                    <span className="text-sm font-bold text-[var(--color-primary)]">{leadMl.mlWinProbability}%</span>
-                    <span className="ml-1.5 rounded bg-[var(--color-primary-soft)] px-1 text-xs font-semibold uppercase text-[var(--color-primary)]">
-                      {leadMl.source === 'mvp_mock' ? 'MVP' : 'Đã lưu'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAssistantPopupOpen(false)}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                <X className="h-4 w-4" aria-hidden />
-                Đóng
-              </button>
-            </div>
-            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              {dynamicAssistantSlot}
-            </div>
-          </div>
-        </>
-      ) : null}
 
       {llmAccessHelpOpen ? (
         <>

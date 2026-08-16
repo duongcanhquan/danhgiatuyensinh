@@ -3,8 +3,8 @@ import { motion } from 'motion/react'
 
 const BRAND_LOGO_SRC = `${import.meta.env.BASE_URL}brand/logo-vietmy-trang.png`
 
-/** Thời gian tối thiểu giữ màn motion (ms). */
-export const AUTH_BOOT_MIN_HOLD_MS = 3000
+/** Thời gian tối thiểu giữ màn motion khi cold start (ms). Re-sync dùng 0 qua opts.minMs. */
+export const AUTH_BOOT_MIN_HOLD_MS = 900
 
 const ORBIT_DOTS = [
   { angle: 0, delay: 0, size: 10 },

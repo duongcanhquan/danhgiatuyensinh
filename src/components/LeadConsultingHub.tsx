@@ -20,10 +20,10 @@ export type ConsultingHubTab = 'assist' | 'overview' | 'playbook' | 'knowledge' 
 const TAB_META: { id: ConsultingHubTab; label: string; icon: typeof BookOpen }[] = [
   { id: 'assist', label: 'Gợi ý gọi', icon: Wand2 },
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
-  { id: 'playbook', label: 'Playbook', icon: BookOpen },
+  { id: 'playbook', label: 'Mẫu tư vấn', icon: BookOpen },
   { id: 'knowledge', label: 'Tri thức', icon: Library },
-  { id: 'scripts', label: 'Kịch bản', icon: Bot },
-  { id: 'general', label: 'Tư vấn chung', icon: GraduationCap },
+  { id: 'scripts', label: 'Mảnh thoại', icon: Bot },
+  { id: 'general', label: 'Chung', icon: GraduationCap },
 ]
 
 export function LeadConsultingHub({
@@ -37,6 +37,8 @@ export function LeadConsultingHub({
   calculatedScore,
   onGoToProfile,
   onGoToAi,
+  compact = false,
+  onTabChange,
 }: {
   lead: Lead
   playbooks: ConsultingPlaybook[]
@@ -48,6 +50,9 @@ export function LeadConsultingHub({
   calculatedScore?: number
   onGoToProfile?: () => void
   onGoToAi?: () => void
+  /** Tab gọn cho cột phải hồ sơ. */
+  compact?: boolean
+  onTabChange?: (tab: ConsultingHubTab) => void
 }) {
   const [tab, setTab] = useState<ConsultingHubTab>(initialTab)
   const [knowledgeFocusId, setKnowledgeFocusId] = useState<string | null>(null)
@@ -55,6 +60,14 @@ export function LeadConsultingHub({
   useEffect(() => {
     setTab(initialTab)
   }, [initialTab])
+
+  const selectTab = useCallback(
+    (next: ConsultingHubTab) => {
+      setTab(next)
+      onTabChange?.(next)
+    },
+    [onTabChange],
+  )
 
   const { documents } = useKnowledgeDocuments()
   const { categories } = useKnowledgeCategories()
@@ -119,28 +132,37 @@ export function LeadConsultingHub({
     ],
   )
 
-  const navigateTab = useCallback((next: ConsultingHubTab, opts?: { knowledgeDocId?: string }) => {
-    if (opts?.knowledgeDocId) setKnowledgeFocusId(opts.knowledgeDocId)
-    setTab(next)
-  }, [])
+  const navigateTab = useCallback(
+    (next: ConsultingHubTab, opts?: { knowledgeDocId?: string }) => {
+      if (opts?.knowledgeDocId) setKnowledgeFocusId(opts.knowledgeDocId)
+      selectTab(next)
+    },
+    [selectTab],
+  )
+
+  const tabsShown = compact
+    ? TAB_META.filter((t) => t.id === 'assist' || t.id === 'playbook' || t.id === 'knowledge' || t.id === 'scripts')
+    : TAB_META
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="shrink-0 flex flex-wrap gap-1 border-b border-slate-200/80 pb-2">
-        {TAB_META.map(({ id, label, icon: Icon }) => (
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <div className="shrink-0 flex flex-wrap gap-1 border-b border-slate-200/80 pb-1.5">
+        {tabsShown.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => selectTab(id)}
+            title={label}
             className={[
-              'inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold sm:text-sm',
+              'inline-flex items-center gap-1 rounded-lg font-semibold transition',
+              compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs sm:text-sm',
               tab === id
-                ? 'bg-amber-600 text-white shadow-sm'
+                ? 'bg-emerald-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
             ].join(' ')}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            {label}
+            <span className={compact ? 'max-[360px]:sr-only' : undefined}>{label}</span>
             {tabCounts[id] > 0 ? (
               <span className="rounded-full bg-white/25 px-1.5 text-[10px] tabular-nums">{tabCounts[id]}</span>
             ) : null}
@@ -156,6 +178,7 @@ export function LeadConsultingHub({
             snippets={snippets}
             knowledgeDocs={documents}
             canUseLlm={Boolean(canRunAssistant)}
+            compact={compact}
           />
         ) : null}
         {tab === 'overview' ? (
@@ -191,7 +214,12 @@ export function LeadConsultingHub({
           />
         ) : null}
         {tab === 'scripts' && canRunAssistant ? (
-          <div className="h-full min-h-[min(60vh,520px)] overflow-y-auto rounded-xl border border-sky-200/80 bg-sky-50/30 p-2 sm:p-3">
+          <div
+            className={[
+              'h-full overflow-y-auto rounded-xl border border-sky-200/80 bg-sky-50/30 p-2',
+              compact ? 'min-h-0' : 'min-h-[min(60vh,520px)] sm:p-3',
+            ].join(' ')}
+          >
             <ConsultingAssistantPanel
               variant="embedded"
               showHeader={false}
@@ -204,7 +232,7 @@ export function LeadConsultingHub({
         ) : tab === 'scripts' ? (
           <p className="text-sm text-slate-500">Không có quyền mở trợ lý kịch bản.</p>
         ) : null}
-        {tab === 'general' ? (
+        {!compact && tab === 'general' ? (
           <div className="grid min-h-0 gap-3 overflow-y-auto sm:grid-cols-2">
             <section className="rounded-xl border border-violet-200/80 bg-violet-50/50 p-3">
               <h3 className="text-sm font-semibold text-violet-950">Playbook chung</h3>

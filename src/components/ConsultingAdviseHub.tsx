@@ -4,7 +4,7 @@ import type { ConsultingPlaybook } from '../types'
 import { ConsultingPlaybookSection } from './ConsultingPlaybookSection'
 import { KnowledgeBaseTab } from './KnowledgeBaseTab'
 import { ScriptHubManager } from './ScriptHubManager'
-import { AISettingsTab } from './AISettingsTab'
+import { AiSupportSettingsPanel } from './AiSupportSettingsPanel'
 
 export type AdviseHubStep = 'facts' | 'plays' | 'snippets' | 'ai'
 
@@ -144,7 +144,7 @@ export function ConsultingAdviseHub({
           />
         ) : null}
         {active === 'snippets' && canPlaybooks ? <ScriptHubManager db={db} /> : null}
-        {active === 'ai' && canAiEngine ? <AISettingsTab db={db} /> : null}
+        {active === 'ai' && canAiEngine ? <AiSupportSettingsPanel db={db} /> : null}
       </div>
     </div>
   )
