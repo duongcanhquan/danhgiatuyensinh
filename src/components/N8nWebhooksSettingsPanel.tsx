@@ -28,7 +28,7 @@ const FIELDS: Array<{
 ]
 
 /** Webhook n8n — form gọn. Đổi URL và Lưu là các luồng TVV/KT/báo cáo dùng ngay. */
-export function N8nWebhooksSettingsPanel() {
+export function N8nWebhooksSettingsPanel({ hideTitle = false }: { hideTitle?: boolean }) {
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
   const canEdit = can('config:master_data') || can('config:omicall')
@@ -95,12 +95,18 @@ export function N8nWebhooksSettingsPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-slate-900">Webhook n8n</h2>
-        <span className="truncate text-xs text-slate-500">
+      {!hideTitle ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-semibold text-slate-900">Tự động hóa (n8n)</h2>
+          <span className="truncate text-xs text-slate-500">
+            {currentOrgLabel} · {filledCount}/4 URL
+          </span>
+        </div>
+      ) : (
+        <p className="truncate text-xs text-slate-500">
           {currentOrgLabel} · {filledCount}/4 URL
-        </span>
-      </div>
+        </p>
+      )}
       <p className="text-xs text-slate-600">
         Dán URL workflow n8n (phải Active). Trên n8n map <code className="rounded bg-slate-100 px-1">message_vi</code> /{' '}
         <code className="rounded bg-slate-100 px-1">chat_text</code> → Google Chat. URL trống = tắt luồng đó.

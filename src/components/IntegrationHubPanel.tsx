@@ -62,7 +62,7 @@ function isConnectorConfigured(hub: OrgIntegrationHubConfig, def: ConnectorDef):
   return Object.values(fields).some((v) => String(v).trim().length > 0)
 }
 
-/** Hub kết nối — lưới icon gọn; có trang cài đặt riêng thì bấm là mở tab đó. */
+/** Các kênh — lưới icon; đầu có màn riêng thì bấm là mở luôn. */
 export function IntegrationHubPanel() {
   const navigate = useNavigate()
   const { can, profile } = useAuth()
@@ -75,6 +75,7 @@ export function IntegrationHubPanel() {
   const [msg, setMsg] = useState<string | null>(null)
   const [activeConnectorId, setActiveConnectorId] = useState<string | null>(null)
   const [freshApiKey, setFreshApiKey] = useState<string | null>(null)
+  const [showPlanned, setShowPlanned] = useState(false)
 
   const openConnector = useCallback(
     (c: ConnectorDef) => {
@@ -88,11 +89,17 @@ export function IntegrationHubPanel() {
     [navigate],
   )
 
-  const groups = useMemo(() => connectorsByGroup(), [])
+  const groups = useMemo(() => connectorsByGroup({ includePlanned: showPlanned }), [showPlanned])
   const activeDef = useMemo(
     () => groups.flatMap((g) => g.items).find((c) => c.id === activeConnectorId) ?? null,
     [groups, activeConnectorId],
   )
+  const showSaveBar =
+    canEdit &&
+    activeDef &&
+    (activeDef.fields.length > 0 ||
+      activeDef.id === 'generic_webhooks' ||
+      activeDef.id === 'inbound_lead_api')
 
   useEffect(() => {
     if (!db) return
@@ -218,9 +225,8 @@ export function IntegrationHubPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-slate-900">Hub kết nối</h2>
-          <p className="mt-0.5 text-xs text-slate-600">
-            Bấm đầu nối đã có màn riêng (Gọi điện, n8n, AI…) để mở cấu hình. Các đầu còn lại cấu hình ngay bên dưới.
+          <p className="text-sm text-slate-600">
+            Bấm ô có màn riêng (Gọi điện, n8n, AI…) để mở cấu hình. Ô còn lại chỉnh ngay bên dưới.
           </p>
           <p className="truncate text-xs text-slate-500">{currentOrgLabel}</p>
         </div>
@@ -233,10 +239,14 @@ export function IntegrationHubPanel() {
             <span className="h-2 w-2 rounded-full bg-sky-500" aria-hidden />
             Sẵn sàng
           </span>
-          <span className="inline-flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowPlanned((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 hover:bg-slate-100"
+          >
             <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden />
-            Sắp có
-          </span>
+            {showPlanned ? 'Ẩn sắp có' : 'Hiện sắp có'}
+          </button>
         </div>
       </div>
 
@@ -507,12 +517,12 @@ export function IntegrationHubPanel() {
           ) : null}
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center text-sm text-slate-500">
-          Chọn một đầu nối ở trên để cấu hình
+        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-center text-sm text-slate-500">
+          Bấm ô có màn riêng để mở cấu hình; ô còn lại (token, webhook…) chỉnh tại đây rồi Lưu.
         </p>
       )}
 
-      {canEdit ? (
+      {showSaveBar ? (
         <div className="sticky bottom-2 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
           <button
             type="button"
@@ -525,6 +535,8 @@ export function IntegrationHubPanel() {
           </button>
           {msg ? <span className="text-sm text-slate-600">{msg}</span> : null}
         </div>
+      ) : msg ? (
+        <p className="text-sm text-slate-600">{msg}</p>
       ) : null}
     </div>
   )

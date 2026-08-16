@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BookOpen, Bot, GraduationCap, LayoutDashboard, Library } from 'lucide-react'
+import { BookOpen, Bot, GraduationCap, LayoutDashboard, Library, Wand2 } from 'lucide-react'
 import type { ConsultingPlaybook, Lead, PriorityTag } from '../types'
 import type { InfoScoreRuntime } from '../utils/infoScoreRules'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
@@ -8,14 +8,17 @@ import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { countLeadRelevantKnowledge } from '../utils/knowledgeRag'
 import { snippetMatchesLead } from '../utils/scriptEngine'
 import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
+import { buildConsultingChips } from '../utils/consultingQuickChips'
 import { LeadPlaybookPanel } from './LeadPlaybookPanel'
 import { LeadKnowledgePanel } from './LeadKnowledgePanel'
 import { ConsultingAssistantPanel } from './ConsultingAssistantPanel'
 import { LeadConsultingOverviewPanel } from './LeadConsultingOverviewPanel'
+import { ConsultingLiveAssistPanel } from './ConsultingLiveAssistPanel'
 
-export type ConsultingHubTab = 'overview' | 'playbook' | 'knowledge' | 'scripts' | 'general'
+export type ConsultingHubTab = 'assist' | 'overview' | 'playbook' | 'knowledge' | 'scripts' | 'general'
 
 const TAB_META: { id: ConsultingHubTab; label: string; icon: typeof BookOpen }[] = [
+  { id: 'assist', label: 'Gợi ý gọi', icon: Wand2 },
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'playbook', label: 'Playbook', icon: BookOpen },
   { id: 'knowledge', label: 'Tri thức', icon: Library },
@@ -27,7 +30,7 @@ export function LeadConsultingHub({
   lead,
   playbooks,
   showDraftHint,
-  initialTab = 'overview',
+  initialTab = 'assist',
   canRunAssistant,
   infoScoreRuntime,
   priorityTag,
@@ -90,8 +93,14 @@ export function LeadConsultingHub({
     [snippets, lead],
   )
 
+  const assistChipCount = useMemo(
+    () => buildConsultingChips({ lead, playbooks, snippets }).length,
+    [lead, playbooks, snippets],
+  )
+
   const tabCounts: Record<ConsultingHubTab, number> = useMemo(
     () => ({
+      assist: assistChipCount,
       overview: insights.infoGaps.length,
       playbook: playbookMatches.length,
       knowledge: knowledgeRelevantCount,
@@ -99,6 +108,7 @@ export function LeadConsultingHub({
       general: generalPlaybooks.length + generalKnowledge.length + generalScripts.length,
     }),
     [
+      assistChipCount,
       insights.infoGaps.length,
       playbookMatches.length,
       knowledgeRelevantCount,
@@ -139,6 +149,15 @@ export function LeadConsultingHub({
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
+        {tab === 'assist' ? (
+          <ConsultingLiveAssistPanel
+            lead={lead}
+            playbooks={playbooks}
+            snippets={snippets}
+            knowledgeDocs={documents}
+            canUseLlm={Boolean(canRunAssistant)}
+          />
+        ) : null}
         {tab === 'overview' ? (
           <LeadConsultingOverviewPanel
             lead={lead}

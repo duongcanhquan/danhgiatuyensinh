@@ -7,6 +7,12 @@ import { BookOpen, Database, Download, Search, Upload, X } from 'lucide-react'
 import { HelpHintPopover } from './HelpHintPopover'
 import type { ConsultingPlaybook } from '../types'
 import { PlaybookTriggerEditor, playbookToMatchConfig, type PlaybookMatchConfig } from './PlaybookTriggerEditor'
+import { ObjectionPairsEditor } from './ObjectionPairsEditor'
+import {
+  parseObjectionLinesToPairs,
+  serializeObjectionPairs,
+  type ObjectionPair,
+} from '../utils/playbookObjectionPairs'
 import { FS_COLLECTIONS } from '../types'
 import {
   importConsultingPlaybooksBatch,
@@ -90,7 +96,7 @@ function PlaybookDataDetailPanel({
   const [isActive, setIsActive] = useState(true)
   const [strategy, setStrategy] = useState('')
   const [uspText, setUspText] = useState('')
-  const [objText, setObjText] = useState('')
+  const [objectionPairs, setObjectionPairs] = useState<ObjectionPair[]>([])
   const [matchConfig, setMatchConfig] = useState<PlaybookMatchConfig>(() => playbookToMatchConfig({}))
   const [busy, setBusy] = useState(false)
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
@@ -103,7 +109,7 @@ function PlaybookDataDetailPanel({
     setIsActive(playbook.isActive)
     setStrategy(playbook.strategy)
     setUspText((playbook.keySellingPoints ?? []).join('\n'))
-    setObjText(playbook.objectionHandling.join('\n'))
+    setObjectionPairs(parseObjectionLinesToPairs(playbook.objectionHandling ?? []))
     setMatchConfig(playbookToMatchConfig(playbook))
     setSaveMsg(null)
   }, [playbook?.id])
@@ -111,6 +117,8 @@ function PlaybookDataDetailPanel({
   const dirty = useMemo(() => {
     if (!playbook) return false
     const orig = playbookToMatchConfig(playbook)
+    const serialized = serializeObjectionPairs(objectionPairs)
+    const origObj = [...(playbook.objectionHandling ?? [])]
     return (
       title.trim() !== playbook.title.trim() ||
       contentCategory !== resolvePlaybookContentCategory(playbook) ||
@@ -118,10 +126,10 @@ function PlaybookDataDetailPanel({
       isActive !== playbook.isActive ||
       strategy !== playbook.strategy ||
       uspText !== (playbook.keySellingPoints ?? []).join('\n') ||
-      objText !== playbook.objectionHandling.join('\n') ||
+      JSON.stringify(serialized) !== JSON.stringify(origObj) ||
       JSON.stringify(orig) !== JSON.stringify(matchConfig)
     )
-  }, [playbook, title, contentCategory, priority, isActive, strategy, uspText, objText, matchConfig])
+  }, [playbook, title, contentCategory, priority, isActive, strategy, uspText, objectionPairs, matchConfig])
 
   const save = async () => {
     if (!playbook || !canEdit) return
@@ -148,10 +156,7 @@ function PlaybookDataDetailPanel({
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
-        objectionHandling: objText
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        objectionHandling: serializeObjectionPairs(objectionPairs),
         triggerConditions,
         matchKeywords,
         matchAllLeads,
@@ -322,19 +327,13 @@ function PlaybookDataDetailPanel({
               className={panelInput}
             />
           </label>
-          <label className="block">
-            <LabelWithHint
-              label="Xử lý từ chối (mỗi dòng)"
-              hint="Cặp phản đối → gợi ý trả lời. Có thể dùng dấu «->» giữa hai phần, ví dụ: Lo học phí: -> Gửi bảng học phí và trả góp."
-            />
-            <textarea
-              value={objText}
-              onChange={(e) => setObjText(e.target.value)}
+          <div className="lg:col-span-2">
+            <ObjectionPairsEditor
+              pairs={objectionPairs}
+              onChange={setObjectionPairs}
               disabled={!canEdit}
-              rows={4}
-              className={panelInput}
             />
-          </label>
+          </div>
           <div className="rounded-xl border border-violet-200/80 bg-violet-50/40 p-3 lg:col-span-2">
             <p className={`${panelLabel} mb-2 flex items-center gap-1.5`}>
               Khi nào hiện trên hồ sơ TVV
@@ -386,7 +385,7 @@ function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void
   const [matchConfig, setMatchConfig] = useState<PlaybookMatchConfig>(() => playbookToMatchConfig({}))
   const [strategy, setStrategy] = useState('')
   const [usps, setUsps] = useState('')
-  const [objections, setObjections] = useState('')
+  const [objectionPairs, setObjectionPairs] = useState<ObjectionPair[]>([])
   const [busy, setBusy] = useState(false)
 
   const save = async () => {
@@ -411,16 +410,13 @@ function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
-        objectionHandling: objections
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        objectionHandling: serializeObjectionPairs(objectionPairs),
         createdAt: now,
         updatedAt: now,
       })
       setStrategy('')
       setUsps('')
-      setObjections('')
+      setObjectionPairs([])
       onSaved?.()
     } catch (e) {
       console.error(e)
@@ -476,15 +472,9 @@ function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void
           className={panelInput}
         />
       </label>
-      <label className={panelLabel}>
-        Xử lý từ chối (mỗi dòng)
-        <textarea
-          value={objections}
-          onChange={(e) => setObjections(e.target.value)}
-          rows={3}
-          className={panelInput}
-        />
-      </label>
+      <div className="md:col-span-2">
+        <ObjectionPairsEditor pairs={objectionPairs} onChange={setObjectionPairs} />
+      </div>
       <div className="md:col-span-2">
         <button
           type="button"

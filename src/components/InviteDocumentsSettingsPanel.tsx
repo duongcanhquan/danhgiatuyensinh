@@ -15,7 +15,7 @@ const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
 
 /** Cài đặt giấy mời / mẫu Docs / thư mục Drive — theo từng trường. */
-export function InviteDocumentsSettingsPanel() {
+export function InviteDocumentsSettingsPanel({ hideTitle = false }: { hideTitle?: boolean }) {
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
   const canEdit = can('config:master_data') || can('config:omicall')
@@ -87,17 +87,20 @@ export function InviteDocumentsSettingsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <FileStack className="h-4 w-4 text-indigo-800" aria-hidden />
-          Giấy mời &amp; mẫu
-        </h2>
-        <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
-      </div>
+      {!hideTitle ? (
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <FileStack className="h-4 w-4 text-indigo-800" aria-hidden />
+            Giấy mời &amp; mẫu
+          </h2>
+          <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
+        </div>
+      ) : (
+        <p className="truncate text-xs text-slate-500">{currentOrgLabel}</p>
+      )}
       <p className="text-sm text-slate-600">
-        Bật/tắt loại giấy, đổi nhãn, gắn mã mẫu Google Docs và thư mục Drive gốc. Webhook tạo giấy nằm ở tab{' '}
-        <strong>Webhook n8n</strong> (ô Giấy mời). Tạo folder cần URL Drive ở tab <strong>Chứng từ</strong> (cùng Apps
-        Script).
+        Bật/tắt loại giấy, đổi nhãn, gắn mã mẫu Google Docs và thư mục Drive gốc. URL tạo giấy nằm ở{' '}
+        <strong>Tự động hóa (n8n)</strong>. Tạo folder cần URL Drive ở <strong>Chứng từ</strong>.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">

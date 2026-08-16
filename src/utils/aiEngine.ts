@@ -226,7 +226,7 @@ async function fetchOpenAiChat(endpoint: string, init: RequestInit): Promise<Res
 }
 
 const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderId, string> = {
-  Gemini: 'gemini-2.0-flash',
+  Gemini: 'gemini-2.5-flash-lite',
   OpenAI: 'gpt-4o-mini',
   DeepSeek: 'deepseek-chat',
 }
@@ -268,9 +268,9 @@ export function resolveAIIntegrationConfig(): AIIntegrationConfig | null {
 
   const apiKey = String(import.meta.env.VITE_AI_API_KEY ?? '').trim()
   if (apiKey) {
-    const providerRaw = String(import.meta.env.VITE_AI_PROVIDER ?? 'OpenAI').trim()
+    const providerRaw = String(import.meta.env.VITE_AI_PROVIDER ?? 'Gemini').trim()
     const provider: AIProviderId =
-      providerRaw === 'Gemini' ? 'Gemini' : providerRaw === 'DeepSeek' ? 'DeepSeek' : 'OpenAI'
+      providerRaw === 'OpenAI' ? 'OpenAI' : providerRaw === 'DeepSeek' ? 'DeepSeek' : 'Gemini'
     const modelRaw = String(import.meta.env.VITE_AI_MODEL ?? '').trim()
     const model = modelRaw || DEFAULT_MODEL_BY_PROVIDER[provider]
     return { provider, apiKey, model }

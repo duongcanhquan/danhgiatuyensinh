@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   enabledSubsForMain,
+  isConnectDetailSub,
   isSettingsSubEnabled,
   resolveSettingsRoute,
   type SettingsAccessContext,
@@ -20,16 +21,32 @@ const fullAccess: SettingsAccessContext = {
   canPermMatrix: true,
 }
 
-describe('settingsNavigation webhooks', () => {
-  it('exposes webhooks under connect for master or omicall', () => {
-    expect(isSettingsSubEnabled('webhooks', fullAccess)).toBe(true)
-    expect(enabledSubsForMain('connect', fullAccess)).toContain('webhooks')
-    expect(enabledSubsForMain('connect', fullAccess)).toContain('hub')
-    expect(enabledSubsForMain('connect', fullAccess)).toContain('invite_docs')
-    expect(enabledSubsForMain('connect', fullAccess)).toContain('receipts')
+describe('settingsNavigation connect hub', () => {
+  it('nav chỉ còn Các kênh + Tư vấn — không trùng tab Gọi điện/n8n/AI', () => {
+    const subs = enabledSubsForMain('connect', fullAccess)
+    expect(subs).toEqual(['hub', 'consulting'])
+    expect(subs).not.toContain('webhooks')
+    expect(subs).not.toContain('omicall')
+    expect(subs).not.toContain('llm')
+    expect(subs).not.toContain('comms')
+    expect(subs).not.toContain('invite_docs')
+  })
+
+  it('URL sâu webhooks/omicall/comms vẫn mở được; llm gộp Tư vấn', () => {
+    expect(isConnectDetailSub('webhooks')).toBe(true)
+    expect(isConnectDetailSub('invite_docs')).toBe(true)
+    expect(isConnectDetailSub('llm')).toBe(false)
     expect(resolveSettingsRoute('connect', 'webhooks', fullAccess)).toEqual({
       main: 'connect',
       sub: 'webhooks',
+    })
+    expect(resolveSettingsRoute('connect', 'llm', fullAccess)).toEqual({
+      main: 'connect',
+      sub: 'consulting',
+    })
+    expect(resolveSettingsRoute('connect', 'comms', fullAccess)).toEqual({
+      main: 'connect',
+      sub: 'comms',
     })
     expect(resolveSettingsRoute('n8n', null, fullAccess).sub).toBe('webhooks')
     expect(resolveSettingsRoute('giay_moi', null, fullAccess).sub).toBe('invite_docs')
@@ -37,14 +54,15 @@ describe('settingsNavigation webhooks', () => {
     expect(resolveSettingsRoute('integrations', null, fullAccess).sub).toBe('hub')
   })
 
-  it('hides webhooks without master/omicall', () => {
-    expect(
-      isSettingsSubEnabled('webhooks', {
-        ...fullAccess,
-        canMaster: false,
-        canOmicall: false,
-      }),
-    ).toBe(false)
+  it('knowledge legacy → Tư vấn; tab connect không có knowledge ngang', () => {
+    expect(resolveSettingsRoute('connect', 'knowledge', fullAccess)).toEqual({
+      main: 'connect',
+      sub: 'consulting',
+    })
+    expect(enabledSubsForMain('connect', fullAccess)).not.toContain('knowledge')
+  })
+
+  it('hides hub without master/omicall', () => {
     expect(
       isSettingsSubEnabled('hub', {
         ...fullAccess,

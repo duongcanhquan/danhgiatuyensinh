@@ -52,7 +52,7 @@ export function buildInboundLeadContractExample(orgSlug: string): string {
         externalId: 'partner-row-1',
       },
       notes: [
-        'Phase 1: lưu API key trong Hub kết nối; endpoint Cloud Function triển khai Phase 2.',
+        'Phase 1: lưu API key trong Các kênh; endpoint Cloud Function triển khai Phase 2.',
         'Dedupe theo org + SĐT / externalId.',
       ],
     },

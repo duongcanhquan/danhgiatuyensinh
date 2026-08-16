@@ -3,7 +3,7 @@ import type { AIIntegrationConfig, AIProviderId } from '../types'
 import { FS_COLLECTIONS, SCORING_AUX_ORG_AI_DOC_ID } from '../types'
 
 const DEFAULT_MODEL_BY_PROVIDER: Record<AIProviderId, string> = {
-  Gemini: 'gemini-2.0-flash',
+  Gemini: 'gemini-2.5-flash-lite',
   OpenAI: 'gpt-4o-mini',
   DeepSeek: 'deepseek-chat',
 }

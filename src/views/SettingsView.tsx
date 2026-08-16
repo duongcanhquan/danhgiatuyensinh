@@ -37,7 +37,7 @@ import {
   resolvedMasterCatalogGroup,
   uniqueCatalogIdFromLabel,
 } from '../utils/masterDataRegistry'
-import { CircleHelp, Maximize2, X } from 'lucide-react'
+import { ArrowLeft, CircleHelp, Maximize2, X } from 'lucide-react'
 import { BentoCell } from '../components/bento'
 import { InfoCompletenessRulesPanel } from '../components/InfoCompletenessRulesPanel'
 import { LeadClassificationRulesPanel } from '../components/LeadClassificationRulesPanel'
@@ -45,10 +45,11 @@ import { KpiSettingsPanel } from '../components/KpiSettingsPanel'
 import { ProfileManagerTab } from '../components/ProfileManagerTab'
 import { RuleTemplateLibraryPanel } from '../components/RuleTemplateLibraryPanel'
 import { TvvSignalDefinitionsPanel } from '../components/TvvSignalDefinitionsPanel'
-import { AISettingsTab } from '../components/AISettingsTab'
-import { ScriptHubManager } from '../components/ScriptHubManager'
-import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
-import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
+import {
+  ConsultingAdviseHub,
+  parseAdviseHubStep,
+  type AdviseHubStep,
+} from '../components/ConsultingAdviseHub'
 import { StaffManagementView } from '../views/StaffManagementView'
 import { ViewportModal } from '../components/ViewportModal'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
@@ -62,20 +63,47 @@ import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSetti
 import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
 import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
 import { CommsAutomationSettingsPanel } from '../components/CommsAutomationSettingsPanel'
-import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import { DataIntake } from '../components/DataIntake'
 import { StaffExcelImportPanel } from '../components/StaffExcelImportPanel'
 import {
   enabledMainTabs,
   enabledSubsForMain,
+  isConnectDetailSub,
+  isSettingsSubEnabled,
   resolveSettingsRoute,
   SETTINGS_MAIN_LABELS,
+  SETTINGS_SUB_LABELS,
   subTabLabel,
   type SettingsAccessContext,
   type SettingsMainTabId,
   type SettingsSubTabId,
 } from '../utils/settingsNavigation'
 
+/** Quay lưới kênh khi đang ở màn chi tiết (Gọi điện, n8n…). */
+function ConnectDetailBack({
+  title,
+  onBack,
+}: {
+  title: string
+  onBack: () => void
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        Các kênh
+      </button>
+      <span className="text-slate-300" aria-hidden>
+        /
+      </span>
+      <h2 className="text-base font-bold text-slate-900 sm:text-lg">{title}</h2>
+    </div>
+  )
+}
 
 function firestoreWriteErrorMessage(e: unknown): string {
   if (e instanceof FirebaseError) {
@@ -221,40 +249,24 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'consulting':
       return (
         <>
-          <p className="font-semibold text-slate-900">Tư vấn (Playbook + Script Hub) là gì?</p>
+          <p className="font-semibold text-slate-900">Tư vấn — nạp theo 4 bước</p>
           <p className="mt-1.5">
-            <strong>Playbook</strong>: kịch bản chiến lược theo <em>điều kiện lead</em> (vùng, ngành, nhãn…) — TVV mở hồ
-            sơ sẽ thấy gợi ý USP / xử lý từ chối. <strong>Script Hub</strong>: các đoạn thoại theo từng bước (chào → USP → …)
-            trong panel «Trợ lý tư vấn động».             Toàn bộ là <strong>nội dung soạn sẵn</strong> trong hệ thống — không tính phí gọi AI.
+            <strong>1. Tri thức</strong> (học phí, ngành, FAQ đã duyệt) → <strong>2. Mẫu tư vấn</strong> (kịch bản theo hồ sơ) →{' '}
+            <strong>3. Mảnh thoại</strong> (đoạn copy lúc gọi) → <strong>4. AI hỗ trợ</strong> (Gemini Flash-Lite).
           </p>
           <p className="mt-2 text-slate-700">
-            <strong>Ứng dụng:</strong> hỗ trợ TVV gọi điện / chat đúng tình huống. <strong>Không thay</strong> Kho tri thức
-            (tài liệu cho AI đọc khi phân tích hồ sơ) và <strong>không thay</strong> tab LLM.
+            Tri thức là <strong>sự thật</strong>; mẫu/mảnh thoại là <strong>cách nói</strong>. AI chỉ được khẳng định số liệu khi có trong Tri thức.
           </p>
           <p className={`mt-2 border-t border-slate-200 pt-2 ${settingsCopyMuted}`}>
-            <strong>Nạp từ app:</strong> trong khối Playbook — tab <strong>Thiết lập</strong> (tải file mẫu, tải JSON lên, nạp
-            mẫu build, thêm nhanh) và tab <strong>Dữ liệu</strong> (danh sách, tìm kiếm, lọc).
+            Cloudflare R2 trong app dùng cho <strong>chứng từ / bill</strong> — không phải kho RAG. Tri thức nằm trên Firestore.
           </p>
         </>
       )
     case 'knowledge':
       return (
         <>
-          <p className="font-semibold text-slate-900">Kho tri thức là gì?</p>
-          <p className="mt-1.5">
-            Nơi lưu <strong>văn bản đã duyệt</strong> (học phí, quy chế, thông tin ngành…). Khi chạy{' '}
-            <strong>Phân tích AI</strong> trong chi tiết hồ sơ, hệ thống có thể <strong>đính kèm đoạn văn từ kho này</strong>{' '}
-            để câu trả lời bám đúng quy định, hạn chế bịa.
-          </p>
-          <p className="mt-2 text-slate-700">
-            <strong>Ứng dụng:</strong> chỉ đi kèm luồng <strong>phân tích AI trên hồ sơ</strong>. Không tự hiện trong Playbook
-            hay Script Hub. Khác tab <strong>Cài đặt Profile</strong> /{' '}
-            <strong>Điểm thông tin</strong> (điểm theo dữ liệu hồ sơ, không phải văn bản RAG).
-          </p>
-          <p className={`mt-2 ${settingsCopyMuted}`}>
-            Trong khối dưới: tab <strong>Thiết lập</strong> (nạp mẫu, thêm/sửa) và tab <strong>Dữ liệu</strong> (danh sách, tìm
-            kiếm, lọc theo danh mục).
-          </p>
+          <p className="font-semibold text-slate-900">Tri thức đã gộp vào Tư vấn</p>
+          <p className="mt-1.5">Mở tab <strong>Tư vấn</strong> → bước <strong>1. Tri thức</strong>.</p>
         </>
       )
     case 'omicall':
@@ -270,10 +282,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'hub':
       return (
         <>
-          <p className="font-semibold text-slate-900">Hub kết nối</p>
+          <p className="font-semibold text-slate-900">Các kênh — một lưới duy nhất</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Bấm đầu nối đã có tab riêng (Gọi điện, Webhook n8n, AI…) để mở màn cấu hình. Đầu nối khác: cấu hình ngay trên
-            Hub rồi Lưu.
+            Bấm ô để mở cấu hình (Gọi điện, tự động hóa, email, chứng từ…). AI hỗ trợ nằm ở tab{' '}
+            <strong>Tư vấn → bước 4</strong>.
           </p>
         </>
       )
@@ -282,8 +294,7 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Email &amp; tin nhắn tự động</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Cấu hình email, SMS, Zalo, WhatsApp: mẫu tin, khi nào gửi, đồng ý liên hệ và giờ im lặng. CRM đẩy sang webhook
-            (n8n) để gửi thật — xem thêm tab <strong>Hub kết nối</strong>.
+            Soạn mẫu và chọn khi gửi. Quay <strong>Các kênh</strong> để xem toàn bộ đầu nối.
           </p>
         </>
       )
@@ -330,15 +341,9 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'llm':
       return (
         <>
-          <p className="font-semibold text-slate-900">LLM &amp; tư vấn AI trên hồ sơ</p>
-          <p className={`mt-1.5 ${settingsCopy}`}>
-            Cấu hình khóa API, tác vụ phân tích và quy tắc lọc hàng loạt. TVV mở chi tiết hồ sơ →{' '}
-            <strong>LLM</strong> để AI đọc dữ liệu thí sinh + <strong>Tri thức tuyển sinh</strong> (tab riêng)
-            và đưa đánh giá, câu hỏi gợi ý, bước hành động.
-          </p>
-          <p className={`mt-2 ${settingsCopyMuted}`}>
-            Tab con: <strong>Hướng dẫn</strong>, <strong>API</strong>, <strong>Lọc trước khi gọi AI</strong>,{' '}
-            <strong>Tác vụ đã lưu</strong>, <strong>Tạo tác vụ</strong>. Nên nạp ít nhất một tác vụ mẫu «Tư vấn tuyển sinh».
+          <p className="font-semibold text-slate-900">AI hỗ trợ — đã gộp vào Tư vấn</p>
+          <p className={`mt-1.5 ${settingsCopyMuted}`}>
+            Mở tab <strong>Tư vấn</strong> → bước <strong>4. AI hỗ trợ</strong> để cấu hình khóa API, lọc và tác vụ.
           </p>
         </>
       )
@@ -395,13 +400,10 @@ export function SettingsView() {
   const [addCatalogPresetGroup, setAddCatalogPresetGroup] = useState<RuleCategory | 'other' | null>(null)
   const addMasterCatalogFormAnchorRef = useRef<HTMLDivElement>(null)
   const [consultingWorkspaceOpen, setConsultingWorkspaceOpen] = useState(false)
-  const [consultingSubView, setConsultingSubView] = useState<'playbooks' | 'script_hub'>('playbooks')
-  const [knowledgeWorkspaceOpen, setKnowledgeWorkspaceOpen] = useState(false)
-  const [llmWorkspaceOpen, setLlmWorkspaceOpen] = useState(false)
+  const [adviseHubStep, setAdviseHubStep] = useState<AdviseHubStep>('facts')
   const [guideOpen, setGuideOpen] = useState(false)
 
-  const settingsWorkspaceOpen =
-    masterWorkspaceOpen || consultingWorkspaceOpen || knowledgeWorkspaceOpen || llmWorkspaceOpen
+  const settingsWorkspaceOpen = masterWorkspaceOpen || consultingWorkspaceOpen
 
   useEffect(() => {
     if (!settingsWorkspaceOpen) return
@@ -412,8 +414,6 @@ export function SettingsView() {
         setGuideOpen(false)
         setMasterWorkspaceOpen(false)
         setConsultingWorkspaceOpen(false)
-        setKnowledgeWorkspaceOpen(false)
-        setLlmWorkspaceOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -616,8 +616,6 @@ export function SettingsView() {
   useEffect(() => {
     setMasterWorkspaceOpen(false)
     setConsultingWorkspaceOpen(false)
-    setKnowledgeWorkspaceOpen(false)
-    setLlmWorkspaceOpen(false)
     setGuideOpen(false)
   }, [activeMainTab, activeSubTab])
 
@@ -725,11 +723,16 @@ export function SettingsView() {
   }
 
   const setSubTab = (sub: SettingsSubTabId) => {
-    if (!subTabs.includes(sub)) return
+    const allowedNav = subTabs.includes(sub)
+    const allowedDetail =
+      activeMainTab === 'connect' &&
+      isConnectDetailSub(sub) &&
+      isSettingsSubEnabled(sub, settingsAccessCtx)
+    if (!allowedNav && !allowedDetail) return
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        n.set('tab', activeMainTab)
+        n.set('tab', activeMainTab === 'connect' || allowedDetail ? 'connect' : activeMainTab)
         n.set('sub', sub)
         n.delete('scoringSub')
         return n
@@ -738,8 +741,69 @@ export function SettingsView() {
     )
   }
 
+  const backToConnectHub = () => {
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        n.set('tab', 'connect')
+        n.set('sub', 'hub')
+        n.delete('scoringSub')
+        return n
+      },
+      { replace: true },
+    )
+  }
+
+  const adviseStepParam = searchParams.get('adviseStep')
+  useEffect(() => {
+    // Legacy URL AI → Tư vấn bước 4
+    if (subParam === 'llm' || tabParam === 'llm' || tabParam === 'ai_lab') {
+      setAdviseHubStep('ai')
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'connect')
+          n.set('sub', 'consulting')
+          n.set('adviseStep', 'ai')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
+    if (activeSubTab !== 'consulting') return
+    if (editSnippetParam) {
+      setAdviseHubStep('snippets')
+      return
+    }
+    if (subParam === 'knowledge') {
+      setAdviseHubStep('facts')
+      return
+    }
+    const parsed = parseAdviseHubStep(adviseStepParam)
+    if (parsed) setAdviseHubStep(parsed)
+  }, [activeSubTab, adviseStepParam, editSnippetParam, subParam, tabParam, setSearchParams])
+
+  const setAdviseStep = (s: AdviseHubStep) => {
+    setAdviseHubStep(s)
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        n.set('tab', 'connect')
+        n.set('sub', 'consulting')
+        n.set('adviseStep', s)
+        return n
+      },
+      { replace: true },
+    )
+  }
+
   return (
-    <div className={`bento-board min-w-0 max-w-full ${settingsCopy}`}>
+    <div
+      className={`flex min-h-0 min-w-0 flex-1 flex-col ${settingsCopy} ${
+        settingsWorkspaceOpen ? '' : '-mx-3 -mb-3 min-h-[calc(100dvh-4.5rem)] sm:-mx-4 sm:min-h-[calc(100dvh-5rem)] md:-mx-6 lg:-mx-8'
+      }`}
+    >
       {isPlatformSuperAdmin ? (
         <BentoCell variant="muted" className="!p-3 text-sm text-indigo-950">
           <p className="font-semibold">
@@ -773,8 +837,8 @@ export function SettingsView() {
       ) : null}
 
       {db && settingsAccess && !settingsWorkspaceOpen ? (
-        <div className="sticky top-0 z-30 -mx-1 space-y-2 bg-[var(--vm-canvas)]/95 px-1 pb-2 pt-1 backdrop-blur-md">
-          <BentoCell className="min-w-0 max-w-full space-y-2 !p-1.5 sm:!p-2">
+        <div className="sticky top-0 z-30 shrink-0 space-y-1.5 border-b border-slate-200/80 bg-[var(--vm-canvas)]/95 px-3 pb-2 pt-2 backdrop-blur-md sm:px-4">
+          <BentoCell className="min-w-0 max-w-full space-y-2 !rounded-xl !p-1.5 sm:!p-2">
           <nav
             className="app-tab-segmented scroll-touch-x flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto"
             role="tablist"
@@ -804,7 +868,8 @@ export function SettingsView() {
               aria-label="Tab con"
             >
               {subTabs.map((sub) => {
-                const selected = activeSubTab === sub
+                const selected =
+                  activeSubTab === sub || (sub === 'hub' && isConnectDetailSub(activeSubTab))
                 return (
                   <button
                     key={sub}
@@ -815,11 +880,9 @@ export function SettingsView() {
                         ? 'tab-master'
                         : sub === 'consulting'
                           ? 'tab-consulting'
-                          : sub === 'knowledge'
-                            ? 'tab-knowledge'
-                            : sub === 'llm'
-                              ? 'tab-llm'
-                              : undefined
+                          : sub === 'hub'
+                            ? 'tab-hub'
+                            : undefined
                     }
                     aria-selected={selected}
                     onClick={() => setSubTab(sub)}
@@ -836,6 +899,12 @@ export function SettingsView() {
                 )
               })}
             </nav>
+            {isConnectDetailSub(activeSubTab) ? (
+              <span className="hidden max-w-[12rem] truncate text-xs font-medium text-slate-500 sm:inline">
+                <span className="text-slate-300"> / </span>
+                {SETTINGS_SUB_LABELS[activeSubTab]}
+              </span>
+            ) : null}
             {db && activeSubTab === 'master' && !masterWorkspaceOpen ? (
               <button
                 type="button"
@@ -850,26 +919,6 @@ export function SettingsView() {
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
-              >
-                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-                Toàn màn
-              </button>
-            ) : null}
-            {db && activeSubTab === 'knowledge' && !knowledgeWorkspaceOpen ? (
-              <button
-                type="button"
-                onClick={() => setKnowledgeWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
-              >
-                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-                Toàn màn
-              </button>
-            ) : null}
-            {db && activeSubTab === 'llm' && !llmWorkspaceOpen ? (
-              <button
-                type="button"
-                onClick={() => setLlmWorkspaceOpen(true)}
                 className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
               >
                 <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
@@ -1172,7 +1221,7 @@ export function SettingsView() {
         </div>
       ) : null}
 
-      {db && activeSubTab === 'consulting' && canPlaybooks ? (
+      {db && activeSubTab === 'consulting' && (canPlaybooks || canAiEngine) ? (
         <div
           role="tabpanel"
           aria-labelledby="tab-consulting"
@@ -1197,135 +1246,35 @@ export function SettingsView() {
           <div
             className={
               consultingWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain'
-                : 'space-y-3'
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                : 'min-h-[28rem]'
             }
           >
-            <div
-              className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/80 bg-white/80 p-1"
-              role="tablist"
-              aria-label="Thông tin T.Vấn"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={consultingSubView === 'playbooks'}
-                onClick={() => setConsultingSubView('playbooks')}
-                className={[
-                  'cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold transition',
-                  consultingSubView === 'playbooks'
-                    ? 'bg-sky-700 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-sky-50',
-                ].join(' ')}
-              >
-                Mẫu tư vấn (Playbook)
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={consultingSubView === 'script_hub'}
-                onClick={() => setConsultingSubView('script_hub')}
-                className={[
-                  'cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold transition',
-                  consultingSubView === 'script_hub'
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-slate-100',
-                ].join(' ')}
-              >
-                Kịch bản Script Hub
-              </button>
-            </div>
-            {consultingSubView === 'playbooks' ? (
-              <ConsultingPlaybookSection
-                db={db}
-                playbooks={playbooks}
-                loading={pbLoading}
-                error={pbError}
-                canPlaybooks={canPlaybooks}
-                consultingWorkspaceOpen={consultingWorkspaceOpen}
-                compactChrome={!consultingWorkspaceOpen}
-              />
-            ) : (
-              <ScriptHubManager db={db} />
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {db && activeSubTab === 'knowledge' && canAiEngine ? (
-        <div
-          role="tabpanel"
-          aria-labelledby="tab-knowledge"
-          className={
-            knowledgeWorkspaceOpen
-              ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : 'bento-cell !p-3 sm:!p-4'
-          }
-        >
-          {knowledgeWorkspaceOpen ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-200/90 pb-2">
-              <button
-                type="button"
-                onClick={() => setKnowledgeWorkspaceOpen(false)}
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
-              >
-                <X className="h-4 w-4 shrink-0" aria-hidden />
-                Đóng (Esc)
-              </button>
-            </div>
-          ) : null}
-          <div
-            className={
-              knowledgeWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pt-2'
-                : 'mt-2 md:mt-3'
-            }
-          >
-            <KnowledgeBaseTab db={db} compactChrome={knowledgeWorkspaceOpen} canEdit={canAiEngine} />
-          </div>
-        </div>
-      ) : null}
-
-      {db && activeSubTab === 'llm' && canAiEngine ? (
-        <div
-          role="tabpanel"
-          aria-labelledby="tab-llm"
-          className={
-            llmWorkspaceOpen
-              ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
-              : 'bento-cell !p-3 sm:!p-4'
-          }
-        >
-          {llmWorkspaceOpen ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 pb-3">
-              <button
-                type="button"
-                onClick={() => setLlmWorkspaceOpen(false)}
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-amber-800/25 bg-amber-50/95 px-3 py-2 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-4 md:py-2.5 ${settingsCopy}`}
-              >
-                <X className="h-4 w-4 shrink-0" aria-hidden />
-                Đóng (Esc)
-              </button>
-            </div>
-          ) : null}
-          <div
-            className={
-              llmWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pt-4 md:pt-5'
-                : 'mt-4 md:mt-5'
-            }
-          >
-            <AISettingsTab db={db} />
+            <ConsultingAdviseHub
+              db={db}
+              playbooks={playbooks}
+              loading={pbLoading}
+              error={pbError}
+              canPlaybooks={canPlaybooks}
+              canAiEngine={canAiEngine}
+              workspaceOpen={consultingWorkspaceOpen}
+              compactChrome={!consultingWorkspaceOpen}
+              step={adviseHubStep}
+              onStepChange={setAdviseStep}
+            />
           </div>
         </div>
       ) : null}
 
       {db && activeSubTab === 'hub' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-hub" className="space-y-3">
-          <IntegrationsStatusStrip />
-          <div className="bento-cell space-y-3 !p-3 sm:!p-4">
+        <div
+          role="tabpanel"
+          aria-labelledby="tab-hub"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4"
+        >
+          <div className="mx-auto w-full max-w-7xl">
             <h2 id="tab-hub" className="sr-only">
-              Hub kết nối
+              Các kênh
             </h2>
             <IntegrationHubPanel />
           </div>
@@ -1333,59 +1282,63 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'comms' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-comms" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-comms" className="sr-only">
-            Email và tin nhắn tự động
-          </h2>
-          <CommsAutomationSettingsPanel />
+        <div role="tabpanel" aria-labelledby="tab-comms" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <div className="mx-auto w-full max-w-7xl">
+            <ConnectDetailBack title="Email & tin nhắn" onBack={backToConnectHub} />
+            <CommsAutomationSettingsPanel hideTitle />
+          </div>
         </div>
       ) : null}
 
       {db && activeSubTab === 'omicall' && canOmicall ? (
-        <div role="tabpanel" aria-labelledby="tab-omicall" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-omicall" className="sr-only">
-            Gọi điện OMICall
-          </h2>
-          <OmicallSettingsTab />
+        <div role="tabpanel" aria-labelledby="tab-omicall" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <div className="mx-auto w-full max-w-7xl">
+            <ConnectDetailBack title="Gọi điện" onBack={backToConnectHub} />
+            <OmicallSettingsTab hideTitle />
+          </div>
         </div>
       ) : null}
 
       {db && activeSubTab === 'webhooks' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-webhooks" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-webhooks" className="sr-only">
-            Webhook n8n
-          </h2>
-          <N8nWebhooksSettingsPanel />
+        <div role="tabpanel" aria-labelledby="tab-webhooks" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <div className="mx-auto w-full max-w-7xl">
+            <ConnectDetailBack title="Tự động hóa (n8n)" onBack={backToConnectHub} />
+            <N8nWebhooksSettingsPanel hideTitle />
+          </div>
         </div>
       ) : null}
 
       {db && activeSubTab === 'invite_docs' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-invite-docs" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-invite-docs" className="sr-only">
-            Giấy mời và mẫu
-          </h2>
-          <InviteDocumentsSettingsPanel />
+        <div role="tabpanel" aria-labelledby="tab-invite-docs" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <div className="mx-auto w-full max-w-7xl">
+            <ConnectDetailBack title="Giấy mời & mẫu" onBack={backToConnectHub} />
+            <InviteDocumentsSettingsPanel hideTitle />
+          </div>
         </div>
       ) : null}
 
       {db && activeSubTab === 'receipts' && (canMaster || canOmicall) ? (
-        <div role="tabpanel" aria-labelledby="tab-receipts" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-receipts" className="sr-only">
-            Chứng từ và lưu trữ
-          </h2>
-          <ReceiptStorageSettingsPanel />
-          <div className="border-t border-slate-200 pt-4">
-            <FinanceThresholdsSettingsPanel />
+        <div role="tabpanel" aria-labelledby="tab-receipts" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+          <div className="mx-auto w-full max-w-7xl space-y-4">
+            <ConnectDetailBack title="Chứng từ & ngưỡng cọc" onBack={backToConnectHub} />
+            <ReceiptStorageSettingsPanel hideTitle />
+            <div className="border-t border-slate-200 pt-4">
+              <FinanceThresholdsSettingsPanel />
+            </div>
           </div>
         </div>
       ) : null}
 
       {db && activeSubTab === 'public_registration' && canMaster ? (
-        <div role="tabpanel" aria-labelledby="tab-public-registration" className="bento-cell space-y-3 !p-3 sm:!p-4">
-          <h2 id="tab-public-registration" className="sr-only">
-            Cổng đăng ký sinh viên
-          </h2>
-          <PublicRegistrationSettingsPanel />
+        <div
+          role="tabpanel"
+          aria-labelledby="tab-public-registration"
+          className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4"
+        >
+          <div className="mx-auto w-full max-w-7xl">
+            <ConnectDetailBack title="Cổng đăng ký SV" onBack={backToConnectHub} />
+            <PublicRegistrationSettingsPanel />
+          </div>
         </div>
       ) : null}
 

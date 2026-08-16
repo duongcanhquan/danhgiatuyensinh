@@ -209,7 +209,7 @@ export function LeadConsultingOverviewPanel({
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-xs text-slate-600">Chưa có tài liệu — thêm tại Cài đặt → Tri thức tuyển sinh.</p>
+            <p className="mt-2 text-xs text-slate-600">Chưa có tài liệu — thêm tại Cài đặt → Tư vấn → bước Tri thức.</p>
           )}
         </section>
       </div>
@@ -217,6 +217,14 @@ export function LeadConsultingOverviewPanel({
       <section className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Hành động tiếp theo</p>
         <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onNavigateTab('assist')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-gradient-to-r from-amber-500 to-sky-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:brightness-110"
+          >
+            <Target className="h-3.5 w-3.5" aria-hidden />
+            Gợi ý lúc gọi
+          </button>
           <button
             type="button"
             onClick={() => onNavigateTab('playbook')}

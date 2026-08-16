@@ -21,7 +21,7 @@ import { VietMyAccentHeading } from './VietMyAccentHeading'
 import { DEFAULT_COUNSELING_AI_TASK } from '../utils/counselingAiDefaults'
 
 const DEFAULT_MODELS: Record<AIProviderId, string> = {
-  Gemini: 'gemini-2.0-flash',
+  Gemini: 'gemini-2.5-flash-lite',
   OpenAI: 'gpt-4o-mini',
   DeepSeek: 'deepseek-chat',
 }
@@ -307,7 +307,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
 
   return (
     <section
-      aria-label="Tích hợp LLM Gemini, OpenAI hoặc DeepSeek"
+      aria-label="AI hỗ trợ trên hồ sơ — Gemini, OpenAI hoặc DeepSeek"
       className="overflow-hidden rounded-2xl border border-rose-500/20 bg-gradient-to-br from-slate-900 via-indigo-950/70 to-slate-900 shadow-[0_16px_48px_rgba(127,29,29,0.14)] backdrop-blur-xl"
     >
       <div className="flex max-h-[min(78vh,720px)] min-h-[320px] flex-col rounded-[18px] border border-white/12 bg-gradient-to-b from-slate-900/55 to-slate-950/40">
@@ -316,7 +316,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
           <div className="flex flex-wrap items-center gap-2">
             <Sparkles className="h-6 w-6 shrink-0 text-rose-300" aria-hidden />
             <VietMyAccentHeading as="h2" tone="onDark" size="md" className="mb-0">
-              LLM &amp; tư vấn AI trên hồ sơ
+              AI hỗ trợ trên hồ sơ
             </VietMyAccentHeading>
           </div>
         </div>
@@ -325,7 +325,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
         <div
           className="shrink-0 border-b border-white/10 px-2 py-2 md:px-3"
           role="tablist"
-          aria-label="Phần con cài đặt LLM"
+          aria-label="Phần con cài đặt AI"
         >
           <div className="flex flex-wrap gap-1">
             {SUB_TABS.map(({ id, label, short, Icon }) => {
@@ -399,7 +399,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               </p>
               <ol className="list-decimal space-y-3 pl-4 marker:text-amber-400/90">
                 <li>
-                  <strong className="text-slate-100">Nạp tri thức</strong> — tab <strong>Tri thức tuyển sinh</strong>:
+                  <strong className="text-slate-100">Nạp tri thức</strong> — bước <strong>1. Tri thức</strong> trong Tư vấn:
                   học phí, quy chế, ngành (đã duyệt).
                 </li>
                 <li>
@@ -417,7 +417,8 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                   <strong className="text-slate-100">Bảng đánh giá gọi</strong> — chỉnh các chiều thái độ, sẵn sàng, tín hiệu… khi TVV gọi OMICall.
                 </li>
                 <li>
-                  <strong className="text-slate-100">Vận hành</strong> — gọi từ hồ sơ → ghi thẻ → <strong>Lưu &amp; AI</strong>; hoặc chi tiết hồ sơ → <strong>LLM</strong>.
+                  <strong className="text-slate-100">Vận hành</strong> — gọi từ hồ sơ → ghi thẻ → <strong>Lưu &amp; AI</strong>; hoặc chi tiết hồ sơ →{' '}
+                  <strong>AI hỗ trợ</strong>.
                 </li>
               </ol>
               {canTasks ? (
@@ -449,7 +450,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                     <strong>«Cho phép dùng AI trên hồ sơ»</strong> — bật riêng từng TVV / Trưởng nhóm trong Quản lý nhân sự (kiểm soát ai được chạy LLM).
                   </li>
                   <li>
-                    <strong>Playbook / Script Hub</strong> — soạn sẵn, không gọi LLM.
+                    <strong>Mẫu tư vấn / Mảnh thoại</strong> — soạn sẵn trong Tư vấn bước 2–3, không gọi AI.
                   </li>
                   <li>
                     <strong>Chấm điểm profile</strong> — công thức CRM, khác đoạn tư vấn AI.
@@ -577,7 +578,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                       ? 'deepseek-chat'
                       : cfg.provider === 'OpenAI'
                         ? 'gpt-4o-mini'
-                        : 'gemini-2.0-flash'
+                        : 'gemini-2.5-flash-lite'
                   }
                   className="mt-1.5 w-full rounded-xl border border-white/18 bg-slate-800/50 px-3 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-rose-400/35 disabled:opacity-50"
                 />

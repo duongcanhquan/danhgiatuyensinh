@@ -34,7 +34,13 @@ describe('validateManualLeadDraft', () => {
   it('rejects empty / incomplete like portal', () => {
     expect(validateManualLeadDraft(emptyLeadCoreDraft())).toMatch(/họ tên|họ và tên/i)
     expect(validateManualLeadDraft(validDraft({ studentEmail: '' }))).toMatch(/email/i)
-    expect(validateManualLeadDraft(validDraft({ phone: '' }))).toMatch(/sinh viên|điện thoại/i)
+    // Chỉ cần một SĐT hợp lệ — thiếu hết mới lỗi.
+    expect(
+      validateManualLeadDraft(
+        validDraft({ phone: '', motherPhone: '', fatherPhone: '', parentPhone: '' }),
+      ),
+    ).toMatch(/sinh viên|điện thoại/i)
+    expect(validateManualLeadDraft(validDraft({ phone: '' }))).toBeNull()
     expect(validateManualLeadDraft(validDraft({ motherPhone: '', parentPhone: '' }))).toBeNull()
     expect(validateManualLeadDraft(validDraft({ gender: 'Khác' }))).toMatch(/giới tính/i)
     expect(validateManualLeadDraft(validDraft({ source1: '', source: 'ghi chú' }))).toMatch(/Nguồn 1|nguồn/i)

@@ -25,7 +25,7 @@ function newId(prefix: string): string {
 }
 
 /** Email / SMS / Zalo / WhatsApp tự động — mẫu + luật theo từng trường. */
-export function CommsAutomationSettingsPanel() {
+export function CommsAutomationSettingsPanel({ hideTitle = false }: { hideTitle?: boolean }) {
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
   const canEdit = can('config:master_data') || can('config:omicall')
@@ -146,16 +146,19 @@ export function CommsAutomationSettingsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <Mail className="h-4 w-4 text-indigo-800" aria-hidden />
-          Email &amp; tin nhắn tự động
-        </h2>
-        <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
-      </div>
+      {!hideTitle ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <Mail className="h-4 w-4 text-indigo-800" aria-hidden />
+            Email &amp; tin nhắn tự động
+          </h2>
+          <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
+        </div>
+      ) : (
+        <p className="truncate text-xs text-slate-500">{currentOrgLabel}</p>
+      )}
       <p className="text-sm text-slate-600">
-        Cấu hình email, SMS, Zalo, WhatsApp theo trường: mẫu tin + luật kích hoạt. Hệ thống đẩy JSON tới URL
-        webhook (n8n/Make) — workflow bên ngoài gửi thật. Hub kết nối vẫn dùng để theo dõi đầu nối.
+        Soạn mẫu và chọn khi gửi email / SMS / Zalo / WhatsApp. Hệ thống đẩy tới URL webhook để n8n hoặc Make gửi thật.
       </p>
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">

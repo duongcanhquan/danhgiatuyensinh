@@ -59,10 +59,10 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
   },
   {
     id: 'inbound_lead_api',
-    name: 'API nhận hồ sơ (đối tác)',
+    name: 'Nhận hồ sơ từ đối tác',
     group: 'capture',
     maturity: 'ready',
-    summary: 'Đối tác / landing / form ngoài đẩy hồ sơ bằng API key theo trường.',
+    summary: 'Landing / form ngoài đẩy hồ sơ bằng API key theo trường.',
     fields: [
       { key: 'enabled', label: 'Bật nhận hồ sơ qua API', kind: 'toggle' },
       {
@@ -129,10 +129,10 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
   },
   {
     id: 'omicall',
-    name: 'OMICall (gọi điện)',
+    name: 'Gọi điện',
     group: 'voice_chat',
     maturity: 'live',
-    summary: 'Tổng đài web, click-to-call, đồng bộ lịch sử gọi & KPI.',
+    summary: 'Tổng đài web, gọi từ hồ sơ, đồng bộ lịch sử & KPI.',
     settingsHref: '/settings?tab=connect&sub=omicall',
     fields: [],
     suggestedEvents: ['call.completed'],
@@ -142,59 +142,29 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     name: 'Zalo OA',
     group: 'voice_chat',
     maturity: 'ready',
-    summary: 'Zalo Official Account / ZNS — cấu hình đầy đủ tại Email & tin nhắn; Hub lưu token phụ.',
+    summary: 'Zalo Official Account / ZNS — mẫu và luật gửi tại Email & tin nhắn.',
     settingsHref: '/settings?tab=connect&sub=comms',
-    fields: [
-      { key: 'enabled', label: 'Bật Zalo OA', kind: 'toggle' },
-      { key: 'oaId', label: 'OA ID', kind: 'text' },
-      { key: 'accessToken', label: 'Access token', kind: 'secret' },
-      { key: 'webhookUrl', label: 'URL nhận sự kiện Zalo (nếu dùng n8n)', kind: 'url' },
-    ],
+    fields: [],
     suggestedEvents: ['lead.created', 'lead.assigned', 'finance.decision', 'followup.due'],
   },
   {
     id: 'whatsapp_cloud',
-    name: 'WhatsApp Cloud API',
+    name: 'WhatsApp',
     group: 'voice_chat',
     maturity: 'ready',
-    summary: 'Meta WhatsApp Business — mẫu & luật gửi tại Email & tin nhắn.',
+    summary: 'WhatsApp Business — mẫu & luật gửi tại Email & tin nhắn.',
     settingsHref: '/settings?tab=connect&sub=comms',
-    fields: [
-      { key: 'enabled', label: 'Bật WhatsApp', kind: 'toggle' },
-      { key: 'phoneNumberId', label: 'Phone number ID', kind: 'text' },
-      { key: 'accessToken', label: 'Access token', kind: 'secret' },
-      { key: 'webhookVerifyToken', label: 'Verify token webhook', kind: 'secret' },
-    ],
+    fields: [],
     suggestedEvents: ['lead.created', 'registration.public'],
   },
   {
     id: 'email_smtp',
-    name: 'Email giao dịch',
+    name: 'Email',
     group: 'voice_chat',
     maturity: 'ready',
-    summary: 'Resend / SendGrid / SMTP / n8n — mẫu + luật tự động tại tab Email & tin nhắn.',
+    summary: 'Gửi email giao dịch — mẫu + luật tại Email & tin nhắn.',
     settingsHref: '/settings?tab=connect&sub=comms',
-    fields: [
-      { key: 'enabled', label: 'Bật email', kind: 'toggle' },
-      {
-        key: 'provider',
-        label: 'Nhà cung cấp',
-        kind: 'select',
-        options: [
-          { value: 'n8n', label: 'Webhook / n8n' },
-          { value: 'resend', label: 'Resend' },
-          { value: 'sendgrid', label: 'SendGrid' },
-          { value: 'smtp', label: 'SMTP tùy chỉnh' },
-        ],
-      },
-      { key: 'apiKey', label: 'API key / mật khẩu SMTP', kind: 'secret' },
-      { key: 'fromEmail', label: 'Email gửi đi', kind: 'text', placeholder: 'tuyensinh@truong.edu.vn' },
-      { key: 'fromName', label: 'Tên hiển thị', kind: 'text' },
-      { key: 'replyTo', label: 'Reply-To', kind: 'text' },
-      { key: 'smtpHost', label: 'SMTP host', kind: 'text', placeholder: 'smtp.gmail.com' },
-      { key: 'smtpPort', label: 'SMTP port', kind: 'text', placeholder: '587' },
-      { key: 'sendWebhookUrl', label: 'URL webhook gửi email', kind: 'url' },
-    ],
+    fields: [],
     suggestedEvents: ['lead.created', 'finance.decision', 'document.requested', 'registration.public'],
   },
   {
@@ -202,44 +172,28 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     name: 'SMS',
     group: 'voice_chat',
     maturity: 'ready',
-    summary: 'Twilio / eSMS / Vietguys — mẫu & luật tại Email & tin nhắn.',
+    summary: 'Gửi SMS — mẫu & luật tại Email & tin nhắn.',
     settingsHref: '/settings?tab=connect&sub=comms',
-    fields: [
-      { key: 'enabled', label: 'Bật SMS', kind: 'toggle' },
-      {
-        key: 'provider',
-        label: 'Nhà cung cấp',
-        kind: 'select',
-        options: [
-          { value: 'twilio', label: 'Twilio' },
-          { value: 'esms', label: 'eSMS' },
-          { value: 'vietguys', label: 'Vietguys' },
-          { value: 'custom', label: 'Webhook tùy chỉnh' },
-        ],
-      },
-      { key: 'apiKey', label: 'API key', kind: 'secret' },
-      { key: 'senderId', label: 'Brandname / Sender', kind: 'text' },
-      { key: 'webhookUrl', label: 'URL gửi SMS', kind: 'url' },
-    ],
+    fields: [],
     suggestedEvents: ['lead.created', 'followup.due'],
   },
   {
     id: 'telegram_bot',
-    name: 'Telegram Bot',
+    name: 'Telegram',
     group: 'voice_chat',
     maturity: 'ready',
-    summary: 'Bot Telegram nhận cảnh báo nội bộ / fan-out sự kiện qua webhook.',
+    summary: 'Bot nhận cảnh báo nội bộ / fan-out sự kiện.',
     fields: [
       { key: 'enabled', label: 'Bật Telegram', kind: 'toggle' },
       { key: 'botToken', label: 'Bot token', kind: 'secret' },
       { key: 'defaultChatId', label: 'Chat ID mặc định', kind: 'text' },
-      { key: 'sendWebhookUrl', label: 'URL webhook gửi (n8n)', kind: 'url' },
+      { key: 'sendWebhookUrl', label: 'URL gửi (nếu dùng n8n)', kind: 'url' },
     ],
     suggestedEvents: ['lead.priority_changed', 'finance.decision', 'report.daily'],
   },
   {
     id: 'n8n',
-    name: 'n8n (workflow)',
+    name: 'Tự động hóa (n8n)',
     group: 'automation',
     maturity: 'live',
     summary: 'Giấy mời, CTSV, báo cáo ngày/tháng — URL theo trường.',
@@ -254,11 +208,20 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     ],
   },
   {
+    id: 'invite_docs',
+    name: 'Giấy mời & mẫu',
+    group: 'automation',
+    maturity: 'live',
+    summary: 'Mẫu giấy mời, nội dung gửi — dùng cùng tự động hóa giấy mời.',
+    settingsHref: '/settings?tab=connect&sub=invite_docs',
+    fields: [],
+  },
+  {
     id: 'generic_webhooks',
-    name: 'Webhook tổng quát (Zapier / Make / …)',
+    name: 'Webhook khác',
     group: 'automation',
     maturity: 'ready',
-    summary: 'Đăng ký nhiều URL theo từng sự kiện CRM — dễ nối Zapier, Make, hệ tự xây.',
+    summary: 'Đăng ký URL theo sự kiện — Zapier, Make, hoặc hệ tự xây.',
     fields: [],
     suggestedEvents: [
       'lead.created',
@@ -277,11 +240,11 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
   },
   {
     id: 'llm',
-    name: 'AI & LLM',
+    name: 'AI hỗ trợ',
     group: 'ai',
     maturity: 'live',
-    summary: 'Khóa API, tác vụ phân tích hồ sơ, tri thức tuyển sinh.',
-    settingsHref: '/settings?tab=connect&sub=llm',
+    summary: 'Khóa API, lọc khi gọi AI, tác vụ phân tích hồ sơ — nằm trong Tư vấn bước 4.',
+    settingsHref: '/settings?tab=connect&sub=consulting&adviseStep=ai',
     fields: [],
   },
   {
@@ -289,7 +252,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     name: 'Slack',
     group: 'notify',
     maturity: 'ready',
-    summary: 'Incoming Webhook Slack — nhận cảnh báo KPI / duyệt cọc / lead HOT.',
+    summary: 'Cảnh báo KPI / duyệt cọc / lead HOT vào Slack.',
     fields: [
       { key: 'enabled', label: 'Bật Slack', kind: 'toggle' },
       { key: 'incomingWebhookUrl', label: 'Incoming webhook URL', kind: 'url' },
@@ -301,7 +264,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     name: 'Microsoft Teams',
     group: 'notify',
     maturity: 'ready',
-    summary: 'Incoming webhook Teams — cùng kiểu cảnh báo nội bộ.',
+    summary: 'Cảnh báo nội bộ vào Teams.',
     fields: [
       { key: 'enabled', label: 'Bật Teams', kind: 'toggle' },
       { key: 'incomingWebhookUrl', label: 'Incoming webhook URL', kind: 'url' },
@@ -313,7 +276,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     name: 'Google Chat',
     group: 'notify',
     maturity: 'live',
-    summary: 'Đang dùng qua workflow n8n CTSV (thông báo tài chính).',
+    summary: 'Dùng chung URL CTSV trong Tự động hóa (n8n).',
     settingsHref: '/settings?tab=connect&sub=webhooks',
     fields: [],
   },
@@ -392,7 +355,9 @@ export function getConnectorDef(id: string): ConnectorDef | undefined {
   return CONNECTOR_CATALOG.find((c) => c.id === id)
 }
 
-export function connectorsByGroup(): Array<{ group: ConnectorGroupId; label: string; items: ConnectorDef[] }> {
+export function connectorsByGroup(opts?: {
+  includePlanned?: boolean
+}): Array<{ group: ConnectorGroupId; label: string; items: ConnectorDef[] }> {
   const order: ConnectorGroupId[] = [
     'capture',
     'voice_chat',
@@ -403,11 +368,19 @@ export function connectorsByGroup(): Array<{ group: ConnectorGroupId; label: str
     'academic',
     'storage',
   ]
-  return order.map((group) => ({
-    group,
-    label: CONNECTOR_GROUP_LABELS[group],
-    items: CONNECTOR_CATALOG.filter((c) => c.group === group),
-  }))
+  const includePlanned = opts?.includePlanned === true
+  return order
+    .map((group) => ({
+      group,
+      label: CONNECTOR_GROUP_LABELS[group],
+      items: CONNECTOR_CATALOG.filter((c) => {
+        if (c.group !== group) return false
+        if (c.id === 'google_sheets') return false
+        if (!includePlanned && c.maturity === 'planned') return false
+        return true
+      }),
+    }))
+    .filter((g) => g.items.length > 0)
 }
 
 export function maturityLabel(m: ConnectorMaturity): string {

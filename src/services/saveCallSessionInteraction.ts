@@ -26,6 +26,7 @@ import type {
 import { FS_COLLECTIONS } from '../types'
 import { commitAuditLog } from './auditLog'
 import { runCallSessionAiAnalysis } from '../utils/callSessionAiAnalysis'
+import { evaluateCallAiEligibility } from '../utils/callSessionAiEligibility'
 import {
   composeEvaluationCounselorNote,
   evaluationRecordFromPicks,
@@ -114,6 +115,8 @@ export type SaveCallSessionResult = {
   interactionId: string
   counselorNote: string
   callAiAssessment?: CallAiAssessment
+  /** Khi bấm Lưu & AI nhưng cổng chặn (ghi chú ngắn). */
+  aiSkippedReason?: string
 }
 
 export async function saveCallSessionInteraction(
@@ -163,19 +166,29 @@ export async function saveCallSessionInteraction(
   const snapTag = lead.priorityTag
 
   let callAiAssessment: CallAiAssessment | undefined
+  let aiSkippedReason: string | undefined
   if (input.runAi && input.aiConfig?.apiKey?.trim()) {
-    callAiAssessment = await runCallSessionAiAnalysis(input.aiConfig, {
-      lead,
+    const gate = evaluateCallAiEligibility({
       counselorNote,
       evaluationPicks: picks,
-      callMeta: {
-        durationSec: durationSeconds,
-        outcome: input.callOutcome,
-        direction: input.direction,
-        phone: input.phone,
-      },
-      institutionalRagBlock: input.institutionalRagBlock,
+      freeNote: input.freeNote,
     })
+    if (!gate.ok) {
+      aiSkippedReason = gate.reason
+    } else {
+      callAiAssessment = await runCallSessionAiAnalysis(input.aiConfig, {
+        lead,
+        counselorNote,
+        evaluationPicks: picks,
+        callMeta: {
+          durationSec: durationSeconds,
+          outcome: input.callOutcome,
+          direction: input.direction,
+          phone: input.phone,
+        },
+        institutionalRagBlock: input.institutionalRagBlock,
+      })
+    }
   }
 
   const dispositionId =
@@ -349,5 +362,6 @@ export async function saveCallSessionInteraction(
     interactionId,
     counselorNote,
     callAiAssessment,
+    ...(aiSkippedReason ? { aiSkippedReason } : {}),
   }
 }

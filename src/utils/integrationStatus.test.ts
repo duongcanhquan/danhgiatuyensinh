@@ -32,5 +32,7 @@ describe('buildIntegrationStatusItems', () => {
     expect(items.find((i) => i.id === 'n8n')?.health).toBe('ok')
     expect(items.find((i) => i.id === 'omicall')?.health).toBe('ok')
     expect(items.find((i) => i.id === 'llm')?.health).toBe('ok')
+    expect(items.find((i) => i.id === 'llm')?.settingsHref).toContain('adviseStep=ai')
+    expect(items.find((i) => i.id === 'llm')?.label).toBe('AI hỗ trợ')
   })
 })

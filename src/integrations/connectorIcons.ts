@@ -18,6 +18,7 @@ import {
   Sheet,
   Smartphone,
   Sparkles,
+  FileText,
   Webhook,
   Workflow,
 } from 'lucide-react'
@@ -37,6 +38,7 @@ export const CONNECTOR_ICONS: Record<string, LucideIcon> = {
   email_smtp: Send,
   sms_gateway: MessagesSquare,
   n8n: Workflow,
+  invite_docs: FileText,
   generic_webhooks: Webhook,
   llm: Bot,
   slack_alerts: MessageSquare,

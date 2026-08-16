@@ -3,8 +3,6 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { TabStrip } from '../components/TabStrip'
 import { BentoCell } from '../components/bento'
-import { CrmAdminShortcuts } from '../components/CrmAdminShortcuts'
-import { IntegrationsStatusStrip } from '../components/IntegrationsStatusStrip'
 import {
   enabledSummaryTabs,
   resolveSummaryTab,
@@ -30,6 +28,7 @@ export function SummaryHubView() {
     () => tabs.map((tab) => ({ id: tab, label: SUMMARY_TAB_LABELS[tab] })),
     [tabs],
   )
+  const reportFullBleed = activeTab === 'bao-cao-toan-dien'
 
   const setTab = (tab: SummaryTabId) => {
     setSearchParams(
@@ -43,11 +42,8 @@ export function SummaryHubView() {
   }
 
   return (
-    <div className="bento-board flex min-h-0 min-w-0 flex-1 flex-col">
-      <CrmAdminShortcuts />
-      <IntegrationsStatusStrip />
-
-      <BentoCell className="!p-2 sm:!p-2.5">
+    <div className="bento-board flex min-h-0 min-w-0 flex-1 flex-col gap-0">
+      <BentoCell className="shrink-0 !rounded-none !border-x-0 !border-t-0 !p-2 sm:!p-2.5">
         <TabStrip
           tabs={tabItems}
           active={activeTab}
@@ -58,23 +54,26 @@ export function SummaryHubView() {
         />
       </BentoCell>
 
-      <BentoCell colSpan={4} className="min-h-0 flex-1 !p-2.5 sm:!p-4">
-        <div
-          id={SUMMARY_PANEL_ID}
-          className="min-h-0 min-w-0 flex-1"
-          role="tabpanel"
-          aria-labelledby={`tab-${activeTab}`}
-        >
-          {activeTab === 'tong-quan' ? <DashboardView embedded /> : null}
-          {activeTab === 'bao-cao-toan-dien' ? <AdmissionsReportsView embedded /> : null}
-          {activeTab === 'quan-ly-team' ? <OpsMonitorView mode="team" /> : null}
-          {activeTab === 'quan-ly-truong' ? <OpsMonitorView mode="school" /> : null}
-          {activeTab === 'kpi-nhan-su' ? <PerformanceReportView /> : null}
-          {activeTab === 'bang-diem' ? <ScorecardView embedded /> : null}
-          {activeTab === 'lich-goi' ? <CallHistoryView embedded /> : null}
-          {activeTab === 'van-hanh' ? <CommandCenterView embedded /> : null}
-        </div>
-      </BentoCell>
+      <div
+        id={SUMMARY_PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={`tab-${activeTab}`}
+        className={[
+          'min-h-0 min-w-0 flex-1',
+          reportFullBleed
+            ? 'flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-sky-50/40'
+            : 'overflow-y-auto overscroll-contain p-2.5 sm:p-4',
+        ].join(' ')}
+      >
+        {activeTab === 'tong-quan' ? <DashboardView embedded /> : null}
+        {activeTab === 'bao-cao-toan-dien' ? <AdmissionsReportsView embedded fullBleed /> : null}
+        {activeTab === 'quan-ly-team' ? <OpsMonitorView mode="team" /> : null}
+        {activeTab === 'quan-ly-truong' ? <OpsMonitorView mode="school" /> : null}
+        {activeTab === 'kpi-nhan-su' ? <PerformanceReportView /> : null}
+        {activeTab === 'bang-diem' ? <ScorecardView embedded /> : null}
+        {activeTab === 'lich-goi' ? <CallHistoryView embedded /> : null}
+        {activeTab === 'van-hanh' ? <CommandCenterView embedded /> : null}
+      </div>
     </div>
   )
 }

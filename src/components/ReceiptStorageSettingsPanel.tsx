@@ -22,7 +22,7 @@ const PROVIDERS: { value: ReceiptStorageProvider; label: string; hint: string }[
 ]
 
 /** Nơi lưu chứng từ thu — cấu hình theo trường (không chỉ .env). */
-export function ReceiptStorageSettingsPanel() {
+export function ReceiptStorageSettingsPanel({ hideTitle = false }: { hideTitle?: boolean }) {
   const { can, profile } = useAuth()
   const { effectiveOrgId, currentOrgLabel } = useOrg()
   const canEdit = can('config:master_data') || can('config:omicall')
@@ -74,13 +74,17 @@ export function ReceiptStorageSettingsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <HardDrive className="h-4 w-4 text-indigo-800" aria-hidden />
-          Chứng từ &amp; lưu trữ
-        </h2>
-        <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
-      </div>
+      {!hideTitle ? (
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <HardDrive className="h-4 w-4 text-indigo-800" aria-hidden />
+            Chứng từ &amp; lưu trữ
+          </h2>
+          <span className="truncate text-xs text-slate-500">{currentOrgLabel}</span>
+        </div>
+      ) : (
+        <p className="truncate text-xs text-slate-500">{currentOrgLabel}</p>
+      )}
       <p className="text-sm text-slate-600">
         Chọn nơi lưu bill khi TVV / kế toán tải chứng từ. Nếu chưa thấy «Xem bill đã lưu» sau khi lưu hồ sơ, chọn{' '}
         <strong>Firebase Storage</strong> (hoặc Tự động) — R2 chỉ dùng khi worker đã deploy và CORS đúng domain app.

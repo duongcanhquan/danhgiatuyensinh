@@ -13,8 +13,10 @@ import { useLeadScoring } from '../hooks/useLeadScoring'
 import { CALL_OUTCOME_QUICK_OPTIONS } from '../utils/callSessionCatalog'
 import {
   buildPicksFromSelections,
+  composeEvaluationCounselorNote,
   validateEvaluationSelections,
 } from '../utils/callSessionEvaluation'
+import { evaluateCallAiEligibility } from '../utils/callSessionAiEligibility'
 import {
   callFormVariantForWorkMode,
   filterDimensionsForCallForm,
@@ -76,6 +78,15 @@ export function CallSessionQuickPanel({
     [dimensions, draft.selections],
   )
 
+  const aiEligibility = useMemo(() => {
+    const note = composeEvaluationCounselorNote(picksPreview, draft.freeNote)
+    return evaluateCallAiEligibility({
+      counselorNote: note,
+      evaluationPicks: picksPreview,
+      freeNote: draft.freeNote,
+    })
+  }, [picksPreview, draft.freeNote])
+
   const onSave = async (withAi: boolean) => {
     if (!profile || !call.leadId) {
       setErr('Thiếu hồ sơ hoặc chưa đăng nhập.')
@@ -103,6 +114,10 @@ export function CallSessionQuickPanel({
         setErr('Chưa có khóa AI — nhờ Siêu quản trị cấu hình Vercel hoặc Cài đặt → LLM.')
         return
       }
+      if (withAi && !aiEligibility.ok) {
+        setErr(aiEligibility.reason)
+        return
+      }
       const picks = buildPicksFromSelections(dimensions, draft.selections)
       const result = await saveCallSessionInteraction(db, profile, {
         leadId: call.leadId,
@@ -114,7 +129,7 @@ export function CallSessionQuickPanel({
         durationSeconds: call.durationSec > 0 ? call.durationSec : undefined,
         direction: call.direction,
         phone: call.phone,
-        runAi: withAi && showAiOption,
+        runAi: withAi && showAiOption && aiEligibility.ok,
         aiConfig: cfg,
         institutionalRagBlock,
         scoring: activeScoringProfile
@@ -128,6 +143,10 @@ export function CallSessionQuickPanel({
           : undefined,
       })
       setLastAi(result.callAiAssessment ?? null)
+      if (result.aiSkippedReason) {
+        // Đã lưu đánh giá; AI bị bỏ qua — báo nhẹ, vẫn đóng panel.
+        window.alert(result.aiSkippedReason)
+      }
       onSaved?.({ callAiAssessment: result.callAiAssessment })
       resetDraft()
       onClose()
@@ -234,9 +253,15 @@ export function CallSessionQuickPanel({
       </label>
 
       {showAiOption ? (
-        <p className="flex items-center gap-1.5 text-[11px] text-violet-100/95">
-          <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
-          <strong className="text-white">Lưu &amp; AI</strong> dùng bảng đánh giá + ghi chú để phân tích hồ sơ.
+        <p className="flex flex-col gap-1 text-[11px] text-violet-100/95">
+          <span className="inline-flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
+            <strong className="text-white">Lưu &amp; AI</strong> chỉ chạy khi có đánh giá hoặc ghi chú đủ dài (tiết kiệm
+            phí AI).
+          </span>
+          {!aiEligibility.ok ? (
+            <span className="text-amber-200/90">{aiEligibility.reason}</span>
+          ) : null}
         </p>
       ) : canRunLlmAnalysis && !aiReady ? (
         <p className="text-[11px] text-amber-200/90">Chưa cấu hình khóa AI — chỉ lưu đánh giá, không chạy phân tích.</p>
@@ -263,9 +288,10 @@ export function CallSessionQuickPanel({
         {showAiOption ? (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !aiEligibility.ok}
+            title={!aiEligibility.ok ? aiEligibility.reason : undefined}
             onClick={() => void onSave(true)}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-400/50 bg-gradient-to-r from-violet-600 to-amber-600 px-3 py-2 text-xs font-bold text-white hover:brightness-110 disabled:opacity-50"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-400/50 bg-gradient-to-r from-violet-600 to-amber-600 px-3 py-2 text-xs font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />

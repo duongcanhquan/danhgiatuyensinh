@@ -145,6 +145,74 @@ export function KnowledgeBaseTab({
     })
   }
 
+  const applyQuickTemplate = (kind: 'school' | 'major' | 'faq') => {
+    startNewDocument()
+    if (kind === 'school') {
+      setType('GENERAL')
+      setTitle('Thông tin nhà trường — cập nhật …')
+      setContent(
+        [
+          '## Địa chỉ & cơ sở',
+          '- …',
+          '',
+          '## Học phí khung (đã duyệt)',
+          '- …',
+          '',
+          '## Ký túc xá / đời sống',
+          '- …',
+          '',
+          '## Lịch xét tuyển / hạn nộp',
+          '- …',
+          '',
+          '## Học bổng',
+          '- …',
+        ].join('\n'),
+      )
+    } else if (kind === 'major') {
+      setType('MAJOR_INFO')
+      setTitle('Ngành … — thông tin tư vấn')
+      setContent(
+        [
+          '## Giới thiệu ngắn (2–4 câu)',
+          '',
+          '## Điểm mạnh / USP',
+          '- …',
+          '',
+          '## Thực hành / lab / đối tác DN',
+          '- …',
+          '',
+          '## Việc làm & mức lương tham chiếu (có nguồn)',
+          '- …',
+          '',
+          '## Điều kiện đầu vào',
+          '- …',
+          '',
+          '## FAQ phụ huynh thường hỏi về ngành này',
+          'Q: …',
+          'A: …',
+        ].join('\n'),
+      )
+    } else {
+      setType('FAQ')
+      setTitle('FAQ phụ huynh — …')
+      setContent(
+        [
+          'Q: Học phí có đắt không? Có trả góp không?',
+          'A: …',
+          '',
+          'Q: Ra trường có việc không?',
+          'A: …',
+          '',
+          'Q: So với trường khác thì sao?',
+          'A: …',
+          '',
+          'Q: Ở tỉnh xa / KTX thế nào?',
+          'A: …',
+        ].join('\n'),
+      )
+    }
+  }
+
   const detailDirty = useMemo(() => {
     if (isNewDoc) return Boolean(title.trim() || content.trim())
     if (!selectedDoc) return false
@@ -628,6 +696,34 @@ export function KnowledgeBaseTab({
                     )
                   ) : selectedDoc || isNewDoc ? (
                     <div className="grid gap-3">
+                      {canEdit ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="w-full text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Mẫu nhanh
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => applyQuickTemplate('school')}
+                            className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-950 hover:bg-sky-100"
+                          >
+                            Thông tin trường
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => applyQuickTemplate('major')}
+                            className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-950 hover:bg-violet-100"
+                          >
+                            Ngành nghề
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => applyQuickTemplate('faq')}
+                            className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                          >
+                            FAQ phụ huynh
+                          </button>
+                        </div>
+                      ) : null}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className={panelLabel}>
                           Tiêu đề

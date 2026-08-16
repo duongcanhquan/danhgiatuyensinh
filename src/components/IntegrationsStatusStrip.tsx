@@ -142,7 +142,7 @@ export function IntegrationsStatusStrip() {
           to="/settings?tab=connect&sub=hub"
           className="inline-flex items-center gap-0.5 text-xs font-semibold text-indigo-800 hover:underline"
         >
-          Hub
+          Các kênh
           <ChevronRight className="h-3.5 w-3.5" aria-hidden />
         </Link>
       </div>

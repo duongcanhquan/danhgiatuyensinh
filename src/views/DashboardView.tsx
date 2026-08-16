@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   Area,
   AreaChart,
@@ -24,10 +24,8 @@ import { useLeadScoring } from '../hooks/useLeadScoring'
 import type { LeadPipelineStatus, PriorityTag } from '../types'
 import { isAdminLikeRole } from '../auth/roleUtils'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
-import { AdminPersonnelKpiPanel } from '../components/AdminPersonnelKpiPanel'
-import { BentoCell, BentoGrid, BentoModule, BentoStat } from '../components/bento'
+import { BentoCell, BentoGrid, BentoModule } from '../components/bento'
 
-/** Nhãn ưu tiên — palette chuyên nghiệp (đồng bộ TagBadge) */
 const TAG_COLORS: Record<PriorityTag, string> = {
   HOT: '#ea580c',
   WARM: '#d97706',
@@ -85,17 +83,32 @@ function formatMonth(d: Date): string {
   return d.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' })
 }
 
-export function DashboardView({ embedded = false }: { embedded?: boolean }) {
-  const { profile, can } = useAuth()
-  const isAdmin = isAdminLikeRole(profile?.role)
-  const showPersonnelTab =
-    !embedded &&
-    (can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead'))
-  const [summaryTab, setSummaryTab] = useState<'personnel' | 'pipeline'>(
-    showPersonnelTab ? 'personnel' : 'pipeline',
+function KpiPill({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: string | number
+  accent?: string
+}) {
+  return (
+    <div className="min-w-0 flex-1 rounded-2xl border border-slate-200/90 bg-white px-3 py-2.5 shadow-sm">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p
+        className="mt-0.5 truncate text-xl font-bold tabular-nums tracking-tight sm:text-2xl"
+        style={{ color: accent ?? '#0f172a' }}
+      >
+        {value}
+      </p>
+    </div>
   )
-  const { leads, loading, error, totalLeadCount, totalLeadCountError, totalPages, currentPage } = useLeads({
-    // Admin Tổng kết dùng aggregates — không tải/chấm điểm cả trang hồ sơ song song.
+}
+
+export function DashboardView({ embedded = false }: { embedded?: boolean }) {
+  const { profile } = useAuth()
+  const isAdmin = isAdminLikeRole(profile?.role)
+  const { leads, loading, error, totalLeadCount, totalLeadCountError } = useLeads({
     enabled: !isAdmin,
   })
   const adminAgg = useAdminDashboardAggregates(isAdmin)
@@ -118,9 +131,6 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
 
   const yieldGauge = useMemo(() => {
     if (adminChartsReady) return adminAgg.data!.yieldGauge
-    if (isAdmin && adminChartsFailed) {
-      return [{ name: 'Tỷ lệ nhập học', value: 0, fill: '#c9a227' }]
-    }
     if (isAdmin) {
       return [{ name: 'Tỷ lệ nhập học', value: 0, fill: '#c9a227' }]
     }
@@ -130,7 +140,7 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
     const enrolled = leads.filter((l) => l.status === 'ENROLLED').length
     const pct = committed ? Math.round((enrolled / committed) * 1000) / 10 : 0
     return [{ name: 'Tỷ lệ nhập học', value: Math.min(100, pct), fill: '#c9a227' }]
-  }, [adminChartsReady, adminChartsFailed, adminAgg.data, isAdmin, leads])
+  }, [adminChartsReady, adminAgg.data, isAdmin, leads])
 
   const summerMeltSeries = useMemo(() => {
     if (adminChartsReady) return adminAgg.data!.summerMeltSeries
@@ -220,8 +230,16 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
     return m
   }, [pieData])
 
+  const totalDisplay = chartsBusy
+    ? '…'
+    : isAdmin
+      ? (adminTotalLeads ?? 0)
+      : totalLeadCount !== null
+        ? totalLeadCount
+        : leads.length
+
   return (
-    <div className={embedded ? 'bento-board' : 'bento-board relative overflow-hidden'}>
+    <div className={embedded ? 'space-y-3' : 'bento-board relative overflow-hidden space-y-3'}>
       {!embedded ? (
         <>
           <div
@@ -235,57 +253,10 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
             <VietMyAccentHeading as="h1" tone="onDark" size="xl" className="block text-white">
               Tổng kết
             </VietMyAccentHeading>
-            {showPersonnelTab ? (
-              <div className="app-tab-segmented scroll-touch mt-3 max-w-md bg-white/10">
-                <button
-                  type="button"
-                  onClick={() => setSummaryTab('personnel')}
-                  className="app-tab-segmented-btn"
-                  data-active={summaryTab === 'personnel' ? 'true' : 'false'}
-                >
-                  KPI nhân sự
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSummaryTab('pipeline')}
-                  className="app-tab-segmented-btn"
-                  data-active={summaryTab === 'pipeline' ? 'true' : 'false'}
-                >
-                  Pipeline
-                </button>
-              </div>
-            ) : null}
           </BentoCell>
         </>
-      ) : showPersonnelTab ? (
-        <div className="app-tab-segmented scroll-touch">
-          <button
-            type="button"
-            onClick={() => setSummaryTab('personnel')}
-            className="app-tab-segmented-btn"
-            data-active={summaryTab === 'personnel' ? 'true' : 'false'}
-          >
-            KPI nhân sự
-          </button>
-          <button
-            type="button"
-            onClick={() => setSummaryTab('pipeline')}
-            className="app-tab-segmented-btn"
-            data-active={summaryTab === 'pipeline' ? 'true' : 'false'}
-          >
-            Pipeline
-          </button>
-        </div>
       ) : null}
 
-      {showPersonnelTab && summaryTab === 'personnel' ? (
-        <BentoCell colSpan={4} className="!p-2.5 sm:!p-4">
-          <AdminPersonnelKpiPanel />
-        </BentoCell>
-      ) : null}
-
-      {(!showPersonnelTab || summaryTab === 'pipeline') && (
-      <>
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm">
           {/permission|insufficient/i.test(error)
@@ -295,107 +266,46 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
       ) : null}
       {totalLeadCountError && !error ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-950 shadow-sm">
-          Không lấy được tổng hồ sơ từ Firestore ({totalLeadCountError}). Số «Tổng hồ sơ» tạm theo danh sách đã tải.
+          Không lấy được tổng hồ sơ ({totalLeadCountError}).
         </div>
       ) : null}
       {isAdmin && adminAgg.error && !error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-900 shadow-sm">
-          Không tải được thống kê toàn hệ thống: {adminAgg.error}
+          Không tải được thống kê: {adminAgg.error}
         </div>
       ) : null}
 
-      <BentoGrid>
-        <BentoStat
-          label="Tổng hồ sơ"
-          value={
-            isAdmin
-              ? chartsBusy
-                ? '…'
-                : (adminTotalLeads ?? 0)
-              : loading && totalLeadCount === null
-                ? '…'
-                : totalLeadCount !== null
-                  ? totalLeadCount
-                  : leads.length
-          }
-          hint={
-            isAdmin
-              ? undefined
-              : totalPages > 1 && totalLeadCount !== null
-                ? `Trang ${currentPage}/${totalPages} · ${leads.length} bản ghi trên trang`
-                : totalPages > 1
-                  ? `Trang ${currentPage}/${totalPages} — dùng Hồ sơ để lật trang`
-                  : undefined
-          }
-          tone="ink"
-          className="bento-span-2"
+      <div className="flex flex-wrap items-stretch gap-2">
+        <KpiPill label="Tổng hồ sơ" value={totalDisplay} />
+        <KpiPill label="HOT" value={chartsBusy ? '…' : (tagCountMap.get('HOT') ?? 0)} accent={TAG_COLORS.HOT} />
+        <KpiPill label="WARM" value={chartsBusy ? '…' : (tagCountMap.get('WARM') ?? 0)} accent={TAG_COLORS.WARM} />
+        <KpiPill label="COLD" value={chartsBusy ? '…' : (tagCountMap.get('COLD') ?? 0)} accent={TAG_COLORS.COLD} />
+        <KpiPill
+          label="% nhập học"
+          value={chartsBusy ? '…' : `${yieldGauge[0]?.value ?? 0}%`}
+          accent="#4f46e5"
         />
-        <BentoStat
-          label="Lead HOT"
-          value={chartsBusy ? '…' : (tagCountMap.get('HOT') ?? 0)}
-          hint="Ưu tiên cao"
-          tone="accent"
-        />
-        <BentoStat
-          label="Lead WARM"
-          value={chartsBusy ? '…' : (tagCountMap.get('WARM') ?? 0)}
-          hint="Đang nuôi"
-        />
-        <BentoStat
-          label="Lead COLD"
-          value={chartsBusy ? '…' : (tagCountMap.get('COLD') ?? 0)}
-          hint="Cần gọi lại"
-          className="bento-span-2"
-        />
-        <BentoCell colSpan={2} variant="muted" className="flex min-h-[5.5rem] flex-col justify-center gap-1.5">
-          <p className="bento-stat__label">Profile chấm điểm</p>
-          <div className="relative min-h-0">
-            <select
-              value={resolvedScoringProfileId ?? ''}
-              disabled={!scoringProfiles.length || profilesLoading}
-              onChange={(e) => setScoringProfileId(e.target.value || null)}
-              title={activeScoringProfile?.profileName}
-              className="h-[2.35rem] w-full cursor-pointer appearance-none truncate rounded-xl border border-slate-200 bg-white px-3 py-2 pr-8 text-sm font-semibold text-slate-900 shadow-inner outline-none focus:border-[var(--vm-accent)] focus:ring-2 focus:ring-[var(--vm-accent)]/20 disabled:opacity-50"
-            >
-              {!scoringProfiles.length ? (
-                <option value="" className="bg-white">
-                  Chưa có profile
-                </option>
-              ) : null}
-              {scoringProfiles.map((p) => (
-                <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                  {p.profileName}
-                </option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-              ▾
-            </span>
-          </div>
-          <p className="truncate text-xs leading-tight text-slate-600" title={activeScoringProfile?.description}>
-            {isAdmin
-              ? activeScoringProfile
-                ? `Admin: biểu đồ nhãn dùng priorityTag đã lưu. Profile «${activeScoringProfile.profileName}» đồng bộ màn Hồ sơ.`
-                : 'Admin: chọn profile để đồng bộ với màn Hồ sơ.'
-              : activeScoringProfile
-                ? `Biểu đồ nhãn dùng ngưỡng HOT/WARM của «${activeScoringProfile.profileName}».`
-                : 'Chọn profile để đồng bộ nhãn với bảng quản lý hồ sơ.'}
-          </p>
-        </BentoCell>
-      </BentoGrid>
+        <div className="flex min-w-[10rem] flex-[1.2] flex-col justify-center rounded-2xl border border-slate-200/90 bg-white px-3 py-2 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Bộ chấm điểm</p>
+          <select
+            value={resolvedScoringProfileId ?? ''}
+            disabled={!scoringProfiles.length || profilesLoading}
+            onChange={(e) => setScoringProfileId(e.target.value || null)}
+            className="mt-1 h-8 w-full cursor-pointer truncate rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-sky-300/40 disabled:opacity-50"
+          >
+            {!scoringProfiles.length ? <option value="">Chưa có</option> : null}
+            {scoringProfiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.profileName}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       <BentoGrid>
-        <BentoModule
-          title="Tỷ lệ nhập học"
-          subtitle={
-            isAdmin
-              ? 'Nhập học / (đã cọc + nhập học + hủy phút chót) — đếm trên toàn bộ hồ sơ'
-              : 'Nhập học / (đã cọc + nhập học + hủy phút chót) — theo CRM'
-          }
-          colSpan={1}
-          rowSpan={2}
-        >
-          <div className="relative mx-auto h-[200px] w-[200px]">
+        <BentoModule title="Tỷ lệ nhập học" subtitle="Trên nhóm đã cam kết" colSpan={1} rowSpan={2}>
+          <div className="relative mx-auto h-[180px] w-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 cx="50%"
@@ -412,104 +322,28 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                   dataKey="value"
                   cornerRadius={8}
                   fill="#4f46e5"
-                  className="drop-shadow-[0_2px_8px_rgba(13,148,136,0.35)]"
                 />
               </RadialBarChart>
             </ResponsiveContainer>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-8 text-center">
-              <p className="text-3xl font-bold tabular-nums text-indigo-800">
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-7 text-center">
+              <p className="text-2xl font-bold tabular-nums text-indigo-800">
                 {chartsBusy ? '…' : `${yieldGauge[0]?.value ?? 0}%`}
               </p>
-              <p className="text-xs uppercase tracking-wide text-slate-600">trên nhóm đã cam kết</p>
             </div>
           </div>
         </BentoModule>
 
-        <BentoModule
-          title="Hủy phút chót (theo tháng cập nhật)"
-          subtitle={
-            isAdmin
-              ? 'Số hồ sơ status «Hủy phút chót» theo tháng updatedAt — 12 tháng gần nhất, toàn hệ thống'
-              : 'Số hồ sơ chuyển sang giai đoạn hủy phút chót — thống kê tháng 6–8 (theo hồ sơ đã tải)'
-          }
-          colSpan={3}
-        >
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={summerMeltSeries} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="meltFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(13,148,136,0.85)" />
-                  <stop offset="100%" stopColor="rgba(13,148,136,0.06)" />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fill: '#475569', fontSize: 11 }} axisLine={{ stroke: '#cbd5e1' }} />
-              <YAxis tick={{ fill: '#475569', fontSize: 11 }} allowDecimals={false} axisLine={{ stroke: '#cbd5e1' }} />
-              <Tooltip content={<ChartTooltip />} />
-              <Area
-                type="monotone"
-                name="Hủy phút chót"
-                dataKey="melt"
-                stroke="#4f46e5"
-                strokeWidth={2}
-                fill="url(#meltFill)"
-                dot={{ r: 3, fill: '#99f6e4', strokeWidth: 0 }}
-                activeDot={{ r: 5, fill: '#5eead4', stroke: '#fff', strokeWidth: 1 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </BentoModule>
-
-        <BentoModule
-          title={isAdmin ? 'Pipeline (toàn hệ thống)' : 'Pipeline theo tháng tiếp cận'}
-          subtitle={
-            isAdmin
-              ? 'Phân bổ theo pipelineStatus đang lưu trên từng hồ sơ (một cột tổng)'
-              : 'Xếp chồng theo giai đoạn pipeline hiện tại (theo hồ sơ đã tải)'
-          }
-          colSpan={4}
-          className="min-h-[320px]"
-        >
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={cohortStack} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis dataKey="monthLabel" tick={{ fill: '#475569', fontSize: 11 }} axisLine={{ stroke: '#cbd5e1' }} />
-              <YAxis tick={{ fill: '#475569', fontSize: 11 }} allowDecimals={false} />
-              <Tooltip content={<ChartTooltip />} />
-              <Legend wrapperStyle={{ color: '#334155', fontSize: 12 }} />
-              {PIPELINE_STACK.map((p) => (
-                <Bar
-                  key={p}
-                  dataKey={p}
-                  stackId="pipeline-month"
-                  name={PIPELINE_LABEL[p]}
-                  fill={PIPELINE_NEON[p]}
-                  radius={[2, 2, 0, 0]}
-                />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </BentoModule>
-
-        <BentoModule
-          title="Phân bổ nhãn ưu tiên"
-          subtitle={
-            isAdmin
-              ? 'Theo trường priorityTag trên Firestore (toàn bộ hồ sơ)'
-              : undefined
-          }
-          colSpan={2}
-        >
-          <ResponsiveContainer width="100%" height={260}>
+        <BentoModule title="Nhãn ưu tiên" subtitle="HOT / WARM / COLD" colSpan={1} rowSpan={2}>
+          <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie
                 data={pieData}
                 dataKey="value"
                 nameKey="name"
-                innerRadius={52}
-                outerRadius={88}
+                innerRadius={42}
+                outerRadius={72}
                 paddingAngle={3}
-                stroke="#f1f5f9"
+                stroke="#f8fafc"
                 strokeWidth={2}
               >
                 {pieData.map((entry) => (
@@ -517,35 +351,55 @@ export function DashboardView({ embedded = false }: { embedded?: boolean }) {
                 ))}
               </Pie>
               <Tooltip content={<ChartTooltip />} />
-              <Legend wrapperStyle={{ color: '#334155', fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
             </PieChart>
           </ResponsiveContainer>
         </BentoModule>
 
         <BentoModule
-          title="Pipeline (tổng hợp nhanh)"
-          subtitle={isAdmin ? 'Đếm theo pipelineStatus — toàn bộ hồ sơ' : 'Theo hồ sơ đã tải'}
+          title="Pipeline theo tháng"
+          subtitle={isAdmin ? 'Toàn hệ thống' : 'Theo hồ sơ đã tải'}
           colSpan={2}
+          className="min-h-[220px]"
         >
-          <ul className="flex flex-wrap gap-2 text-base">
-            {PIPELINE_STACK.map((k) => (
-              <li
-                key={k}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-800 shadow-sm"
-              >
-                <span style={{ color: PIPELINE_NEON[k] }}>{PIPELINE_LABEL[k]}:</span>{' '}
-                {chartsBusy
-                  ? '…'
-                  : adminChartsReady
-                    ? adminAgg.data!.pipeline[k]
-                    : leads.filter((l) => l.pipelineStatus === k).length}
-              </li>
-            ))}
-          </ul>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={cohortStack} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="monthLabel" tick={{ fill: '#64748b', fontSize: 10 }} />
+              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} width={32} />
+              <Tooltip content={<ChartTooltip />} />
+              {PIPELINE_STACK.map((p) => (
+                <Bar key={p} dataKey={p} stackId="p" name={PIPELINE_LABEL[p]} fill={PIPELINE_NEON[p]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </BentoModule>
+
+        <BentoModule title="Hủy phút chót" subtitle="Theo tháng cập nhật" colSpan={4}>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={summerMeltSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="meltFillCompact" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(79,70,229,0.45)" />
+                  <stop offset="100%" stopColor="rgba(79,70,229,0.04)" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} />
+              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} width={28} />
+              <Tooltip content={<ChartTooltip />} />
+              <Area
+                type="monotone"
+                name="Hủy phút chót"
+                dataKey="melt"
+                stroke="#4f46e5"
+                strokeWidth={2}
+                fill="url(#meltFillCompact)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </BentoModule>
       </BentoGrid>
-      </>
-      )}
     </div>
   )
 }
@@ -556,7 +410,7 @@ function ChartTooltip({
   label,
 }: {
   active?: boolean
-  payload?: { name?: string; value?: number; color?: string; payload?: Record<string, unknown> }[]
+  payload?: { name?: string; value?: number; color?: string }[]
   label?: string
 }) {
   if (!active || !payload?.length) return null

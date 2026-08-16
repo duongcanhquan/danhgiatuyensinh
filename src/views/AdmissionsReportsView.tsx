@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -15,7 +17,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Download } from 'lucide-react'
+import {
+  BarChart3,
+  Download,
+  GraduationCap,
+  Layers,
+  Megaphone,
+  Radio,
+  Table2,
+  Users,
+} from 'lucide-react'
 import { ANALYTICS_FULL_SCOPE_MAX, useLeads } from '../hooks/useLeads'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -36,13 +47,55 @@ import { todayOpsDateKey, shiftOpsDateKey, monthStartOpsKey } from '../utils/ops
 
 type TabId = 'tong-quan' | 'tvv' | 'mkt' | 'nganh' | 'nguon' | 'tuyen-sinh'
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'tong-quan', label: 'Tổng quan' },
-  { id: 'tvv', label: 'TVV' },
-  { id: 'mkt', label: 'MKT' },
-  { id: 'nguon', label: 'Nguồn' },
-  { id: 'nganh', label: 'Ngành' },
-  { id: 'tuyen-sinh', label: 'Chi tiết' },
+const TABS: {
+  id: TabId
+  label: string
+  Icon: typeof BarChart3
+  active: string
+  idle: string
+}[] = [
+  {
+    id: 'tong-quan',
+    label: 'Tổng quan',
+    Icon: BarChart3,
+    active: 'bg-sky-700 text-white shadow-md shadow-sky-700/25',
+    idle: 'bg-sky-50 text-sky-900 hover:bg-sky-100',
+  },
+  {
+    id: 'tvv',
+    label: 'TVV',
+    Icon: Users,
+    active: 'bg-violet-700 text-white shadow-md shadow-violet-700/25',
+    idle: 'bg-violet-50 text-violet-900 hover:bg-violet-100',
+  },
+  {
+    id: 'mkt',
+    label: 'MKT',
+    Icon: Megaphone,
+    active: 'bg-fuchsia-700 text-white shadow-md shadow-fuchsia-700/25',
+    idle: 'bg-fuchsia-50 text-fuchsia-900 hover:bg-fuchsia-100',
+  },
+  {
+    id: 'nguon',
+    label: 'Nguồn',
+    Icon: Radio,
+    active: 'bg-cyan-700 text-white shadow-md shadow-cyan-700/25',
+    idle: 'bg-cyan-50 text-cyan-900 hover:bg-cyan-100',
+  },
+  {
+    id: 'nganh',
+    label: 'Ngành',
+    Icon: GraduationCap,
+    active: 'bg-amber-700 text-white shadow-md shadow-amber-700/25',
+    idle: 'bg-amber-50 text-amber-950 hover:bg-amber-100',
+  },
+  {
+    id: 'tuyen-sinh',
+    label: 'Chi tiết',
+    Icon: Table2,
+    active: 'bg-slate-800 text-white shadow-md shadow-slate-800/20',
+    idle: 'bg-slate-100 text-slate-800 hover:bg-slate-200',
+  },
 ]
 
 const BUCKET_LABEL: Record<AdmissionsEvalBucket, string> = {
@@ -54,6 +107,15 @@ const BUCKET_LABEL: Record<AdmissionsEvalBucket, string> = {
 }
 
 const PIE_COLORS = ['#64748b', '#0ea5e9', '#2563eb', '#16a34a', '#7c3aed']
+
+const KPI_TONES = [
+  { border: 'border-slate-200', bg: 'bg-white', label: 'text-slate-500', value: 'text-slate-900' },
+  { border: 'border-sky-200', bg: 'bg-sky-50/90', label: 'text-sky-700', value: 'text-sky-950' },
+  { border: 'border-indigo-200', bg: 'bg-indigo-50/90', label: 'text-indigo-700', value: 'text-indigo-950' },
+  { border: 'border-blue-200', bg: 'bg-blue-50/90', label: 'text-blue-700', value: 'text-blue-950' },
+  { border: 'border-emerald-200', bg: 'bg-emerald-50/90', label: 'text-emerald-700', value: 'text-emerald-950' },
+  { border: 'border-violet-200', bg: 'bg-violet-50/90', label: 'text-violet-700', value: 'text-violet-950' },
+]
 
 type DatePreset = 'month' | 'week' | 'today' | 'custom'
 
@@ -78,7 +140,14 @@ function leadsHref(opts: { assign?: string; from?: string; to?: string }): strin
  * Báo cáo tuyển sinh kỳ — parity Dashboard Apps Script (5+ tab).
  * Dùng độc lập (`/bao-cao-tuyen-sinh`) hoặc nhúng trong Tổng kết.
  */
-export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean }) {
+export function AdmissionsReportsView({
+  embedded = false,
+  fullBleed = false,
+}: {
+  embedded?: boolean
+  /** Trong Tổng kết — chiếm hết chiều cao còn lại, không max-width. */
+  fullBleed?: boolean
+}) {
   const { can, profile } = useAuth()
   const { preferTeamScope } = useManagementViewScope()
   const allowed =
@@ -282,27 +351,55 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
     })
   }
 
-  const shellClass = embedded ? 'space-y-4' : 'mx-auto max-w-6xl space-y-5 px-4 py-6'
+  const shellClass = fullBleed
+    ? 'flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden px-3 py-3 sm:px-4 sm:py-4'
+    : embedded
+      ? 'space-y-4'
+      : 'mx-auto max-w-7xl space-y-5 px-4 py-6'
 
   return (
     <div className={shellClass}>
-      {!embedded ? (
-        <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-slate-900">Báo cáo tuyển sinh</h1>
-          <p className="text-sm text-slate-600">
-            Kỳ theo ngày tạo, ngày kế toán duyệt tiền, hoặc ngày Full NE — giống trung tâm báo cáo hệ thống cũ.
-          </p>
-        </header>
-      ) : (
-        <div className="space-y-1">
-          <h2 className="text-base font-bold text-slate-900">Báo cáo toàn diện</h2>
-          <p className="text-sm text-slate-600">
-            Nhìn tổng cục theo kỳ: tình trạng nộp phí, nguồn, ngành, từng TVV. Lọc rồi mở hồ sơ để xử lý tiếp.
-          </p>
-        </div>
-      )}
+      <header
+        className={[
+          'shrink-0 space-y-1',
+          fullBleed
+            ? 'rounded-2xl border border-sky-100/80 bg-gradient-to-r from-sky-50 via-white to-violet-50 px-4 py-3 shadow-sm'
+            : '',
+        ].join(' ')}
+      >
+        {!embedded || fullBleed ? (
+          <>
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                  <Layers className="h-6 w-6 text-sky-700" aria-hidden />
+                  Báo cáo tuyển sinh
+                </h1>
+                <p className="mt-1 text-sm text-slate-600">
+                  Một màn hình nắm kỳ: trạng thái nộp phí, nguồn, ngành, TVV — lọc rồi mở hồ sơ xử lý.
+                </p>
+              </div>
+              <p className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold tabular-nums text-slate-600 ring-1 ring-slate-200">
+                {startIso} → {endIso}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-slate-900">Báo cáo toàn diện</h2>
+            <p className="text-sm text-slate-600">
+              Nhìn tổng cục theo kỳ: tình trạng nộp phí, nguồn, ngành, từng TVV.
+            </p>
+          </div>
+        )}
+      </header>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3">
+      <div
+        className={[
+          'shrink-0 space-y-3 rounded-2xl border border-slate-200/90 bg-white/95 p-3 shadow-sm',
+          fullBleed ? 'backdrop-blur-sm' : '',
+        ].join(' ')}
+      >
         <div className="flex flex-wrap gap-1">
           {(
             [
@@ -451,23 +548,33 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
         </div>
       </div>
 
-      {loading ? <p className="text-sm text-slate-500">Đang tải hồ sơ…</p> : null}
-      {error ? <p className="text-sm text-rose-600">{String(error)}</p> : null}
+      {loading ? <p className="shrink-0 text-sm text-slate-500">Đang tải hồ sơ…</p> : null}
+      {error ? <p className="shrink-0 text-sm text-rose-600">{String(error)}</p> : null}
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-1">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={[
-              'rounded-lg px-3 py-1.5 text-sm font-medium transition',
-              tab === t.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
-            ].join(' ')}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div
+        className="flex shrink-0 flex-wrap gap-1.5"
+        role="tablist"
+        aria-label="Mục báo cáo tuyển sinh"
+      >
+        {TABS.map((t) => {
+          const selected = tab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setTab(t.id)}
+              className={[
+                'inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold transition',
+                selected ? t.active : t.idle,
+              ].join(' ')}
+            >
+              <t.Icon className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+              {t.label}
+            </button>
+          )
+        })}
       </div>
 
       <AnimatePresence mode="wait">
@@ -477,10 +584,11 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.2 }}
+          className={fullBleed ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4' : undefined}
         >
           {tab === 'tong-quan' ? (
             <section className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
                 {(
                   [
                     ['Tổng', report.overview.total],
@@ -490,74 +598,118 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
                     ['Cọc', report.overview.coc],
                     ['Full NE', report.overview.fullNe],
                   ] as const
-                ).map(([label, value], i) => (
-                  <motion.div
-                    key={label}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-3"
-                  >
-                    <p className="text-xs text-slate-500">{label}</p>
-                    <p className="text-lg font-semibold tabular-nums text-slate-900">{value}</p>
-                  </motion.div>
-                ))}
+                ).map(([label, value], i) => {
+                  const tone = KPI_TONES[i] ?? KPI_TONES[0]!
+                  return (
+                    <motion.div
+                      key={label}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      className={`rounded-2xl border px-3 py-3 shadow-sm ${tone.border} ${tone.bg}`}
+                    >
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${tone.label}`}>{label}</p>
+                      <p className={`mt-1 text-2xl font-bold tabular-nums tracking-tight ${tone.value}`}>{value}</p>
+                    </motion.div>
+                  )
+                })}
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-3">
-                  <p className="text-xs font-medium text-emerald-800">Tỷ lệ NE (cọc/full)</p>
-                  <p className="text-xl font-bold text-emerald-900">{conversion.neRate}%</p>
+                <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-white px-4 py-3 shadow-sm">
+                  <p className="text-xs font-semibold text-emerald-800">Tỷ lệ NE (cọc/full)</p>
+                  <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-950">{conversion.neRate}%</p>
                 </div>
-                <div className="rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-3">
-                  <p className="text-xs font-medium text-sky-800">Tỷ lệ LPXT</p>
-                  <p className="text-xl font-bold text-sky-900">{conversion.lpxtRate}%</p>
+                <div className="rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 to-white px-4 py-3 shadow-sm">
+                  <p className="text-xs font-semibold text-sky-800">Tỷ lệ LPXT</p>
+                  <p className="mt-1 text-3xl font-bold tabular-nums text-sky-950">{conversion.lpxtRate}%</p>
                 </div>
                 <Link
                   to={leadsHref({ assign: tvvUid || 'all', from: startIso, to: endIso })}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-sky-900 hover:bg-slate-50"
+                  className="flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
                 >
-                  Mở danh sách hồ sơ theo kỳ →
+                  Mở hồ sơ theo kỳ →
                 </Link>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
-                <div className="h-64 rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="mb-2 text-sm font-medium text-slate-700">Trạng thái trong kỳ</p>
-                  <ResponsiveContainer width="100%" height="90%">
+                <div className="h-72 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+                  <p className="mb-2 text-sm font-bold text-slate-800">Trạng thái trong kỳ</p>
+                  <ResponsiveContainer width="100%" height="88%">
                     <PieChart>
-                      <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={90} label>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={95}
+                        paddingAngle={2}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      >
                         {pieData.map((d) => (
                           <Cell key={d.name} fill={d.fill} />
                         ))}
                       </Pie>
                       <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="h-64 rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="mb-2 text-sm font-medium text-slate-700">Doanh thu duyệt theo hệ</p>
-                  <ResponsiveContainer width="100%" height="90%">
+                <div className="h-72 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+                  <p className="mb-2 text-sm font-bold text-slate-800">Doanh thu duyệt theo hệ</p>
+                  <ResponsiveContainer width="100%" height="88%">
                     <BarChart data={report.overview.revenueBySystem}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <defs>
+                        <linearGradient id="revBar" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0d9488" />
+                          <stop offset="100%" stopColor="#115e59" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
                       <Tooltip formatter={(v) => money(Number(v))} />
-                      <Bar dataKey="amount" fill="#0f766e" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="amount" fill="url(#revBar)" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
-              <div className="h-64 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="mb-2 text-sm font-medium text-slate-700">Xu hướng theo ngày trong kỳ</p>
-                <ResponsiveContainer width="100%" height="90%">
-                  <LineChart data={report.dailyTrend}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="dateKey" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
+              <div className="h-72 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+                <p className="mb-2 text-sm font-bold text-slate-800">Xu hướng theo ngày trong kỳ</p>
+                <ResponsiveContainer width="100%" height="88%">
+                  <AreaChart data={report.dailyTrend}>
+                    <defs>
+                      <linearGradient id="trendTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(15,23,42,0.35)" />
+                        <stop offset="100%" stopColor="rgba(15,23,42,0.02)" />
+                      </linearGradient>
+                      <linearGradient id="trendNe" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(22,163,74,0.4)" />
+                        <stop offset="100%" stopColor="rgba(22,163,74,0.03)" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="dateKey" tick={{ fontSize: 10, fill: '#64748b' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
                     <Tooltip />
-                    <Line type="monotone" dataKey="total" name="Tổng HS" stroke="#0f172a" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="neCount" name="NE" stroke="#16a34a" strokeWidth={2} dot={false} />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="total"
+                      name="Tổng HS"
+                      stroke="#0f172a"
+                      strokeWidth={2}
+                      fill="url(#trendTotal)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="neCount"
+                      name="NE"
+                      stroke="#16a34a"
+                      strokeWidth={2}
+                      fill="url(#trendNe)"
+                    />
                     <Line type="monotone" dataKey="lpxtCount" name="LPXT" stroke="#2563eb" strokeWidth={2} dot={false} />
-                  </LineChart>
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </section>
@@ -565,16 +717,22 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
 
           {tab === 'tvv' ? (
             <section className="space-y-3">
-              <div className="h-64 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="mb-2 text-sm font-medium text-slate-700">Top TVV theo NE</p>
-                <ResponsiveContainer width="100%" height="90%">
-                  <BarChart data={report.tvvRanking.slice(0, 12)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                    <YAxis tick={{ fontSize: 11 }} />
+              <div className="h-72 rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/50 to-white p-4 shadow-sm">
+                <p className="mb-2 text-sm font-bold text-violet-950">Top TVV theo NE</p>
+                <ResponsiveContainer width="100%" height="88%">
+                  <BarChart data={report.tvvRanking.slice(0, 12)} layout="vertical" margin={{ left: 8, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={100}
+                      tick={{ fontSize: 10, fill: '#475569' }}
+                    />
                     <Tooltip />
-                    <Bar dataKey="neCount" name="NE" fill="#16a34a" radius={[4, 6, 0, 0]} />
-                    <Bar dataKey="total" name="Tổng" fill="#94a3b8" radius={[4, 6, 0, 0]} />
+                    <Legend />
+                    <Bar dataKey="neCount" name="NE" fill="#16a34a" radius={[0, 6, 6, 0]} />
+                    <Bar dataKey="total" name="Tổng" fill="#c4b5fd" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -729,7 +887,28 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
           ) : null}
 
           {tab === 'nganh' ? (
-            <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <section className="space-y-3">
+              <div className="h-72 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50/60 to-white p-4 shadow-sm">
+                <p className="mb-2 text-sm font-bold text-amber-950">Ngành — tổng vs NE (cọc+full)</p>
+                <ResponsiveContainer width="100%" height="88%">
+                  <BarChart
+                    data={report.byMajor.slice(0, 12).map((r) => ({
+                      major: r.major,
+                      total: r.total,
+                      ne: r.coc + r.fullNe,
+                    }))}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="major" tick={{ fontSize: 10, fill: '#64748b' }} interval={0} angle={-22} textAnchor="end" height={70} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="total" name="Tổng" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="ne" name="NE" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
@@ -754,6 +933,7 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
                   ))}
                 </tbody>
               </table>
+              </div>
             </section>
           ) : null}
 

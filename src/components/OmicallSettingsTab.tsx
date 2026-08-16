@@ -41,7 +41,7 @@ function statusBadge(status: string): string {
   }
 }
 
-export function OmicallSettingsTab() {
+export function OmicallSettingsTab({ hideTitle = false }: { hideTitle?: boolean }) {
   const { can, profile, reloadProfile } = useAuth()
   const canEdit = can('config:omicall')
   const {
@@ -318,12 +318,18 @@ export function OmicallSettingsTab() {
 
   return (
     <div className="flex min-h-0 w-full flex-col gap-5 px-1 py-2">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Gọi điện — OMICall</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+      {!hideTitle ? (
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Gọi điện — OMICall</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Nhập API + webhook → <strong>Cài đặt nhanh</strong> một lần; hệ thống tự đồng bộ khi đăng nhập.
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">
           Nhập API + webhook → <strong>Cài đặt nhanh</strong> một lần; hệ thống tự đồng bộ khi đăng nhập.
         </p>
-      </div>
+      )}
 
       <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {setupSteps.map((s, i) => (

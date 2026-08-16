@@ -9,6 +9,7 @@ import {
   type PlaybookMatchKind,
   type PlaybookMatchResult,
 } from '../utils/playbookMatch'
+import { parseObjectionLine } from '../utils/playbookObjectionPairs'
 import { PLAYBOOK_FIELD_LABEL, PLAYBOOK_OPERATOR_LABEL } from '../utils/playbookFieldOptions'
 
 type KindFilter = 'show_all' | PlaybookMatchKind
@@ -74,21 +75,6 @@ function formatTriggerSummary(pb: ConsultingPlaybook): string[] {
     out.push(`Từ khóa: ${pb.matchKeywords.join(', ')}`)
   }
   return out
-}
-
-function parseObjectionLine(raw: string): { objection: string; response: string } {
-  const t = raw.trim()
-  const arrows = ['->', '→', '=>', '|']
-  for (const sep of arrows) {
-    const i = t.indexOf(sep)
-    if (i > 0) {
-      return {
-        objection: t.slice(0, i).trim(),
-        response: t.slice(i + sep.length).trim(),
-      }
-    }
-  }
-  return { objection: t, response: '' }
 }
 
 function buildQuickTermsFromLead(lead: Lead): string[] {
