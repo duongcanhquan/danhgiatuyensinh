@@ -23,6 +23,7 @@ import {
 } from '../types'
 import { getFirestoreDb } from '../services/firebase'
 import {
+  canAppearOnPublicRegistrationPortal,
   canOwnFieldStaffTeam,
   isAdminLikeRole,
   isFieldStaffRole,
@@ -377,9 +378,12 @@ export function StaffManagementView({
           : canOwnFieldStaffTeam(editing.role) || (editing.managedCounselorIds?.length ?? 0) > 0
             ? { managedCounselorIds: [] }
             : {}),
-        ...(isFieldStaffRole(editRole) || isFieldStaffRole(editing.role)
+        ...(canAppearOnPublicRegistrationPortal(editRole) ||
+        canAppearOnPublicRegistrationPortal(editing.role)
           ? {
-              showOnPublicRegistrationPortal: isFieldStaffRole(editRole) ? editShowOnPortal : false,
+              showOnPublicRegistrationPortal: canAppearOnPublicRegistrationPortal(editRole)
+                ? editShowOnPortal
+                : false,
             }
           : {}),
       })
@@ -1114,7 +1118,7 @@ export function StaffManagementView({
                       </select>
                     </label>
                   ) : null}
-                  {isFieldStaffRole(editRole) ? (
+                  {canAppearOnPublicRegistrationPortal(editRole) ? (
                     <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-3 py-2 text-sm text-slate-800">
                       <input
                         type="checkbox"
@@ -1125,7 +1129,7 @@ export function StaffManagementView({
                       <span>
                         <span className="font-semibold">Hiện trên cổng đăng ký</span>
                         <span className="mt-0.5 block text-xs text-slate-600">
-                          Sinh viên chọn thầy/cô này khi điền form công khai.
+                          Sinh viên chọn thầy/cô này khi điền form công khai (TVV, CTV, trưởng nhóm hoặc quản lý).
                         </span>
                       </span>
                     </label>

@@ -87,8 +87,14 @@ describe('publicRegistrationForm', () => {
       validatePublicRegistrationForm({ ...form, motherPhone: '' }),
     ).toBeNull()
     expect(
-      validatePublicRegistrationForm({ ...form, phone: '' }),
-    ).toMatch(/sinh viên|điện thoại|phone/i)
+      validatePublicRegistrationForm({ ...form, phone: '', motherPhone: '0912345678' }),
+    ).toBeNull()
+    expect(
+      validatePublicRegistrationForm({ ...form, phone: '', motherPhone: '', fatherPhone: '0912345678' }),
+    ).toBeNull()
+    expect(
+      validatePublicRegistrationForm({ ...form, phone: '', motherPhone: '', fatherPhone: '' }),
+    ).toMatch(/ít nhất|điện thoại|phone/i)
     expect(
       validatePublicRegistrationForm(form, 'vn', {
         trainingProgramLabels: ['Cao đẳng chính quy'],

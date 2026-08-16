@@ -16,6 +16,7 @@ import {
   describePublicDobIssue,
   PUBLIC_REG_INPUT_CLS,
   resolveAcademicPerformance,
+  resolvePublicRegistrationPhones,
   validatePublicRegistrationForm,
 } from '../../utils/publicRegistrationForm'
 import {
@@ -160,10 +161,11 @@ export function StudentRegistrationView() {
     try {
       const academicPerformance = resolveAcademicPerformance(form)
       const study = (form.studyIntention || form.educationLevel).trim()
+      const phones = resolvePublicRegistrationPhones(form)
       const result = await submitPublicRegistration({
         orgSlug,
         fullName: form.fullName.trim().toUpperCase(),
-        phone: form.phone.trim(),
+        phone: phones.phone,
         studentEmail: form.studentEmail.trim(),
         dateOfBirth: form.dateOfBirth.trim(),
         gender: form.gender,
@@ -174,10 +176,10 @@ export function StudentRegistrationView() {
         permanentAddress: form.permanentAddress.trim(),
         address: form.permanentAddress.trim(),
         fatherName: form.fatherName.trim().toUpperCase(),
-        fatherPhone: form.fatherPhone.trim(),
+        fatherPhone: phones.fatherPhone,
         motherName: form.motherName.trim().toUpperCase(),
-        motherPhone: form.motherPhone.trim(),
-        parentPhone: form.motherPhone.trim(),
+        motherPhone: phones.motherPhone,
+        parentPhone: phones.parentPhone,
         highSchool: form.highSchool.trim(),
         schoolProvince: form.schoolProvince.trim(),
         province: form.schoolProvince.trim(),
@@ -421,7 +423,6 @@ export function StudentRegistrationView() {
                         value={form.phone}
                         onChange={(e) => patch({ phone: formatVnPhoneInput(e.target.value) })}
                         placeholder={t('phPhone')}
-                        required
                         inputMode="numeric"
                         maxLength={10}
                         autoComplete="tel"
@@ -590,6 +591,11 @@ export function StudentRegistrationView() {
                         {(meta?.counselors ?? []).map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.displayName}
+                            {c.role === 'team_lead'
+                              ? ' — Trưởng nhóm'
+                              : c.role === 'admin'
+                                ? ' — Quản lý'
+                                : ''}
                           </option>
                         ))}
                       </select>

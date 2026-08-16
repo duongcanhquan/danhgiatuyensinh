@@ -140,8 +140,8 @@ export function isValidPublicPhone(phone: string): boolean {
 }
 
 /**
- * SĐT sinh viên bắt buộc; SĐT mẹ / bố / người liên hệ tùy chọn (ô nào điền thì phải đúng 10 số).
- * Không bắt buộc đủ cả ba số liên hệ khi đã có SĐT sinh viên.
+ * Chỉ cần một trong ba SĐT (sinh viên / mẹ / cha) hợp lệ.
+ * Ô nào điền thì phải đúng 10 số bắt đầu bằng 0.
  */
 export function describeContactPhonesIssue(
   phones: {
@@ -157,10 +157,16 @@ export function describeContactPhonesIssue(
   const father = String(phones.fatherPhone ?? '').trim()
   const contact = String(phones.parentPhone ?? '').trim()
 
-  if (!isValidPublicPhone(student)) {
+  const candidates = [student, mother, father].filter(Boolean)
+  if (!candidates.length) {
     return lang === 'en'
-      ? 'Student phone is required (exactly 10 digits, start with 0).'
-      : 'SĐT sinh viên bắt buộc — đủ đúng 10 số (bắt đầu bằng 0).'
+      ? 'Enter at least one phone: student, mother, or father (exactly 10 digits, start with 0).'
+      : 'Cần ít nhất một số điện thoại: sinh viên, mẹ hoặc cha — đủ đúng 10 số (bắt đầu bằng 0).'
+  }
+  if (student && !isValidPublicPhone(student)) {
+    return lang === 'en'
+      ? 'Student phone must be exactly 10 digits (start with 0).'
+      : 'SĐT sinh viên phải đủ đúng 10 số (bắt đầu bằng 0).'
   }
   if (mother && !isValidPublicPhone(mother)) {
     return lang === 'en'
@@ -178,6 +184,22 @@ export function describeContactPhonesIssue(
       : 'SĐT người liên hệ phải đủ đúng 10 số.'
   }
   return null
+}
+
+/** SĐT chính + SĐT phụ huynh để ghi CRM (ưu tiên SV → mẹ → cha). */
+export function resolvePublicRegistrationPhones(phones: {
+  phone?: string
+  motherPhone?: string
+  fatherPhone?: string
+  parentPhone?: string
+}): { phone: string; parentPhone: string; motherPhone: string; fatherPhone: string } {
+  const student = normalizeVnPhoneDigits(String(phones.phone ?? ''))
+  const mother = normalizeVnPhoneDigits(String(phones.motherPhone ?? ''))
+  const father = normalizeVnPhoneDigits(String(phones.fatherPhone ?? ''))
+  const contact = normalizeVnPhoneDigits(String(phones.parentPhone ?? ''))
+  const phone = student || mother || father || contact
+  const parentPhone = mother || father || contact || student
+  return { phone, parentPhone, motherPhone: mother, fatherPhone: father }
 }
 
 /** Email bắt buộc có @ và dạng cơ bản hợp lệ. */

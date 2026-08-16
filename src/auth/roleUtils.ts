@@ -34,6 +34,17 @@ export function isFieldStaffRole(role: UserRole | string | undefined | null): bo
   return r === 'counselor' || r === 'ctv'
 }
 
+/**
+ * Có thể hiện trên cổng đăng ký công khai (khi bật «Hiện trên cổng đăng ký»).
+ * Gồm TVV, CTV, Trưởng nhóm và Quản lý trường — không gồm Siêu quản trị / kế toán.
+ */
+export function canAppearOnPublicRegistrationPortal(
+  role: UserRole | string | undefined | null,
+): boolean {
+  const r = normalizeUserRole(role)
+  return r === 'counselor' || r === 'ctv' || r === 'team_lead' || r === 'admin'
+}
+
 /** Nhân viên sale / CTV — được gán hồ sơ và thuộc roster trưởng nhóm. */
 export function isAssignableFieldStaffRole(role: UserRole | string | undefined | null): boolean {
   return isFieldStaffRole(role)

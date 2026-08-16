@@ -98,9 +98,9 @@ export interface VietMyUserProfile {
   /** Lần đồng bộ số nội bộ từ API Tổng đài gần nhất. */
   omicallSyncedAt?: Timestamp
   /**
-   * Hiện tên trên cổng đăng ký công khai — thí sinh chọn thì hồ sơ gán cho người này.
-   * Chỉ áp dụng TVV / CTV đang hoạt động.
-   */
+ * Hiện tên trên cổng đăng ký công khai — thí sinh chọn thì hồ sơ gán cho người này.
+ * Áp dụng TVV / CTV / Trưởng nhóm / Quản lý trường đang hoạt động (bật cờ trên Nhân sự).
+ */
   showOnPublicRegistrationPortal?: boolean
   /**
    * Bổ sung quyền ngoài ma trận vai trò (gán trên Firestore `users/{uid}` — thường do Siêu quản trị).

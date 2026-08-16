@@ -15,7 +15,7 @@ import { FS_COLLECTIONS } from '../types'
 import { hasPermission, resolveEffectivePermissions } from '../auth/permissions'
 import { type OrgRoleCapabilities } from '../utils/roleCapabilitiesConfig'
 import { subscribeRoleCapabilities } from '../utils/roleCapabilitiesSubscribe'
-import { canOwnFieldStaffTeam, isFieldStaffRole, normalizeUserRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, canAppearOnPublicRegistrationPortal, isFieldStaffRole, normalizeUserRole } from '../auth/roleUtils'
 import { isUserInExplicitTeamRoster } from '../utils/teamScope'
 import { isLlmAnalysisAllowedForProfile } from '../auth/llmAccess'
 import { getFirebaseAuth, getFirestoreDb, getStaffCreatorAuth } from '../services/firebase'
@@ -601,7 +601,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const nextRoleForPortal =
           input.role !== undefined ? normalizeUserRole(input.role) : normalizeUserRole(String(currentRole))
         patch.showOnPublicRegistrationPortal =
-          isFieldStaffRole(nextRoleForPortal) && input.showOnPublicRegistrationPortal === true
+          canAppearOnPublicRegistrationPortal(nextRoleForPortal) &&
+          input.showOnPublicRegistrationPortal === true
       }
       if (input.extraPermissions !== undefined) {
         if (!canAll) throw new Error('Chỉ Quản lý trường / Siêu quản trị mới phân quyền chi tiết.')

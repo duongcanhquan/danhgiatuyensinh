@@ -370,11 +370,12 @@ async function loadMasterCatalog(db: Firestore, catalogId: string, orgId: string
 
 async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLite[]> {
   const out: CounselorLite[] = []
+  const portalRoles = ['counselor', 'ctv', 'team_lead', 'admin'] as const
   const pushDoc = (id: string, data: Record<string, unknown>) => {
     const userOrg = str(data.orgId) || 'vietmy'
     if (userOrg !== orgId) return
     const role = str(data.role)
-    if (role !== 'counselor' && role !== 'ctv') return
+    if (!(portalRoles as readonly string[]).includes(role)) return
     out.push({
       id,
       email: str(data.email),
@@ -385,7 +386,7 @@ async function loadCounselors(db: Firestore, orgId: string): Promise<CounselorLi
     })
   }
 
-  for (const role of ['counselor', 'ctv'] as const) {
+  for (const role of portalRoles) {
     try {
       const snap = await db.collection('users').where('role', '==', role).where('orgId', '==', orgId).get()
       snap.forEach((d) => pushDoc(d.id, d.data() as Record<string, unknown>))
@@ -503,6 +504,8 @@ function validatePublicLeadInput(
   const studentEmail = str(input.studentEmail)
   const dob = str(input.dateOfBirth)
   const motherPhone = str(input.motherPhone)
+  const fatherPhone = str(input.fatherPhone)
+  const parentPhone = str(input.parentPhone)
   const nationalId = str(input.nationalId).toUpperCase()
   const notAvailable = input.nationalIdNotAvailable === true || nationalId === 'CHƯA CÓ'
   const study = str(input.studyIntention) || str(input.educationLevel)
@@ -525,10 +528,12 @@ function validatePublicLeadInput(
   if (!str(input.permanentAddress) && !str(input.address)) {
     return 'Vui lòng nhập địa chỉ thường trú.'
   }
-  const fatherPhone = str(input.fatherPhone)
-  const parentPhone = str(input.parentPhone)
-  if (!isValidPhone(phone)) {
-    return 'SĐT sinh viên bắt buộc — đủ đúng 10 số (bắt đầu bằng 0).'
+  const phoneCandidates = [phone, motherPhone, fatherPhone].filter(Boolean)
+  if (!phoneCandidates.length) {
+    return 'Cần ít nhất một số điện thoại: sinh viên, mẹ hoặc cha — đủ đúng 10 số (bắt đầu bằng 0).'
+  }
+  if (phone && !isValidPhone(phone)) {
+    return 'SĐT sinh viên phải đủ đúng 10 số (bắt đầu bằng 0).'
   }
   if (motherPhone && !isValidPhone(motherPhone)) {
     return 'SĐT mẹ phải đủ đúng 10 số (bắt đầu bằng 0).'
@@ -609,6 +614,7 @@ function buildLeadDoc(
   const motherPhone = str(input.motherPhone)
   const fatherPhone = str(input.fatherPhone)
   const parentPhone = motherPhone || fatherPhone || str(input.parentPhone)
+  const phone = str(input.phone) || motherPhone || fatherPhone || parentPhone
   const nationalIdRaw = str(input.nationalId).toUpperCase()
   const nationalIdNotAvailable =
     input.nationalIdNotAvailable === true || nationalIdRaw === 'CHƯA CÓ'
@@ -618,7 +624,7 @@ function buildLeadDoc(
     customerId: '',
     systemCode: opts.systemCode,
     fullName: str(input.fullName).toUpperCase(),
-    phone: str(input.phone),
+    phone,
     parentPhone,
     studentEmail: str(input.studentEmail),
     source: opts.source1,
@@ -730,6 +736,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       schoolProvince: str(data.schoolProvince) || str(data.province),
       permanentAddress: str(data.permanentAddress) || str(data.address),
       parentPhone: str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
+      phone: str(data.phone) || str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
     }
 
     const [trainingPrograms, majors, applicantCategoriesRaw, allCounselors] = await Promise.all([
