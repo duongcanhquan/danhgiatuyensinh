@@ -4,6 +4,7 @@ import { useCounselorDirectory } from '../../hooks/useCounselorDirectory'
 import { canManageAccountantStaff } from '../../auth/accountantPortal'
 import { USER_ROLE_LABELS, type VietMyUserProfile } from '../../types'
 import { confirmDangerousStaffAccountDelete } from '../../utils/dangerousDeleteConfirm'
+import { ViewportModal } from '../../components/ViewportModal'
 
 export function AccountantStaffView() {
   const {
@@ -260,46 +261,46 @@ export function AccountantStaffView() {
       </div>
 
       {editing ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
-          role="dialog"
-          aria-modal
-          onClick={() => setEditing(null)}
+        <ViewportModal
+          open
+          onClose={() => setEditing(null)}
+          title="Sửa kế toán viên"
+          subtitle={editing.email}
+          titleId="accountant-staff-edit-title"
+          size="md"
+          closeDisabled={editBusy}
+          footer={
+            <>
+              <button
+                type="submit"
+                form="accountant-staff-edit-form"
+                disabled={editBusy}
+                className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {editBusy ? 'Đang lưu…' : 'Lưu'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                disabled={editBusy}
+                className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-800"
+              >
+                Hủy
+              </button>
+            </>
+          }
         >
-          <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:max-w-lg md:max-w-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold text-slate-900">Sửa kế toán viên</h3>
-            <p className="mt-1 text-xs text-slate-600">{editing.email}</p>
-            <form onSubmit={(e) => void saveEdit(e)} className="mt-4 space-y-3">
-              <label className="block text-sm font-medium text-slate-700">
-                Tên hiển thị
-                <input
-                  value={editDisplayName}
-                  onChange={(e) => setEditDisplayName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={editBusy}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {editBusy ? 'Đang lưu…' : 'Lưu'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-                >
-                  Hủy
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          <form id="accountant-staff-edit-form" onSubmit={(e) => void saveEdit(e)} className="space-y-3">
+            <label className="block text-sm font-medium text-slate-700">
+              Tên hiển thị
+              <input
+                value={editDisplayName}
+                onChange={(e) => setEditDisplayName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          </form>
+        </ViewportModal>
       ) : null}
     </div>
   )

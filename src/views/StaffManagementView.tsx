@@ -9,11 +9,11 @@ import {
   UserPlus,
   Users,
   UsersRound,
-  X,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
+import { ViewportModal } from '../components/ViewportModal'
 import {
   FS_COLLECTIONS,
   USER_ROLE_LABELS,
@@ -1012,34 +1012,36 @@ export function StaffManagementView({
       ) : null}
 
       {editing ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/45 p-3 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal
-          aria-labelledby="staff-edit-title"
-          onClick={() => setEditing(null)}
-        >
-          <div
-            className="flex max-h-[min(94dvh,900px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-w-xl md:max-w-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
-              <div className="min-w-0">
-                <h3 id="staff-edit-title" className="text-base font-semibold text-slate-900">
-                  Sửa nhân sự
-                </h3>
-                <p className="truncate text-xs text-slate-600">{editing.email}</p>
-              </div>
+        <ViewportModal
+          open
+          onClose={() => setEditing(null)}
+          title="Sửa nhân sự"
+          subtitle={editing.email}
+          titleId="staff-edit-title"
+          size="xl"
+          closeDisabled={editBusy || resetPwdBusy}
+          footer={
+            <>
+              <button
+                type="submit"
+                form="staff-edit-form"
+                disabled={editBusy || resetPwdBusy}
+                className="cursor-pointer rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+              >
+                {editBusy ? 'Đang lưu…' : 'Lưu thay đổi'}
+              </button>
               <button
                 type="button"
+                disabled={editBusy || resetPwdBusy}
                 onClick={() => setEditing(null)}
-                className="cursor-pointer rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Đóng"
+                className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
               >
-                <X className="h-5 w-5" />
+                Hủy
               </button>
-            </div>
-            <form onSubmit={(e) => void saveEdit(e)} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5">
+            </>
+          }
+        >
+            <form id="staff-edit-form" onSubmit={(e) => void saveEdit(e)} className="space-y-3">
               <SectionCard title="Thông tin cơ bản" hint="Họ tên, vai trò, trạng thái đăng nhập">
                 <label className="block text-sm font-medium text-slate-700">
                   Họ tên hiển thị
@@ -1278,27 +1280,8 @@ export function StaffManagementView({
 
               {editErr ? <p className="text-sm text-rose-600">{editErr}</p> : null}
               {editMsg ? <p className="text-sm text-emerald-700">{editMsg}</p> : null}
-
-              <div className="sticky bottom-0 -mx-4 flex flex-wrap gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 sm:-mx-5 sm:px-5">
-                <button
-                  type="submit"
-                  disabled={editBusy || resetPwdBusy}
-                  className="cursor-pointer rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
-                >
-                  {editBusy ? 'Đang lưu…' : 'Lưu thay đổi'}
-                </button>
-                <button
-                  type="button"
-                  disabled={editBusy || resetPwdBusy}
-                  onClick={() => setEditing(null)}
-                  className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
-                >
-                  Hủy
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </ViewportModal>
       ) : null}
     </div>
   )

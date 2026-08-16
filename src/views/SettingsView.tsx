@@ -50,6 +50,7 @@ import { ScriptHubManager } from '../components/ScriptHubManager'
 import { KnowledgeBaseTab } from '../components/KnowledgeBaseTab'
 import { ConsultingPlaybookSection } from '../components/ConsultingPlaybookSection'
 import { StaffManagementView } from '../views/StaffManagementView'
+import { ViewportModal } from '../components/ViewportModal'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
@@ -1403,41 +1404,19 @@ export function SettingsView() {
       ) : null}
 
       {guideOpen ? (
-        <div className="fixed inset-0 z-[210] flex items-end justify-center sm:items-center sm:p-4">
-          <button
-            type="button"
-            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
-            aria-label="Đóng hướng dẫn"
-            onClick={() => setGuideOpen(false)}
-          />
-          <div
-            id="settings-guide-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-guide-title"
-            className="relative z-10 mt-auto w-full max-h-[min(90dvh,780px)] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200/90 bg-white px-4 pb-5 pt-4 shadow-2xl sm:mt-0 sm:max-w-lg sm:rounded-2xl md:max-w-2xl lg:max-w-3xl"
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-              <div className="min-w-0">
-                <h2 id="settings-guide-title" className={settingsHeading}>
-                  Hướng dẫn
-                </h2>
-                <p className={`mt-0.5 ${settingsCopyMuted}`}>
-                  {subTabLabel(activeSubTab, settingsAccessCtx)}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                onClick={() => setGuideOpen(false)}
-                aria-label="Đóng"
-              >
-                <X className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
-            <div className={`space-y-3 pt-4 ${settingsCopy}`}>{settingsGuideBody(activeSubTab, settingsAccessCtx)}</div>
+        <ViewportModal
+          open
+          onClose={() => setGuideOpen(false)}
+          title="Hướng dẫn"
+          subtitle={subTabLabel(activeSubTab, settingsAccessCtx)}
+          titleId="settings-guide-title"
+          size="lg"
+          zIndexClass="z-[210]"
+        >
+          <div id="settings-guide-dialog" className={`space-y-3 ${settingsCopy}`}>
+            {settingsGuideBody(activeSubTab, settingsAccessCtx)}
           </div>
-        </div>
+        </ViewportModal>
       ) : null}
 
     </div>
