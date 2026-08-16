@@ -421,12 +421,7 @@ export function LeadManagement() {
   const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { users: directoryUsers, fieldStaff: fieldStaffUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
-  const { documents: knowledgeDocuments } = useKnowledgeDocuments()
   const { items: leadSources } = useLeadSources()
-  const institutionalRagBlock = useMemo(
-    () => buildInstitutionalRagBlock(knowledgeDocuments),
-    [knowledgeDocuments],
-  )
 
   const [searchParams, setSearchParams] = useSearchParams()
   const urlQuery = (searchParams.get(LWF.Q) ?? '').trim().toLowerCase()
@@ -544,8 +539,10 @@ export function LeadManagement() {
   const callQueueNeedsScope = callWorkBucketFilter !== 'all' || dispositionFilter !== 'all'
   /** Lọc chế độ xử lý — field tùy chọn trên hồ sơ → fullScope + lọc client. */
   const workModeNeedsScope = workModeFilter !== 'all'
-  /** Cổng đăng ký: load đủ trong phạm vi (không chỉ 1 trang). Chiến dịch: phân trang. */
-  const intakeOriginNeedsScope = intakeOriginTab === 'public_portal'
+  /**
+   * Tab cổng: phân trang + `portalIntakeGroup` / pagedKeepMatch (không fullScope mặc định —
+   * tránh đọc hàng nghìn doc mỗi lần mở danh sách). fullScope chỉ khi lọc client khác.
+   */
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
   /** Có chọn nguồn (đợt / kênh, kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
@@ -585,8 +582,11 @@ export function LeadManagement() {
     if (scoreMaxParsed != null) o.scoreMax = scoreMaxParsed
     if (statusFilter !== 'ALL') o.pipelineStatus = statusFilter as LeadPipelineStatus
     if (crmStatusFilter !== 'ALL') o.crmStatus = crmStatusFilter as LeadCounselorStatus
-    else if (!urlQuery.trim()) {
-      // Ẩn «Đã cọc» khỏi danh sách mặc định — chỉ hiện khi lọc đúng tình trạng hoặc đang tìm.
+    else if (!urlQuery.trim() && intakeOriginTab !== 'public_portal') {
+      /**
+       * Ẩn «Đã cọc» trên server — trừ tab cổng: kết hợp `crmStatusIn` + `portalIntakeGroup` OR
+       * dễ thiếu composite → danh sách trống. Tab cổng lọc visibility trên pagedKeepMatch/client.
+       */
       o.crmStatusIn = [...LEAD_COUNSELOR_STATUS_DEFAULT_VISIBLE]
     }
     if (!tagClientEval && tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
@@ -635,19 +635,16 @@ export function LeadManagement() {
     tagClientEval ||
     callQueueNeedsScope ||
     workModeNeedsScope ||
-    intakeOriginNeedsScope ||
     assigneeUnsetNeedsScope ||
     programNeedsScope ||
     enrollmentNeedsScope ||
     uploadedDateNeedsScope
 
   /**
-   * Lọc không where được trên Firestore (hàng chờ, nguồn gộp, tình trạng, ngày tải, nhóm cổng…)
+   * Lọc không where được trên Firestore (hàng chờ, nguồn gộp, thu phí, ngày tải…)
    * → quét theo docId + chỉ giữ hồ sơ khớp.
-   * Tab cổng: keepMatch origin để gồm legacy manual-… và tránh OR server × team-lead.
    */
   const clientKeepMatchNeeded =
-    intakeOriginNeedsScope ||
     programNeedsScope ||
     enrollmentNeedsScope ||
     uploadedDateNeedsScope ||
@@ -725,25 +722,37 @@ export function LeadManagement() {
     directoryLabels: counselorDirectoryLabelById,
     dataMode: listNeedsFullScope && !urlQuery ? 'fullScope' : 'paged',
     maxFullScopeLeads: listNeedsFullScope && !urlQuery ? LEADS_UI_FULL_SCOPE_MAX : undefined,
-    /** Tab cổng: updatedAt (mới trước) — docId ASC quét hồ sơ cũ trước nên mất hồ sơ vừa tạo. */
-    fullScopeOrderMode:
-      clientKeepMatchNeeded && !urlQuery && intakeOriginTab !== 'public_portal' ? 'docId' : undefined,
+    /** fullScope keepMatch: docId để không bỏ sót khi lọc client; tab cổng paged dùng updatedAt. */
+    fullScopeOrderMode: clientKeepMatchNeeded && !urlQuery ? 'docId' : undefined,
     maxFullScopeScanDocs: clientKeepMatchNeeded && !urlQuery ? LEADS_UI_PROGRAM_SCAN_MAX : undefined,
     fullScopeKeepMatch: urlQuery ? undefined : fullScopeKeepMatch,
     fullScopeMatchKey:
       !urlQuery && clientKeepMatchNeeded
         ? `keep|origin:${intakeOriginTab}|crm:${crmStatusFilter}|unset:${programNeedsScope ? 1 : 0}|enr:${enrollmentFilter}|prog:${programFilter}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
         : undefined,
-    /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ.
-     * Khi đang tìm (ô tìm có chữ): không lọc origin — tránh mất hồ sơ tạo tay / cổng
-     * (vd. mã 2608150003) dù Firestore đã khớp đúng. */
+    /**
+     * Phân trang + lọc tab nguồn trên client (oversample):
+     * - Cổng: bổ sung legacy `manual-…` khi server bỏ OR (team-lead lớn).
+     * - Chiến dịch: tránh trang bị cổng/tạo tay chiếm chỗ.
+     * Ô tìm có chữ: không cắt origin.
+     */
     pagedKeepMatch:
-      !listNeedsFullScope && intakeOriginTab === 'campaign_upload' && !urlQuery
-        ? (l: Lead) => leadMatchesIntakeOrigin(l, 'campaign_upload')
+      !listNeedsFullScope && !urlQuery
+        ? intakeOriginTab === 'public_portal'
+          ? (l: Lead) =>
+              leadMatchesIntakeOriginTab(l, 'public_portal') &&
+              leadMatchesCrmListVisibility(l, crmStatusFilter, false)
+          : intakeOriginTab === 'campaign_upload'
+            ? (l: Lead) => leadMatchesIntakeOrigin(l, 'campaign_upload')
+            : undefined
         : undefined,
     pagedKeepMatchKey:
-      !listNeedsFullScope && intakeOriginTab === 'campaign_upload' && !urlQuery
-        ? 'origin:campaign_upload'
+      !listNeedsFullScope && !urlQuery
+        ? intakeOriginTab === 'public_portal'
+          ? `origin:public_portal_tab|crm:${crmStatusFilter}`
+          : intakeOriginTab === 'campaign_upload'
+            ? 'origin:campaign_upload'
+            : undefined
         : undefined,
     // Đếm HOT/WARM… và catalog chương trình chỉ khi cần — giảm 4× count + 800 doc mỗi lần tải.
     includeScopeTagCounts: false,
@@ -895,6 +904,12 @@ export function LeadManagement() {
   }, [showAdminGlobalFilters, highSchoolLabels, leads])
 
   const [selected, setSelected] = useState<Lead | null>(null)
+  /** Tri thức trường chỉ tải khi mở chi tiết — không lắng nghe khi chỉ xem danh sách. */
+  const { documents: knowledgeDocumentsForLlm } = useKnowledgeDocuments({ enabled: Boolean(selected) })
+  const institutionalRagBlock = useMemo(
+    () => (selected ? buildInstitutionalRagBlock(knowledgeDocumentsForLlm) : ''),
+    [selected, knowledgeDocumentsForLlm],
+  )
   /** Chi tiết hồ sơ: form tiến độ/ghi chú còn thay đổi chưa lưu — dùng trong onClose (confirm). */
   const leadDetailUnsavedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
@@ -1019,6 +1034,11 @@ export function LeadManagement() {
   useEffect(() => {
     setPage(1)
   }, [leadServerFiltersKey, setPage])
+
+  /** Đổi lọc / tab / tìm → bỏ chọn hàng loạt (tránh thao tác lô trên hồ sơ đã ẩn, vd. Đã cọc). */
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [leadServerFiltersKey, urlQuery, intakeOriginTab, crmStatusFilter])
 
   useEffect(() => {
     if (!openLeadIdFromUrl || !db || !configured) return
@@ -1455,9 +1475,10 @@ export function LeadManagement() {
       callWorkBucketFilter !== 'all' ||
       workModeFilter !== 'all' ||
       aiShortlistOnly ||
-      intakeOriginTab === 'campaign_upload'
+      intakeOriginTab === 'campaign_upload' ||
+      intakeOriginTab === 'public_portal'
     ) {
-      // Paged + keepMatch chiến dịch: chỉ biết số dòng trang hiện tại — không giả là tổng.
+      // Paged + keepMatch tab nguồn: chỉ biết số dòng trang hiện tại — không giả là tổng.
       return sortedFiltered.length
     }
     return totalLeadCount ?? sortedFiltered.length
@@ -1528,7 +1549,7 @@ export function LeadManagement() {
     [setSearchParams],
   )
 
-  const listSearchInput = useImeFriendlySearchInput(searchParams.get(LWF.Q) ?? '', setUrlQuery)
+  const listSearchInput = useImeFriendlySearchInput(searchParams.get(LWF.Q) ?? '', setUrlQuery, 550)
 
   const mergeListFilterUrl = useCallback(
     (patch: Partial<Record<(typeof LWF)[keyof typeof LWF], string | null | undefined>>) => {
@@ -2174,10 +2195,8 @@ export function LeadManagement() {
     infoScoreRuntime,
     classificationRuntime: classificationRuntime.enabled ? classificationRuntime : null,
     applyLocalLeadPatch,
-    enabled: profileScoringLive && Boolean(db) && !rescoreBusy,
-    onRequestFullRescore: () => {
-      void runBulkRescore({ silent: true })
-    },
+    enabled: profileScoringLive && Boolean(db) && !rescoreBusy && !listNeedsFullScope,
+    /** Không tự quét fullScope ghi hàng loạt — chỉ sync điểm lệch trên trang đã tải (tiết kiệm R/W). */
   })
 
   const evalMapForExport = useCallback(
@@ -3538,7 +3557,7 @@ export function LeadManagement() {
           <div className="min-w-0 shrink-0">
             <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               Nguồn nhập
-              {intakeOriginNeedsScope && (loading || loadingPage) ? (
+              {intakeOriginTab === 'public_portal' && (loading || loadingPage) ? (
                 <span className="ml-1 font-normal normal-case tracking-normal text-slate-400">
                   · đang tải…
                 </span>
@@ -4245,11 +4264,7 @@ export function LeadManagement() {
                 {rescoreMsg}
               </p>
             ) : null}
-            {(tagClientEval ||
-              callQueueNeedsScope ||
-              workModeNeedsScope ||
-              intakeOriginNeedsScope ||
-              programNeedsScope) &&
+            {(tagClientEval || callQueueNeedsScope || workModeNeedsScope || programNeedsScope) &&
             scopeFetchTruncated ? (
               <p className="text-xs font-medium text-amber-900">
                 {clientKeepMatchNeeded
@@ -6870,20 +6885,22 @@ function LeadDetailPanel({
         })
       }
 
-      if (crmChanged) {
+      if (crmChanged || nextPipeFinal !== lead.pipelineStatus) {
+        const parts: string[] = []
+        if (crmChanged) {
+          parts.push(
+            `Tình trạng tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[nextCrm]}`,
+          )
+        }
+        if (nextPipeFinal !== lead.pipelineStatus) {
+          parts.push(
+            `Pipeline funnel: ${PIPELINE_LABEL[lead.pipelineStatus]} → ${PIPELINE_LABEL[nextPipeFinal]}`,
+          )
+        }
         await commitAuditLog(db, {
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
-          description: `Tình trạng tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[nextCrm]}`,
-          performedBy: profile.id,
-          performedByName: performer,
-        })
-      }
-      if (nextPipeFinal !== lead.pipelineStatus) {
-        await commitAuditLog(db, {
-          leadId: lead.id,
-          actionType: 'STATUS_CHANGE',
-          description: `Pipeline funnel: ${PIPELINE_LABEL[lead.pipelineStatus]} → ${PIPELINE_LABEL[nextPipeFinal]}`,
+          description: parts.join(' · '),
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -7872,7 +7889,7 @@ function LeadDetailPanel({
                       {detailRightTab === 'assign' ? (
                         <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
                           <LeadCrmQuickBlock
-                            key={`${lead.id}-${lead.updatedAt?.toMillis?.() ?? 0}`}
+                            key={lead.id}
                             lead={lead}
                             db={db}
                             counselorUsers={counselorUsers}

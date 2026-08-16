@@ -482,7 +482,7 @@ export function CallHistoryView({ embedded = false }: { embedded?: boolean }) {
               <div className="border-b border-slate-200/80 px-4 py-3">
                 <h2 className="app-section-heading flex items-center gap-2">
                   <Wallet className="h-4 w-4" aria-hidden />
-                  Hồ sơ đã gọi — trạng thái thu phí
+                  Hồ sơ đã gọi — tình trạng CRM
                 </h2>
               </div>
               <div className="overflow-x-auto">

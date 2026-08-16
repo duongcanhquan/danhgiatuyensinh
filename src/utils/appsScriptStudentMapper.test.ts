@@ -50,7 +50,7 @@ describe('appsScriptStudentMapper', () => {
     expect(parsed!.extras.motherPhone).toBe('0987654321')
     expect(parsed!.extras.nationalIdNotAvailable).toBe(false)
     expect(
-      mapAppsScriptToCounselorStatus(parsed!.row.statusRaw ?? '', parsed!.extras.finance.enrollmentStatus ?? ''),
+      mapAppsScriptToCounselorStatus(parsed!.row.statusRaw ?? '', parsed!.extras.situationRaw ?? ''),
     ).toBe('ENROLLED')
   })
 

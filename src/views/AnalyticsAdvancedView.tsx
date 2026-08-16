@@ -73,7 +73,8 @@ export function AnalyticsAdvancedView() {
   } = useLeads({
     dataMode: 'fullScope',
     maxFullScopeLeads: ANALYTICS_FULL_SCOPE_MAX,
-    includeScopeTagCounts: true,
+    /** Đếm HOT/WARM từ tập đã tải — tránh 4× getCountFromServer mỗi lần mở. */
+    includeScopeTagCounts: false,
   })
   const { users, counselors } = useCounselorDirectory()
   const [teamLeadUid, setTeamLeadUid] = useState('')

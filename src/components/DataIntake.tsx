@@ -632,10 +632,7 @@ export function DataIntake() {
         const now = Timestamp.now()
         const extras = pr.appsScriptExtras
         const counselorStatus = extras
-          ? mapAppsScriptToCounselorStatus(
-              pr.row.statusRaw ?? '',
-              extras.finance.enrollmentStatus ?? '',
-            )
+          ? mapAppsScriptToCounselorStatus(pr.row.statusRaw ?? '', extras.situationRaw ?? '')
           : undefined
 
         const scholarship1Id = extras?.scholarship1Label

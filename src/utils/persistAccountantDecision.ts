@@ -9,6 +9,7 @@ import { triggerAccountantDecisionN8n, triggerAccountantFullNeN8n } from './n8nI
 import { resolveCounselorForLead } from './accountantN8nPayload'
 import { resolveScholarshipLabels } from './scholarshipLabelResolver'
 import { leadTouchPatch } from './leadTouch'
+import { crmStatusUpgradeFromEnrollment } from './crmFinanceStatusSync'
 import {
   callAccountantApplyPaymentDecision,
   callAccountantConfirmFullNe,
@@ -100,13 +101,14 @@ export async function persistAccountantPaymentDecision(opts: {
   if (viaCf?.finance) {
     const finance = viaCf.finance
     const touch = leadTouchPatch()
+    const crmUpgrade = crmStatusUpgradeFromEnrollment(lead.status, finance.enrollmentStatus)
     const [scholarshipLabels, counselor] = await Promise.all([
       resolveScholarshipLabels(db, lead),
       resolveCounselorForLead(db, lead),
     ])
     try {
       await triggerAccountantDecisionN8n({
-        lead: { ...lead, finance },
+        lead: { ...lead, finance, ...(crmUpgrade ? { status: crmUpgrade } : {}) },
         finance,
         decision,
         batch,
@@ -122,7 +124,16 @@ export async function persistAccountantPaymentDecision(opts: {
       console.warn('[persistAccountantPaymentDecision] n8n soft-fail', e)
     }
     await writeDecisionAudit(String(finance.payments?.[slotKey]?.collectedAt ?? collectedAt))
-    return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
+    return {
+      lead: {
+        ...lead,
+        finance,
+        ...(crmUpgrade ? { status: crmUpgrade } : {}),
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      },
+      finance,
+    }
   }
 
   payments[slotKey] = {
@@ -146,11 +157,13 @@ export async function persistAccountantPaymentDecision(opts: {
   }
   const enrollmentStatus = computeEnrollmentStatusAfterDecision(lead, financeBase, decision)
   const finance: LeadFinanceRecord = { ...financeBase, enrollmentStatus }
+  const crmUpgrade = crmStatusUpgradeFromEnrollment(lead.status, enrollmentStatus)
 
   const touch = leadTouchPatch()
   await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
     ...touch,
     finance,
+    ...(crmUpgrade ? { status: crmUpgrade } : {}),
   })
 
   const [scholarshipLabels, counselor] = await Promise.all([
@@ -177,7 +190,16 @@ export async function persistAccountantPaymentDecision(opts: {
   }
 
   await writeDecisionAudit(collectedAt)
-  return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
+  return {
+    lead: {
+      ...lead,
+      finance,
+      ...(crmUpgrade ? { status: crmUpgrade } : {}),
+      updatedAt: touch.updatedAt,
+      lastTouchedAt: touch.lastTouchedAt,
+    },
+    finance,
+  }
 }
 
 export async function persistAccountantFullNe(opts: {
@@ -191,13 +213,14 @@ export async function persistAccountantFullNe(opts: {
   if (viaCf?.finance) {
     const finance = viaCf.finance
     const touch = leadTouchPatch()
+    const crmUpgrade = crmStatusUpgradeFromEnrollment(lead.status, finance.enrollmentStatus)
     const [scholarshipLabels, counselor] = await Promise.all([
       resolveScholarshipLabels(db, lead),
       resolveCounselorForLead(db, lead),
     ])
     try {
       await triggerAccountantFullNeN8n({
-        lead: { ...lead, finance },
+        lead: { ...lead, finance, ...(crmUpgrade ? { status: crmUpgrade } : {}) },
         finance,
         autoApprovedAmount: viaCf.autoApproved,
         counselor,
@@ -208,7 +231,16 @@ export async function persistAccountantFullNe(opts: {
     } catch (e) {
       console.warn('[persistAccountantFullNe] n8n soft-fail', e)
     }
-    return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
+    return {
+      lead: {
+        ...lead,
+        finance,
+        ...(crmUpgrade ? { status: crmUpgrade } : {}),
+        updatedAt: touch.updatedAt,
+        lastTouchedAt: touch.lastTouchedAt,
+      },
+      finance,
+    }
   }
 
   const prev = lead.finance ?? { payments: {} }
@@ -248,11 +280,13 @@ export async function persistAccountantFullNe(opts: {
     enrollmentStatus: 'ĐÃ HOÀN THIỆN',
     declaredTotalVnd: sumPayments(payments),
   }
+  const crmUpgrade = crmStatusUpgradeFromEnrollment(lead.status, finance.enrollmentStatus)
 
   const touch = leadTouchPatch()
   await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
     ...touch,
     finance,
+    ...(crmUpgrade ? { status: crmUpgrade } : {}),
   })
 
   const [scholarshipLabels, counselor] = await Promise.all([
@@ -261,7 +295,7 @@ export async function persistAccountantFullNe(opts: {
   ])
   try {
     await triggerAccountantFullNeN8n({
-      lead: { ...lead, finance },
+      lead: { ...lead, finance, ...(crmUpgrade ? { status: crmUpgrade } : {}) },
       finance,
       autoApprovedAmount: autoApproved,
       counselor,
@@ -273,5 +307,14 @@ export async function persistAccountantFullNe(opts: {
     console.warn('[persistAccountantFullNe] n8n soft-fail', e)
   }
 
-  return { lead: { ...lead, finance, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt }, finance }
+  return {
+    lead: {
+      ...lead,
+      finance,
+      ...(crmUpgrade ? { status: crmUpgrade } : {}),
+      updatedAt: touch.updatedAt,
+      lastTouchedAt: touch.lastTouchedAt,
+    },
+    finance,
+  }
 }

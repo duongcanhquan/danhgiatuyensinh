@@ -129,7 +129,7 @@ export function KpiMetricsSections({
           hint="Chuyển nhãn trong kỳ"
         />
         <MetricCard
-          label="Quan tâm mới"
+          label="Đăng ký XT mới"
           value={dash ?? fmtKpiNum(totals.newToInterested)}
           hint={`Chuyển cọc ${fmtKpiNum(totals.toDeposit)}`}
         />

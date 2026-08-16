@@ -48,6 +48,8 @@ export type AppsScriptStudentExtras = {
   schoolYear: string
   /** Cột 43 — điểm Sheet (nếu có) */
   sheetScore: string
+  /** Cột 42 — tình trạng hoàn thiện / nhập học (map CRM) */
+  situationRaw: string
   /** Cột 16 = «CHƯA CÓ» */
   nationalIdNotAvailable: boolean
 }
@@ -269,6 +271,7 @@ export function mapAppsScriptStudentRow(r: unknown[], sheetRowIndex: number): Ap
     campus,
     schoolYear,
     sheetScore,
+    situationRaw: cell(r, 42),
     nationalIdNotAvailable,
   }
 

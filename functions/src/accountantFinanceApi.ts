@@ -88,6 +88,41 @@ function profileComplete(data: Record<string, unknown>, leadId: string): boolean
   ].every(Boolean)
 }
 
+function foldVi(raw: string): string {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[đĐ]/g, 'D')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+}
+
+/** Nâng CRM status theo thu phí (không hạ bậc; bỏ qua Hủy / Không tiềm năng). */
+function crmStatusUpgradeFromEnrollment(
+  currentStatus: unknown,
+  enrollmentStatus: string,
+): string | null {
+  const es = foldVi(enrollmentStatus)
+  let suggested: string | null = null
+  if (es.includes('DA HOAN THIEN') || es.includes('NHAP HOC') || es.includes('GHI DANH')) {
+    suggested = 'ENROLLED'
+  } else if (es.includes('COC THANH CONG') || es === 'COC' || es.includes('DA COC')) {
+    suggested = 'DEPOSIT_PAID'
+  }
+  if (!suggested) return null
+  const cur = str(currentStatus) || 'NEW'
+  if (cur === 'DEAD' || cur === 'SUMMER_MELT') return null
+  const rank: Record<string, number> = {
+    NEW: 0,
+    INTERESTED: 1,
+    DEPOSIT_PAID: 2,
+    ENROLLED: 3,
+  }
+  if ((rank[suggested] ?? 0) <= (rank[cur] ?? 0)) return null
+  return suggested
+}
+
 function enrollmentAfterDecision(
   data: Record<string, unknown>,
   finance: Record<string, unknown>,
@@ -205,8 +240,10 @@ export function registerAccountantFinanceCallables() {
         snap.id,
       )
       const nextFinance = { ...financeBase, enrollmentStatus }
+      const crmUpgrade = crmStatusUpgradeFromEnrollment(data.status, enrollmentStatus)
       tx.update(leadRef, {
         finance: nextFinance,
+        ...(crmUpgrade ? { status: crmUpgrade } : {}),
         updatedAt: FieldValue.serverTimestamp(),
         lastTouchedAt: FieldValue.serverTimestamp(),
       })
@@ -256,8 +293,10 @@ export function registerAccountantFinanceCallables() {
         enrollmentStatus: 'ĐÃ HOÀN THIỆN',
         declaredTotalVnd: sumPayments(payments as Record<string, { amountVnd?: number }>),
       }
+      const crmUpgrade = crmStatusUpgradeFromEnrollment(data.status, 'ĐÃ HOÀN THIỆN')
       tx.update(leadRef, {
         finance: nextFinance,
+        ...(crmUpgrade ? { status: crmUpgrade } : {}),
         updatedAt: FieldValue.serverTimestamp(),
         lastTouchedAt: FieldValue.serverTimestamp(),
       })

@@ -11,6 +11,7 @@ import { leadNeedsAutoScorePersist } from './leadNeedsAutoScorePersist'
 
 const AUTO_SYNC_DEBOUNCE_MS = 1200
 const AUTO_SYNC_MAX_LEADS = 80
+/** Chỉ sync khi đã có danh sách trang thường — không chạy trên fullScope nặng. */
 
 export type UseAutoPersistLeadScoresOptions = {
   db: Firestore | null

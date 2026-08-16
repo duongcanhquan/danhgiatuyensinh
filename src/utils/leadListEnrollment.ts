@@ -7,10 +7,10 @@ import {
 import { intakeProgramsMatch } from './intakeProgramRecent'
 import { leadUploadedAtMs } from './leadUploadedDateRange'
 
-/** Giá trị lọc «Tình trạng» trên danh sách Hồ sơ. */
+/** Giá trị lọc «Thu phí» trên danh sách Hồ sơ (kế toán — khác «Tình trạng» CRM). */
 export const LEAD_TINH_TRANG_FILTER_OPTIONS: readonly { v: string; t: string }[] = [
   { v: 'ALL', t: 'Tất cả' },
-  { v: 'MOI', t: 'Mới' },
+  { v: 'MOI', t: 'Chưa thu phí' },
   { v: 'DANG_HOAN_THIEN', t: 'Đang hoàn thiện' },
   { v: 'COC_THANH_CONG', t: 'Cọc thành công' },
   { v: 'DA_HOAN_THIEN', t: 'Đã hoàn thiện' },
@@ -20,7 +20,7 @@ export const LEAD_TINH_TRANG_FILTER_OPTIONS: readonly { v: string; t: string }[]
 ] as const
 
 const TINH_TRANG_LABEL: Record<AccountantStatusTag, string> = {
-  Mới: 'Mới',
+  Mới: 'Chưa thu phí',
   'Đang hoàn thiện': 'Đang hoàn thiện',
   Cọc: 'Cọc thành công',
   'Ghi danh': 'Ghi danh',

@@ -32,7 +32,11 @@ export function leadHasPendingAccountantReview(lead: Pick<Lead, 'finance'>): boo
     if (amt > 0 && !st) return true
     if (st === 'KIỂM TRA LẠI') return true
   }
-  return String(finance.fullNeStatus ?? '').trim() === 'YÊU CẦU FULL NE'
+  if (String(finance.fullNeStatus ?? '').trim() === 'YÊU CẦU FULL NE') return true
+  const es = String(finance.enrollmentStatus ?? '')
+    .trim()
+    .toUpperCase()
+  return es === 'KIỂM TRA LẠI' || es === 'TỪ CHỐI'
 }
 
 export function countFinanceSlotsWithAmount(lead: Pick<Lead, 'finance'>): number {

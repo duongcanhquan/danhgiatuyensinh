@@ -310,9 +310,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'receipts':
       return (
         <>
-          <p className="font-semibold text-slate-900">Chứng từ &amp; lưu trữ</p>
+          <p className="font-semibold text-slate-900">Chứng từ &amp; ngưỡng cọc</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Chọn nơi lưu bill (R2 / Drive / Firebase) và điền URL/token theo từng trường — không chỉ phụ thuộc file .env.
+            Nơi lưu bill (R2 / Drive / Firebase) và ngưỡng tiền cọc / LPXT dùng khi kế toán duyệt và báo cáo — không
+            đặt trong Webhook n8n.
           </p>
         </>
       )
@@ -1355,9 +1356,6 @@ export function SettingsView() {
             Webhook n8n
           </h2>
           <N8nWebhooksSettingsPanel />
-          <div className="border-t border-slate-200 pt-4">
-            <FinanceThresholdsSettingsPanel />
-          </div>
         </div>
       ) : null}
 
@@ -1376,6 +1374,9 @@ export function SettingsView() {
             Chứng từ và lưu trữ
           </h2>
           <ReceiptStorageSettingsPanel />
+          <div className="border-t border-slate-200 pt-4">
+            <FinanceThresholdsSettingsPanel />
+          </div>
         </div>
       ) : null}
 

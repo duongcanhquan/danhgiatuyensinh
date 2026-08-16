@@ -146,7 +146,7 @@ export function KpiSettingsGuideBody(): ReactNode {
             <strong>Gọi</strong> (~40%): HL, lead chạm, chất lượng gọi.
           </li>
           <li>
-            <strong>Chuyển đổi</strong> (~30%): WARM+/HOT+, NEW→Quan tâm, thao tác CRM.
+            <strong>Chuyển đổi</strong> (~30%): WARM+/HOT+, NEW→Đăng ký XT, thao tác CRM.
           </li>
           <li>
             <strong>Tuân thủ</strong> (~10%): cảnh báo + điểm trưởng nhóm nhập tay.

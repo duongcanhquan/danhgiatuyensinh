@@ -1,7 +1,7 @@
 /**
  * Báo cáo thu ngày/tháng theo lịch — parity `sendDailyReportToN8N` / `sendMonthlyReportToN8N`.
  */
-import type { Firestore } from 'firebase-admin/firestore'
+import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 
 const SLOT_KEYS = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4'] as const
@@ -322,20 +322,44 @@ export function isLastDayOfMonthIct(at = new Date()): boolean {
 export async function loadOrgLeadsForFinanceReport(
   db: Firestore,
   orgId: string,
+  opts?: { lookbackDays?: number; softCap?: number },
 ): Promise<LeadFinanceLite[]> {
-  const snap = await db.collection('leads').where('orgId', '==', orgId).get()
-  return snap.docs.map((d) => {
-    const data = d.data() as Record<string, unknown>
-    const createdAt = data.createdAt as { toMillis?: () => number } | undefined
-    return {
-      id: d.id,
-      educationLevel: str(data.educationLevel),
-      uploaderName: str(data.uploaderName),
-      assignedTo: str(data.assignedTo),
-      createdAtMs: createdAt?.toMillis?.() ?? 0,
-      finance: data.finance as LeadFinanceLite['finance'],
+  /** Báo cáo ngày: ~4 tháng; cuối tháng: ~14 tháng — tránh đọc cả tenant. */
+  const lookbackDays = Math.max(30, opts?.lookbackDays ?? 120)
+  const softCap = Math.min(25_000, Math.max(500, opts?.softCap ?? 12_000))
+  const since = Timestamp.fromMillis(Date.now() - lookbackDays * 86_400_000)
+  const pageSize = 500
+  const out: LeadFinanceLite[] = []
+  let lastDoc: QueryDocumentSnapshot | undefined
+
+  while (out.length < softCap) {
+    let q = db
+      .collection('leads')
+      .where('orgId', '==', orgId)
+      .where('updatedAt', '>=', since)
+      .orderBy('updatedAt', 'desc')
+      .select('educationLevel', 'uploaderName', 'assignedTo', 'createdAt', 'finance')
+      .limit(pageSize)
+    if (lastDoc) q = q.startAfter(lastDoc)
+    const snap = await q.get()
+    if (snap.empty) break
+    for (const d of snap.docs) {
+      const data = d.data() as Record<string, unknown>
+      const createdAt = data.createdAt as { toMillis?: () => number } | undefined
+      out.push({
+        id: d.id,
+        educationLevel: str(data.educationLevel),
+        uploaderName: str(data.uploaderName),
+        assignedTo: str(data.assignedTo),
+        createdAtMs: createdAt?.toMillis?.() ?? 0,
+        finance: data.finance as LeadFinanceLite['finance'],
+      })
+      if (out.length >= softCap) return out
     }
-  })
+    lastDoc = snap.docs[snap.docs.length - 1]
+    if (snap.docs.length < pageSize) break
+  }
+  return out
 }
 
 export async function loadOrgDailyWebhook(db: Firestore, orgId: string): Promise<string> {

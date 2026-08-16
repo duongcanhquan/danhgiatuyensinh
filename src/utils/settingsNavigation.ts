@@ -51,7 +51,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   omicall: 'Gọi điện',
   webhooks: 'Webhook n8n',
   invite_docs: 'Giấy mời & mẫu',
-  receipts: 'Chứng từ & lưu trữ',
+  receipts: 'Chứng từ & ngưỡng cọc',
   public_registration: 'Cổng đăng ký SV',
   comms: 'Email & tin nhắn',
 }

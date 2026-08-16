@@ -47,7 +47,7 @@ const DAILY_TARGET_FIELDS: { key: KpiDailyMetricKey; label: string }[] = [
   { key: 'connectedCalls', label: 'Bắt máy' },
   { key: 'outboundCalls', label: 'Gọi đi' },
   { key: 'warmHot', label: 'Warm/Hot' },
-  { key: 'newToInterested', label: 'NEW → Quan tâm' },
+  { key: 'newToInterested', label: 'NEW → Đăng ký XT' },
   { key: 'lpxtCount', label: 'LPXT' },
   { key: 'depositPaidCount', label: 'Cọc' },
   { key: 'toEnrolled', label: 'Nhập học' },

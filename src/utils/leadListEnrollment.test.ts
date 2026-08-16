@@ -52,6 +52,14 @@ describe('tinh trang filter', () => {
     expect(leadTinhTrangLabel(coc)).toBe('Cọc thành công')
     expect(leadMatchesTinhTrangFilter(coc, 'COC_THANH_CONG')).toBe(true)
     expect(leadMatchesTinhTrangFilter(coc, 'MOI')).toBe(false)
+    expect(
+      leadTinhTrangLabel(
+        stub({
+          id: '2',
+          finance: { enrollmentStatus: 'MỚI' },
+        }),
+      ),
+    ).toBe('Chưa thu phí')
   })
 })
 

@@ -11,7 +11,7 @@ import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { leadBelongsToOrg, shouldUseLegacyMissingOrgIdRead } from '../tenancy/orgQuery'
 import { isSuperAdminRole } from '../auth/roleUtils'
 
-/** Quét hồ sơ — parity getAccountantData (~3000 dòng Sheet/FB). */
+/** Quét hồ sơ gần đây — parity cổng kế toán; chỉ chạy khi màn kế toán bật `enabled`. */
 const ACCOUNTANT_LEAD_LIMIT = 3000
 
 export function useAccountantLeads(enabled: boolean) {

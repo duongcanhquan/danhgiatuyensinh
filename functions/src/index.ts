@@ -1387,7 +1387,10 @@ export const sendScheduledFinanceReports = onSchedule(
       const monthlyUrl = sendMonthly ? await loadOrgMonthlyWebhook(db, orgId) : ''
       if (!dailyUrl && !monthlyUrl) continue
 
-      const leads = await loadOrgLeadsForFinanceReport(db, orgId)
+      const leads = await loadOrgLeadsForFinanceReport(db, orgId, {
+        lookbackDays: sendMonthly ? 400 : 120,
+        softCap: sendMonthly ? 15_000 : 10_000,
+      })
       const thresholds = await loadOrgFinanceThresholds(db, orgId)
 
       if (dailyUrl) {

@@ -1200,21 +1200,17 @@ export function useLeads(opts?: UseLeadsOptions) {
       .map(([k, v]) => `${k}:${v}`)
       .join('|')
   }, [directoryLabels])
-  const filterKey = useMemo(() => {
-    // directoryLabels chỉ ảnh hưởng tìm kiếm — không refetch list khi directory vừa tải xong.
-    const dirKey = searchText ? directoryLabelsKey : ''
-    const b = `${serverFiltersKey}|${searchText}|${dataMode}|${batchLimit}|${hoDKey}|${dirKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}|p:${profileListKey}`
+  const scopeFilterKey = useMemo(() => {
+    const b = `${serverFiltersKey}|${dataMode}|${batchLimit}|${hoDKey}|g:${canReadGlobal ? 1 : 0}|org:${effectiveOrgId}|p:${profileListKey}`
     if (dataMode === 'fullScope') {
       return `${b}|fsc:${fullScopeChunkSize}|cap:${maxFullScopeLeads}|om:${fullScopeOrderMode}|scan:${maxFullScopeScanDocs}|mk:${fullScopeMatchKey}`
     }
     return `${b}|pk:${pagedKeepMatchKey}`
   }, [
     serverFiltersKey,
-    searchText,
     dataMode,
     batchLimit,
     hoDKey,
-    directoryLabelsKey,
     fullScopeChunkSize,
     maxFullScopeLeads,
     fullScopeOrderMode,
@@ -1225,6 +1221,12 @@ export function useLeads(opts?: UseLeadsOptions) {
     effectiveOrgId,
     profileListKey,
   ])
+
+  const filterKey = useMemo(() => {
+    // directoryLabels chỉ ảnh hưởng tìm kiếm — không refetch list khi directory vừa tải xong.
+    const dirKey = searchText ? directoryLabelsKey : ''
+    return `${scopeFilterKey}|q:${searchText}|dir:${dirKey}`
+  }, [scopeFilterKey, searchText, directoryLabelsKey])
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
@@ -1311,6 +1313,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const pageEndSnaps = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([])
   const searchBucketRef = useRef<Lead[] | null>(null)
   const lastDataFilterKey = useRef<string>('')
+  const lastScopeFilterKey = useRef<string>('')
   const totalRef = useRef<number | null>(null)
 
   const setPage = useCallback((p: number) => {
@@ -1380,18 +1383,28 @@ export function useLeads(opts?: UseLeadsOptions) {
     let cancelled = false
     const gen = ++fetchGenRef.current
     const fkChanged = lastDataFilterKey.current !== filterKey
+    const scopeKeyChanged = lastScopeFilterKey.current !== scopeFilterKey
     const manualRefetch = pendingManualRefetchRef.current
     if (manualRefetch) pendingManualRefetchRef.current = false
     if (fkChanged) {
       lastDataFilterKey.current = filterKey
-      pageEndSnaps.current = []
       searchBucketRef.current = null
-      totalRef.current = null
       setCurrentPageState(1)
-      setScopeTagCounts(null)
+      // Chỉ reset cursor / tổng / tag khi đổi phạm vi server — không vì mỗi lần gõ tìm.
+      if (scopeKeyChanged) {
+        lastScopeFilterKey.current = scopeFilterKey
+        pageEndSnaps.current = []
+        totalRef.current = null
+        setScopeTagCounts(null)
+      }
     }
 
     const pageToLoad = fkChanged ? 1 : currentPageRef.current
+    const shouldRefreshCatalogs =
+      includeScopeSourceOptions || includeScopeProgramOptions
+        ? scopeKeyChanged || manualRefetch
+        : false
+    const shouldRefreshTagCounts = includeScopeTagCounts && (scopeKeyChanged || manualRefetch)
 
     const fetchTotalOnly = async (): Promise<number | null> => {
       try {
@@ -1574,7 +1587,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         let cursor = after
         let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null
         let exhausted = false
-        const maxRounds = 25
+        const maxRounds = 20
         for (let round = 0; round < maxRounds && acc.length < LEADS_PAGE_SIZE; round++) {
           const snap = await getDocsListWithOrgFallback(
             firestore,
@@ -1944,11 +1957,15 @@ export function useLeads(opts?: UseLeadsOptions) {
 
         if (searchText) {
           if (fkChanged || totalRef.current == null) {
-            await Promise.all([fetchTotalOnly(), loadSearchBucketAndSlice(pageToLoad, fkChanged)])
+            const needTotal = scopeKeyChanged || totalRef.current == null || manualRefetch
+            await Promise.all([
+              needTotal ? fetchTotalOnly() : Promise.resolve(totalRef.current),
+              loadSearchBucketAndSlice(pageToLoad, fkChanged),
+            ])
             if (cancelled) return
-            if (includeScopeTagCounts) void fetchTagCountsOnly()
-            if (includeScopeSourceOptions) void fetchSourceCatalog()
-            if (includeScopeProgramOptions) void fetchProgramCatalog()
+            if (shouldRefreshTagCounts) void fetchTagCountsOnly()
+            if (shouldRefreshCatalogs && includeScopeSourceOptions) void fetchSourceCatalog()
+            if (shouldRefreshCatalogs && includeScopeProgramOptions) void fetchProgramCatalog()
           } else {
             await loadSearchBucketAndSlice(pageToLoad, manualRefetch)
             if (manualRefetch && includeScopeTagCounts) void fetchTagCountsOnly()
@@ -1978,7 +1995,11 @@ export function useLeads(opts?: UseLeadsOptions) {
         const pagedKeepActive = Boolean(pagedKeepMatchKey)
         if (fkChanged || total == null || manualRefetch) {
           const tentativePage = fkChanged ? 1 : Math.max(1, pageToLoad)
-          await Promise.all([fetchTotalOnly(), loadFirestorePage(tentativePage, null)])
+          const needTotal = scopeKeyChanged || total == null || manualRefetch
+          await Promise.all([
+            needTotal ? fetchTotalOnly() : Promise.resolve(total),
+            loadFirestorePage(tentativePage, null),
+          ])
           if (cancelled) return
           total = totalRef.current
           if (total === 0) {
@@ -1994,9 +2015,9 @@ export function useLeads(opts?: UseLeadsOptions) {
               await loadFirestorePage(safePage, total)
             }
           }
-          if (includeScopeTagCounts) void fetchTagCountsOnly()
-          if (includeScopeSourceOptions) void fetchSourceCatalog()
-          if (includeScopeProgramOptions) void fetchProgramCatalog()
+          if (shouldRefreshTagCounts) void fetchTagCountsOnly()
+          if (shouldRefreshCatalogs && includeScopeSourceOptions) void fetchSourceCatalog()
+          if (shouldRefreshCatalogs && includeScopeProgramOptions) void fetchProgramCatalog()
         } else {
           if (total === 0) {
             applyEmptyList()
@@ -2047,6 +2068,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fullScopeMatchKey,
     pagedKeepMatchKey,
     filterKey,
+    scopeFilterKey,
     directoryLabelsKey,
     pagedFirestoreDep,
     includeScopeTagCounts,
