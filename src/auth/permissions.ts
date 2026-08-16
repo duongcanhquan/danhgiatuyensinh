@@ -11,11 +11,14 @@ const ALL = PERMISSIONS as unknown as readonly Permission[]
 /** Admin thường: mọi quyền trừ cấu hình khóa API LLM (chỉ Siêu quản trị). */
 const FINANCE_PERMISSIONS: readonly Permission[] = [
   'finance:accountant',
-  'finance:manage_accountants',
   'finance:reports',
 ]
+const FINANCE_ADMIN_ONLY: readonly Permission[] = ['finance:manage_accountants']
 const ALL_EXCEPT_LLM_API_AND_FINANCE = ALL.filter(
-  (p) => p !== 'config:llm_api' && !FINANCE_PERMISSIONS.includes(p),
+  (p) =>
+    p !== 'config:llm_api' &&
+    !FINANCE_PERMISSIONS.includes(p) &&
+    !FINANCE_ADMIN_ONLY.includes(p),
 )
 
 /** Quyền tầng Trưởng nhóm (`team_lead`). */

@@ -28,9 +28,24 @@ describe('leadSearchScope', () => {
     expect(
       teamLeadAssigneeScopeIds({
         id: 'tl1',
+        role: 'team_lead',
         managedCounselorIds: ['c1', 'c2'],
       } as never),
     ).toEqual(['tl1', 'c1', 'c2'])
+  })
+
+  it('falls back to same department when roster empty', () => {
+    const tl = {
+      id: 'tl1',
+      role: 'team_lead',
+      departmentId: 'sale',
+      managedCounselorIds: [],
+    } as never
+    const dir = [
+      { id: 'c1', role: 'counselor', departmentId: 'sale', isActive: true },
+      { id: 'c2', role: 'counselor', departmentId: 'other', isActive: true },
+    ] as never
+    expect(teamLeadAssigneeScopeIds(tl, dir)).toEqual(['tl1', 'c1'])
   })
 
   it('placeholder mentions scope', () => {

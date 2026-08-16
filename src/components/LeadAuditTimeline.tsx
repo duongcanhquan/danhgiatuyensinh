@@ -135,8 +135,9 @@ export function LeadAuditTimeline({
                 <p className="mt-2 text-base leading-relaxed text-slate-800">{log.description}</p>
                 <p className="mt-2 text-xs text-slate-600">
                   <span className="text-slate-500">Thực hiện:</span>{' '}
-                  <span className="font-medium text-slate-900">{log.performedByName}</span>
-                  <span className="ml-1 font-mono text-xs text-slate-600">({log.performedBy.slice(0, 8)}…)</span>
+                  <span className="font-medium text-slate-900">
+                    {(log.performedByName || '').trim() || 'Chưa đặt tên'}
+                  </span>
                 </p>
               </div>
             </li>

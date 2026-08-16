@@ -16,6 +16,7 @@ import {
 } from '../services/accountantFinanceCallable'
 import { commitAuditLog } from '../services/auditLog'
 import { describeAccountantPaymentAudit } from './leadFinanceAudit'
+import { normalizePaymentApprovalStatus } from './paymentApprovalStatus'
 
 const SLOT_BY_BATCH: LeadPaymentSlotKey[] = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
@@ -260,15 +261,17 @@ export async function persistAccountantFullNe(opts: {
 
   for (const key of SLOT_BY_BATCH) {
     const line = payments[key]
-    if (line?.amountVnd && !line.approvalStatus) {
-      // Apps Script setFullNE: gắn ngày hôm nay cho khoản treo được auto duyệt
-      payments[key] = {
-        ...line,
-        approvalStatus: 'ĐỒNG Ý',
-        collectedAt: line.collectedAt?.trim() || todayStr,
-      }
-      autoApproved += line.amountVnd
+    if (!line?.amountVnd) continue
+    const st = normalizePaymentApprovalStatus(line.approvalStatus)
+    if (st === 'ĐỒNG Ý' || st === 'TỪ CHỐI') continue
+    // Auto duyệt khoản treo / kiểm tra lại khi xác nhận Full NE
+    payments[key] = {
+      ...line,
+      approvalStatus: 'ĐỒNG Ý',
+      collectedAt: line.collectedAt?.trim() || todayStr,
+      approvedAt: todayStr,
     }
+    autoApproved += line.amountVnd
   }
 
   const finance: LeadFinanceRecord = {

@@ -948,11 +948,11 @@ export function CounselorDashboard() {
     }
 
     const writeAuditSample = async (committedIds: string[]) => {
-      const performer = profile.displayName?.trim() || profile.email || profile.id
-      const targetLabel =
-        reassignPickList.find((c) => c.id === bulkReassignUid)?.displayName?.trim() ||
-        reassignPickList.find((c) => c.id === bulkReassignUid)?.email ||
-        bulkReassignUid
+      const performer = profile.displayName?.trim() || profile.email || 'Chưa đặt tên'
+      const pick = reassignPickList.find((c) => c.id === bulkReassignUid)
+      const targetLabel = pick
+        ? formatStaffDirectoryLabel(pick)
+        : formatStaffDirectoryLabel({ id: bulkReassignUid, displayName: '', email: '' })
       const itemById = new Map(items.map((it) => [it.leadId, it]))
       for (const id of committedIds.slice(0, 40)) {
         const item = itemById.get(id)
@@ -1410,7 +1410,7 @@ export function CounselorDashboard() {
                     <option value="__UNASSIGNED__">Chưa gán TVV</option>
                     {counselorUsers.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.displayName || c.email || c.id}
+                        {formatStaffDirectoryLabel(c)}
                       </option>
                     ))}
                   </select>

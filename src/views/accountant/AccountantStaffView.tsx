@@ -19,7 +19,7 @@ export function AccountantStaffView() {
     firebaseUser,
   } = useAuth()
   const { users, loading } = useCounselorDirectory()
-  const allowed = canManageAccountantStaff(can)
+  const allowed = canManageAccountantStaff(can, profile)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

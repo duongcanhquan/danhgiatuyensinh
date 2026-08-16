@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canAccessAccountantPortal } from './accountantPortal'
+import { canAccessAccountantPortal, canManageAccountantStaff } from './accountantPortal'
 import { defaultPermissionsForRole } from './permissions'
 import { hasPermission } from './permissions'
 
@@ -21,5 +21,18 @@ describe('canAccessAccountantPortal', () => {
   it('blocks counselor and inactive users', () => {
     expect(canAccessAccountantPortal(canFrom('counselor'), { role: 'counselor', isActive: true })).toBe(false)
     expect(canAccessAccountantPortal(canFrom('super_admin'), { role: 'super_admin', isActive: false })).toBe(false)
+  })
+})
+
+describe('canManageAccountantStaff', () => {
+  const canFrom = (role: Parameters<typeof defaultPermissionsForRole>[0]) => {
+    const perms = defaultPermissionsForRole(role)
+    return (p: Parameters<typeof hasPermission>[1]) => hasPermission(perms, p)
+  }
+
+  it('only super_admin may manage accountant accounts', () => {
+    expect(canManageAccountantStaff(canFrom('super_admin'), { role: 'super_admin' })).toBe(true)
+    expect(canManageAccountantStaff(canFrom('accountant'), { role: 'accountant' })).toBe(false)
+    expect(canManageAccountantStaff(canFrom('admin'), { role: 'admin' })).toBe(false)
   })
 })

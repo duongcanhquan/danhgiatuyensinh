@@ -44,8 +44,9 @@ import {
   teamLeadsForCounselor,
 } from '../utils/teamScope'
 
-/** Vai trò quản trị được tạo trong app; kế toán là cổng riêng, không nằm trong quyền admin. */
-const ROLES_BASE: UserRole[] = ['counselor', 'ctv', 'team_lead', 'admin', 'accountant', 'marketing']
+/** Vai trò quản trị được tạo trong app; kế toán chỉ Siêu quản trị được gán. */
+const ROLES_BASE: UserRole[] = ['counselor', 'ctv', 'team_lead', 'admin', 'marketing']
+const ROLES_WITH_ACCOUNTANT: UserRole[] = [...ROLES_BASE, 'accountant']
 
 type StaffMainTab = 'list' | 'teams' | 'add'
 
@@ -110,7 +111,7 @@ export function StaffManagementView({
   const canOmicallConfig = can('config:omicall')
   const assignableRoles = useMemo((): UserRole[] => {
     if (teamScopeOnly) return ['counselor', 'ctv']
-    if (profile?.role === 'super_admin') return [...ROLES_BASE, 'super_admin']
+    if (profile?.role === 'super_admin') return [...ROLES_WITH_ACCOUNTANT, 'super_admin']
     return [...ROLES_BASE]
   }, [profile?.role, teamScopeOnly])
   const { users, loading, error: directoryError, fieldStaff } = useCounselorDirectory()
@@ -156,11 +157,12 @@ export function StaffManagementView({
 
   const counselorPickList = useMemo(() => {
     if (teamScopeOnly && profile) {
-      const team = new Set(explicitManagedCounselorIds(profile))
+      // Khớp bộ lọc lead / KPI: roster rõ + fallback khoa/phòng khi chưa gán UID.
+      const team = new Set(counselorIdsInManagerScope(profile, users))
       return fieldStaff.filter((c) => team.has(c.id))
     }
     return fieldStaff
-  }, [fieldStaff, teamScopeOnly, profile])
+  }, [fieldStaff, teamScopeOnly, profile, users])
 
   const teamLeads = useMemo(
     () => users.filter((u) => canOwnFieldStaffTeam(u.role) && u.isActive !== false),
@@ -170,14 +172,15 @@ export function StaffManagementView({
   const teamLeadMembers = useMemo(() => {
     const map = new Map<string, VietMyUserProfile[]>()
     for (const lead of teamLeads) {
-      const ids = new Set(counselorIdsInManagerScope(lead, users))
+      // Chỉ hiện sale đã gán rõ trên roster — tránh nhầm «cùng khoa» thành đã gán nhóm.
+      const ids = new Set(explicitManagedCounselorIds(lead))
       map.set(
         lead.id,
         fieldStaff.filter((c) => ids.has(c.id)),
       )
     }
     return map
-  }, [teamLeads, users, fieldStaff])
+  }, [teamLeads, fieldStaff])
 
   const unassignedCounselors = useMemo(() => {
     if (teamScopeOnly) return []
@@ -187,7 +190,7 @@ export function StaffManagementView({
   const sortedUsers = useMemo(() => {
     let list = users
     if (teamScopeOnly && profile) {
-      const teamIds = new Set(explicitManagedCounselorIds(profile))
+      const teamIds = new Set(counselorIdsInManagerScope(profile, users))
       list = users.filter((u) => teamIds.has(u.id) || u.id === profile.id)
     }
     return [...list].sort((a, b) => {
@@ -233,6 +236,7 @@ export function StaffManagementView({
 
   const canManageUser = (u: VietMyUserProfile) => {
     if (isSuperAdminRole(u.role) && !isSuperAdminRole(profile?.role)) return false
+    if (u.role === 'accountant' && !isSuperAdminRole(profile?.role)) return false
     if (canStaffAll) return true
     if (!profile || !teamScopeOnly) return false
     return isUserInExplicitTeamRoster(profile, u)

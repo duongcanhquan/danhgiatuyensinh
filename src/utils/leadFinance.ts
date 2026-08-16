@@ -67,12 +67,12 @@ function lineFromStored(line?: LeadPaymentLine): LeadPaymentLineDraft {
   }
 }
 
-/** Chuyển dd/MM/yyyy hoặc ISO sang value cho input[type=date] */
+/** Chuyển dd/MM/yyyy (có thể kèm giờ) hoặc ISO sang value cho input[type=date] */
 export function isoToDateInput(raw?: string): string {
-  const s = String(raw ?? '').trim()
+  const s = String(raw ?? '').trim().replace(/^'/, '')
   if (!s) return ''
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
   // Timestamp / Date ISO đầy đủ
   const t = Date.parse(s)

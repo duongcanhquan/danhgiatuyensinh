@@ -6,6 +6,7 @@ import { AuthSessionExitBar } from '../components/AuthSessionControls'
 import { AuthSessionBootScreen, useAuthBootMinHold } from '../components/AuthSessionBootScreen'
 import { VietMyAccentHeading } from '../components/VietMyAccentHeading'
 import { useAuth } from '../hooks/useAuth'
+import { isAccountantOnlyUser } from '../auth/accountantPortal'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../services/firebase'
 import { defaultSuperAdminEmailFromEnv } from '../tenancy/superAdminBootstrap'
 
@@ -166,7 +167,7 @@ export function LoginView() {
         />
       )
     }
-    return <Navigate to={from} replace />
+    return <Navigate to={isAccountantOnlyUser(profile) ? '/ke-toan' : from} replace />
   }
 
   if (firebaseUser && status === 'authenticated' && !profile) {

@@ -1,11 +1,11 @@
 import type {
   LeadCounselorStatus,
   LeadFinanceRecord,
-  LeadPaymentApprovalStatus,
   LeadPaymentLine,
   LeadPaymentSlotKey,
 } from '../types'
 import type { ExcelLeadRow } from './excelLeadMapper'
+import { foldFinanceStatusText, normalizePaymentApprovalStatus } from './accountantFinanceFilter'
 
 /** Data Sheet Apps Script bắt đầu dòng 3 Excel (= index 2). */
 export const APPS_SCRIPT_SHEET_DATA_START_ROW = 2
@@ -76,23 +76,13 @@ function parseAmountVnd(raw: string): number {
   return Number.isFinite(n) && n > 0 ? n : 0
 }
 
-function normalizeApproval(raw: string): LeadPaymentApprovalStatus | '' {
-  const s = raw.trim().toUpperCase()
-  if (s === 'ĐỒNG Ý' || s === 'DONG Y') return 'ĐỒNG Ý'
-  if (s === 'TỪ CHỐI' || s === 'TU CHOI' || s.includes('TỪ CHỐI') || s.includes('TU CHOI')) return 'TỪ CHỐI'
-  if (!s) return ''
-  // Giữ nguyên nếu đã đúng tiếng Việt có dấu
-  if (raw.trim() === 'ĐỒNG Ý' || raw.trim() === 'TỪ CHỐI') return raw.trim() as LeadPaymentApprovalStatus
-  return ''
-}
-
 function buildFinanceFromRow(r: unknown[]): LeadFinanceRecord {
   const payments: LeadFinanceRecord['payments'] = {}
   let declared = 0
   for (const col of PAYMENT_COLS) {
     const amountVnd = parseAmountVnd(cell(r, col.amount))
     const receiptUrl = cell(r, col.bill)
-    const approvalStatus = normalizeApproval(cell(r, col.approval))
+    const approvalStatus = normalizePaymentApprovalStatus(cell(r, col.approval))
     const collectedAt = cell(r, col.date)
     declared += amountVnd
     if (!amountVnd && !receiptUrl && !approvalStatus && !collectedAt) continue
@@ -110,8 +100,9 @@ function buildFinanceFromRow(r: unknown[]): LeadFinanceRecord {
   const fullNeRaw = cell(r, 65)
   const fullNeAt = cell(r, 66)
   const n8nStatus = cell(r, 55)
-  const reqFullNe = fullNeRaw.toUpperCase().includes('YÊU CẦU')
-  const isFullNe = fullNeRaw.toUpperCase().includes('ĐÃ FULL')
+  const fullNeFolded = foldFinanceStatusText(fullNeRaw)
+  const reqFullNe = fullNeFolded.includes('YEU CAU')
+  const isFullNe = fullNeFolded.includes('DA FULL')
 
   return {
     payments,

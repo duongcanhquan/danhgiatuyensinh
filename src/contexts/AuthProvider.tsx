@@ -76,9 +76,11 @@ function mapProfileFromDoc(uid: string, user: User, d: Record<string, unknown>):
     orgId,
     departmentId: d.departmentId as string | undefined,
     professionUnitId: d.professionUnitId as string | undefined,
-    managedMajorIds: d.managedMajorIds as string[] | undefined,
-    managedCounselorIds: d.managedCounselorIds as string[] | undefined,
-    specialtyMajorIds: d.specialtyMajorIds as string[] | undefined,
+    managedMajorIds: Array.isArray(d.managedMajorIds) ? d.managedMajorIds.map(String) : undefined,
+    managedCounselorIds: Array.isArray(d.managedCounselorIds)
+      ? d.managedCounselorIds.map(String).filter(Boolean)
+      : undefined,
+    specialtyMajorIds: Array.isArray(d.specialtyMajorIds) ? d.specialtyMajorIds.map(String) : undefined,
     maxConcurrentLeads: d.maxConcurrentLeads as number | undefined,
     isActive: d.isActive !== false,
     allowLlmAndAiTasks: d.allowLlmAndAiTasks === true ? true : undefined,
@@ -517,9 +519,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       omicallOutboundNumber?: string
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
-      const canAcctStaff = hasPermission(permissions, 'finance:manage_accountants')
+      const canAcctStaff =
+        profile?.role === 'super_admin' && hasPermission(permissions, 'finance:manage_accountants')
       if (!canAll && !canAcctStaff) {
-        throw new Error('Chỉ quản trị (hoặc quản lý kế toán trên cổng kế toán) mới được tạo tài khoản.')
+        throw new Error('Chỉ quản trị (hoặc Siêu quản trị trên cổng kế toán) mới được tạo tài khoản.')
       }
       if (canAcctStaff && !canAll) {
         if (input.role !== 'accountant') {
@@ -528,6 +531,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
         throw new Error('Chỉ Siêu quản trị mới được tạo tài khoản Siêu quản trị.')
+      }
+      if (input.role === 'accountant' && profile?.role !== 'super_admin') {
+        throw new Error('Chỉ Siêu quản trị mới được tạo tài khoản kế toán.')
       }
       if (
         (input.omicallSipUser !== undefined ||
@@ -597,7 +603,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }) => {
       const canAll = hasPermission(permissions, 'config:users')
       const canTeam = hasPermission(permissions, 'config:users:team')
-      const canAcctStaff = hasPermission(permissions, 'finance:manage_accountants')
+      const canAcctStaff =
+        profile?.role === 'super_admin' && hasPermission(permissions, 'finance:manage_accountants')
       if (!canAll && !canTeam && !canAcctStaff) {
         throw new Error('Bạn không có quyền sửa nhân sự.')
       }
@@ -630,6 +637,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (currentRole === 'super_admin' && profile?.role !== 'super_admin') {
         throw new Error('Chỉ Siêu quản trị mới chỉnh được tài khoản Siêu quản trị khác.')
+      }
+      if (
+        (currentRole === 'accountant' || input.role === 'accountant') &&
+        profile?.role !== 'super_admin'
+      ) {
+        throw new Error('Chỉ Siêu quản trị mới quản lý tài khoản kế toán.')
       }
       if (input.role === 'super_admin' && profile?.role !== 'super_admin') {
         throw new Error('Chỉ Siêu quản trị mới gán được vai trò Siêu quản trị.')
@@ -807,8 +820,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const createAccountantStaff = useCallback(
     async (input: { email: string; password: string; displayName: string }) => {
-      if (!hasPermission(permissions, 'finance:manage_accountants')) {
-        throw new Error('Bạn không có quyền thêm kế toán viên.')
+      if (profile?.role !== 'super_admin' || !hasPermission(permissions, 'finance:manage_accountants')) {
+        throw new Error('Chỉ Siêu quản trị mới được thêm kế toán viên.')
       }
       await createStaffAccount({
         email: input.email,
@@ -817,13 +830,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: 'accountant',
       })
     },
-    [permissions, createStaffAccount],
+    [permissions, profile?.role, createStaffAccount],
   )
 
   const updateAccountantStaff = useCallback(
     async (input: { userId: string; displayName?: string; isActive?: boolean }) => {
-      if (!hasPermission(permissions, 'finance:manage_accountants')) {
-        throw new Error('Bạn không có quyền sửa kế toán viên.')
+      if (profile?.role !== 'super_admin' || !hasPermission(permissions, 'finance:manage_accountants')) {
+        throw new Error('Chỉ Siêu quản trị mới được sửa kế toán viên.')
       }
       const db = getFirestoreDb()
       if (!db) throw new Error('Firestore chưa cấu hình.')
@@ -840,7 +853,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isActive: input.isActive,
       })
     },
-    [permissions, updateStaffProfile],
+    [permissions, profile?.role, updateStaffProfile],
   )
 
   const value = useMemo<AuthContextValue>(

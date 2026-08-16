@@ -137,7 +137,8 @@ export function formatLeadLatestInteractionLine(
   if (callAt) {
     // Đổi tiền tố «Gọi» → «Gọi điện» cho rõ cột tương tác.
     const line = formatLeadLastCallLine(lead)
-    return line === 'Chưa gọi' ? line : line.replace(/^Gọi /, 'Gọi điện ')
+    if (line === 'Chưa gọi') return line
+    return line.startsWith('Gọi ·') ? `Gọi điện ·${line.slice(4)}` : line.replace(/^Gọi /, 'Gọi điện ')
   }
 
   const touch = isTs(lead.lastTouchedAt)
@@ -147,4 +148,35 @@ export function formatLeadLatestInteractionLine(
       : null
   if (touch) return `Cập nhật hồ sơ · ${formatShortWhen(touch)}`
   return '—'
+}
+
+/** Bản gọn cho cột bảng + bản đầy đủ khi hover. */
+export function formatLeadLatestInteractionCompact(
+  lead: Parameters<typeof formatLeadLatestInteractionLine>[0],
+  shortMax = 42,
+): { short: string; full: string } {
+  const full = formatLeadLatestInteractionLine(lead)
+  if (full === '—') return { short: '—', full: '' }
+
+  let when = ''
+  let body = full
+  if (isTs(lead.lastInteractionAt)) {
+    when = formatShortWhen(lead.lastInteractionAt)
+    body = full.replace(new RegExp(`\\s*·\\s*${when.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), '')
+  }
+
+  const kind =
+    lead.lastInteractionKind && KIND_LABEL[lead.lastInteractionKind]
+      ? KIND_LABEL[lead.lastInteractionKind]
+      : null
+
+  let shortBody = body
+  if (kind && shortBody.startsWith(`${kind} · `)) {
+    shortBody = shortBody.slice(kind.length + 3)
+  }
+  shortBody = shortBody.replace(/\s+/g, ' ').trim()
+  if (shortBody.length > shortMax) shortBody = `${shortBody.slice(0, shortMax).trim()}…`
+
+  const short = [kind, shortBody || null, when || null].filter(Boolean).join(' · ')
+  return { short: short || full, full }
 }

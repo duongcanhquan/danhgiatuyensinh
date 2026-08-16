@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, Lock, ShieldCheck, Wallet } from 'lucide-react'
-import { AuthSessionExitBar, LoggedInPortalGate } from '../../components/AuthSessionControls'
+import { AuthSessionExitBar } from '../../components/AuthSessionControls'
+import { AuthSessionBootScreen, useAuthBootMinHold } from '../../components/AuthSessionBootScreen'
 import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../../services/firebase'
@@ -21,6 +22,7 @@ export function AccountantLoginView() {
   const [busy, setBusy] = useState(false)
 
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
+  const bootHold = useAuthBootMinHold(Boolean(firebaseUser && status === 'authenticated' && profile))
 
   if (!hasAuth) {
     const missing = getFirebaseMissingKeys()
@@ -42,14 +44,15 @@ export function AccountantLoginView() {
   }
 
   if (firebaseUser && status === 'authenticated' && profile && canAccessAccountantPortal(can, profile)) {
-    return (
-      <LoggedInPortalGate
-        continueTo={from}
-        portalTitle="Cổng kế toán"
-        continueLabel="Vào cổng kế toán"
-        tone="indigo"
-      />
-    )
+    if (bootHold) {
+      return (
+        <AuthSessionBootScreen
+          statusLabel="Đang mở cổng kế toán"
+          detail="Đăng nhập thành công."
+        />
+      )
+    }
+    return <Navigate to={from} replace />
   }
 
   const loggedInWithoutPortalAccess =

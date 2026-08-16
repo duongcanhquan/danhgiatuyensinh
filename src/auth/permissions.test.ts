@@ -43,11 +43,11 @@ describe('defaultPermissionsForRole', () => {
     }
   })
 
-  it('accountant only gets finance permissions', () => {
+  it('accountant only gets finance work permissions (not manage accountants)', () => {
     const perms = defaultPermissionsForRole('accountant')
     expect(hasPermission(perms, 'finance:accountant')).toBe(true)
     expect(hasPermission(perms, 'finance:reports')).toBe(true)
-    expect(hasPermission(perms, 'finance:manage_accountants')).toBe(true)
+    expect(hasPermission(perms, 'finance:manage_accountants')).toBe(false)
     expect(hasPermission(perms, 'leads:read:global')).toBe(false)
     expect(canAccessSettingsPage(perms)).toBe(false)
   })

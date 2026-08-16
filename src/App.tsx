@@ -42,9 +42,6 @@ const AccountantView = lazyWithRetry(() =>
 const AccountantLoginView = lazyWithRetry(() =>
   import('./views/accountant/AccountantLoginView').then((m) => ({ default: m.AccountantLoginView })),
 )
-const AccountantStaffView = lazyWithRetry(() =>
-  import('./views/accountant/AccountantStaffView').then((m) => ({ default: m.AccountantStaffView })),
-)
 const AccountantReportsView = lazyWithRetry(() =>
   import('./views/accountant/AccountantReportsView').then((m) => ({
     default: m.AccountantReportsView,
@@ -121,7 +118,7 @@ export default function App() {
                       <Route element={<AccountantProtectedRoute />}>
                         <Route path="/ke-toan" element={<AccountantLayout />}>
                           <Route index element={<AccountantView portalMode />} />
-                          <Route path="nhan-su" element={<AccountantStaffView />} />
+                          <Route path="nhan-su" element={<Navigate to="/ke-toan" replace />} />
                           <Route path="bao-cao" element={<AccountantReportsView />} />
                         </Route>
                       </Route>

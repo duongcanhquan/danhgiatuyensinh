@@ -11,6 +11,53 @@ function str(v: unknown): string {
   return String(v ?? '').trim()
 }
 
+function foldStatus(raw: unknown): string {
+  return str(raw)
+    .toUpperCase()
+    .replace(/[đĐ]/g, 'D')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+}
+
+/** Nhận biến thể Sheet: Dong y / OK / Đã duyệt… — tránh CHUA XAC NHAN / KHONG DONG Y. */
+function isApprovedStatus(raw: unknown): boolean {
+  const f = foldStatus(raw)
+  if (!f) return false
+  if (
+    f === 'TU CHOI' ||
+    /\bTU CHOI\b/.test(f) ||
+    f === 'REJECTED' ||
+    f === 'NO' ||
+    f === 'FALSE' ||
+    /\bKHONG DONG Y\b/.test(f) ||
+    f.includes('KHONG DUYET') ||
+    f.includes('CHUA XAC NHAN') ||
+    f.includes('CHUA DUYET') ||
+    f.includes('KIEM TRA')
+  ) {
+    return false
+  }
+  return (
+    f === 'DONG Y' ||
+    /\bDONG Y\b/.test(f) ||
+    f === 'APPROVED' ||
+    f === 'OK' ||
+    f === 'YES' ||
+    f === 'X' ||
+    f === '1' ||
+    f === 'TRUE' ||
+    f.includes('DA DUYET') ||
+    /\bDA XAC NHAN\b/.test(f) ||
+    f === 'XAC NHAN'
+  )
+}
+
+function isRejectedStatus(raw: unknown): boolean {
+  const f = foldStatus(raw)
+  return f === 'TU CHOI' || f.includes('TU CHOI') || f === 'REJECTED' || f === 'NO' || f === 'FALSE'
+}
+
 function callerCanAccountant(role: string, extra: unknown, denied: unknown): boolean {
   const deniedList = Array.isArray(denied) ? denied.map(String) : []
   if (deniedList.includes('finance:accountant')) return false
@@ -135,7 +182,7 @@ function enrollmentAfterDecision(
   let total = 0
   for (const key of SLOT_KEYS) {
     const line = payments[key]
-    if (line?.approvalStatus === 'ĐỒNG Ý' && line.amountVnd) total += line.amountVnd
+    if (isApprovedStatus(line?.approvalStatus) && line.amountVnd) total += line.amountVnd
   }
   const threshold = depositThreshold(str(data.educationLevel), thresholds)
   if (total >= threshold) return profileComplete(data, leadId) ? 'ĐÃ HOÀN THIỆN' : 'CỌC THÀNH CÔNG'
@@ -274,15 +321,15 @@ export function registerAccountantFinanceCallables() {
       let autoApproved = 0
       for (const key of SLOT_KEYS) {
         const line = payments[key] as { amountVnd?: number; approvalStatus?: string; collectedAt?: string } | undefined
-        if (line?.amountVnd && !str(line.approvalStatus)) {
-          payments[key] = {
-            ...line,
-            approvalStatus: 'ĐỒNG Ý',
-            collectedAt: str(line.collectedAt) || todayStr,
-            approvedAt: todayStr,
-          }
-          autoApproved += line.amountVnd
+        if (!line?.amountVnd) continue
+        if (isApprovedStatus(line.approvalStatus) || isRejectedStatus(line.approvalStatus)) continue
+        payments[key] = {
+          ...line,
+          approvalStatus: 'ĐỒNG Ý',
+          collectedAt: str(line.collectedAt) || todayStr,
+          approvedAt: todayStr,
         }
+        autoApproved += line.amountVnd
       }
       const nextFinance = {
         ...prev,

@@ -12,7 +12,11 @@ export function canAccessAccountantPortal(
   return can('finance:accountant')
 }
 
-export function canManageAccountantStaff(can: (p: Permission) => boolean): boolean {
+export function canManageAccountantStaff(
+  can: (p: Permission) => boolean,
+  profile?: Pick<VietMyUserProfile, 'role'> | null,
+): boolean {
+  if (normalizeUserRole(profile?.role) !== 'super_admin') return false
   return can('finance:manage_accountants')
 }
 

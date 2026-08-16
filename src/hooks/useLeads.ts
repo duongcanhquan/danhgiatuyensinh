@@ -38,6 +38,7 @@ import { FS_COLLECTIONS } from '../types'
 import { canOwnFieldStaffTeam, isAdminLikeRole, isFieldStaffRole, isSuperAdminRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
+import { useCounselorDirectory } from './useCounselorDirectory'
 import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 import { useOrg } from './useOrg'
 import { useMasterData } from './useMasterData'
@@ -628,13 +629,14 @@ function rbacConstraint(
   profile: VietMyUserProfile,
   hoDLabels: string[],
   canReadGlobal: boolean,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): QueryFilterConstraint | null {
   if (isSuperAdminRole(profile.role)) return null
   if (canReadGlobal && isAdminLikeRole(profile.role)) return null
   if (canReadGlobal && isTeamLeadRole(profile.role)) return null
 
   if (canOwnFieldStaffTeam(profile.role) && !canReadGlobal) {
-    const team = teamLeadAssigneeScopeIds(profile)
+    const team = teamLeadAssigneeScopeIds(profile, staffDirectory)
     if (team.length) {
       const chunk = team.slice(0, 30)
       return or(where('assignedTo', 'in', chunk), where('assignedCounselorId', 'in', chunk))
@@ -662,6 +664,7 @@ function filterConstraints(
   f: LeadListServerFilters | undefined,
   profile: VietMyUserProfile,
   canReadGlobal: boolean,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): QueryFilterConstraint[] {
   if (!f) return []
   const c: QueryFilterConstraint[] = []
@@ -703,7 +706,9 @@ function filterConstraints(
   if (f.portalIntakeGroup) {
     // Team-lead RBAC đã là OR(assignedTo in N, assignedCounselorId in N).
     // Nhân thêm OR portal (~3 nhánh) dễ vượt trần 30 disjunction Firestore khi N ≥ 6.
-    const teamSize = isTeamLeadRole(profile.role) ? (profile.managedCounselorIds ?? []).filter(Boolean).length : 0
+    const teamSize = isTeamLeadRole(profile.role)
+      ? teamLeadAssigneeScopeIds(profile, staffDirectory).filter((id) => id !== profile.id).length
+      : 0
     if (!(isTeamLeadRole(profile.role) && teamSize > 4)) {
       c.push(
         or(
@@ -725,7 +730,7 @@ function filterConstraints(
       const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
       const team =
         canOwnFieldStaffTeam(profile.role) && !canReadGlobal && !isSuperAdminRole(profile.role)
-          ? new Set(teamLeadAssigneeScopeIds(profile))
+          ? new Set(teamLeadAssigneeScopeIds(profile, staffDirectory))
           : null
       const allowedIds = team ? ids.filter((id) => team.has(id)) : ids
       if (allowedIds.length === 1) {
@@ -767,6 +772,7 @@ function assigneeRbacOverride(
   profile: VietMyUserProfile,
   canReadGlobal: boolean,
   filters: LeadListServerFilters | undefined,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): QueryFilterConstraint | null {
   const ids = (filters?.assignedCounselorIn ?? []).filter(Boolean)
   if (ids.length !== 1) return null
@@ -775,7 +781,7 @@ function assigneeRbacOverride(
     return or(where('assignedTo', '==', uid), where('assignedCounselorId', '==', uid))
   }
   if (canOwnFieldStaffTeam(profile.role)) {
-    const team = teamLeadAssigneeScopeIds(profile)
+    const team = teamLeadAssigneeScopeIds(profile, staffDirectory)
     if (team.includes(uid)) {
       return or(where('assignedTo', '==', uid), where('assignedCounselorId', '==', uid))
     }
@@ -791,14 +797,15 @@ function resolveListRbacAndFilters(
   hoDLabels: string[],
   filters: LeadListServerFilters | undefined,
   canReadGlobal: boolean,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): { rbac: QueryFilterConstraint | null; extras: QueryFilterConstraint[] } {
-  const assigneeNarrow = assigneeRbacOverride(profile, canReadGlobal, filters)
-  const rbac = assigneeNarrow ?? rbacConstraint(profile, hoDLabels, canReadGlobal)
+  const assigneeNarrow = assigneeRbacOverride(profile, canReadGlobal, filters, staffDirectory)
+  const rbac = assigneeNarrow ?? rbacConstraint(profile, hoDLabels, canReadGlobal, staffDirectory)
   const filterInput =
     assigneeNarrow && filters?.assignedCounselorIn?.length
       ? { ...filters, assignedCounselorIn: undefined }
       : filters
-  return { rbac, extras: filterConstraints(filterInput, profile, canReadGlobal) }
+  return { rbac, extras: filterConstraints(filterInput, profile, canReadGlobal, staffDirectory) }
 }
 
 /**
@@ -825,9 +832,16 @@ function buildListDataQuery(
   orgId: string | undefined,
   canReadGlobal: boolean,
   orgFilter: 'auto' | 'strict' = 'auto',
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const { rbac, extras } = resolveListRbacAndFilters(profile, hoDLabels, filters, canReadGlobal)
+  const { rbac, extras } = resolveListRbacAndFilters(
+    profile,
+    hoDLabels,
+    filters,
+    canReadGlobal,
+    staffDirectory,
+  )
   const parts: QueryFilterConstraint[] = []
   if (orgId && !shouldOmitOrgServerFilter(profile, orgId, orgFilter)) {
     parts.push(orgIdEqualityConstraint(orgId))
@@ -845,9 +859,16 @@ function buildPriorityTagCountQuery(
   tag: PriorityTag,
   orgId: string | undefined,
   canReadGlobal: boolean,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const { rbac, extras } = resolveListRbacAndFilters(profile, hoDLabels, filters, canReadGlobal)
+  const { rbac, extras } = resolveListRbacAndFilters(
+    profile,
+    hoDLabels,
+    filters,
+    canReadGlobal,
+    staffDirectory,
+  )
   const parts: QueryFilterConstraint[] = []
   // Count luôn strict — tránh đếm lẫn trường khác khi Superadmin bỏ lọc list
   if (orgId) parts.push(orgIdEqualityConstraint(orgId))
@@ -871,10 +892,20 @@ async function getDocsListWithOrgFallback(
   orgId: string | undefined,
   canReadGlobal: boolean,
   withConstraints: (base: Query) => Query,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): Promise<QuerySnapshot<DocumentData>> {
   const allowLegacy = shouldOmitOrgServerFilter(profile, orgId, 'auto')
   const scopedQ = withConstraints(
-    buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'strict'),
+    buildListDataQuery(
+      firestore,
+      profile,
+      hoDLabels,
+      filters,
+      orgId,
+      canReadGlobal,
+      'strict',
+      staffDirectory,
+    ),
   )
 
   if (!allowLegacy) {
@@ -897,7 +928,16 @@ async function getDocsListWithOrgFallback(
   if (scopedSnap.docs.length > 0) return scopedSnap
 
   const legacyQ = withConstraints(
-    buildListDataQuery(firestore, profile, hoDLabels, filters, orgId, canReadGlobal, 'auto'),
+    buildListDataQuery(
+      firestore,
+      profile,
+      hoDLabels,
+      filters,
+      orgId,
+      canReadGlobal,
+      'auto',
+      staffDirectory,
+    ),
   )
   try {
     return await getDocs(legacyQ)
@@ -913,12 +953,13 @@ function applyRoleClientFilter(
   hoDQueryLabels: string[],
   canReadGlobal: boolean,
   orgId?: string,
+  staffDirectory: readonly VietMyUserProfile[] = [],
 ): Lead[] {
   const scoped = orgId ? rows.filter((l) => leadBelongsToOrg(l, orgId)) : rows
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
 
   if (canOwnFieldStaffTeam(profile.role) && !canReadGlobal) {
-    const team = new Set(teamLeadAssigneeScopeIds(profile))
+    const team = new Set(teamLeadAssigneeScopeIds(profile, staffDirectory))
     if (team.size) {
       return scoped.filter((l) => {
         const u = l.assignedTo ?? l.assignedCounselorId
@@ -1058,7 +1099,7 @@ export async function fetchLeadsInScopeForRescore(
   profile: VietMyUserProfile,
   hoDQueryLabels: string[],
   filters: LeadListServerFilters | undefined,
-  opts?: { maxLeads?: number; chunkSize?: number; orgId?: string; canReadGlobal?: boolean },
+  opts?: { maxLeads?: number; chunkSize?: number; orgId?: string; canReadGlobal?: boolean; staffDirectory?: readonly VietMyUserProfile[] },
 ): Promise<{ leads: Lead[]; truncated: boolean }> {
   const maxLeads = Math.min(100_000, Math.max(LEADS_PAGE_SIZE, opts?.maxLeads ?? LEADS_UI_FULL_SCOPE_MAX))
   const chunkSize = Math.min(500, Math.max(50, opts?.chunkSize ?? FULL_SCOPE_CHUNK_SIZE))
@@ -1093,7 +1134,14 @@ export async function fetchLeadsInScopeForRescore(
     }
   }
 
-  const leads = applyRoleClientFilter(acc, profile, hoDQueryLabels, canReadGlobal, opts?.orgId)
+  const leads = applyRoleClientFilter(
+    acc,
+    profile,
+    hoDQueryLabels,
+    canReadGlobal,
+    opts?.orgId,
+    opts?.staffDirectory ?? [],
+  )
   leads.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
   return { leads, truncated: hitCap }
 }
@@ -1114,6 +1162,7 @@ export async function collectMatchingLeadIdsInScope(
     chunkSize?: number
     orgId?: string
     canReadGlobal?: boolean
+    staffDirectory?: readonly VietMyUserProfile[]
     /** `docId` = quét hết collection theo id (khuyến nghị khi xóa theo chương trình). */
     orderMode?: 'updatedAt' | 'docId'
     onProgress?: (scanned: number, matched: number) => void
@@ -1156,7 +1205,14 @@ export async function collectMatchingLeadIdsInScope(
       const row = mapDoc(d.id, d.data() as Record<string, unknown>)
       if (row) mapped.push(row)
     }
-    const filtered = applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, opts?.orgId)
+    const filtered = applyRoleClientFilter(
+      mapped,
+      profile,
+      hoDQueryLabels,
+      canReadGlobal,
+      opts?.orgId,
+      opts?.staffDirectory ?? [],
+    )
     scanned += snap.docs.length
     for (const lead of filtered) {
       if (!match(lead)) continue
@@ -1183,6 +1239,7 @@ const EMPTY_HOD_LABELS: string[] = []
 
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile, can } = useAuth()
+  const { users: staffDirectory } = useCounselorDirectory()
   const { preferTeamScope: preferTeamScopeFromCtx } = useManagementViewScope()
   const preferTeamScope =
     typeof opts?.preferTeamScope === 'boolean' ? opts.preferTeamScope : preferTeamScopeFromCtx
@@ -1233,8 +1290,13 @@ export function useLeads(opts?: UseLeadsOptions) {
   }, [profile?.managedMajorIds, byKind.majors])
 
   /** Chỉ đổi khi quyền đọc list thực sự đổi — tránh refetch vì snapshot users/{uid} đổi identity. */
+  const teamAssigneeScopeKey = useMemo(() => {
+    if (!profile || !canOwnFieldStaffTeam(profile.role)) return ''
+    return teamLeadAssigneeScopeIds(profile, staffDirectory).join(',')
+  }, [profile, staffDirectory])
+
   const profileListKey = profile
-    ? `${profile.id}|${profile.role}|${(profile.managedMajorIds ?? []).join(',')}|${(profile.managedCounselorIds ?? []).join(',')}`
+    ? `${profile.id}|${profile.role}|${(profile.managedMajorIds ?? []).join(',')}|${teamAssigneeScopeKey}`
     : ''
 
   const hoDKey = hoDQueryLabels.join('\u0001')
@@ -1314,13 +1376,13 @@ export function useLeads(opts?: UseLeadsOptions) {
         effectiveOrgId,
         canReadGlobal,
         (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
-      )
+          staffDirectory)
       const rows: Lead[] = []
       snap.forEach((d) => {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) rows.push(row)
       })
-      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory)
       setScopeSourceOptions(collectDistinctSources(filtered))
     } catch (e) {
       console.error(e)
@@ -1341,13 +1403,13 @@ export function useLeads(opts?: UseLeadsOptions) {
         effectiveOrgId,
         canReadGlobal,
         (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
-      )
+          staffDirectory)
       const rows: Lead[] = []
       snap.forEach((d) => {
         const row = mapDoc(d.id, d.data() as Record<string, unknown>)
         if (row) rows.push(row)
       })
-      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+      const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory)
       setScopeProgramOptions(collectDistinctIntakePrograms(filtered))
     } catch (e) {
       console.error(e)
@@ -1462,7 +1524,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           effectiveOrgId,
           canReadGlobal,
           'strict',
-        )
+          staffDirectory)
         let total = (await getCountFromServer(strictBase)).data().count
         // VietMy + hồ sơ cũ thiếu orgId: đếm scoped = 0 dù data còn — thử đếm không lọc org.
         if (
@@ -1478,7 +1540,7 @@ export function useLeads(opts?: UseLeadsOptions) {
               effectiveOrgId,
               canReadGlobal,
               'auto',
-            )
+          staffDirectory)
             total = (await getCountFromServer(legacyBase)).data().count
           } catch (legacyErr) {
             console.warn('[useLeads] legacy count failed', legacyErr)
@@ -1505,7 +1567,8 @@ export function useLeads(opts?: UseLeadsOptions) {
         const distFilters = serverFiltersForTagDistribution(serverFilters)
         const tagEntries = await Promise.all(
           TAG_KEYS.map(async (t) => {
-            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t, effectiveOrgId, canReadGlobal)
+            const qTag = buildPriorityTagCountQuery(firestore, profile, hoDQueryLabels, distFilters, t, effectiveOrgId, canReadGlobal,
+          staffDirectory)
             const n = (await getCountFromServer(qTag)).data().count
             return [t, n] as const
           }),
@@ -1534,14 +1597,14 @@ export function useLeads(opts?: UseLeadsOptions) {
           effectiveOrgId,
           canReadGlobal,
           (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
-        )
+          staffDirectory)
         if (cancelled) return
         const rows: Lead[] = []
         snap.forEach((d) => {
           const row = mapDoc(d.id, d.data() as Record<string, unknown>)
           if (row) rows.push(row)
         })
-        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory)
         setScopeSourceOptions(collectDistinctSources(filtered))
       } catch (e) {
         console.error(e)
@@ -1560,14 +1623,14 @@ export function useLeads(opts?: UseLeadsOptions) {
           effectiveOrgId,
           canReadGlobal,
           (base) => query(base, orderBy('updatedAt', 'desc'), limit(SOURCE_CATALOG_BATCH)),
-        )
+          staffDirectory)
         if (cancelled) return
         const rows: Lead[] = []
         snap.forEach((d) => {
           const row = mapDoc(d.id, d.data() as Record<string, unknown>)
           if (row) rows.push(row)
         })
-        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId)
+        const filtered = applyRoleClientFilter(rows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory)
         setScopeProgramOptions(collectDistinctIntakePrograms(filtered))
       } catch (e) {
         console.error(e)
@@ -1613,7 +1676,7 @@ export function useLeads(opts?: UseLeadsOptions) {
               after === null
                 ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
                 : query(base, orderBy('updatedAt', 'desc'), startAfter(after), limit(LEADS_PAGE_SIZE)),
-          )
+          staffDirectory)
           if (cancelled) return
           const mapped: Lead[] = []
           snap.forEach((d) => {
@@ -1622,7 +1685,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           })
           mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
           if (applyLeads) {
-            setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
+            setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory))
           }
           snaps[pageNum - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
           return
@@ -1646,7 +1709,7 @@ export function useLeads(opts?: UseLeadsOptions) {
               cursor === null
                 ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
                 : query(base, orderBy('updatedAt', 'desc'), startAfter(cursor), limit(LEADS_PAGE_SIZE)),
-          )
+          staffDirectory)
           if (cancelled) return
           if (!snap.docs.length) {
             exhausted = true
@@ -1665,6 +1728,7 @@ export function useLeads(opts?: UseLeadsOptions) {
             hoDQueryLabels,
             canReadGlobal,
             effectiveOrgId,
+            staffDirectory,
           )
           for (const row of roleFiltered) {
             if (!pageKeep(row)) continue
@@ -1711,7 +1775,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           effectiveOrgId,
           canReadGlobal,
           (base) => query(base, orderBy('updatedAt', 'desc'), limit(bulkLimit)),
-        )
+          staffDirectory)
         if (cancelled) return
         const docs = snap.docs
         for (let p = 1; p <= pg; p++) {
@@ -1728,7 +1792,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           if (row) pageRows.push(row)
         })
         pageRows.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
+        setLeads(applyRoleClientFilter(pageRows, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory))
       } else {
         for (let p = 1; p < pg; p++) {
           if (snaps[p - 1] !== undefined && snaps[p - 1] !== null) continue
@@ -1744,7 +1808,7 @@ export function useLeads(opts?: UseLeadsOptions) {
               prevEnd === null
                 ? query(base, orderBy('updatedAt', 'desc'), limit(LEADS_PAGE_SIZE))
                 : query(base, orderBy('updatedAt', 'desc'), startAfter(prevEnd), limit(LEADS_PAGE_SIZE)),
-          )
+          staffDirectory)
           if (cancelled) return
           snaps[p - 1] = snap.docs.length ? snap.docs[snap.docs.length - 1]! : null
           if (!snap.docs.length) break
@@ -1785,7 +1849,7 @@ export function useLeads(opts?: UseLeadsOptions) {
             effectiveOrgId,
             canReadGlobal,
             (base) => query(base, where(field, '==', value), limit(40)),
-          )
+          staffDirectory)
           if (!cancelled) ingestSnap(snap)
           return
         } catch (e) {
@@ -1826,7 +1890,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           effectiveOrgId,
           canReadGlobal,
           (base) => query(base, orderBy('updatedAt', 'desc'), limit(scanLimit)),
-        )
+          staffDirectory)
         if (cancelled) return
         ingestSnap(snap)
         setSearchScanTruncated(snap.docs.length >= scanLimit)
@@ -1840,6 +1904,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         hoDQueryLabels,
         canReadGlobal,
         effectiveOrgId,
+        staffDirectory,
       )
       if (classified.clientNeedle) {
         mapped = mapped.filter((l) =>
@@ -1880,7 +1945,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         effectiveOrgId,
         canReadGlobal,
         (base) => query(base, orderBy('updatedAt', 'desc'), limit(batchLimit)),
-      )
+          staffDirectory)
       if (cancelled) return
       const mapped: Lead[] = []
       snap.forEach((d) => {
@@ -1888,7 +1953,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         if (row) mapped.push(row)
       })
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
-      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId))
+      setLeads(applyRoleClientFilter(mapped, profile, hoDQueryLabels, canReadGlobal, effectiveOrgId, staffDirectory))
       setTotalPages(1)
     }
 
@@ -1918,7 +1983,7 @@ export function useLeads(opts?: UseLeadsOptions) {
               ? query(base, orderBy('updatedAt', 'desc'), limit(fullScopeChunkSize))
               : query(base, orderBy('updatedAt', 'desc'), startAfter(lastSnap), limit(fullScopeChunkSize))
           },
-        )
+          staffDirectory)
         if (cancelled) return
         if (!snap.docs.length) break
         scanned += snap.docs.length
@@ -1933,6 +1998,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           hoDQueryLabels,
           canReadGlobal,
           effectiveOrgId,
+          staffDirectory,
         )
         for (const row of roleFiltered) {
           if (keepMatch && !keepMatch(row)) continue
@@ -2138,7 +2204,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         effectiveOrgId,
         canReadGlobal,
         'strict',
-      )
+          staffDirectory)
       const agg = await getCountFromServer(cq)
       setTotalLeadCount(agg.data().count)
       setTotalLeadCountError(null)

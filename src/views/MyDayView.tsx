@@ -13,6 +13,7 @@ import { fmtKpiNum, todayDateKey } from '../utils/kpiDisplay'
 import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
+import { formatStaffDisplayName } from '../utils/counselorDisplay'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { isFieldStaffRole } from '../auth/roleUtils'
 import { canSchoolWideReportScope } from '../utils/reportScope'
@@ -66,7 +67,7 @@ export function MyDayView() {
     return scoped
       .map((u) => ({
         id: u.id,
-        name: (u.displayName || u.email || u.id).trim(),
+        name: formatStaffDisplayName(u),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
   }, [users, allowedCounselorIds])
@@ -320,7 +321,7 @@ export function MyDayView() {
                 </thead>
                 <tbody>
                   {reportSummaries.map((r) => {
-                    const name = counselorOptions.find((o) => o.id === r.counselorUid)?.name || r.counselorUid
+                    const name = counselorOptions.find((o) => o.id === r.counselorUid)?.name || 'Chưa đặt tên'
                     return (
                       <tr key={r.counselorUid} className="border-t border-slate-100">
                         <td className="px-3 py-2">{name}</td>

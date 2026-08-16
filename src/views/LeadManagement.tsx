@@ -96,9 +96,10 @@ import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import {
   formatLeadCounselorNotePreview,
-  formatLeadLatestInteractionLine,
+  formatLeadLatestInteractionCompact,
   leadListActivityPatch,
 } from '../utils/leadListActivity'
+import { formatLeadPaidToDate } from '../utils/leadPaidDisplay'
 import { formatLeadLastCallAiLine } from '../utils/leadCallAiDisplay'
 import {
   formatLeadLastCallLine,
@@ -264,7 +265,7 @@ function writeLeadsUiSessionFlag(key: string, value: boolean) {
     /* ignore */
   }
 }
-import { formatStaffDirectoryLabel, formatStaffDisplayName } from '../utils/counselorDisplay'
+import { formatStaffDirectoryLabel, formatStaffDisplayName, looksLikeUserIdCode, resolveCounselorDisplayName } from '../utils/counselorDisplay'
 import { CreateLeadModal } from '../components/CreateLeadModal'
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
@@ -391,9 +392,10 @@ const ML_WIN_COLUMN_HINT =
   'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
 
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
-  const uid = leadAssignedUid(l)
-  if (!uid) return '—'
-  return names.get(uid) ?? `${uid.slice(0, 8)}…`
+  return resolveCounselorDisplayName(leadAssignedUid(l), {
+    directoryNames: names,
+    leadUploaderName: l.uploaderName,
+  })
 }
 
 function effectiveLeadAssigneeUid(l: Lead): string {
@@ -407,7 +409,7 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
-const LEAD_TABLE_COL_COUNT = 13
+const LEAD_TABLE_COL_COUNT = 11
 
 /** Ngày nhập hồ sơ — ưu tiên uploadedAt (cổng / import), fallback createdAt. */
 function leadRegisteredAtMs(l: Lead): number {
@@ -424,6 +426,18 @@ function formatLeadRegisteredAt(l: Lead): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  })
+}
+
+/** Dòng 1 cột Ngày + tình trạng — chỉ ngày cho gọn. */
+function formatLeadRegisteredAtShort(l: Lead): string {
+  const ms = leadRegisteredAtMs(l)
+  if (!ms) return '—'
+  return new Date(ms).toLocaleDateString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
   })
 }
 
@@ -586,7 +600,7 @@ export function LeadManagement() {
     return m
   }, [directoryUsers])
 
-  const counselorDisplayNameById = useMemo(() => {
+  const counselorNamesFromDirectory = useMemo(() => {
     const m = new Map<string, string>()
     for (const c of directoryUsers) {
       m.set(c.id, formatStaffDisplayName(c))
@@ -788,6 +802,19 @@ export function LeadManagement() {
     includeScopeProgramOptions: programCatalogRequested,
     preferTeamScope: workListPreferTeam ? true : undefined,
   })
+
+  const counselorDisplayNameById = useMemo(() => {
+    const m = new Map(counselorNamesFromDirectory)
+    for (const l of leads) {
+      const uid = leadAssignedUid(l)
+      if (!uid) continue
+      const cur = m.get(uid)?.trim()
+      if (cur && cur !== 'Chưa đặt tên') continue
+      const up = (l.uploaderName || '').trim()
+      if (up && !looksLikeUserIdCode(up)) m.set(uid, up)
+    }
+    return m
+  }, [counselorNamesFromDirectory, leads])
 
   const scoringMasterBuckets = useMemo(
     () => ({
@@ -2018,7 +2045,8 @@ export function LeadManagement() {
       const al =
         counselorDisplayNameById.get(assigneeFilter) ??
         reassignPickList.find((c) => c.id === assigneeFilter)?.displayName ??
-        assigneeFilter.slice(0, 8)
+        reassignPickList.find((c) => c.id === assigneeFilter)?.email ??
+        'Nhân viên'
       out.push({
         id: 'assign',
         label: `Nhân viên: ${al}`,
@@ -2568,11 +2596,13 @@ export function LeadManagement() {
           const item = itemById.get(id)
           const uid = item?.counselorUid ?? plan.assignments.get(id) ?? ''
           const targetLabel =
-            bulkReassignTargets.find((c) => c.id === uid)?.displayName?.trim() ||
-            bulkReassignTargets.find((c) => c.id === uid)?.email ||
-            reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
-            reassignPickList.find((c) => c.id === uid)?.email ||
-            uid
+            (() => {
+              const fromBulk = bulkReassignTargets.find((c) => c.id === uid)
+              if (fromBulk) return formatStaffDisplayName(fromBulk)
+              const fromPick = reassignPickList.find((c) => c.id === uid)
+              if (fromPick) return formatStaffDisplayName(fromPick)
+              return resolveCounselorDisplayName(uid, { directoryNames: counselorDisplayNameById })
+            })()
           const before = item?.prevOwner ?? '—'
           await commitAuditLog(db, {
             leadId: id,
@@ -2613,11 +2643,13 @@ export function LeadManagement() {
               const item = itemById.get(id)
               const uid = item?.counselorUid ?? ''
               const targetLabel =
-                bulkReassignTargets.find((c) => c.id === uid)?.displayName?.trim() ||
-                bulkReassignTargets.find((c) => c.id === uid)?.email ||
-                reassignPickList.find((c) => c.id === uid)?.displayName?.trim() ||
-                reassignPickList.find((c) => c.id === uid)?.email ||
-                uid
+                (() => {
+                  const fromBulk = bulkReassignTargets.find((c) => c.id === uid)
+                  if (fromBulk) return formatStaffDisplayName(fromBulk)
+                  const fromPick = reassignPickList.find((c) => c.id === uid)
+                  if (fromPick) return formatStaffDisplayName(fromPick)
+                  return resolveCounselorDisplayName(uid, { directoryNames: counselorDisplayNameById })
+                })()
               await commitAuditLog(db, {
                 leadId: id,
                 actionType: 'REASSIGNMENT',
@@ -4433,7 +4465,7 @@ export function LeadManagement() {
               : ''
           }`}
         >
-          <table className="w-full min-w-[1080px] border-collapse text-left text-[13px] leading-snug xl:min-w-0">
+          <table className="w-full min-w-[960px] border-collapse text-left text-[13px] leading-snug xl:min-w-0">
             <thead className="sticky top-0 z-10 border-b border-slate-200/90 bg-white/95 backdrop-blur-xl">
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                 <th className="sticky left-0 z-[3] w-9 bg-white/95 px-0.5 py-2 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]">
@@ -4450,7 +4482,7 @@ export function LeadManagement() {
                     </label>
                   ) : null}
                 </th>
-                <th className="sticky left-9 z-[3] w-[12%] min-w-[7.5rem] bg-white/95 px-2 py-2 font-semibold shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)]">
+                <th className="sticky left-9 z-[3] w-[14%] min-w-[8rem] bg-white/95 px-2 py-2 font-semibold shadow-[2px_0_6px_-2px_rgba(15,23,42,0.08)]">
                   <button
                     type="button"
                     onClick={() => toggleSort('fullName')}
@@ -4461,65 +4493,52 @@ export function LeadManagement() {
                   </button>
                 </th>
                 <th
-                  className="w-[9%] min-w-[6.5rem] px-1.5 py-2 font-semibold"
-                  title="Ngày hồ sơ vào hệ thống (cổng đăng ký / nhập liệu)"
+                  className="w-[11%] min-w-[7rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Dòng 1: ngày vào hệ thống · Dòng 2: tình trạng tư vấn / thu phí"
                 >
                   <button
                     type="button"
                     onClick={() => toggleSort('registeredAt')}
-                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
+                    className="flex items-center gap-0.5 text-left transition hover:text-amber-700"
                   >
-                    Ngày đăng ký
+                    Ngày · Tình trạng
                     {sortKey === 'registeredAt' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
                   </button>
                 </th>
                 <th
-                  className="w-[9%] max-w-[8rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Tình trạng tư vấn: Mới, Đăng ký XT, Đã cọc, Nhập học…"
+                  className="w-[12%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Dòng 1: tỉnh · Dòng 2: ghi chú TVV"
                 >
-                  Tình trạng
+                  Thông tin
                 </th>
                 <th
-                  className="w-[10%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Đợt nhập hoặc kênh nguồn"
+                  className="w-[12%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Dòng 1: hệ đào tạo · Dòng 2: nguồn / đợt nhập"
                 >
-                  Nguồn
-                </th>
-                <th className="w-[9%] max-w-[7.5rem] px-1.5 py-2 font-semibold">
                   <button
                     type="button"
                     onClick={() => toggleSort('educationLevel')}
-                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
+                    className="flex items-center gap-0.5 text-left transition hover:text-amber-700"
                   >
-                    Hệ ĐT
+                    Hệ · Nguồn
                     {sortKey === 'educationLevel' ? (
                       <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
                     ) : null}
                   </button>
                 </th>
-                <th className="w-[7%] max-w-[5.5rem] px-1.5 py-2 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('province')}
-                    className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
-                  >
-                    Tỉnh
-                    {sortKey === 'province' ? <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
-                  </button>
+                <th
+                  className="w-[9%] min-w-[5.5rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Tổng tiền đã ghi nhận nộp đến hôm nay (mọi khoản)"
+                >
+                  Đã nộp
                 </th>
                 <th
-                  className="w-[12%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Ghi chú TVV trên hồ sơ — cùng nội dung ô «Ghi chú TVV» khi mở chi tiết"
+                  className="w-[12%] max-w-[10rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Tương tác gần nhất — đưa chuột để xem đủ nội dung"
                 >
-                  Ghi chú
-                </th>
-                <th
-                  className="w-[16%] max-w-[14rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Tương tác gần nhất: loại + nội dung ghi chú / phản hồi đầy đủ"
-                >
-                  Tương tác gần nhất
+                  Tương tác
                 </th>
                 <th className="w-[5%] px-1.5 py-2 font-semibold">
                   <button
@@ -4620,7 +4639,8 @@ export function LeadManagement() {
                 const displayTag = effectiveLeadTag(l)
                 const ml = resolveMlWinDisplay(l, infoScoreRuntime)
                 const notePreview = formatLeadCounselorNotePreview(l, 40)
-                const latestInteraction = formatLeadLatestInteractionLine(l)
+                const latestInteraction = formatLeadLatestInteractionCompact(l, 36)
+                const paid = formatLeadPaidToDate(l.finance)
                 const callAiLine = formatLeadLastCallAiLine(l)
                 const callQueueLine = formatLeadLastCallLine(l)
                 return (
@@ -4683,22 +4703,20 @@ export function LeadManagement() {
                     ) : null}
                   </td>
                   <td
-                    className="whitespace-nowrap px-1.5 py-1.5 tabular-nums text-slate-700"
-                    title={formatLeadRegisteredAt(l)}
-                  >
-                    {formatLeadRegisteredAt(l)}
-                  </td>
-                  <td
                     className="px-1.5 py-1.5"
                     title={[
+                      formatLeadRegisteredAt(l),
                       LEAD_COUNSELOR_STATUS_LABELS[l.status],
                       l.finance?.enrollmentStatus ? `Thu phí: ${leadTinhTrangLabel(l)}` : '',
                     ]
                       .filter(Boolean)
                       .join(' · ')}
                   >
+                    <p className="whitespace-nowrap tabular-nums text-[12px] text-slate-700">
+                      {formatLeadRegisteredAtShort(l)}
+                    </p>
                     <span
-                      className={`inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[11px] font-semibold ${leadCounselorStatusBadgeClass(l.status)}`}
+                      className={`mt-0.5 inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[11px] font-semibold ${leadCounselorStatusBadgeClass(l.status)}`}
                     >
                       {LEAD_COUNSELOR_STATUS_LABELS[l.status]}
                     </span>
@@ -4708,37 +4726,52 @@ export function LeadManagement() {
                       </p>
                     ) : null}
                   </td>
+                  <td className="px-1.5 py-1.5" title={[l.province, notePreview.full].filter(Boolean).join(' · ') || undefined}>
+                    <p className="truncate text-[12px] font-medium text-slate-800">{l.province || '—'}</p>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">{notePreview.text}</p>
+                  </td>
                   <td
-                    className="truncate px-1.5 py-1.5 text-slate-700"
-                    title={leadNguonDisplay(l) || undefined}
+                    className="px-1.5 py-1.5"
+                    title={[l.educationLevel, leadNguonDisplay(l)].filter(Boolean).join(' · ') || undefined}
                   >
+                    <p className="truncate text-[12px] font-medium text-slate-800">{l.educationLevel || '—'}</p>
                     {leadNguonDisplay(l) ? (
-                      <span className="rounded bg-indigo-50 px-1 py-0.5 text-[12px] font-medium text-indigo-900">
-                        {formatDescPreview(leadNguonDisplay(l), 28)}
-                      </span>
+                      <p className="mt-0.5 truncate text-[11px] text-indigo-800">
+                        {formatDescPreview(leadNguonDisplay(l), 32)}
+                      </p>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <p className="mt-0.5 text-[11px] text-slate-400">Chưa gắn nguồn</p>
                     )}
                   </td>
-                  <td className="truncate px-1.5 py-1.5 text-slate-600" title={l.educationLevel || undefined}>
-                    {l.educationLevel || '—'}
-                  </td>
-                  <td className="truncate px-1.5 py-1.5 text-slate-600" title={l.province || undefined}>
-                    {l.province || '—'}
-                  </td>
-                  <td
-                    className="truncate px-1.5 py-1.5 text-slate-600"
-                    title={notePreview.full || undefined}
-                  >
-                    {notePreview.text}
-                  </td>
-                  <td
-                    className="px-1.5 py-1.5 text-slate-600"
-                    title={latestInteraction !== '—' ? latestInteraction : undefined}
-                  >
-                    <span className="line-clamp-3 whitespace-pre-wrap break-words text-[12px] leading-snug">
-                      {latestInteraction}
+                  <td className="px-1.5 py-1.5 tabular-nums" title={paid.title}>
+                    <span
+                      className={
+                        paid.recordedVnd > 0
+                          ? 'font-semibold text-emerald-800'
+                          : 'text-slate-400'
+                      }
+                    >
+                      {paid.label}
                     </span>
+                    {paid.approvedVnd > 0 && paid.approvedVnd !== paid.recordedVnd ? (
+                      <p className="mt-0.5 text-[10px] text-slate-500">
+                        Duyệt {paid.approvedVnd.toLocaleString('vi-VN')}đ
+                      </p>
+                    ) : null}
+                  </td>
+                  <td
+                    className="relative px-1.5 py-1.5 text-slate-600"
+                    title={latestInteraction.full || undefined}
+                  >
+                    <span className="line-clamp-2 text-[12px] leading-snug">{latestInteraction.short}</span>
+                    {latestInteraction.full ? (
+                      <span
+                        role="tooltip"
+                        className="pointer-events-none absolute left-full top-0 z-30 ml-1 hidden w-max max-w-[min(20rem,55vw)] rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] leading-snug text-slate-800 shadow-lg group-hover:block"
+                      >
+                        {latestInteraction.full}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-1.5 py-1.5 font-medium tabular-nums text-[var(--color-primary)]">
                     {displayScore}
@@ -5825,8 +5858,10 @@ function LeadCrmQuickBlock({
 
   const labelForUid = (uid: string | null) => {
     if (!uid) return '—'
-    const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-    return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
+    return resolveCounselorDisplayName(uid, {
+      directoryUsers: [...pickListUsers, ...counselorUsers],
+      leadUploaderName: lead.uploaderName,
+    })
   }
 
   if (peerMode && !mine) return null
@@ -6468,12 +6503,12 @@ function LeadDetailPanel({
   const canRunAi = canRunLlmAnalysis
 
   const labelUid = useCallback(
-    (uid: string) => {
-      if (!uid) return '—'
-      const u = pickListUsers.find((c) => c.id === uid) ?? counselorUsers.find((c) => c.id === uid)
-      return u ? formatStaffDisplayName(u) : `${uid.slice(0, 8)}…`
-    },
-    [pickListUsers, counselorUsers],
+    (uid: string) =>
+      resolveCounselorDisplayName(uid, {
+        directoryUsers: [...pickListUsers, ...counselorUsers],
+        leadUploaderName: lead.uploaderName,
+      }),
+    [pickListUsers, counselorUsers, lead.uploaderName],
   )
 
   const saveFinanceProfile = async (): Promise<{ ok: boolean; message: string }> => {

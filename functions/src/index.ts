@@ -2055,6 +2055,9 @@ async function assertStaffManagementPermission(
   if (normalizeStaffRole(target.role) === 'super_admin' && normalizeStaffRole(caller.role) !== 'super_admin') {
     throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới quản lý tài khoản Siêu quản trị khác.')
   }
+  if (normalizeStaffRole(target.role) === 'accountant' && normalizeStaffRole(caller.role) !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới quản lý tài khoản kế toán.')
+  }
 
   const callerAdmin = isAdminLikeRole(caller.role)
   const callerTeamLead = caller.role === 'team_lead'
@@ -2063,8 +2066,8 @@ async function assertStaffManagementPermission(
     if (target.role !== 'accountant') {
       throw new HttpsError('permission-denied', 'Chỉ quản lý tài khoản kế toán.')
     }
-    if (!callerAdmin && caller.role !== 'accountant') {
-      throw new HttpsError('permission-denied', 'Không có quyền quản lý kế toán viên.')
+    if (normalizeStaffRole(caller.role) !== 'super_admin') {
+      throw new HttpsError('permission-denied', 'Chỉ Siêu quản trị mới quản lý tài khoản kế toán.')
     }
     return caller
   }

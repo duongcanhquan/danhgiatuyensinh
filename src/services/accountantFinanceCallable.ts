@@ -11,17 +11,13 @@ function fns() {
   return getFunctions(app, 'asia-southeast1')
 }
 
-/** Chỉ fallback client khi CF chưa deploy / mạng — không nuốt lỗi quyền hay validate. */
+/** Chỉ fallback client khi CF chưa deploy / mạng tạm — không nuốt lỗi quyền hay validate. */
 function isCfMissingOrTransient(e: unknown): boolean {
   const code = String((e as { code?: string })?.code ?? '')
   return (
     code === 'functions/not-found' ||
     code === 'functions/unavailable' ||
-    code === 'functions/deadline-exceeded' ||
-    code === 'functions/internal' ||
-    // Một số môi trường chưa gắn Functions → app null đã return; còn lại lỗi mạng generic
-    code === '' ||
-    code === 'undefined'
+    code === 'functions/deadline-exceeded'
   )
 }
 

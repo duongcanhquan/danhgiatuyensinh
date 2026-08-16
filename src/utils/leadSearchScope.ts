@@ -7,6 +7,7 @@ import {
 } from '../auth/roleUtils'
 import { isSystemLeadCode } from './systemLeadCode'
 import { normalizePhoneKey } from './leadIdentity'
+import { counselorIdsInManagerScope } from './teamScope'
 
 /** Admin / siêu QT — quét rộng trong trường (không phá RBAC). */
 export const MAX_LEAD_SEARCH_SCAN_ADMIN = 2000
@@ -27,9 +28,13 @@ export type LeadSearchQueryClass = {
   clientNeedle: string
 }
 
-/** UID trong phạm vi gán hồ sơ của trưởng nhóm (roster + chính mình). */
-export function teamLeadAssigneeScopeIds(profile: VietMyUserProfile): string[] {
-  const ids = (profile.managedCounselorIds ?? []).map(String).filter(Boolean)
+/** UID trong phạm vi gán hồ sơ của trưởng nhóm (roster / fallback khoa·phòng + chính mình). */
+export function teamLeadAssigneeScopeIds(
+  profile: VietMyUserProfile,
+  directory: readonly VietMyUserProfile[] = [],
+): string[] {
+  const team = counselorIdsInManagerScope(profile, directory)
+  const ids = [...team]
   if (profile.id) ids.unshift(profile.id)
   return [...new Set(ids)]
 }

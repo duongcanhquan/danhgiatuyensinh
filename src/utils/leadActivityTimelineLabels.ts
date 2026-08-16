@@ -47,7 +47,7 @@ export function timelineActorName(opts: {
     const labeled = opts.labelUid(uid).trim()
     if (labeled && labeled !== '—') return labeled
   }
-  if (uid) return `${uid.slice(0, 8)}…`
+  if (uid) return 'Chưa đặt tên'
   return 'Chưa rõ người'
 }
 

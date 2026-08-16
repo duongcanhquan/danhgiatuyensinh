@@ -11,6 +11,8 @@ import {
 } from 'react'
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -19,7 +21,7 @@ import {
   type DocumentData,
   type QuerySnapshot,
 } from 'firebase/firestore'
-import { normalizeUserRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, normalizeUserRole } from '../auth/roleUtils'
 import type { VietMyUserProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
@@ -125,7 +127,10 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     return profile?.orgId?.trim() || DEFAULT_ORG_ID
   }, [profile?.role, profile?.orgId, effectiveOrgId])
 
-  const isPlatform = isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)
+  const rosterIdsKey = useMemo(() => {
+    if (!profile || !canOwnFieldStaffTeam(profile.role)) return ''
+    return [...new Set((profile.managedCounselorIds ?? []).map(String).filter(Boolean))].sort().join(',')
+  }, [profile])
 
   const counselors = useMemo(
     () => users.filter((u) => u.role === 'counselor' && u.isActive),
@@ -153,19 +158,24 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
     isFirstSnapRef.current = true
 
     /**
-     * Luôn live theo orgId (rẻ, đúng multi-tenant).
-     * Superadmin + VietMy legacy: bổ sung một lần (và định kỳ) quét users thiếu orgId —
-     * không giữ onSnapshot toàn collection (mỗi user write = broadcast lớn).
+     * Live theo orgId.
+     * Superadmin + VietMy: bổ sung users thiếu orgId (full scan — chỉ nền tảng mới đọc được mọi doc).
+     * Trưởng nhóm / quản lý trường: hydrate từng UID trong managedCounselorIds nếu chưa có trong danh bạ.
      */
+    const isPlatform = isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null)
     const needLegacyFill = isPlatform && shouldUseLegacyMissingOrgIdRead(scopeOrgId)
     const qy = query(collection(firestore, FS_COLLECTIONS.users), where('orgId', '==', scopeOrgId))
     const scopedByIdRef = { current: new Map<string, VietMyUserProfile>() }
     const legacyByIdRef = { current: new Map<string, VietMyUserProfile>() }
+    const rosterByIdRef = { current: new Map<string, VietMyUserProfile>() }
     let cancelled = false
     let legacyReady = !needLegacyFill
     let scopedReady = false
     let legacyTimer: ReturnType<typeof setInterval> | null = null
     let legacyInFlight = false
+    let rosterInFlight = false
+
+    const rosterUidList = rosterIdsKey ? rosterIdsKey.split(',').filter(Boolean) : []
 
     const publishMerged = (opts?: { fromLegacyError?: string | null }) => {
       if (cancelled) return
@@ -174,9 +184,15 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       for (const [id, row] of legacyByIdRef.current) {
         if (!merged.has(id)) merged.set(id, row)
       }
+      for (const [id, row] of rosterByIdRef.current) {
+        if (!merged.has(id)) merged.set(id, row)
+      }
       const next = [...merged.values()]
       const sig = next
-        .map((u) => `${u.id}:${u.updatedAt?.seconds ?? 0}:${u.isActive ? 1 : 0}:${u.role}`)
+        .map(
+          (u) =>
+            `${u.id}:${u.updatedAt?.seconds ?? 0}:${u.isActive ? 1 : 0}:${u.role}:${(u.managedCounselorIds ?? []).join(',')}`,
+        )
         .sort()
         .join('|')
       const ready = scopedReady && legacyReady
@@ -205,6 +221,42 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       scopedByIdRef.current = next
       scopedReady = true
       publishMerged()
+      void hydrateMissingRosterMembers()
+    }
+
+    const hydrateMissingRosterMembers = async () => {
+      if (!rosterUidList.length || rosterInFlight || cancelled) return
+      const missing = rosterUidList.filter(
+        (id) =>
+          !scopedByIdRef.current.has(id) &&
+          !legacyByIdRef.current.has(id) &&
+          !rosterByIdRef.current.has(id),
+      )
+      if (!missing.length) return
+      rosterInFlight = true
+      try {
+        const next = new Map(rosterByIdRef.current)
+        await Promise.all(
+          missing.map(async (uid) => {
+            try {
+              const snap = await getDoc(doc(firestore, FS_COLLECTIONS.users, uid))
+              if (!snap.exists() || cancelled) return
+              const raw = snap.data() as Record<string, unknown>
+              // Roster TL: vẫn hydrate nếu cùng trường (hoặc legacy thiếu orgId trên VietMy).
+              if (!userDocBelongsToOrg(raw, scopeOrgId)) return
+              const row = mapUser(snap.id, raw)
+              if (row) next.set(row.id, row)
+            } catch (e) {
+              console.warn('[CounselorDirectory] roster hydrate', uid, e)
+            }
+          }),
+        )
+        if (cancelled) return
+        rosterByIdRef.current = next
+        publishMerged()
+      } finally {
+        rosterInFlight = false
+      }
     }
 
     const fillLegacyMissingOrg = async () => {
@@ -225,6 +277,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
         legacyByIdRef.current = next
         legacyReady = true
         publishMerged()
+        void hydrateMissingRosterMembers()
       } catch (e) {
         console.error(e)
         if (cancelled) return
@@ -255,6 +308,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
             isFirstSnapRef.current = false
             flush()
             if (needLegacyFill) void fillLegacyMissingOrg()
+            else void hydrateMissingRosterMembers()
             return
           }
           debounceTimerRef.current = setTimeout(flush, DIRECTORY_SNAPSHOT_DEBOUNCE_MS)
@@ -284,7 +338,7 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
       if (legacyTimer) clearInterval(legacyTimer)
       pendingSnapRef.current = null
     }
-  }, [configured, scopeOrgId, isPlatform])
+  }, [configured, scopeOrgId, rosterIdsKey, profile?.role, profile?.orgId])
 
   const value = useMemo(
     (): CounselorDirectoryState => ({ users, counselors, fieldStaff, loading, error }),

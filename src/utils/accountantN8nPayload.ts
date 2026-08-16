@@ -4,6 +4,7 @@ import { FS_COLLECTIONS } from '../types'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
 import { resolveStudentDisplayCode } from './studentDisplayCode'
 import { buildGoogleChatPayload, chatBold } from './googleChatFinanceMessage'
+import { normalizePaymentApprovalStatus } from './paymentApprovalStatus'
 
 export function formatVnd(n: number): string {
   if (!n || Number.isNaN(n)) return '0 đ'
@@ -30,14 +31,14 @@ export function sumRecordedPaymentsVnd(finance: LeadFinanceRecord | undefined): 
   return s
 }
 
-/** Tổng tiền kế toán đã duyệt «ĐỒNG Ý». */
+/** Tổng tiền kế toán đã duyệt «ĐỒNG Ý» (nhận cả biến thể Sheet: Dong y / OK / Đã duyệt…). */
 export function sumApprovedPaymentsVnd(finance: LeadFinanceRecord | undefined): number {
   let s = 0
   for (const key of SLOT_KEYS) {
     const line = finance?.payments?.[key]
-    if (line?.approvalStatus === 'ĐỒNG Ý') {
-      s += line.amountVnd ?? 0
-    }
+    if (!line) continue
+    if (normalizePaymentApprovalStatus(line.approvalStatus) !== 'ĐỒNG Ý') continue
+    s += line.amountVnd ?? 0
   }
   return s
 }

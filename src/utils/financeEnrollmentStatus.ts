@@ -5,6 +5,7 @@ import {
   type FinanceDepositThresholds,
   resolveDepositThresholdVnd,
 } from './financeThresholds'
+import { normalizePaymentApprovalStatus } from './paymentApprovalStatus'
 
 const PAYMENT_KEYS: LeadPaymentSlotKey[] = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
@@ -13,7 +14,9 @@ function approvedTotal(finance: LeadFinanceRecord | undefined): number {
   let sum = 0
   for (const key of PAYMENT_KEYS) {
     const line = pay[key]
-    if (line?.approvalStatus === 'ĐỒNG Ý' && line.amountVnd) sum += line.amountVnd
+    if (normalizePaymentApprovalStatus(line?.approvalStatus) === 'ĐỒNG Ý' && line?.amountVnd) {
+      sum += line.amountVnd
+    }
   }
   return sum
 }
