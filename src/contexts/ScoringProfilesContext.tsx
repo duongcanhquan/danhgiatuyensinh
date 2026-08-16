@@ -6,6 +6,7 @@ import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { mapScoringProfileDoc } from '../utils/scoringProfileFirestore'
 import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
+import { useAuth } from '../hooks/useAuth'
 import { useOrg } from './OrgProvider'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { leadBelongsToOrg } from '../tenancy/orgQuery'
@@ -21,6 +22,7 @@ type ScoringProfilesState = {
 const ScoringProfilesContext = createContext<ScoringProfilesState | null>(null)
 
 export function ScoringProfilesProvider({ children }: { children: ReactNode }) {
+  const { profile } = useAuth()
   const { effectiveOrgId, isPlatformSuperAdmin } = useOrg()
   const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [profiles, setProfiles] = useState<ScoringProfile[]>([])
@@ -29,6 +31,15 @@ export function ScoringProfilesProvider({ children }: { children: ReactNode }) {
   const configured = useMemo(() => isFirebaseConfigured(), [])
 
   useEffect(() => {
+    if (!profile) {
+      queueMicrotask(() => {
+        setProfiles([])
+        setLoading(false)
+        setError(null)
+      })
+      return
+    }
+
     const firestore = getFirestoreDb()
     if (!firestore) {
       queueMicrotask(() => {
@@ -72,7 +83,7 @@ export function ScoringProfilesProvider({ children }: { children: ReactNode }) {
         },
       ),
     )
-  }, [configured, orgKey, isPlatformSuperAdmin])
+  }, [configured, orgKey, isPlatformSuperAdmin, profile?.id])
 
   const value = useMemo(
     () => ({ profiles, loading, error, configured }),

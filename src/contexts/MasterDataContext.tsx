@@ -15,6 +15,7 @@ import { FS_COLLECTIONS } from '../types'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { processMasterDataDocs } from '../utils/masterDataRegistry'
 import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
+import { useAuth } from '../hooks/useAuth'
 import { useOrg } from './OrgProvider'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { leadBelongsToOrg } from '../tenancy/orgQuery'
@@ -49,6 +50,7 @@ type MasterDataState = {
 const MasterDataContext = createContext<MasterDataState | null>(null)
 
 export function MasterDataProvider({ children }: { children: ReactNode }) {
+  const { profile } = useAuth()
   const { effectiveOrgId, isPlatformSuperAdmin } = useOrg()
   const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [byKind, setByKind] = useState<Record<string, MasterDataEntry[]>>({})
@@ -62,6 +64,16 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
   const isFirstMasterSnapRef = useRef(true)
 
   useEffect(() => {
+    if (!profile) {
+      queueMicrotask(() => {
+        setByKind({})
+        setCatalogs([])
+        setLoading(false)
+        setError(null)
+      })
+      return
+    }
+
     const firestore = getFirestoreDb()
     if (!firestore) {
       queueMicrotask(() => {
@@ -139,7 +151,7 @@ export function MasterDataProvider({ children }: { children: ReactNode }) {
       lastSigRef.current = null
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
     }
-  }, [configured, orgKey, isPlatformSuperAdmin])
+  }, [configured, orgKey, isPlatformSuperAdmin, profile?.id])
 
   const value = useMemo(
     () => ({ byKind, catalogs, loading, error, configured }),

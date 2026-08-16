@@ -1214,6 +1214,8 @@ export interface AuthState {
   status: 'unknown' | 'unauthenticated' | 'authenticating' | 'authenticated'
   firebaseUid: UserId | null
   profile: VietMyUserProfile | null
+  /** Lỗi đồng bộ users/{uid} gần nhất (để hiện trên màn chặn). */
+  profileSyncError?: string | null
   /** Effective permissions after role + overrides */
   permissions: readonly Permission[]
 }

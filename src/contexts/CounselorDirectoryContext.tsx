@@ -143,6 +143,16 @@ export function CounselorDirectoryProvider({ children }: { children: ReactNode }
   )
 
   useEffect(() => {
+    // Chưa đăng nhập xong — không mở listener users (tránh chậm + permission-denied trên /login).
+    if (!profile) {
+      queueMicrotask(() => {
+        setUsers([])
+        setLoading(false)
+        setError(null)
+      })
+      return
+    }
+
     const firestore = getFirestoreDb()
     if (!firestore) {
       queueMicrotask(() => {

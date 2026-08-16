@@ -1,48 +1,71 @@
+import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { getConfiguredFirestoreDatabaseId } from '../utils/firestoreDatabaseHint'
 
-/** Khi Auth OK nhưng không tạo/ghi được Firestore users/{uid} (Rules / chưa bật Firestore). */
+/** Khi Auth OK nhưng không tạo/ghi được Firestore users/{uid} (Rules / sai database). */
 export function ProfileSyncBlocked() {
-  const { firebaseUser, signOut } = useAuth()
+  const { firebaseUser, signOut, profileSyncError, reloadProfile } = useAuth()
   const uid = firebaseUser?.uid ?? '—'
+  const dbLabel = getConfiguredFirestoreDatabaseId()
+  const [retrying, setRetrying] = useState(false)
+
+  const onRetry = async () => {
+    setRetrying(true)
+    try {
+      await reloadProfile()
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-100 px-4 py-10 text-slate-800">
       <div className="app-surface-elevated max-w-lg rounded-2xl p-6 sm:p-8">
         <p className="text-sm font-semibold uppercase tracking-wide text-slate-900">Chưa tạo được hồ sơ Firestore</p>
         <p className="mt-2 text-sm text-slate-600">
-          Bạn đã đăng nhập Authentication, nhưng app không ghi/đọc được{' '}
+          Bạn đã đăng nhập Authentication, nhưng app không đọc/ghi được{' '}
           <code className="rounded bg-slate-200/80 px-1 py-0.5 text-xs">{`users/${uid}`}</code>.
         </p>
-        <p className="mt-3 rounded-lg border border-slate-200/80 bg-slate-50/90 p-3 text-xs leading-relaxed text-slate-600">
-          Trong <code className="text-slate-800">firebaseConfig</code>, trường <code className="text-slate-800">databaseURL</code>{' '}
-          là <strong>Realtime Database</strong> (cây JSON). Hồ sơ CRM và <code className="text-slate-800">users</code> của
-          app nằm ở <strong>Cloud Firestore</strong> — cùng <code className="text-slate-800">projectId</code> nhưng là
-          tab &quot;Firestore Database&quot; trong Console, không phải tab Realtime.
+        <p className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/90 px-3 py-2 text-xs text-indigo-950">
+          Database đang dùng: <code className="font-semibold">{dbLabel}</code>
+          {dbLabel !== 'warmlist' ? (
+            <span>
+              {' '}
+              — CRM VietMy thường cần <code className="font-semibold">warmlist</code>. Kiểm tra biến{' '}
+              <code>VITE_FIREBASE_FIRESTORE_DATABASE_ID</code> trên Vercel.
+            </span>
+          ) : (
+            <span> (đúng tên mặc định CRM).</span>
+          )}
         </p>
+        {profileSyncError ? (
+          <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900" role="alert">
+            Chi tiết: {profileSyncError}
+          </p>
+        ) : null}
         <ul className="mt-4 list-inside list-disc space-y-2 text-xs text-slate-600">
           <li>
-            Nếu lệnh <code className="text-slate-800">seed:super-admin</code> từng báo <code className="text-slate-800">NOT_FOUND</code>{' '}
-            (mã 5): project chưa có <strong>Cloud Firestore</strong> — bắt buộc tạo ở bước dưới rồi chạy lại seed hoặc
-            tải lại trang sau khi có Rules.
+            Quản trị: Publish lại <strong>Firestore Rules</strong> (database <code className="text-slate-800">{dbLabel}</code>
+            ) từ file <code className="text-slate-800">firestore.rules</code> trong repo — lệnh{' '}
+            <code className="text-slate-800">npm run deploy:firestore-rules</code>.
           </li>
           <li>
-            Vào <strong>Firebase Console → Firestore Database</strong> — nếu chưa tạo database thì chọn chế độ (thường
-            là location gần bạn) và tạo.
+            Trong Console chọn đúng database <strong>{dbLabel}</strong> (không nhầm tab Realtime Database).
           </li>
           <li>
-            Tab <strong>Rules</strong>: cho phép user đã đăng nhập ghi doc của chính họ (hoặc tạm thời dùng mẫu trong
-            file <code className="text-slate-800">firestore.rules.example</code> ở thư mục project) rồi <strong>Publish</strong>.
+            Nếu doc <code className="text-slate-800">users/{'{'}uid{'}'}</code> chưa có: Rules phải cho phép tự tạo hồ sơ
+            lần đầu, hoặc chạy seed / tạo nhân sự từ Siêu quản trị.
           </li>
-          <li>
-            Nếu trên Firebase bạn dùng database tên riêng (vd. <code className="text-slate-800">warmlist</code>) thay vì{' '}
-            <code className="text-slate-800">(default)</code>: biến{' '}
-            <code className="text-slate-800">VITE_FIREBASE_FIRESTORE_DATABASE_ID</code> trên Vercel / GitHub Actions phải{' '}
-            <strong>trùng</strong> tên đó — nếu thiếu hoặc sai, app có thể không đọc/ghi được{' '}
-            <code className="text-slate-800">users/{'{'}uid{'}'}</code>.
-          </li>
-          <li>Bấm «Đăng xuất» để quay lại form đăng nhập, hoặc «Tải lại trang» sau khi sửa Rules.</li>
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={retrying}
+            onClick={() => void onRetry()}
+            className="rounded-xl border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {retrying ? 'Đang thử lại…' : 'Thử đồng bộ lại'}
+          </button>
           <button
             type="button"
             onClick={() => void signOut()}

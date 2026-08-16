@@ -123,7 +123,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 async function syncUserProfileWithRetry(
   db: NonNullable<ReturnType<typeof getFirestoreDb>>,
   user: User,
-  attempts = 4,
+  attempts = 3,
 ): Promise<VietMyUserProfile> {
   let last: unknown
   for (let i = 0; i < attempts; i++) {
@@ -132,10 +132,24 @@ async function syncUserProfileWithRetry(
     } catch (e) {
       last = e
       console.warn(`[syncUserProfile] lần ${i + 1}/${attempts}`, e)
-      if (i < attempts - 1) await sleep(350 * (i + 1))
+      if (i < attempts - 1) await sleep(280 * (i + 1))
     }
   }
   throw last instanceof Error ? last : new Error(String(last))
+}
+
+function formatProfileSyncError(err: unknown): string {
+  const code = firebaseAuthErrorCode(err)
+  const msg = err instanceof Error ? err.message : String(err)
+  if (code === 'permission-denied') {
+    return 'Firestore từ chối đọc/ghi users (permission-denied). Thường do Rules chưa publish hoặc sai database.'
+  }
+  if (code === 'unavailable' || /unavailable|network/i.test(msg)) {
+    return 'Không kết nối được Firestore (mạng / service). Thử lại sau vài giây.'
+  }
+  if (/quá \d+s/i.test(msg)) return msg
+  if (code) return `${msg} (${code})`
+  return msg || 'Không đồng bộ được hồ sơ.'
 }
 
 function firebaseAuthErrorCode(err: unknown): string {
@@ -155,23 +169,35 @@ async function syncUserProfile(db: NonNullable<ReturnType<typeof getFirestoreDb>
   const now = Timestamp.now()
 
   if (!snap.exists()) {
-    const profile: VietMyUserProfile = {
-      id: user.uid,
+    const role: UserRole = isSuper ? 'super_admin' : isDefaultAccountant ? 'accountant' : 'counselor'
+    const orgId = isSuper ? null : DEFAULT_ORG_ID
+    // Payload tối thiểu khớp Rules create (không ghi field `id` thừa).
+    const payload: Record<string, unknown> = {
       email: user.email ?? '',
       displayName: user.displayName || user.email?.split('@')[0] || 'Người dùng',
-      role: isSuper ? 'super_admin' : isDefaultAccountant ? 'accountant' : 'counselor',
-      orgId: isSuper ? null : DEFAULT_ORG_ID,
+      role,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     }
+    if (orgId != null) payload.orgId = orgId
+    else payload.orgId = null
     try {
-      await setDoc(ref, profile)
+      await setDoc(ref, payload)
     } catch (e) {
       console.error('[syncUserProfile] không tạo được users/{uid}', user.uid, e)
       throw e instanceof Error ? e : new Error(String(e))
     }
-    return profile
+    return {
+      id: user.uid,
+      email: String(payload.email),
+      displayName: String(payload.displayName),
+      role,
+      orgId,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    }
   }
 
   const data = snap.data() as Record<string, unknown>
@@ -262,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthState['status']>('unknown')
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<VietMyUserProfile | null>(null)
+  const [profileSyncError, setProfileSyncError] = useState<string | null>(null)
   const sessionRef = useRef<{
     uid: string | null
     status: AuthState['status']
@@ -310,6 +337,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const applyLogout = () => {
       setFirebaseUser(null)
       setProfile(null)
+      setProfileSyncError(null)
       setStatus('unauthenticated')
     }
 
@@ -317,14 +345,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!db) {
         if (myGen !== gen || cancelled) return
         setProfile(null)
+        setProfileSyncError('Chưa khởi tạo được Firestore (thiếu cấu hình Firebase).')
         setStatus('authenticated')
         return
       }
-      if (!soft) setStatus('authenticating')
+      if (!soft) {
+        setStatus('authenticating')
+        setProfileSyncError(null)
+      }
       try {
-        const p = await withTimeout(syncUserProfileWithRetry(db, user), 22_000, 'Đồng bộ users/{uid}')
+        // Timeout ngắn hơn — tránh treo lâu trên màn đăng nhập.
+        const p = await withTimeout(syncUserProfileWithRetry(db, user), 12_000, 'Đồng bộ users/{uid}')
         if (myGen !== gen || cancelled) return
         setProfile(p)
+        setProfileSyncError(null)
         if (p.isActive === false) {
           const a = getFirebaseAuth()
           if (a) await a.signOut()
@@ -333,18 +367,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('unauthenticated')
           return
         }
-        try {
-          await Promise.race([
-            ensureAuthClaimsFresh(user, p),
-            new Promise<void>((resolve) => {
-              window.setTimeout(resolve, 8_000)
-            }),
-          ])
-        } catch (e) {
-          console.warn('[ensureAuthClaimsFresh]', e)
-        }
-        if (myGen !== gen || cancelled) return
+        // Mở shell ngay — claims chạy nền (không chặn thêm tới 8s).
         setStatus('authenticated')
+        void ensureAuthClaimsFresh(user, p).catch((e) => {
+          console.warn('[ensureAuthClaimsFresh]', e)
+        })
         if (p.role === 'admin' || p.role === 'super_admin') {
           void ensureDefaultFirestoreData(db, user.uid).catch((e) => {
             console.warn('[firestoreBootstrap]', e)
@@ -357,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('[syncUserProfile] thất bại sau retry — thường do Firestore Rules chặn ghi/đọc users/', user.uid, e)
         if (myGen !== gen || cancelled) return
         if (!soft) setProfile(null)
+        setProfileSyncError(formatProfileSyncError(e))
         setStatus('authenticated')
       }
     }
@@ -459,8 +487,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const p = await syncUserProfileWithRetry(db, user)
       setProfile(p)
+      setProfileSyncError(null)
     } catch (e) {
       console.warn('[reloadProfile]', e)
+      setProfileSyncError(formatProfileSyncError(e))
     }
   }, [])
 
@@ -861,6 +891,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       firebaseUid: firebaseUser?.uid ?? profile?.id ?? null,
       profile,
+      profileSyncError,
       permissions,
       firebaseUser,
       can,
@@ -883,6 +914,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       firebaseUser,
       profile,
+      profileSyncError,
       permissions,
       can,
       canRunLlmAnalysis,
