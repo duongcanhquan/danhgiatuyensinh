@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, Lock, Wallet } from 'lucide-react'
 import { AuthSessionBootScreen } from '../../components/AuthSessionBootScreen'
@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../../services/firebase'
 import { mapFirebaseLoginError } from '../../utils/firebaseLoginErrors'
+import { applyAccountantPwaMeta, clearAccountantPwaMeta } from '../../utils/accountantPwaMeta'
 
 export function AccountantLoginView() {
   const { status, firebaseUser, profile, signInWithEmail, can, signOut } = useAuth()
@@ -19,6 +20,11 @@ export function AccountantLoginView() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    applyAccountantPwaMeta()
+    return () => clearAccountantPwaMeta()
+  }, [])
 
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
 
@@ -155,6 +161,9 @@ export function AccountantLoginView() {
                 {busy ? 'Đang xác thực…' : 'Đăng nhập'}
               </button>
             ) : null}
+            <p className="text-center text-xs leading-relaxed text-slate-500">
+              Trên điện thoại: mở Safari/Chrome → Chia sẻ → <strong>Thêm vào Màn hình chính</strong> để dùng như app.
+            </p>
           </form>
         </div>
       </div>
