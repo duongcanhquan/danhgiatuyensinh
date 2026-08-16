@@ -71,6 +71,11 @@ export const STAFF_ASSIGNABLE_PERMISSIONS: readonly {
   hint: string
 }[] = [
   { permission: 'analytics:advanced', label: 'Phân tích nâng cao', hint: 'Xem báo cáo sâu' },
+  {
+    permission: 'leads:read:global',
+    label: 'Theo dõi hồ sơ toàn trường',
+    hint: 'Trưởng nhóm xem / theo dõi mọi hồ sơ (không chỉ nhóm) — dùng cùng nút chuyển Nhóm / Toàn trường',
+  },
   { permission: 'config:playbooks', label: 'Thông tin tư vấn', hint: 'Playbook / script' },
   { permission: 'config:scoring_profiles_own', label: 'Profile chấm điểm cá nhân', hint: 'Tạo bộ chấm của mình' },
   { permission: 'leads:reassign:peer', label: 'Chuyển hồ sơ cho đồng nghiệp', hint: 'TVV chuyển assigned' },

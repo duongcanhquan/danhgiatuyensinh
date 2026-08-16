@@ -489,7 +489,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         updatedAt: now,
         ...teamMeta,
-        ...(normalizedRole === 'team_lead'
+        ...(canOwnFieldStaffTeam(normalizedRole)
           ? {
               managedCounselorIds: (input.managedCounselorIds ?? []).filter(Boolean).slice(0, 60),
             }

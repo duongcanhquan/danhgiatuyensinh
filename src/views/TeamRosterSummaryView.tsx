@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { ANALYTICS_FULL_SCOPE_MAX, useLeads } from '../hooks/useLeads'
 import { useOmicallCalls, type OmicallCallsScope } from '../hooks/useOmicallCalls'
@@ -222,12 +223,14 @@ function RosterDesktopTable({
 /** Bảng tổng kết nhân sự trong nhóm — lead đang giữ, đã gọi, HOT, tỷ lệ gọi kỳ. */
 export function TeamRosterSummaryView() {
   const { can, profile } = useAuth()
+  const { preferTeamScope } = useManagementViewScope()
   const { effectiveOrgId } = useOrg()
   const { users, loading: directoryLoading } = useCounselorDirectory()
   const allowed = canAccessTeamRosterTab(can)
   const showTeamFilter =
     Boolean(profile) &&
     (isAdminLikeRole(profile?.role) || can('leads:read:global')) &&
+    !preferTeamScope &&
     !isTeamLeadRole(profile?.role)
 
   const [filterTeamLeadUid, setFilterTeamLeadUid] = useState('')
@@ -239,8 +242,9 @@ export function TeamRosterSummaryView() {
         can,
         directory: users,
         filterTeamLeadUid: showTeamFilter ? filterTeamLeadUid : null,
+        preferOwnTeam: preferTeamScope,
       }),
-    [profile, can, users, showTeamFilter, filterTeamLeadUid],
+    [profile, can, users, showTeamFilter, filterTeamLeadUid, preferTeamScope],
   )
 
   const teamLeadOptions = useMemo(() => teamLeadOptionsForFilter(users), [users])
@@ -266,6 +270,13 @@ export function TeamRosterSummaryView() {
   )
 
   const callScope: OmicallCallsScope = useMemo(() => {
+    if (preferTeamScope && profile) {
+      return {
+        mode: 'team',
+        teamLeadUid: profile.id,
+        counselorUids: counselorIdsInManagerScope(profile, users),
+      }
+    }
     if (can('leads:read:global') || isAdminLikeRole(profile?.role)) {
       return { mode: 'global' }
     }
@@ -277,7 +288,7 @@ export function TeamRosterSummaryView() {
       }
     }
     return { mode: 'global' }
-  }, [can, profile, users])
+  }, [can, profile, users, preferTeamScope])
 
   const {
     calls,

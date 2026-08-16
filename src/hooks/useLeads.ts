@@ -35,9 +35,10 @@ import type {
   VietMyUserProfile,
 } from '../types'
 import { FS_COLLECTIONS } from '../types'
-import { isAdminLikeRole, isFieldStaffRole, isSuperAdminRole, isTeamLeadRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, isAdminLikeRole, isFieldStaffRole, isSuperAdminRole, isTeamLeadRole } from '../auth/roleUtils'
 import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { useAuth } from './useAuth'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 import { useOrg } from './useOrg'
 import { useMasterData } from './useMasterData'
 import {
@@ -612,6 +613,13 @@ export type UseLeadsOptions = {
    * Mặc định true.
    */
   enabled?: boolean
+  /**
+   * Ghi đè phạm vi Nhóm/Trường từ sidebar.
+   * `true` = luôn hẹp theo nhóm (vd. màn Hồ sơ làm việc).
+   * `false` = luôn toàn trường khi có quyền.
+   * Bỏ trống = theo `useManagementViewScope`.
+   */
+  preferTeamScope?: boolean
 }
 
 function rbacConstraint(
@@ -620,16 +628,10 @@ function rbacConstraint(
   canReadGlobal: boolean,
 ): QueryFilterConstraint | null {
   if (isSuperAdminRole(profile.role)) return null
-  if (isAdminLikeRole(profile.role)) {
-    if (canReadGlobal) return null
-    return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
-  }
+  if (canReadGlobal && isAdminLikeRole(profile.role)) return null
+  if (canReadGlobal && isTeamLeadRole(profile.role)) return null
 
-  if (isFieldStaffRole(profile.role)) {
-    return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
-  }
-
-  if (isTeamLeadRole(profile.role)) {
+  if (canOwnFieldStaffTeam(profile.role) && !canReadGlobal) {
     const team = teamLeadAssigneeScopeIds(profile)
     if (team.length) {
       const chunk = team.slice(0, 30)
@@ -637,7 +639,18 @@ function rbacConstraint(
     }
     const chunk = hoDLabels.filter(Boolean).slice(0, 30)
     if (chunk.length) return where('educationLevel', 'in', chunk)
+    if (isAdminLikeRole(profile.role)) {
+      return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
+    }
     return where('assignedTo', '==', impossibleUid())
+  }
+
+  if (isAdminLikeRole(profile.role)) {
+    return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
+  }
+
+  if (isFieldStaffRole(profile.role)) {
+    return or(where('assignedTo', '==', profile.id), where('assignedCounselorId', '==', profile.id))
   }
 
   return null
@@ -851,7 +864,8 @@ function applyRoleClientFilter(
 ): Lead[] {
   const scoped = orgId ? rows.filter((l) => leadBelongsToOrg(l, orgId)) : rows
   const labelSet = new Set(hoDQueryLabels.map((x) => x.trim().toLowerCase()))
-  if (isTeamLeadRole(profile.role)) {
+
+  if (canOwnFieldStaffTeam(profile.role) && !canReadGlobal) {
     const team = new Set(teamLeadAssigneeScopeIds(profile))
     if (team.size) {
       return scoped.filter((l) => {
@@ -862,8 +876,15 @@ function applyRoleClientFilter(
     if (labelSet.size) {
       return scoped.filter((l) => labelSet.has(l.educationLevel.trim().toLowerCase()))
     }
+    if (isAdminLikeRole(profile.role) && profile.id) {
+      return scoped.filter((l) => {
+        const u = l.assignedTo ?? l.assignedCounselorId
+        return u === profile.id
+      })
+    }
     return []
   }
+
   if (isFieldStaffRole(profile.role) && profile.id) {
     return scoped.filter((l) => {
       const u = l.assignedTo ?? l.assignedCounselorId
@@ -1110,13 +1131,18 @@ const EMPTY_HOD_LABELS: string[] = []
 
 export function useLeads(opts?: UseLeadsOptions) {
   const { profile, can } = useAuth()
-  const canReadGlobal = Boolean(
+  const { preferTeamScope: preferTeamScopeFromCtx } = useManagementViewScope()
+  const preferTeamScope =
+    typeof opts?.preferTeamScope === 'boolean' ? opts.preferTeamScope : preferTeamScopeFromCtx
+  const canReadGlobalRaw = Boolean(
     profile &&
       (can('leads:read:global') ||
         profile.role === 'super_admin' ||
         // Vai trò Quản lý trường luôn xem hồ sơ toàn trường (kể cả khi capability doc cũ thiếu module).
         profile.role === 'admin'),
   )
+  /** Khi chọn «Nhóm của tôi», thu hẹp như trưởng nhóm dù vẫn có quyền trường. */
+  const canReadGlobal = canReadGlobalRaw && !preferTeamScope
   const { effectiveOrgId } = useOrg()
   const { byKind } = useMasterData()
   const serverFilters = opts?.serverFilters

@@ -5,6 +5,7 @@ import { useOmicallCalls, type OmicallCallsScope } from './useOmicallCalls'
 import { vnDayRangeFromKeys } from '../utils/kpiFromOmicallCalls'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { canSchoolWideReportScope } from '../utils/reportScope'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 
 /** Tải omicallCalls trong khoảng ngày để bù KPI khi kpiDaily chưa đồng bộ. */
 export function useOmicallCallsForKpi(
@@ -14,6 +15,7 @@ export function useOmicallCallsForKpi(
   enabled = true,
 ) {
   const { firebaseUser, profile, can } = useAuth()
+  const { preferTeamScope } = useManagementViewScope()
   const { users: directory } = useCounselorDirectory()
   const viewerSip = profile?.omicallSipUser ?? undefined
   const rangeOk = Boolean(from.trim() && to.trim())
@@ -26,8 +28,8 @@ export function useOmicallCallsForKpi(
     return [range.from, range.to] as const
   }, [from, to, rangeOk])
 
-  const canGlobal = canSchoolWideReportScope(can, profile?.role)
-  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role) && !preferTeamScope
+  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead') || preferTeamScope
 
   const scope = useMemo((): OmicallCallsScope => {
     if (counselorUidFilter) return { mode: 'counselor', counselorUid: counselorUidFilter }

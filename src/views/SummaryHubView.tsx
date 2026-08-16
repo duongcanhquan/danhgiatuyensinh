@@ -16,7 +16,8 @@ import { ScorecardView } from './ScorecardView'
 import { CallHistoryView } from './CallHistoryView'
 import { CommandCenterView } from './CommandCenterView'
 import { PerformanceReportView } from './PerformanceReportView'
-import { TeamRosterSummaryView } from './TeamRosterSummaryView'
+import { OpsMonitorView } from './OpsMonitorView'
+import { AdmissionsReportsView } from './AdmissionsReportsView'
 
 const SUMMARY_PANEL_ID = 'summary-tabpanel'
 
@@ -65,7 +66,9 @@ export function SummaryHubView() {
           aria-labelledby={`tab-${activeTab}`}
         >
           {activeTab === 'tong-quan' ? <DashboardView embedded /> : null}
-          {activeTab === 'nhom-cua-toi' ? <TeamRosterSummaryView /> : null}
+          {activeTab === 'bao-cao-toan-dien' ? <AdmissionsReportsView embedded /> : null}
+          {activeTab === 'quan-ly-team' ? <OpsMonitorView mode="team" /> : null}
+          {activeTab === 'quan-ly-truong' ? <OpsMonitorView mode="school" /> : null}
           {activeTab === 'kpi-nhan-su' ? <PerformanceReportView /> : null}
           {activeTab === 'bang-diem' ? <ScorecardView embedded /> : null}
           {activeTab === 'lich-goi' ? <CallHistoryView embedded /> : null}

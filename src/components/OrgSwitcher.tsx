@@ -9,11 +9,11 @@ export function OrgSwitcher({ className = '' }: { className?: string }) {
   if (!isPlatformSuperAdmin) return null
 
   return (
-    <div className={`min-w-0 space-y-0.5 ${className}`.trim()}>
-      <label className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-        Đang làm việc tại
+    <div className={`min-w-0 ${className}`.trim()}>
+      <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Đang làm việc tại</p>
+      <div className="flex items-center gap-1">
         <select
-          className="mt-0.5 w-full cursor-pointer truncate rounded-md border border-white/15 bg-white/10 px-1.5 py-1 text-[11px] font-medium leading-tight text-white outline-none focus:border-indigo-400/60"
+          className="h-7 min-w-0 flex-1 cursor-pointer truncate rounded border border-white/15 bg-white/10 px-1.5 text-[11px] font-medium leading-none text-white outline-none focus:border-indigo-400/60"
           value={effectiveOrgId}
           disabled={organizationsLoading || organizations.length === 0}
           onChange={(e) => setActiveOrgId(e.target.value)}
@@ -26,13 +26,14 @@ export function OrgSwitcher({ className = '' }: { className?: string }) {
             </option>
           ))}
         </select>
-      </label>
-      <NavLink
-        to="/organizations"
-        className="block text-center text-[10px] font-medium text-indigo-200/90 underline-offset-2 hover:text-white hover:underline"
-      >
-        Quản lý trường
-      </NavLink>
+        <NavLink
+          to="/organizations"
+          title="Quản lý trường"
+          className="inline-flex h-7 shrink-0 items-center rounded border border-white/15 px-1.5 text-[10px] font-medium text-indigo-200/90 transition hover:bg-white/10 hover:text-white"
+        >
+          Trường
+        </NavLink>
+      </div>
     </div>
   )
 }

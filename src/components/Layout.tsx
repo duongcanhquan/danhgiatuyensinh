@@ -27,6 +27,7 @@ import { OrgAiIntegrationProvider } from '../contexts/OrgAiIntegrationContext'
 import { OrgSwitcher } from './OrgSwitcher'
 import { ChangePasswordPanel } from './ChangePasswordPanel'
 import { isPlatformSuperAdminRole } from '../tenancy/orgId'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 
 type NavGroup = 'work' | 'more'
 
@@ -126,6 +127,7 @@ function navTarget(to: string, pathname: string, search: string) {
 
 export function Layout() {
   const { profile, firebaseUser, can, signOut, permissions } = useAuth()
+  const { scope, setScope, canToggle } = useManagementViewScope()
   const location = useLocation()
   const showSignOut = Boolean(isFirebaseConfigured() && getFirebaseAuth() && firebaseUser)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -274,6 +276,43 @@ export function Layout() {
         {showLabels ? (
           <>
             <OrgSwitcher className="mb-1" />
+            {canToggle ? (
+              <div
+                className="mb-1 rounded border border-white/15 bg-white/5 p-0.5"
+                role="group"
+                aria-label="Phạm vi xem Tổng kết"
+              >
+                <p className="px-1 pb-0.5 text-[9px] font-medium leading-tight text-slate-500">
+                  Tổng kết
+                </p>
+                <div className="grid grid-cols-2 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setScope('team')}
+                    className={[
+                      'cursor-pointer rounded px-1 py-1 text-[10px] font-medium leading-tight transition',
+                      scope === 'team'
+                        ? 'bg-sky-600 text-white'
+                        : 'text-slate-400 hover:bg-white/10 hover:text-white',
+                    ].join(' ')}
+                  >
+                    Nhóm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScope('school')}
+                    className={[
+                      'cursor-pointer rounded px-1 py-1 text-[10px] font-medium leading-tight transition',
+                      scope === 'school'
+                        ? 'bg-amber-600 text-white'
+                        : 'text-slate-400 hover:bg-white/10 hover:text-white',
+                    ].join(' ')}
+                  >
+                    Trường
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center gap-1.5 rounded-md bg-white/5 px-1.5 py-1">
               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300">
                 <User className="h-3 w-3" strokeWidth={2} aria-hidden />

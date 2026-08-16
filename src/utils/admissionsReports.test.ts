@@ -116,6 +116,9 @@ describe('buildAdmissionsReport (Apps Script runReportEngine)', () => {
       lead({
         id: '1',
         uploaderName: 'An',
+        assignedTo: 'uid-an',
+        assigneeUid: 'uid-an',
+        assigneeLabel: 'An',
         createdAtMs: new Date(2026, 7, 2).getTime(),
         finance: {
           payments: {
@@ -126,12 +129,18 @@ describe('buildAdmissionsReport (Apps Script runReportEngine)', () => {
       lead({
         id: '2',
         uploaderName: 'An',
+        assignedTo: 'uid-an',
+        assigneeUid: 'uid-an',
+        assigneeLabel: 'An',
         createdAtMs: new Date(2026, 7, 3).getTime(),
         finance: { fullNeStatus: 'ĐÃ FULL NE', fullNeAt: '03/08/2026' },
       }),
       lead({
         id: '3',
         uploaderName: 'Bình',
+        assignedTo: 'uid-binh',
+        assigneeUid: 'uid-binh',
+        assigneeLabel: 'Bình',
         createdAtMs: new Date(2026, 7, 4).getTime(),
         finance: {
           payments: {
@@ -203,5 +212,30 @@ describe('buildAdmissionsReport (Apps Script runReportEngine)', () => {
     const kt = report.byMajor.find((m) => m.major === 'Kế toán')
     expect(cntt).toMatchObject({ total: 2, lpxt: 1, fullNe: 1 })
     expect(kt).toMatchObject({ total: 1, chua: 1 })
+  })
+
+  it('lọc theo UID TVV (không phụ thuộc displayName trên assignedTo)', () => {
+    const rows = [
+      lead({
+        id: '1',
+        assigneeUid: 'uid-an',
+        assigneeLabel: 'An',
+        uploaderName: 'An',
+        assignedTo: 'uid-an',
+        createdAtMs: new Date(2026, 7, 2).getTime(),
+      }),
+      lead({
+        id: '2',
+        assigneeUid: 'uid-binh',
+        assigneeLabel: 'Bình',
+        uploaderName: 'Bình',
+        assignedTo: 'uid-binh',
+        createdAtMs: new Date(2026, 7, 2).getTime(),
+      }),
+    ]
+    const report = buildAdmissionsReport(rows, period, { assigneeUids: ['uid-an'] })
+    expect(report.overview.total).toBe(1)
+    expect(report.rows[0]?.id).toBe('1')
+    expect(report.tvvRanking[0]).toMatchObject({ name: 'An', uid: 'uid-an' })
   })
 })

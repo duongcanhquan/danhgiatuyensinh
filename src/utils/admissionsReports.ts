@@ -34,6 +34,10 @@ export type AdmissionsReportLeadInput = {
   source1?: string
   uploaderName?: string
   assignedTo?: string
+  /** UID TVV đang giữ hồ sơ (ưu tiên lọc / xếp hạng). */
+  assigneeUid?: string
+  /** Tên hiển thị TVV (directory). */
+  assigneeLabel?: string
   createdAtMs: number
   finance?: LeadFinanceRecord
 }
@@ -41,6 +45,18 @@ export type AdmissionsReportLeadInput = {
 export type AdmissionsPeriod = { startMs: number; endMs: number }
 
 export type AdmissionsEvalBucket = 'fullNe' | 'coc' | 'lpxt' | 'dang' | 'moi'
+
+export type AdmissionsReportFilters = {
+  /** Lọc theo UID TVV (ưu tiên). */
+  assigneeUids?: string[]
+  /** Legacy: khớp tên uploader / nhãn. */
+  tvvNames?: string[]
+  /** Khớp chính xác nhãn nguồn (không phân biệt hoa thường). */
+  sources?: string[]
+  educationLevels?: string[]
+  majors?: string[]
+  buckets?: AdmissionsEvalBucket[]
+}
 
 export type AdmissionsReportRow = AdmissionsReportLeadInput & {
   moneyInPeriod: number
@@ -60,8 +76,9 @@ export type AdmissionsReport = {
     fullNe: number
     revenueBySystem: { label: string; amount: number; count: number }[]
   }
-  tvvRanking: { name: string; neCount: number; lpxtCount: number; total: number }[]
+  tvvRanking: { name: string; uid: string; neCount: number; lpxtCount: number; total: number }[]
   mktBySource: { source: string; total: number; neCount: number; lpxtCount: number }[]
+  bySource: { source: string; total: number; neCount: number; lpxtCount: number }[]
   byMajor: {
     major: string
     total: number
@@ -70,6 +87,8 @@ export type AdmissionsReport = {
     fullNe: number
     chua: number
   }[]
+  /** Xu hướng theo ngày tạo/chạm kỳ (YYYY-MM-DD VN). */
+  dailyTrend: { dateKey: string; total: number; neCount: number; lpxtCount: number }[]
 }
 
 function str(v: unknown): string {
@@ -158,39 +177,82 @@ function systemGroupLabel(educationLevel: string): string {
   return 'Cao đẳng / 9+'
 }
 
-export function leadToAdmissionsInput(lead: Lead): AdmissionsReportLeadInput {
+export function leadToAdmissionsInput(
+  lead: Lead,
+  opts?: { assigneeLabelByUid?: Map<string, string> },
+): AdmissionsReportLeadInput {
   const createdAt = lead.createdAt as { toMillis?: () => number } | undefined
   const uploadedAt = lead.uploadedAt as { toMillis?: () => number } | undefined
+  const assigneeUid = str(lead.assignedTo || lead.assignedCounselorId)
+  const assigneeLabel =
+    (assigneeUid && opts?.assigneeLabelByUid?.get(assigneeUid)) ||
+    str(lead.uploaderName) ||
+    assigneeUid ||
+    'Khác'
+  const source1 = str(lead.source1 || lead.source)
   return {
     id: lead.id,
     fullName: lead.fullName,
     educationLevel: lead.educationLevel,
     majorInterest: lead.majorInterest,
-    source1: lead.source1,
+    source1,
     uploaderName: lead.uploaderName,
     assignedTo: lead.assignedTo ?? undefined,
+    assigneeUid: assigneeUid || undefined,
+    assigneeLabel,
     createdAtMs: createdAt?.toMillis?.() ?? uploadedAt?.toMillis?.() ?? 0,
     finance: lead.finance,
   }
 }
 
+function normSet(values?: string[]): Set<string> | null {
+  const cleaned = (values ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean)
+  return cleaned.length ? new Set(cleaned) : null
+}
+
+function rowTvvLabel(lead: AdmissionsReportLeadInput): string {
+  return str(lead.assigneeLabel || lead.uploaderName || lead.assignedTo || 'Khác')
+}
+
+function rowTvvUid(lead: AdmissionsReportLeadInput): string {
+  return str(lead.assigneeUid || lead.assignedTo)
+}
+
+function dateKeyVnFromMs(ms: number): string {
+  if (!ms) return ''
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' })
+}
+
 export function buildAdmissionsReport(
   leads: AdmissionsReportLeadInput[],
   period: AdmissionsPeriod,
-  filters?: { tvvNames?: string[] },
+  filters?: AdmissionsReportFilters,
 ): AdmissionsReport {
-  const tvvFilter = filters?.tvvNames?.map((n) => n.trim()).filter(Boolean)
-  const tvvSet = tvvFilter?.length ? new Set(tvvFilter.map((n) => n.toLowerCase())) : null
+  const tvvNameSet = normSet(filters?.tvvNames)
+  const assigneeUidSet = normSet(filters?.assigneeUids)
+  const sourceSet = normSet(filters?.sources)
+  const eduSet = normSet(filters?.educationLevels)
+  const majorSet = normSet(filters?.majors)
+  const bucketSet = filters?.buckets?.length ? new Set(filters.buckets) : null
 
   const rows: AdmissionsReportRow[] = []
   for (const lead of leads) {
     if (!leadTouchesPeriod(lead, period)) continue
-    const tvvName = str(lead.uploaderName || lead.assignedTo || 'Khác')
-    if (tvvSet && !tvvSet.has(tvvName.toLowerCase())) continue
+
+    const uid = rowTvvUid(lead).toLowerCase()
+    const tvvName = rowTvvLabel(lead)
+    if (assigneeUidSet && (!uid || !assigneeUidSet.has(uid))) continue
+    if (tvvNameSet && !tvvNameSet.has(tvvName.toLowerCase())) continue
+
+    const source = str(lead.source1)
+    if (sourceSet && !sourceSet.has(source.toLowerCase())) continue
+    if (eduSet && !eduSet.has(str(lead.educationLevel).toLowerCase())) continue
+    if (majorSet && !majorSet.has(str(lead.majorInterest).toLowerCase())) continue
 
     const moneyInPeriod = moneyApprovedInPeriod(lead.finance, period)
     const isFullNeInPeriod = hasFullNeInPeriod(lead.finance, period)
     const bucket = evaluatePeriodBucket(lead.educationLevel ?? '', moneyInPeriod, isFullNeInPeriod)
+    if (bucketSet && !bucketSet.has(bucket)) continue
 
     rows.push({
       ...lead,
@@ -223,32 +285,37 @@ export function buildAdmissionsReport(
   }
   overview.revenueBySystem = [...revMap.entries()].map(([label, v]) => ({ label, ...v }))
 
-  const tvvMap = new Map<string, { neCount: number; lpxtCount: number; total: number }>()
+  const tvvMap = new Map<string, { name: string; uid: string; neCount: number; lpxtCount: number; total: number }>()
   for (const r of rows) {
-    const name = str(r.uploaderName || r.assignedTo || 'Khác')
-    const cur = tvvMap.get(name) ?? { neCount: 0, lpxtCount: 0, total: 0 }
+    const uid = rowTvvUid(r) || rowTvvLabel(r)
+    const name = rowTvvLabel(r)
+    const cur = tvvMap.get(uid) ?? { name, uid, neCount: 0, lpxtCount: 0, total: 0 }
     cur.total++
     if (r.bucket === 'coc' || r.bucket === 'fullNe') cur.neCount++
     if (r.bucket === 'lpxt') cur.lpxtCount++
-    tvvMap.set(name, cur)
+    tvvMap.set(uid, cur)
   }
-  const tvvRanking = [...tvvMap.entries()]
-    .map(([name, v]) => ({ name, ...v }))
-    .sort((a, b) => b.neCount - a.neCount || b.total - a.total || a.name.localeCompare(b.name, 'vi'))
+  const tvvRanking = [...tvvMap.values()].sort(
+    (a, b) => b.neCount - a.neCount || b.total - a.total || a.name.localeCompare(b.name, 'vi'),
+  )
 
-  const mktMap = new Map<string, { total: number; neCount: number; lpxtCount: number }>()
-  for (const r of rows) {
-    if (!r.isMkt) continue
-    const source = str(r.source1) || 'Khác'
-    const cur = mktMap.get(source) ?? { total: 0, neCount: 0, lpxtCount: 0 }
-    cur.total++
-    if (r.bucket === 'coc' || r.bucket === 'fullNe') cur.neCount++
-    if (r.bucket === 'lpxt') cur.lpxtCount++
-    mktMap.set(source, cur)
+  const sourceAgg = (mktOnly: boolean) => {
+    const map = new Map<string, { total: number; neCount: number; lpxtCount: number }>()
+    for (const r of rows) {
+      if (mktOnly && !r.isMkt) continue
+      const source = str(r.source1) || 'Khác'
+      const cur = map.get(source) ?? { total: 0, neCount: 0, lpxtCount: 0 }
+      cur.total++
+      if (r.bucket === 'coc' || r.bucket === 'fullNe') cur.neCount++
+      if (r.bucket === 'lpxt') cur.lpxtCount++
+      map.set(source, cur)
+    }
+    return [...map.entries()]
+      .map(([source, v]) => ({ source, ...v }))
+      .sort((a, b) => b.neCount - a.neCount || b.total - a.total)
   }
-  const mktBySource = [...mktMap.entries()]
-    .map(([source, v]) => ({ source, ...v }))
-    .sort((a, b) => b.neCount - a.neCount || b.total - a.total)
+  const mktBySource = sourceAgg(true)
+  const bySource = sourceAgg(false)
 
   const majorMap = new Map<
     string,
@@ -268,7 +335,20 @@ export function buildAdmissionsReport(
     .map(([major, v]) => ({ major, ...v }))
     .sort((a, b) => b.total - a.total || a.major.localeCompare(b.major, 'vi'))
 
-  return { rows, overview, tvvRanking, mktBySource, byMajor }
+  const dayMap = new Map<string, { total: number; neCount: number; lpxtCount: number }>()
+  for (const r of rows) {
+    const dateKey = dateKeyVnFromMs(r.createdAtMs) || '—'
+    const cur = dayMap.get(dateKey) ?? { total: 0, neCount: 0, lpxtCount: 0 }
+    cur.total++
+    if (r.bucket === 'coc' || r.bucket === 'fullNe') cur.neCount++
+    if (r.bucket === 'lpxt') cur.lpxtCount++
+    dayMap.set(dateKey, cur)
+  }
+  const dailyTrend = [...dayMap.entries()]
+    .map(([dateKey, v]) => ({ dateKey, ...v }))
+    .sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+
+  return { rows, overview, tvvRanking, mktBySource, bySource, byMajor, dailyTrend }
 }
 
 /** Kỳ mặc định: đầu tháng ICT → cuối ngày hôm nay. */

@@ -12,6 +12,7 @@ import { fetchKpiDailyCounselorRows } from '../utils/fetchKpiDailyCounselorRows'
 import { resolveKpiDailyTargetUids } from '../utils/resolveKpiDailyTargetUids'
 import { useOmicallCallsForKpi } from './useOmicallCallsForKpi'
 import { canSchoolWideReportScope } from '../utils/reportScope'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 
 function dateKeysBetween(from: string, to: string): string[] {
   const { from: start, to: end } = vnDayRangeFromKeys(from, to)
@@ -36,6 +37,7 @@ export function useCounselorKpiDateRange(
   options?: { enabled?: boolean; includeOmicallCalls?: boolean },
 ) {
   const { firebaseUser, profile, can } = useAuth()
+  const { preferTeamScope } = useManagementViewScope()
   const { users: directory } = useCounselorDirectory()
   const [rows, setRows] = useState<CounselorDailyKpi[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,8 +46,8 @@ export function useCounselorKpiDateRange(
   const dates = useMemo(() => dateKeysBetween(from, to), [from, to])
   const enabled = options?.enabled !== false
   const includeOmicallCalls = options?.includeOmicallCalls !== false
-  const canGlobal = canSchoolWideReportScope(can, profile?.role)
-  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role) && !preferTeamScope
+  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead') || preferTeamScope
 
   const directoryIds = useMemo(() => {
     if (canGlobal) {

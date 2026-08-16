@@ -59,6 +59,7 @@ import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { canCreateLead, canWriteLead, leadAssignedUid } from '../auth/leadAccess'
 import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
+import { profileHasTeamRoster } from '../contexts/ManagementViewScopeContext'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { useAutoPersistLeadScores } from '../hooks/useAutoPersistLeadScores'
@@ -425,6 +426,12 @@ export function LeadManagement() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const showAdminGlobalFilters = can('leads:read:global')
+  /**
+   * Hồ sơ = việc hàng ngày: TVV/TL luôn theo nhóm mình;
+   * quản lý có danh sách TVV cũng ưu tiên nhóm mình (xem toàn trường ở tab Quản lý trường).
+   */
+  const workListPreferTeam =
+    isTeamLeadRole(profile?.role) || profileHasTeamRoster(profile)
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
   const [createLeadNotice, setCreateLeadNotice] = useState<string | null>(null)
@@ -710,6 +717,7 @@ export function LeadManagement() {
     includeScopeTagCounts: false,
     includeScopeSourceOptions: sourceCatalogRequested,
     includeScopeProgramOptions: programCatalogRequested,
+    preferTeamScope: workListPreferTeam ? true : undefined,
   })
 
   const scoringMasterBuckets = useMemo(

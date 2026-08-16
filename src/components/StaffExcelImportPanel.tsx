@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { Download, FileSpreadsheet, Upload } from 'lucide-react'
+import { Download, Upload } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -63,8 +63,9 @@ export function StaffExcelImportPanel() {
     let ok = 0
     let skip = 0
     const fail: string[] = []
+    const seen = new Set(existingEmails)
     for (const row of preview) {
-      if (existingEmails.has(row.email)) {
+      if (seen.has(row.email)) {
         skip += 1
         continue
       }
@@ -77,7 +78,7 @@ export function StaffExcelImportPanel() {
           orgId: row.role === 'super_admin' ? null : effectiveOrgId,
           ...(row.omicallSipUser ? { omicallSipUser: row.omicallSipUser } : {}),
         })
-        existingEmails.add(row.email)
+        seen.add(row.email)
         ok += 1
       } catch (ex) {
         fail.push(`${row.email}: ${ex instanceof Error ? ex.message : 'lỗi'}`)
@@ -95,22 +96,15 @@ export function StaffExcelImportPanel() {
   }
 
   return (
-    <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 shadow-sm">
+    <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-sm font-extrabold text-violet-950">
-            <FileSpreadsheet className="h-4 w-4" aria-hidden />
-            Nhập Excel tư vấn viên
-          </h3>
-          <p className="mt-1 text-xs text-violet-900/80">
-            Bước 1 trước khi import Sheet sinh viên (Mẫu 3). Cột <strong>Tên hiển thị</strong> phải khớp tên TVV trên
-            Sheet cũ (cột index 18) để gán hồ sơ đúng người. Sau đó sang tab <strong>Nhập liệu</strong>.
-          </p>
-        </div>
+        <p className="text-xs leading-relaxed text-slate-600">
+          Cột <strong>Tên hiển thị</strong> phải khớp tên TVV trên Sheet hồ sơ để gán đúng người.
+        </p>
         <button
           type="button"
           onClick={() => downloadStaffIntakeTemplate()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-bold text-violet-900"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-50"
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
           Tải mẫu

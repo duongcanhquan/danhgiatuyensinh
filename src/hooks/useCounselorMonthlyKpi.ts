@@ -12,6 +12,7 @@ import { useCounselorKpiDateRange } from './useCounselorKpiDateRange'
 import { kpiDayKeyFromDate } from '../utils/kpiFromOmicallCalls'
 import { monthlyLiveMergeBounds } from '../utils/kpiMonthlyLiveBounds'
 import { canSchoolWideReportScope } from '../utils/reportScope'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 
 function mapMonthly(id: string, data: Record<string, unknown>): CounselorMonthlyKpi {
   return {
@@ -55,13 +56,14 @@ export function useCounselorMonthlyKpi(
   const mergeLiveCalls = options?.mergeLiveCalls === true
   const mergeLiveDays = options?.mergeLiveDays ?? 2
   const { firebaseUser, profile, can } = useAuth()
+  const { preferTeamScope } = useManagementViewScope()
   const { users: directory } = useCounselorDirectory()
   const [officialRows, setOfficialRows] = useState<CounselorMonthlyKpi[]>([])
   const [loadingOfficial, setLoadingOfficial] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const canGlobal = canSchoolWideReportScope(can, profile?.role)
-  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead')
+  const canGlobal = canSchoolWideReportScope(can, profile?.role) && !preferTeamScope
+  const canTeam = can('leads:read:team_scope') || can('dashboard:team_lead') || preferTeamScope
   const { from, to } = useMemo(
     () => (mergeLiveCalls ? monthlyLiveMergeBounds(month, mergeLiveDays) : { from: '', to: '' }),
     [month, mergeLiveCalls, mergeLiveDays],

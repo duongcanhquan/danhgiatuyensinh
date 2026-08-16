@@ -70,7 +70,18 @@ describe('teamScope roster', () => {
     expect(isUserInExplicitTeamRoster(withRoster, c1)).toBe(true)
   })
 
-  it('clears orphan managedCounselorIds on admin when reassigning counselor', () => {
+  it('allows assigning counselor into admin roster when admin owns a team', () => {
+    const dir = [
+      u('mgr', 'admin', { managedCounselorIds: [] }),
+      u('lead-a', 'team_lead', { managedCounselorIds: ['c1'] }),
+      u('c1', 'counselor'),
+    ]
+    const patches = patchesForCounselorTeamAssignment('c1', 'mgr', dir)
+    expect(patches.find((p) => p.userId === 'mgr')?.managedCounselorIds).toEqual(['c1'])
+    expect(patches.find((p) => p.userId === 'lead-a')?.managedCounselorIds).toEqual([])
+  })
+
+  it('moves counselor from admin roster to team_lead', () => {
     const dir = [
       u('mgr', 'admin', { managedCounselorIds: ['c1'] }),
       u('lead-a', 'team_lead', { managedCounselorIds: [] }),
@@ -79,16 +90,5 @@ describe('teamScope roster', () => {
     const patches = patchesForCounselorTeamAssignment('c1', 'lead-a', dir)
     expect(patches.find((p) => p.userId === 'mgr')?.managedCounselorIds).toEqual([])
     expect(patches.find((p) => p.userId === 'lead-a')?.managedCounselorIds).toEqual(['c1'])
-  })
-
-  it('allows assigning counselor only into team_lead rosters (not admin)', () => {
-    const dir = [
-      u('mgr', 'admin', { managedCounselorIds: [] }),
-      u('lead-a', 'team_lead', { managedCounselorIds: ['c1'] }),
-      u('c1', 'counselor'),
-    ]
-    const patches = patchesForCounselorTeamAssignment('c1', 'mgr', dir)
-    expect(patches.find((p) => p.userId === 'mgr')).toBeUndefined()
-    expect(patches.find((p) => p.userId === 'lead-a')?.managedCounselorIds).toEqual([])
   })
 })

@@ -796,28 +796,29 @@ export function OrganizationsView() {
                               )}
                             </p>
                           </div>
+                          <div className="flex flex-wrap items-center gap-1">
                           <button
                             type="button"
-                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                             disabled={busy}
                             onClick={() => openEdit(org.id)}
                           >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                            <Pencil className="h-3 w-3" aria-hidden />
                             Sửa
                           </button>
                           <button
                             type="button"
-                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1 text-rose-700"
+                            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-rose-200 bg-white px-2 text-[11px] font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
                             disabled={busy || org.id === DEFAULT_ORG_ID}
                             title={org.id === DEFAULT_ORG_ID ? 'Không xóa trường mặc định Việt Mỹ' : 'Xóa khỏi danh sách'}
                             onClick={() => void onSoftDelete(org)}
                           >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            <Trash2 className="h-3 w-3" aria-hidden />
                             Xóa
                           </button>
                           <button
                             type="button"
-                            className="vm-btn vm-btn-secondary text-xs"
+                            className="inline-flex h-7 cursor-pointer items-center rounded-md border border-indigo-200 bg-indigo-50 px-2 text-[11px] font-medium text-indigo-800 transition hover:bg-indigo-100 disabled:opacity-50"
                             disabled={busy || org.status !== 'active'}
                             onClick={() => setActiveOrgId(org.id)}
                           >
@@ -825,30 +826,31 @@ export function OrganizationsView() {
                           </button>
                           <button
                             type="button"
-                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                             disabled={busy || org.status !== 'active'}
                             onClick={() => onOpenSettings(org)}
                           >
-                            <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                            <Settings2 className="h-3 w-3" aria-hidden />
                             Cài đặt
                           </button>
                           <button
                             type="button"
-                            className="vm-btn vm-btn-secondary text-xs inline-flex items-center gap-1"
+                            className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                             disabled={busy}
                             onClick={() => void onExport(org)}
                           >
-                            <Download className="h-3.5 w-3.5" aria-hidden />
+                            <Download className="h-3 w-3" aria-hidden />
                             Tải cấu hình
                           </button>
                           <button
                             type="button"
-                            className="vm-btn vm-btn-secondary text-xs"
+                            className="inline-flex h-7 cursor-pointer items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                             disabled={busy}
                             onClick={() => void onToggleStatus(org)}
                           >
                             {org.status === 'active' ? 'Tạm ngưng' : 'Mở lại'}
                           </button>
+                          </div>
                         </div>
                       </li>
                     )

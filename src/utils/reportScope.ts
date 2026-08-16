@@ -1,5 +1,5 @@
 import type { Permission, VietMyUserProfile } from '../types'
-import { isAdminLikeRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, isAdminLikeRole } from '../auth/roleUtils'
 
 export type ReportScope = 'self' | 'team' | 'school'
 
@@ -15,6 +15,20 @@ export function canSchoolWideReportScope(
   role?: string | null,
 ): boolean {
   return can('leads:read:global') || isAdminLikeRole(role)
+}
+
+/**
+ * Phạm vi báo cáo hiệu lực — tôn trọng lựa chọn «Nhóm / Toàn trường» khi tài khoản kiêm cả hai.
+ */
+export function resolveEffectiveReportScope(
+  can: (p: Permission) => boolean,
+  role: string | null | undefined,
+  preferTeamScope: boolean,
+): ReportScope {
+  if (preferTeamScope && (can('leads:read:team_scope') || can('dashboard:team_lead') || canOwnFieldStaffTeam(role))) {
+    return 'team'
+  }
+  return getReportScope(can, role)
 }
 
 export function getReportScope(

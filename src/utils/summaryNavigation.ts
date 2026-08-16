@@ -3,15 +3,19 @@ import { canAccessTeamRosterTab } from './teamRosterMembers'
 
 export type SummaryTabId =
   | 'tong-quan'
+  | 'bao-cao-toan-dien'
   | 'kpi-nhan-su'
   | 'bang-diem'
   | 'lich-goi'
   | 'van-hanh'
-  | 'nhom-cua-toi'
+  | 'quan-ly-team'
+  | 'quan-ly-truong'
 
 export const SUMMARY_TAB_ORDER: SummaryTabId[] = [
   'tong-quan',
-  'nhom-cua-toi',
+  'bao-cao-toan-dien',
+  'quan-ly-team',
+  'quan-ly-truong',
   'kpi-nhan-su',
   'bang-diem',
   'lich-goi',
@@ -21,7 +25,9 @@ export const SUMMARY_TAB_ORDER: SummaryTabId[] = [
 /** Nhãn tab ngắn — dễ chọn trên điện thoại (vuốt ngang). */
 export const SUMMARY_TAB_LABELS: Record<SummaryTabId, string> = {
   'tong-quan': 'Tổng quan',
-  'nhom-cua-toi': 'Nhóm',
+  'bao-cao-toan-dien': 'Báo cáo',
+  'quan-ly-team': 'Quản lý team',
+  'quan-ly-truong': 'Quản lý trường',
   'kpi-nhan-su': 'Đánh giá',
   'bang-diem': 'Bảng điểm',
   'lich-goi': 'Lịch gọi',
@@ -32,8 +38,12 @@ export function canAccessSummaryTab(tab: SummaryTabId, can: (p: Permission) => b
   switch (tab) {
     case 'tong-quan':
       return true
-    case 'nhom-cua-toi':
+    case 'bao-cao-toan-dien':
+      return can('analytics:advanced') || can('leads:read:global') || can('dashboard:team_lead')
+    case 'quan-ly-team':
       return canAccessTeamRosterTab(can)
+    case 'quan-ly-truong':
+      return can('leads:read:global')
     case 'kpi-nhan-su':
       return can('dashboard:counselor') || can('analytics:advanced') || can('dashboard:team_lead')
     case 'bang-diem':
@@ -65,6 +75,8 @@ export function resolveSummaryTab(
     scorecard: 'bang-diem',
     calls: 'lich-goi',
     command: 'van-hanh',
+    'nhom-cua-toi': 'quan-ly-team',
+    'bao-cao-tuyen-sinh': 'bao-cao-toan-dien',
   }
   const mapped = param ? legacy[param] : undefined
   if (mapped && tabs.includes(mapped)) return mapped

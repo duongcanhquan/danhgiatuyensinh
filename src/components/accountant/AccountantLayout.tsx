@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { FileSpreadsheet, LogOut, Users, Wallet } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageAccountantStaff } from '../../auth/accountantPortal'
+import { ChangePasswordPanel } from '../ChangePasswordPanel'
 
 function navClass(isActive: boolean) {
   return [
@@ -29,14 +30,17 @@ export function AccountantLayout() {
               {profile?.displayName || profile?.email || '—'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 active:bg-slate-50 sm:gap-2"
-          >
-            <LogOut className="h-4 w-4" aria-hidden />
-            <span>Thoát</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <ChangePasswordPanel tone="light" compact />
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 active:bg-slate-50 sm:gap-2"
+            >
+              <LogOut className="h-4 w-4" aria-hidden />
+              <span>Thoát</span>
+            </button>
+          </div>
         </div>
         {/* Desktop / tablet top nav */}
         <nav className="mx-auto hidden max-w-[1800px] gap-1 px-4 pb-3 sm:flex sm:px-6">

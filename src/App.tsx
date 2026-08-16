@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AuthProvider } from './contexts/AuthProvider'
+import { ManagementViewScopeProvider } from './contexts/ManagementViewScopeContext'
 import { CallSessionConfigProvider } from './contexts/CallSessionConfigContext'
 import { OmicallProvider } from './contexts/OmicallProvider'
 import { OrgProvider } from './contexts/OrgProvider'
@@ -99,6 +100,7 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <AuthProvider>
+        <ManagementViewScopeProvider>
         {/* Org + danh bạ/master data phải bọc cả OMICall (panel gọi ngoài Layout). */}
         <OrgProvider>
           <SharedFirestoreDataProviders>
@@ -163,6 +165,7 @@ export default function App() {
             </InfoScoreRulesProvider>
           </SharedFirestoreDataProviders>
         </OrgProvider>
+        </ManagementViewScopeProvider>
       </AuthProvider>
     </AppErrorBoundary>
   )

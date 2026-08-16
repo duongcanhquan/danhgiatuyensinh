@@ -20,7 +20,7 @@ export type DocumentId = string
 //    - May create Interactions & counselor notes for those leads only
 //    - May read ConsultingPlaybooks (global playbook library; matching is server/client logic)
 //
-// 2) Trưởng nhóm (`team_lead`)
+// 2) Trưởng nhóm (`team_lead`) / Quản lý kiêm nhóm (`admin` + managedCounselorIds)
 //    - Quản lý / cập nhật hồ sơ TVV trong nhóm (`managedCounselorIds`); đổi TVV; profile nhóm; mẫu tư vấn
 //    - Không: master data toàn trường, Tri thức/LLM engine, nhân sự admin
 //    - Legacy Firestore: `head_of_profession` / `head_of_department` → đọc như `team_lead`

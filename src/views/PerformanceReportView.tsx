@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { BarChart3, CalendarDays, ClipboardList, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import {
-  getReportScope,
+  resolveEffectiveReportScope,
   reportScopeDescription,
+  REPORT_SCOPE_LABELS,
   reportScopeLabel,
 } from '../utils/reportScope'
+import { useManagementViewScope } from '../contexts/ManagementViewScopeContext'
 import { AdminPersonnelKpiPanel } from '../components/AdminPersonnelKpiPanel'
 import { CounselorKpiView } from './CounselorKpiView'
 import { PersonalMonthlyKpiSection } from '../components/PersonalMonthlyKpiSection'
@@ -21,8 +23,12 @@ function canAccessPersonnelReport(can: (p: import('../types').Permission) => boo
 
 export function PerformanceReportView() {
   const { can, profile } = useAuth()
-  const scope = getReportScope(can, profile?.role)
-  const scopeLabel = reportScopeLabel(can, profile)
+  const { preferTeamScope } = useManagementViewScope()
+  const scope = resolveEffectiveReportScope(can, profile?.role, preferTeamScope)
+  const scopeLabel =
+    scope === 'self'
+      ? reportScopeLabel(can, profile)
+      : REPORT_SCOPE_LABELS[scope]
   const showManagerPanel = canAccessPersonnelReport(can)
 
   const tabs = useMemo((): { id: ReportTab; label: string }[] => {

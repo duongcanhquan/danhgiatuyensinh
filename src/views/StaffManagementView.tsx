@@ -1,5 +1,16 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { doc, Timestamp, writeBatch } from 'firebase/firestore'
+import {
+  KeyRound,
+  Phone,
+  Plus,
+  Search,
+  Shield,
+  UserPlus,
+  Users,
+  UsersRound,
+  X,
+} from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../hooks/useOrg'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
@@ -19,9 +30,9 @@ import {
 } from '../auth/roleUtils'
 import { STAFF_ASSIGNABLE_PERMISSIONS } from '../utils/roleCapabilitiesConfig'
 import { defaultPermissionsForRole } from '../auth/permissions'
-import { syncOmicallInternalPhones } from '../services/omicallSyncInternalPhones'
 import { confirmDangerousStaffAccountDelete } from '../utils/dangerousDeleteConfirm'
 import { StaffExcelImportPanel } from '../components/StaffExcelImportPanel'
+import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import {
   counselorIdsInManagerScope,
   explicitManagedCounselorIds,
@@ -35,9 +46,40 @@ import {
 /** Vai trò quản trị được tạo trong app; kế toán là cổng riêng, không nằm trong quyền admin. */
 const ROLES_BASE: UserRole[] = ['counselor', 'ctv', 'team_lead', 'admin', 'accountant', 'marketing']
 
+type StaffMainTab = 'list' | 'teams' | 'add'
+
 /** Quản lý gán số nội bộ / mật khẩu SIP cho nhân viên gọi điện và Trưởng nhóm. */
 function canAssignOmicallSip(role: UserRole): boolean {
   return role === 'counselor' || role === 'ctv' || role === 'team_lead' || role === 'admin'
+}
+
+function fieldClass() {
+  return 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-[var(--color-primary)]/50 focus:ring-2 focus:ring-[var(--color-primary)]/20'
+}
+
+function SectionCard({
+  title,
+  hint,
+  children,
+  icon,
+}: {
+  title: string
+  hint?: string
+  children: ReactNode
+  icon?: ReactNode
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200/90 bg-slate-50/60 p-3 sm:p-3.5">
+      <div className="mb-2.5 flex items-start gap-2">
+        {icon ? <span className="mt-0.5 text-slate-500">{icon}</span> : null}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          {hint ? <p className="mt-0.5 text-xs leading-snug text-slate-600">{hint}</p> : null}
+        </div>
+      </div>
+      <div className="space-y-2.5">{children}</div>
+    </div>
+  )
 }
 
 export function StaffManagementView({
@@ -72,6 +114,11 @@ export function StaffManagementView({
   }, [profile?.role, teamScopeOnly])
   const { users, loading, error: directoryError, fieldStaff } = useCounselorDirectory()
 
+  const [mainTab, setMainTab] = useState<StaffMainTab>('list')
+  const [listQuery, setListQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -81,6 +128,7 @@ export function StaffManagementView({
   const [createOmicallPassword, setCreateOmicallPassword] = useState('')
   const [createOmicallOutbound, setCreateOmicallOutbound] = useState('')
   const [createOmicallAgentId, setCreateOmicallAgentId] = useState('')
+  const [showCreateOmicall, setShowCreateOmicall] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -98,8 +146,6 @@ export function StaffManagementView({
   const [editOmicallAgentId, setEditOmicallAgentId] = useState('')
   const [editOmicallOutbound, setEditOmicallOutbound] = useState('')
   const [editTeamIds, setEditTeamIds] = useState<string[]>([])
-  const [omicallSyncBusy, setOmicallSyncBusy] = useState(false)
-  /** Trưởng nhóm phụ trách (khi sửa TVV — admin). */
   const [editTeamLeadId, setEditTeamLeadId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [editNewPassword, setEditNewPassword] = useState('')
@@ -115,7 +161,6 @@ export function StaffManagementView({
     return fieldStaff
   }, [fieldStaff, teamScopeOnly, profile])
 
-  /** Trưởng nhóm Sale (cầm roster TVV/CTV). */
   const teamLeads = useMemo(
     () => users.filter((u) => canOwnFieldStaffTeam(u.role) && u.isActive !== false),
     [users],
@@ -151,6 +196,30 @@ export function StaffManagementView({
     })
   }, [users, teamScopeOnly, profile])
 
+  const filteredUsers = useMemo(() => {
+    const q = listQuery.trim().toLowerCase()
+    return sortedUsers.filter((u) => {
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false
+      if (statusFilter === 'active' && u.isActive === false) return false
+      if (statusFilter === 'inactive' && u.isActive !== false) return false
+      if (!q) return true
+      const hay = `${u.displayName ?? ''} ${u.email} ${USER_ROLE_LABELS[u.role]}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [sortedUsers, listQuery, roleFilter, statusFilter])
+
+  const stats = useMemo(() => {
+    const active = sortedUsers.filter((u) => u.isActive !== false).length
+    const inactive = sortedUsers.length - active
+    return {
+      total: sortedUsers.length,
+      active,
+      inactive,
+      leads: teamLeads.length,
+      unassigned: unassignedCounselors.length,
+    }
+  }, [sortedUsers, teamLeads.length, unassignedCounselors.length])
+
   const selfUid = firebaseUser?.uid ?? profile?.id ?? null
 
   if (!canAccessStaff) {
@@ -161,60 +230,12 @@ export function StaffManagementView({
     )
   }
 
-  const teamBanner = teamScopeOnly ? (
-    <div className="space-y-2">
-      <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
-        <strong>Trưởng nhóm Sale:</strong> quản lý TVV / CTV đã gán trong nhóm; đặt mật khẩu do Quản lý trường.
-      </p>
-      {profile && !teamLeadUsesExplicitRoster(profile) ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Chưa có danh sách sale rõ trên hồ sơ nhóm. Nhờ Quản lý trường gán TVV/CTV vào nhóm bạn — khi đó mới sửa /
-          vô hiệu / xóa được trên màn này.
-        </p>
-      ) : null}
-    </div>
-  ) : canStaffAll ? (
-    <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
-      <strong>Quản lý trường:</strong> xem, sửa, vô hiệu và đặt mật khẩu mọi nhân sự trong trường (TVV, CTV, Trưởng
-      nhóm, Quản lý khác) — trừ Siêu quản trị. Nhiều Quản lý cùng làm được.
-    </p>
-  ) : null
-
   const canManageUser = (u: VietMyUserProfile) => {
     if (isSuperAdminRole(u.role) && !isSuperAdminRole(profile?.role)) return false
     if (canStaffAll) return true
     if (!profile || !teamScopeOnly) return false
     return isUserInExplicitTeamRoster(profile, u)
   }
-
-  const omicallSyncBanner =
-    canOmicallConfig && !teamScopeOnly ? (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
-        <p>
-          <strong>OMICall:</strong> đồng bộ số nội bộ, SIP, agent ID và đầu số từ tổng đài vào hồ sơ nhân sự (khớp
-          email) — TVV, CTV, Trưởng nhóm, Quản lý.
-        </p>
-        <button
-          type="button"
-          disabled={omicallSyncBusy}
-          onClick={() => {
-            setOmicallSyncBusy(true)
-            setMsg(null)
-            void syncOmicallInternalPhones(false)
-              .then((r) =>
-                setMsg(
-                  `Đồng bộ OMICall: ${r.updated} hồ sơ cập nhật / ${r.matched} khớp · ${r.totalExtensions} số nội bộ trên tổng đài.`,
-                ),
-              )
-              .catch((e) => setErr(e instanceof Error ? e.message : 'Lỗi đồng bộ OMICall'))
-              .finally(() => setOmicallSyncBusy(false))
-          }}
-          className="rounded-lg bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50"
-        >
-          {omicallSyncBusy ? 'Đang đồng bộ…' : 'Đồng bộ số nội bộ → hồ sơ'}
-        </button>
-      </div>
-    ) : null
 
   const toggleTeamId = (ids: string[], uid: string, on: boolean) => {
     if (on) return [...new Set([...ids, uid])]
@@ -255,6 +276,8 @@ export function StaffManagementView({
       setCreateOmicallPassword('')
       setCreateOmicallOutbound('')
       setCreateOmicallAgentId('')
+      setShowCreateOmicall(false)
+      setMainTab('list')
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Không tạo được tài khoản')
     } finally {
@@ -437,7 +460,7 @@ export function StaffManagementView({
     onChange: (ids: string[]) => void,
     idPrefix: string,
   ) => (
-    <fieldset className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+    <fieldset className="rounded-xl border border-slate-200 bg-white px-3 py-3">
       <legend className="px-1 text-sm font-medium text-slate-800">Sale / CTV trong nhóm</legend>
       {counselorPickList.length === 0 ? (
         <p className="text-xs text-slate-600">Chưa có sale / CTV trong danh bạ.</p>
@@ -445,10 +468,10 @@ export function StaffManagementView({
         <ul className="max-h-40 space-y-1.5 overflow-y-auto text-sm">
           {counselorPickList.map((c) => (
             <li key={c.id}>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-white/70">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-slate-50">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 accent-[var(--color-primary)]"
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-[var(--color-primary)]"
                   checked={selected.includes(c.id)}
                   onChange={(e) => onChange(toggleTeamId(selected, c.id, e.target.checked))}
                   id={`${idPrefix}-${c.id}`}
@@ -462,260 +485,179 @@ export function StaffManagementView({
     </fieldset>
   )
 
+  const tabs: { id: StaffMainTab; label: string; show: boolean }[] = [
+    { id: 'list', label: 'Danh sách', show: true },
+    { id: 'teams', label: 'Nhóm sale', show: canStaffAll && !teamScopeOnly },
+    { id: 'add', label: 'Thêm nhân sự', show: canStaffAll },
+  ]
+
+  const initialOf = (u: VietMyUserProfile) => {
+    const raw = (u.displayName || u.email || '?').trim()
+    return raw.slice(0, 1).toUpperCase()
+  }
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-5">
       {embedded ? null : (
-        <header>
-          <h1 className="text-xl font-semibold text-slate-900">
+        <header className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
             {teamScopeOnly ? 'Nhóm tư vấn' : 'Quản lý nhân sự'}
           </h1>
+          <p className="max-w-2xl text-sm text-slate-600">
+            {teamScopeOnly
+              ? 'Xem và sửa TVV / CTV trong nhóm bạn. Đặt mật khẩu do Quản lý trường.'
+              : 'Tạo tài khoản, gán nhóm, mật khẩu và quyền — một chỗ cho cả trường.'}
+          </p>
         </header>
       )}
 
-      {teamBanner}
-      {omicallSyncBanner}
-
-      {canStaffAll && !teamScopeOnly ? <StaffExcelImportPanel /> : null}
-
-      {canStaffAll && !teamScopeOnly ? (
-        <section className="app-surface-elevated p-4 sm:p-5">
-          <h2 className="app-section-heading">Phân nhóm sale ↔ Trưởng nhóm</h2>
-          {teamLeads.length === 0 ? (
-            <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              Chưa có tài khoản <strong>Trưởng nhóm Sale</strong> để cầm nhóm. Tạo / chọn vai trò đó, rồi gán sale ở
-              «Chỉnh nhóm» hoặc form Sửa. Quản lý trường vẫn xem và sửa được mọi nhân sự trong trường (trừ Siêu quản
-              trị).
-            </p>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {teamLeads.map((lead) => {
-                const members = teamLeadMembers.get(lead.id) ?? []
-                const explicit = teamLeadUsesExplicitRoster(lead)
-                return (
-                  <li
-                    key={lead.id}
-                    className="rounded-xl border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/40 px-4 py-3"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900">{lead.displayName || lead.email}</p>
-                        <p className="text-xs text-slate-500">
-                          {USER_ROLE_LABELS[lead.role]} · {lead.email}
-                        </p>
-                        {!explicit ? (
-                          <p className="mt-1 text-xs text-amber-800">
-                            Đang dùng fallback khoa/phòng (legacy) — nên chọn TVV rõ trong «Chỉnh nhóm».
-                          </p>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(lead)}
-                        className="shrink-0 rounded-lg border border-[var(--color-primary)]/40 bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
-                      >
-                        Chỉnh nhóm ({members.length} TVV)
-                      </button>
-                    </div>
-                    {members.length > 0 ? (
-                      <ul className="mt-2 flex flex-wrap gap-1.5">
-                        {members.map((m) => (
-                          <li
-                            key={m.id}
-                            className="rounded-lg border border-slate-200/80 bg-white px-2 py-0.5 text-xs font-medium text-slate-800"
-                          >
-                            {m.displayName || m.email}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-xs text-slate-600">Chưa gán TVV — bấm «Chỉnh nhóm» để tick danh sách.</p>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {unassignedCounselors.length > 0 ? (
-            <div className="mt-4 rounded-xl border border-amber-300/80 bg-amber-50/90 px-4 py-3">
-              <p className="text-sm font-semibold text-amber-950">
-                TVV chưa thuộc nhóm nào ({unassignedCounselors.length})
-              </p>
-              <ul className="mt-2 flex flex-wrap gap-1.5">
-                {unassignedCounselors.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(c)}
-                      className="rounded-lg border border-amber-400/80 bg-white px-2 py-0.5 text-xs font-medium text-amber-950 hover:bg-amber-100/80"
-                    >
-                      {c.displayName || c.email} — gán nhóm
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {directoryError ? (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-          Không đọc được danh sách users: {directoryError}. Kiểm tra Firestore Rules cho collection{' '}
-          <code className="text-xs">users</code>.
+      {teamScopeOnly && profile && !teamLeadUsesExplicitRoster(profile) ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Chưa có danh sách sale rõ trên hồ sơ nhóm. Nhờ Quản lý trường gán TVV/CTV vào nhóm bạn.
         </p>
       ) : null}
 
-      <div className={`grid gap-8 ${canStaffAll ? 'lg:grid-cols-2' : ''}`}>
-        {canStaffAll ? (
-        <form onSubmit={(e) => void submit(e)} className="app-surface-elevated p-4 sm:p-5">
-          <h2 className="app-section-heading">Thêm nhân viên</h2>
-          <label className="mt-4 block text-sm font-medium text-slate-700">
-            Email đăng nhập
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
+      <BentoGrid tight>
+        <BentoStat label="Nhân sự" value={stats.total} hint={loading ? 'Đang tải…' : `${stats.active} đang dùng`} />
+        <BentoStat label="Đang hoạt động" value={stats.active} tone="accent" />
+        {canStaffAll && !teamScopeOnly ? (
+          <>
+            <BentoStat
+              label="Cầm nhóm"
+              value={stats.leads}
+              hint="Trưởng nhóm / Quản lý có roster"
             />
-          </label>
-          <label className="mt-3 block text-sm font-medium text-slate-700">
-            Mật khẩu ban đầu
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
+            <BentoStat
+              label="Chưa gán nhóm"
+              value={stats.unassigned}
+              tone={stats.unassigned > 0 ? 'ink' : 'default'}
+              hint={stats.unassigned > 0 ? 'Cần gán vào nhóm' : 'Đã đủ nhóm'}
             />
-          </label>
-          <label className="mt-3 block text-sm font-medium text-slate-700">
-            Họ tên hiển thị
-            <input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
-            />
-          </label>
-          <label className="mt-3 block text-sm font-medium text-slate-700">
-            Vai trò
-            <select
-              value={role}
-              onChange={(e) => {
-                const r = e.target.value as UserRole
-                setRole(r)
-                if (!canOwnFieldStaffTeam(r)) setCreateTeamIds([])
-                if (!canAssignOmicallSip(r)) {
-                  setCreateOmicallUser('')
-                  setCreateOmicallPassword('')
-                  setCreateOmicallOutbound('')
-                  setCreateOmicallAgentId('')
-                }
-              }}
-              className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-900"
+          </>
+        ) : (
+          <BentoStat label="Đã khóa" value={stats.inactive} />
+        )}
+      </BentoGrid>
+
+      {(msg || err || directoryError) && (
+        <div className="space-y-2">
+          {directoryError ? (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+              Không đọc được danh sách: {directoryError}
+            </p>
+          ) : null}
+          {err ? <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{err}</p> : null}
+          {msg ? (
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</p>
+          ) : null}
+        </div>
+      )}
+
+      <div
+        className="flex flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-sm"
+        role="tablist"
+        aria-label="Mục quản lý nhân sự"
+      >
+        {tabs
+          .filter((t) => t.show)
+          .map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={mainTab === t.id}
+              onClick={() => setMainTab(t.id)}
+              className={[
+                'inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition duration-150',
+                mainTab === t.id
+                  ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+              ].join(' ')}
             >
+              {t.id === 'list' ? <Users className="h-3.5 w-3.5" aria-hidden /> : null}
+              {t.id === 'teams' ? <UsersRound className="h-3.5 w-3.5" aria-hidden /> : null}
+              {t.id === 'add' ? <UserPlus className="h-3.5 w-3.5" aria-hidden /> : null}
+              {t.label}
+            </button>
+          ))}
+      </div>
+
+      {mainTab === 'list' ? (
+        <BentoCell className="p-3 sm:p-4" colSpan={4}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                {teamScopeOnly ? 'Nhân viên trong nhóm' : 'Danh sách nhân sự'}
+              </h2>
+              <p className="text-xs text-slate-500">
+                {filteredUsers.length}/{sortedUsers.length} người · bấm Sửa để đổi nhóm, mật khẩu, quyền
+              </p>
+            </div>
+            {canStaffAll ? (
+              <button
+                type="button"
+                onClick={() => setMainTab('add')}
+                className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Thêm nhanh
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+              <input
+                value={listQuery}
+                onChange={(e) => setListQuery(e.target.value)}
+                placeholder="Tìm tên, email, vai trò…"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+              />
+            </label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as UserRole | 'all')}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              aria-label="Lọc vai trò"
+            >
+              <option value="all">Mọi vai trò</option>
               {assignableRoles.map((r) => (
                 <option key={r} value={r}>
                   {USER_ROLE_LABELS[r]}
                 </option>
               ))}
             </select>
-          </label>
-          {role === 'accountant' ? (
-            <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs leading-snug text-emerald-950">
-              Tài khoản <strong>Kế toán</strong> đăng nhập tại{' '}
-              <strong>/ke-toan/login</strong> (không vào CRM tuyển sinh). Giao email + mật khẩu tạm cho kế
-              toán; có thể đổi MK sau bằng «Gửi email đặt lại mật khẩu» khi sửa nhân sự.
-            </p>
-          ) : null}
-          {canOwnFieldStaffTeam(role) && canStaffAll
-            ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create')
-            : null}
-          {canOwnFieldStaffTeam(role) && canStaffAll && createTeamIds.length === 0 ? (
-            <p className="mt-2 text-xs text-amber-800">
-              Có thể chọn sẵn sale trong nhóm — hoặc chỉnh sau ở mục «Phân nhóm» phía trên.
-            </p>
-          ) : null}
-          {canAssignOmicallSip(role) && canOmicallConfig ? (
-            <div className="mt-4 rounded-xl border border-sky-200/80 bg-sky-50/50 px-3 py-3 space-y-2">
-              <p className="text-xs font-semibold text-sky-950">OMICall (tuỳ chọn)</p>
-              <p className="text-xs leading-snug text-slate-600">
-                Quản lý gán số nội bộ và mật khẩu SIP cho nhân viên / Trưởng nhóm. Có thể tạo số trên OMICall cùng{' '}
-                <strong>email</strong> này rồi đồng bộ, hoặc điền tay bên dưới.
-              </p>
-              <label className="block text-sm font-medium text-slate-700">
-                Số nội bộ
-                <input
-                  value={createOmicallUser}
-                  onChange={(e) => setCreateOmicallUser(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm"
-                  placeholder="vd. 100"
-                  autoComplete="off"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Mật khẩu SIP
-                <input
-                  type="password"
-                  value={createOmicallPassword}
-                  onChange={(e) => setCreateOmicallPassword(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm"
-                  autoComplete="new-password"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Đầu số gọi ra
-                <input
-                  value={createOmicallOutbound}
-                  onChange={(e) => setCreateOmicallOutbound(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm"
-                  autoComplete="off"
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Agent ID OMICall
-                <input
-                  value={createOmicallAgentId}
-                  onChange={(e) => setCreateOmicallAgentId(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm font-mono"
-                  autoComplete="off"
-                />
-              </label>
-            </div>
-          ) : null}
-          {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
-          {msg ? <p className="mt-3 text-sm text-emerald-700">{msg}</p> : null}
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-4 w-full rounded-xl border border-emerald-300/60 bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {busy ? 'Đang tạo…' : 'Tạo tài khoản'}
-          </button>
-        </form>
-        ) : null}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              aria-label="Lọc trạng thái"
+            >
+              <option value="all">Mọi trạng thái</option>
+              <option value="active">Đang dùng</option>
+              <option value="inactive">Đã khóa</option>
+            </select>
+          </div>
 
-        <div className="app-surface-elevated p-4 sm:p-5">
-          <h2 className="app-section-heading">
-            {teamScopeOnly ? 'Nhân viên trong nhóm' : 'Danh sách nhân sự'}
-          </h2>
-          {loading ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p> : null}
+          {loading ? <p className="mt-4 text-sm text-slate-600">Đang tải…</p> : null}
           {!loading && !directoryError && sortedUsers.length === 0 ? (
-            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-              Chưa thấy nhân sự trong trường đang chọn. Siêu quản trị: kiểm tra bộ chọn trường (VietMy). Tài khoản cũ
-              thiếu mã trường sẽ hiện lại sau khi app cập nhật — hoặc chạy gắn orgId Phase 0.
+            <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              Chưa thấy nhân sự trong trường đang chọn.
             </p>
           ) : null}
-          <ul className="mt-3 max-h-[min(75vh,56rem)] min-h-[28rem] space-y-2 overflow-y-auto text-sm">
-            {sortedUsers.map((u) => {
+          {!loading && filteredUsers.length === 0 && sortedUsers.length > 0 ? (
+            <p className="mt-4 text-sm text-slate-600">Không khớp bộ lọc — thử xóa ô tìm hoặc đổi vai trò.</p>
+          ) : null}
+
+          <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200/90 bg-white">
+            {filteredUsers.map((u) => {
               const isSelf = selfUid !== null && u.id === selfUid
               const inactive = u.isActive === false
               const targetSuper = isSuperAdminRole(u.role)
               const viewerSuper = profile?.role === 'super_admin'
               const canStaffEdit = !targetSuper || viewerSuper
               const llmOk = targetSuper || u.allowLlmAndAiTasks === true
-              const teamCount = u.managedCounselorIds?.length ?? 0
               const members = canOwnFieldStaffTeam(u.role) ? (teamLeadMembers.get(u.id) ?? []) : []
               const primaryLead = isFieldStaffRole(u.role)
                 ? primaryTeamLeadForCounselor(u.id, users)
@@ -726,135 +668,263 @@ export function StaffManagementView({
                 <li
                   key={u.id}
                   className={[
-                    'rounded-lg border border-slate-200/70 bg-white/60 px-3 py-2',
-                    inactive ? 'opacity-70' : '',
+                    'flex flex-col gap-2 px-3 py-3 transition sm:flex-row sm:items-center sm:justify-between',
+                    inactive ? 'bg-slate-50/80 opacity-80' : 'hover:bg-slate-50/70',
                   ].join(' ')}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      className={[
+                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold',
+                        inactive
+                          ? 'bg-slate-200 text-slate-600'
+                          : 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]',
+                      ].join(' ')}
+                      aria-hidden
+                    >
+                      {initialOf(u)}
+                    </span>
                     <div className="min-w-0">
-                      <p className="font-medium text-slate-900">{u.displayName || u.email}</p>
+                      <p className="truncate font-semibold text-slate-900">
+                        {u.displayName || u.email}
+                        {isSelf ? (
+                          <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-900">
+                            Bạn
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="truncate text-xs text-slate-500">{u.email}</p>
-                      <p className="mt-0.5 text-xs font-medium text-[var(--color-primary)]">
-                        {USER_ROLE_LABELS[u.role]}
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                          {USER_ROLE_LABELS[u.role]}
+                        </span>
+                        {inactive ? (
+                          <span className="rounded-md bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                            Đã khóa
+                          </span>
+                        ) : null}
+                        {llmOk ? (
+                          <span className="rounded-md bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-900">
+                            AI
+                          </span>
+                        ) : !targetSuper &&
+                          (u.role === 'counselor' || u.role === 'ctv' || u.role === 'team_lead') ? (
+                          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
+                            Chưa AI
+                          </span>
+                        ) : null}
                         {canOwnFieldStaffTeam(u.role) ? (
-                          <span className="ml-2 font-normal text-slate-600">
-                            · {members.length > 0
-                              ? members.map((m) => m.displayName || m.email).join(', ')
-                              : teamCount > 0
-                                ? `${teamCount} sale`
-                                : 'Chưa gán sale'}
+                          <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-900">
+                            Nhóm: {members.length ? `${members.length} sale` : 'Chưa gán sale'}
                           </span>
                         ) : null}
                         {primaryLead ? (
-                          <span className="ml-2 block font-normal text-slate-600">
-                            Nhóm: {primaryLead.displayName || primaryLead.email}
+                          <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-900">
+                            Thuộc: {primaryLead.displayName || primaryLead.email}
                           </span>
                         ) : null}
                         {unassignedCounselor ? (
-                          <span className="ml-2 block font-normal text-amber-800">Chưa gán nhóm</span>
+                          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
+                            Chưa gán nhóm
+                          </span>
                         ) : null}
-                        {inactive ? (
-                          <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">Đã vô hiệu</span>
-                        ) : null}
-                        {isSelf ? (
-                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">Bạn</span>
-                        ) : null}
-                        {llmOk ? (
-                          <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-900">LLM</span>
-                        ) : !targetSuper && (u.role === 'counselor' || u.role === 'ctv' || u.role === 'team_lead') ? (
-                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">Chưa AI</span>
-                        ) : null}
-                      </p>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap gap-1">
-                      {canStaffEdit && canManageUser(u) ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(u)}
-                            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                          >
-                            Sửa
-                          </button>
-                          {!isSelf ? (
-                            inactive ? (
-                              <button
-                                type="button"
-                                onClick={() => void toggleActive(u, true)}
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-900 hover:bg-indigo-100"
-                              >
-                                Kích hoạt
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => void toggleActive(u, false)}
-                                className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100"
-                              >
-                                Vô hiệu
-                              </button>
-                            )
-                          ) : null}
-                          {!isSelf ? (
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-1.5 sm:justify-end">
+                    {canStaffEdit && canManageUser(u) ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(u)}
+                          className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-50"
+                        >
+                          Sửa
+                        </button>
+                        {!isSelf ? (
+                          inactive ? (
                             <button
                               type="button"
-                              onClick={() => void removeUser(u)}
-                              className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-100"
+                              onClick={() => void toggleActive(u, true)}
+                              className="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-100"
                             >
-                              Xóa
+                              Mở lại
                             </button>
-                          ) : null}
-                        </>
-                      ) : (
-                        <span className="self-center rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-                          Siêu QT
-                        </span>
-                      )}
-                    </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void toggleActive(u, false)}
+                              className="cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
+                            >
+                              Khóa
+                            </button>
+                          )
+                        ) : null}
+                        {!isSelf ? (
+                          <button
+                            type="button"
+                            onClick={() => void removeUser(u)}
+                            className="cursor-pointer rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-900 transition hover:bg-rose-100"
+                          >
+                            Xóa
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="self-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                        Siêu QT
+                      </span>
+                    )}
                   </div>
                 </li>
               )
             })}
           </ul>
-        </div>
-      </div>
+        </BentoCell>
+      ) : null}
 
-      {editing ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-4 sm:items-center"
-          role="dialog"
-          aria-modal
-          aria-labelledby="staff-edit-title"
-          onClick={() => setEditing(null)}
-        >
-          <div
-            className="max-h-[min(92dvh,880px)] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:max-w-xl md:max-w-2xl md:p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="staff-edit-title" className="text-base font-semibold text-slate-900">
-              Sửa nhân viên
-            </h3>
-            <p className="mt-1 text-xs text-slate-600">{editing.email}</p>
-            <form onSubmit={(e) => void saveEdit(e)} className="mt-4 space-y-3">
+      {mainTab === 'teams' && canStaffAll && !teamScopeOnly ? (
+        <BentoGrid>
+          <BentoCell className="p-4" colSpan={4}>
+            <h2 className="text-base font-semibold text-slate-900">Nhóm sale</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Mỗi Trưởng nhóm / Quản lý cầm nhóm có danh sách TVV–CTV. Bấm «Chỉnh nhóm» để tick người.
+            </p>
+            {teamLeads.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                Chưa có ai cầm nhóm. Tạo tài khoản vai trò Trưởng nhóm hoặc Quản lý, rồi gán sale ở tab này / form Sửa.
+              </p>
+            ) : (
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {teamLeads.map((lead) => {
+                  const members = teamLeadMembers.get(lead.id) ?? []
+                  const explicit = teamLeadUsesExplicitRoster(lead)
+                  return (
+                    <li
+                      key={lead.id}
+                      className="flex flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900">{lead.displayName || lead.email}</p>
+                          <p className="text-xs text-slate-500">
+                            {lead.role === 'admin' ? 'Quản lý · cầm nhóm' : USER_ROLE_LABELS[lead.role]}
+                          </p>
+                          {!explicit ? (
+                            <p className="mt-1 text-xs text-amber-800">Nên chọn sale rõ trong «Chỉnh nhóm».</p>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(lead)}
+                          className="shrink-0 cursor-pointer rounded-lg border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-primary)] transition hover:brightness-95"
+                        >
+                          Chỉnh nhóm
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs font-medium text-slate-600">{members.length} sale</p>
+                      {members.length > 0 ? (
+                        <ul className="mt-2 flex flex-wrap gap-1">
+                          {members.slice(0, 8).map((m) => (
+                            <li
+                              key={m.id}
+                              className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-800"
+                            >
+                              {m.displayName || m.email}
+                            </li>
+                          ))}
+                          {members.length > 8 ? (
+                            <li className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                              +{members.length - 8}
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">Chưa gán TVV.</p>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {unassignedCounselors.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/90 p-3">
+                <p className="text-sm font-semibold text-amber-950">
+                  Chưa thuộc nhóm ({unassignedCounselors.length})
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {unassignedCounselors.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(c)}
+                        className="cursor-pointer rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-950 transition hover:bg-amber-100"
+                      >
+                        {c.displayName || c.email}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </BentoCell>
+        </BentoGrid>
+      ) : null}
+
+      {mainTab === 'add' && canStaffAll ? (
+        <BentoGrid>
+          <BentoCell className="p-4 sm:p-5" colSpan={2} rowSpan={2}>
+            <h2 className="text-base font-semibold text-slate-900">Thêm một người</h2>
+            <p className="mt-1 text-sm text-slate-600">Điền email, mật khẩu tạm, vai trò — rồi giao cho họ đổi mật khẩu sau.</p>
+            <form onSubmit={(e) => void submit(e)} className="mt-4 space-y-3">
               <label className="block text-sm font-medium text-slate-700">
-                Họ tên hiển thị
+                Email đăng nhập
                 <input
-                  value={editDisplayName}
-                  onChange={(e) => setEditDisplayName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={fieldClass()}
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Mật khẩu ban đầu
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={fieldClass()}
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Họ tên hiển thị
+                  <input
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className={fieldClass()}
+                  />
+                </label>
+              </div>
               <label className="block text-sm font-medium text-slate-700">
                 Vai trò
                 <select
-                  value={editRole}
+                  value={role}
                   onChange={(e) => {
                     const r = e.target.value as UserRole
-                    setEditRole(r)
-                    if (!canOwnFieldStaffTeam(r)) setEditTeamIds([])
+                    setRole(r)
+                    if (!canOwnFieldStaffTeam(r)) setCreateTeamIds([])
+                    if (!canAssignOmicallSip(r)) {
+                      setCreateOmicallUser('')
+                      setCreateOmicallPassword('')
+                      setCreateOmicallOutbound('')
+                      setCreateOmicallAgentId('')
+                      setShowCreateOmicall(false)
+                    }
                   }}
-                  disabled={selfUid === editing.id}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-60"
+                  className={fieldClass()}
                 >
                   {assignableRoles.map((r) => (
                     <option key={r} value={r}>
@@ -862,139 +932,273 @@ export function StaffManagementView({
                     </option>
                   ))}
                 </select>
-                {selfUid === editing.id ? (
-                  <span className="mt-1 block text-xs text-amber-800">Không đổi vai trò trên chính bạn từ đây.</span>
-                ) : null}
-                {editRole === 'accountant' ? (
-                  <span className="mt-1 block text-xs text-emerald-800">
-                    Kế toán đăng nhập tại <strong>/ke-toan/login</strong>.
-                  </span>
-                ) : null}
               </label>
-              {canOwnFieldStaffTeam(editRole) && canStaffAll
-                ? teamMemberPicker(editTeamIds, setEditTeamIds, 'edit')
-                : null}
-              {isFieldStaffRole(editRole) && canStaffAll ? (
-                <label className="block text-sm font-medium text-slate-700">
-                  Nhóm phụ trách (Trưởng nhóm)
-                  <select
-                    value={editTeamLeadId}
-                    onChange={(e) => setEditTeamLeadId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              {role === 'accountant' ? (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs leading-snug text-emerald-950">
+                  Kế toán đăng nhập tại <strong>/ke-toan/login</strong> — có nút đổi mật khẩu trên cổng đó.
+                </p>
+              ) : null}
+              {canOwnFieldStaffTeam(role) ? teamMemberPicker(createTeamIds, setCreateTeamIds, 'create') : null}
+              {canAssignOmicallSip(role) && canOmicallConfig ? (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateOmicall((v) => !v)}
+                    className="cursor-pointer text-xs font-semibold text-sky-800 underline-offset-2 hover:underline"
                   >
-                    <option value="">— Chưa gán / gỡ khỏi nhóm —</option>
-                    {teamLeads.map((lead) => (
-                      <option key={lead.id} value={lead.id}>
-                        {lead.displayName || lead.email} — Trưởng nhóm
+                    {showCreateOmicall ? 'Ẩn tổng đài' : 'Gán số tổng đài (tuỳ chọn)'}
+                  </button>
+                  {showCreateOmicall ? (
+                    <div className="mt-2 space-y-2 rounded-xl border border-sky-200 bg-sky-50/50 p-3">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Số nội bộ
+                        <input
+                          value={createOmicallUser}
+                          onChange={(e) => setCreateOmicallUser(e.target.value)}
+                          className={fieldClass()}
+                          placeholder="vd. 100"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="block text-sm font-medium text-slate-700">
+                        Mật khẩu SIP
+                        <input
+                          type="password"
+                          value={createOmicallPassword}
+                          onChange={(e) => setCreateOmicallPassword(e.target.value)}
+                          className={fieldClass()}
+                          autoComplete="new-password"
+                        />
+                      </label>
+                      <label className="block text-sm font-medium text-slate-700">
+                        Đầu số gọi ra
+                        <input
+                          value={createOmicallOutbound}
+                          onChange={(e) => setCreateOmicallOutbound(e.target.value)}
+                          className={fieldClass()}
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="block text-sm font-medium text-slate-700">
+                        Agent ID
+                        <input
+                          value={createOmicallAgentId}
+                          onChange={(e) => setCreateOmicallAgentId(e.target.value)}
+                          className={`${fieldClass()} font-mono`}
+                          autoComplete="off"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full cursor-pointer rounded-xl bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+              >
+                {busy ? 'Đang tạo…' : 'Tạo tài khoản'}
+              </button>
+            </form>
+          </BentoCell>
+          <BentoCell className="p-4 sm:p-5" colSpan={2} variant="muted">
+            <h2 className="text-base font-semibold text-slate-900">Nhập nhiều người (Excel)</h2>
+            <p className="mt-1 text-sm text-slate-600">Dùng khi thêm hàng loạt TVV trước khi gắn hồ sơ.</p>
+            <div className="mt-3">
+              <StaffExcelImportPanel />
+            </div>
+          </BentoCell>
+        </BentoGrid>
+      ) : null}
+
+      {editing ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/45 p-3 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal
+          aria-labelledby="staff-edit-title"
+          onClick={() => setEditing(null)}
+        >
+          <div
+            className="flex max-h-[min(94dvh,900px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-w-xl md:max-w-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+              <div className="min-w-0">
+                <h3 id="staff-edit-title" className="text-base font-semibold text-slate-900">
+                  Sửa nhân sự
+                </h3>
+                <p className="truncate text-xs text-slate-600">{editing.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="cursor-pointer rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Đóng"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={(e) => void saveEdit(e)} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5">
+              <SectionCard title="Thông tin cơ bản" hint="Họ tên, vai trò, trạng thái đăng nhập">
+                <label className="block text-sm font-medium text-slate-700">
+                  Họ tên hiển thị
+                  <input
+                    value={editDisplayName}
+                    onChange={(e) => setEditDisplayName(e.target.value)}
+                    className={fieldClass()}
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Vai trò
+                  <select
+                    value={editRole}
+                    onChange={(e) => {
+                      const r = e.target.value as UserRole
+                      setEditRole(r)
+                      if (!canOwnFieldStaffTeam(r)) setEditTeamIds([])
+                    }}
+                    disabled={selfUid === editing.id}
+                    className={`${fieldClass()} disabled:opacity-60`}
+                  >
+                    {assignableRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {USER_ROLE_LABELS[r]}
                       </option>
                     ))}
                   </select>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    Sale / CTV thuộc một nhóm do Trưởng nhóm cầm. Quản lý trường quản mọi nhân sự trong trường, không
-                    cần cầm nhóm riêng.
-                  </span>
                 </label>
-              ) : null}
-              {canStaffAll ? (
-              <div className="rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/40 px-3 py-2.5 space-y-2">
-                <p className="text-xs font-medium text-slate-800">Mật khẩu đăng nhập</p>
-                <label className="block text-sm font-medium text-slate-700">
-                  Mật khẩu mới (tuỳ chọn)
+                {editRole === 'accountant' ? (
+                  <p className="text-xs text-emerald-800">
+                    Kế toán đăng nhập tại <strong>/ke-toan/login</strong>.
+                  </p>
+                ) : null}
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
                   <input
-                    type="password"
-                    value={editNewPassword}
-                    onChange={(e) => setEditNewPassword(e.target.value)}
-                    minLength={6}
-                    autoComplete="new-password"
-                    placeholder="Để trống nếu không đổi"
+                    type="checkbox"
+                    className="cursor-pointer"
+                    checked={editActive}
+                    onChange={(e) => setEditActive(e.target.checked)}
                     disabled={selfUid === editing.id}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
                   />
+                  Tài khoản đang hoạt động
                 </label>
-                {selfUid === editing.id ? (
-                  <p className="text-xs text-amber-800">Không đổi mật khẩu chính bạn từ đây.</p>
-                ) : (
-                  <p className="text-xs leading-snug text-slate-600">
-                    Lưu form sẽ áp dụng mật khẩu ngay — không cần email.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  disabled={resetPwdBusy || editBusy || !editing.email?.trim()}
-                  onClick={sendPasswordResetForEditing}
-                  className="w-full rounded-lg border border-[var(--color-primary)]/35 bg-white px-3 py-2 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-50"
+              </SectionCard>
+
+              {(canOwnFieldStaffTeam(editRole) || isFieldStaffRole(editRole)) && canStaffAll ? (
+                <SectionCard
+                  title="Nhóm làm việc"
+                  hint="Gán sale vào người cầm nhóm, hoặc chọn nhóm cho TVV/CTV"
+                  icon={<UsersRound className="h-4 w-4" />}
                 >
-                  {resetPwdBusy ? 'Đang gửi…' : 'Hoặc gửi email đặt lại (tuỳ chọn)'}
-                </button>
-              </div>
-              ) : (
-                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Đặt / gửi mật khẩu do Quản lý trường thực hiện.
-                </p>
-              )}
-              <label className="flex items-center gap-2 text-sm text-slate-800">
-                <input
-                  type="checkbox"
-                  checked={editActive}
-                  onChange={(e) => setEditActive(e.target.checked)}
-                  disabled={selfUid === editing.id}
-                />
-                Tài khoản đang hoạt động
-              </label>
-              {isFieldStaffRole(editRole) ? (
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-emerald-200/80 bg-emerald-50/60 px-3 py-2.5 text-sm text-slate-800">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-emerald-600"
-                    checked={editShowOnPortal}
-                    onChange={(e) => setEditShowOnPortal(e.target.checked)}
-                  />
-                  <span>
-                    <span className="font-semibold text-slate-800">Hiện trên cổng đăng ký</span>
-                    <span className="mt-0.5 block text-xs text-slate-600">
-                      Sinh viên chọn thầy/cô này khi điền form công khai — hồ sơ gán đúng người đó.
-                    </span>
-                  </span>
-                </label>
+                  {canOwnFieldStaffTeam(editRole)
+                    ? teamMemberPicker(editTeamIds, setEditTeamIds, 'edit')
+                    : null}
+                  {isFieldStaffRole(editRole) ? (
+                    <label className="block text-sm font-medium text-slate-700">
+                      Thuộc nhóm của
+                      <select
+                        value={editTeamLeadId}
+                        onChange={(e) => setEditTeamLeadId(e.target.value)}
+                        className={fieldClass()}
+                      >
+                        <option value="">— Chưa gán / gỡ khỏi nhóm —</option>
+                        {teamLeads.map((lead) => (
+                          <option key={lead.id} value={lead.id}>
+                            {lead.displayName || lead.email} —{' '}
+                            {lead.role === 'admin' ? 'Quản lý (cầm nhóm)' : 'Trưởng nhóm'}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {isFieldStaffRole(editRole) ? (
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-3 py-2 text-sm text-slate-800">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 cursor-pointer rounded border-slate-300 accent-emerald-600"
+                        checked={editShowOnPortal}
+                        onChange={(e) => setEditShowOnPortal(e.target.checked)}
+                      />
+                      <span>
+                        <span className="font-semibold">Hiện trên cổng đăng ký</span>
+                        <span className="mt-0.5 block text-xs text-slate-600">
+                          Sinh viên chọn thầy/cô này khi điền form công khai.
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
+                </SectionCard>
               ) : null}
-              {isSuperAdminRole(editing.role) ? (
-                <p className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-950">
-                  <strong>Siêu quản trị</strong> luôn được dùng AI trên CRM.
-                </p>
-              ) : (
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)]/50 px-3 py-2.5 text-sm text-slate-800">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-violet-600"
-                    checked={editAllowLlm}
-                    onChange={(e) => setEditAllowLlm(e.target.checked)}
-                  />
-                  <span>
-                    <span className="font-semibold text-slate-800">Cho phép dùng AI trên hồ sơ</span>
-                  </span>
-                </label>
-              )}
-              {canStaffAll &&
-              !isAdminLikeRole(editRole) &&
-              !isSuperAdminRole(editRole) &&
-              editRole !== 'accountant' ? (
-                <div className="rounded-lg border border-violet-200/80 bg-violet-50/40 px-3 py-2.5 space-y-2">
-                  <p className="text-xs font-semibold text-violet-950">Phân quyền trong trường</p>
-                  <p className="text-[11px] leading-snug text-slate-600">
-                    Bật = giao thêm so với vai trò. Tắt «Thu hồi» = giữ quyền mặc định của vai trò.
-                  </p>
-                  <ul className="space-y-2">
+
+              <SectionCard
+                title="Mật khẩu đăng nhập"
+                hint="Đặt ngay hoặc gửi email — người dùng cũng đổi được sau khi đăng nhập"
+                icon={<KeyRound className="h-4 w-4" />}
+              >
+                {canStaffAll ? (
+                  <>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Mật khẩu mới (tuỳ chọn)
+                      <input
+                        type="password"
+                        value={editNewPassword}
+                        onChange={(e) => setEditNewPassword(e.target.value)}
+                        minLength={6}
+                        autoComplete="new-password"
+                        placeholder="Để trống nếu không đổi"
+                        disabled={selfUid === editing.id}
+                        className={`${fieldClass()} disabled:bg-slate-100`}
+                      />
+                    </label>
+                    {selfUid === editing.id ? (
+                      <p className="text-xs text-amber-800">Đổi mật khẩu của bạn ở menu bên trái (Đổi mật khẩu).</p>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={resetPwdBusy || editBusy || !editing.email?.trim()}
+                        onClick={sendPasswordResetForEditing}
+                        className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {resetPwdBusy ? 'Đang gửi…' : 'Gửi email đặt lại mật khẩu'}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-600">Đặt mật khẩu do Quản lý trường thực hiện.</p>
+                )}
+              </SectionCard>
+
+              <SectionCard title="AI & quyền thêm" icon={<Shield className="h-4 w-4" />}>
+                {isSuperAdminRole(editing.role) ? (
+                  <p className="text-xs text-sky-900">Siêu quản trị luôn được dùng AI trên CRM.</p>
+                ) : (
+                  <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-800">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 cursor-pointer rounded accent-violet-600"
+                      checked={editAllowLlm}
+                      onChange={(e) => setEditAllowLlm(e.target.checked)}
+                    />
+                    <span className="font-semibold">Cho phép dùng AI trên hồ sơ</span>
+                  </label>
+                )}
+                {canStaffAll &&
+                !isAdminLikeRole(editRole) &&
+                !isSuperAdminRole(editRole) &&
+                editRole !== 'accountant' ? (
+                  <ul className="space-y-2 border-t border-slate-200/80 pt-2">
                     {STAFF_ASSIGNABLE_PERMISSIONS.map((item) => {
                       const roleHas = defaultPermissionsForRole(editRole).includes(item.permission)
                       const grantedExtra = editExtraPerms.includes(item.permission)
                       const denied = editDeniedPerms.includes(item.permission)
                       const effectiveOn = denied ? false : roleHas || grantedExtra
                       return (
-                        <li key={item.permission} className="rounded-md border border-white/80 bg-white/80 px-2 py-1.5">
+                        <li key={item.permission}>
                           <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-800">
                             <input
                               type="checkbox"
-                              className="mt-0.5"
+                              className="mt-0.5 cursor-pointer"
                               checked={effectiveOn}
                               onChange={(e) => {
                                 const on = e.target.checked
@@ -1020,75 +1224,74 @@ export function StaffManagementView({
                       )
                     })}
                   </ul>
-                </div>
-              ) : null}
+                ) : null}
+              </SectionCard>
+
               {canOmicallConfig && canAssignOmicallSip(editRole) ? (
-                <div className="rounded-lg border border-sky-200/80 bg-sky-50/50 px-3 py-2.5 space-y-2">
-                  <p className="text-xs font-semibold text-sky-950">OMICall — số nội bộ & mật khẩu SIP</p>
-                  <p className="text-xs leading-snug text-slate-600">
-                    Chỉ Quản lý gán cho nhân viên và Trưởng nhóm. Để trống nếu dùng số mặc định trong Cài đặt → Gọi
-                    điện.
-                  </p>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Số nội bộ
-                    <input
-                      value={editOmicallUser}
-                      onChange={(e) => setEditOmicallUser(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="vd. 100"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Mật khẩu SIP
-                    <input
-                      type="password"
-                      value={editOmicallPassword}
-                      onChange={(e) => setEditOmicallPassword(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      autoComplete="new-password"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Đầu số gọi ra (hotline)
-                    <input
-                      value={editOmicallOutbound}
-                      onChange={(e) => setEditOmicallOutbound(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="Từ API hotline/list"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Agent ID OMICall
-                    <input
-                      value={editOmicallAgentId}
-                      onChange={(e) => setEditOmicallAgentId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
-                      placeholder="create_by.id từ API lịch sử"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <p className="text-xs text-slate-600">
-                    Agent ID lấy từ lịch sử cuộc gọi API (`create_by.id`) — giúp map cuộc gọi đúng người khi SIP trùng.
-                  </p>
-                </div>
+                <SectionCard
+                  title="Tổng đài (tuỳ chọn)"
+                  hint="Số nội bộ & SIP — để trống nếu dùng mặc định hệ thống"
+                  icon={<Phone className="h-4 w-4" />}
+                >
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Số nội bộ
+                      <input
+                        value={editOmicallUser}
+                        onChange={(e) => setEditOmicallUser(e.target.value)}
+                        className={fieldClass()}
+                        placeholder="vd. 100"
+                        autoComplete="off"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Mật khẩu SIP
+                      <input
+                        type="password"
+                        value={editOmicallPassword}
+                        onChange={(e) => setEditOmicallPassword(e.target.value)}
+                        className={fieldClass()}
+                        autoComplete="new-password"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Đầu số gọi ra
+                      <input
+                        value={editOmicallOutbound}
+                        onChange={(e) => setEditOmicallOutbound(e.target.value)}
+                        className={fieldClass()}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Agent ID
+                      <input
+                        value={editOmicallAgentId}
+                        onChange={(e) => setEditOmicallAgentId(e.target.value)}
+                        className={`${fieldClass()} font-mono`}
+                        autoComplete="off"
+                      />
+                    </label>
+                  </div>
+                </SectionCard>
               ) : null}
+
               {editErr ? <p className="text-sm text-rose-600">{editErr}</p> : null}
               {editMsg ? <p className="text-sm text-emerald-700">{editMsg}</p> : null}
-              <div className="flex flex-wrap gap-2 pt-2">
+
+              <div className="sticky bottom-0 -mx-4 flex flex-wrap gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 sm:-mx-5 sm:px-5">
                 <button
                   type="submit"
                   disabled={editBusy || resetPwdBusy}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="cursor-pointer rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
                 >
-                  {editBusy ? 'Đang lưu…' : 'Lưu'}
+                  {editBusy ? 'Đang lưu…' : 'Lưu thay đổi'}
                 </button>
                 <button
                   type="button"
                   disabled={editBusy || resetPwdBusy}
                   onClick={() => setEditing(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                  className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
                 >
                   Hủy
                 </button>

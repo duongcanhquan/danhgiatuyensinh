@@ -1,5 +1,5 @@
 import type { Permission, VietMyUserProfile } from '../types'
-import { isAdminLikeRole, isAssignableFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, isAdminLikeRole, isAssignableFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
 import { counselorIdsInManagerScope } from './teamScope'
 import type { TeamRosterMemberInput } from './teamRosterSummary'
 
@@ -29,6 +29,8 @@ export function resolveTeamRosterMembers(input: {
   directory: readonly VietMyUserProfile[]
   /** Chỉ áp dụng khi xem phạm vi trường. */
   filterTeamLeadUid?: string | null
+  /** Quản lý kiêm nhóm đang chọn «Nhóm của tôi». */
+  preferOwnTeam?: boolean
 }): TeamRosterMemberInput[] {
   const { profile, can, directory } = input
   const staff = activeFieldStaff(directory)
@@ -39,8 +41,13 @@ export function resolveTeamRosterMembers(input: {
       .sort((a, b) => memberLabel(a).localeCompare(memberLabel(b), 'vi'))
       .map((u) => ({ counselorUid: u.id, displayName: memberLabel(u) }))
 
-  // Trưởng nhóm: luôn nhóm của mình.
+  // Trưởng nhóm (hoặc đang xem phạm vi nhóm): roster của mình.
   if (isTeamLeadRole(profile.role) && !isAdminLikeRole(profile.role)) {
+    const ids = new Set(counselorIdsInManagerScope(profile, directory))
+    return toMembers(staff.filter((u) => ids.has(u.id)))
+  }
+
+  if (canOwnFieldStaffTeam(profile.role) && input.preferOwnTeam) {
     const ids = new Set(counselorIdsInManagerScope(profile, directory))
     return toMembers(staff.filter((u) => ids.has(u.id)))
   }
@@ -69,7 +76,13 @@ export function teamLeadOptionsForFilter(
   directory: readonly VietMyUserProfile[],
 ): { id: string; label: string }[] {
   return directory
-    .filter((u) => isTeamLeadRole(u.role) && u.isActive !== false)
-    .map((u) => ({ id: u.id, label: memberLabel(u) }))
+    .filter((u) => canOwnFieldStaffTeam(u.role) && u.isActive !== false)
+    .map((u) => ({
+      id: u.id,
+      label:
+        u.role === 'admin'
+          ? `${memberLabel(u)} (Quản lý · nhóm)`
+          : memberLabel(u),
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
 }

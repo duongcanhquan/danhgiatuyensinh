@@ -54,6 +54,7 @@ async function resolveTeamLeadUidForUpsert(
       const role = String(d.data()?.role ?? '')
       if (
         role === 'team_lead' ||
+        role === 'admin' ||
         role === 'head_of_profession' ||
         role === 'head_of_department'
       ) {
