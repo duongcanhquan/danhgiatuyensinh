@@ -1,7 +1,8 @@
 /**
  * Xác nhận trước thao tác xóa dữ liệu không hoàn tác được.
- * Dùng confirm / prompt — không phụ thuộc modal UI.
+ * Ưu tiên hộp thoại trong app (`appConfirm`); fallback confirm/prompt trình duyệt khi chưa gắn host.
  */
+import { appConfirm } from './appConfirm'
 
 const BATCH_PHRASE = 'XOA VINH VIEN'
 
@@ -14,14 +15,6 @@ function normalizeConfirmPhrase(raw: string): string {
     .replace(/\s+/g, ' ')
 }
 
-function browserConfirm(message: string): boolean {
-  return typeof globalThis.confirm === 'function' ? globalThis.confirm(message) : false
-}
-
-function browserPrompt(message: string, defaultValue = ''): string | null {
-  return typeof globalThis.prompt === 'function' ? globalThis.prompt(message, defaultValue) : null
-}
-
 /** Chuẩn hóa cụm gõ xác nhận (bỏ dấu, gộp khoảng trắng). */
 export function normalizeDangerousDeletePhrase(raw: string): string {
   return normalizeConfirmPhrase(raw)
@@ -32,98 +25,112 @@ export function dangerousDeleteBatchPhrase(): string {
 }
 
 /**
- * Xóa hàng loạt theo chương trình / bộ lọc — 2 bước: confirm + gõ cụm.
+ * Xóa hàng loạt theo chương trình / bộ lọc — confirm + gõ cụm.
  */
-export function confirmDangerousLeadBatchDelete(opts: {
+export async function confirmDangerousLeadBatchDelete(opts: {
   scopeLabel: string
   /** Số ước lượng nếu đã biết; null/undefined = «tất cả khớp phạm vi». */
   estimatedCount?: number | null
-}): boolean {
+}): Promise<boolean> {
   const n = opts.estimatedCount
   const countPart =
     n != null && n > 0
-      ? ` khoảng ${n.toLocaleString('vi-VN')} hồ sơ`
-      : ' TẤT CẢ hồ sơ khớp phạm vi'
-  const ok1 = browserConfirm(
-    [
-      'CẢNH BÁO — XÓA VĨNH VIỄN',
-      '',
-      `Bạn sắp xóa${countPart} thuộc ${opts.scopeLabel}.`,
-      '',
-      'Không hoàn tác được. Dữ liệu biến mất khỏi hệ thống (không vào thùng rác).',
-      '',
-      'Chỉ tiếp tục nếu bạn chắc chắn đây là lô nhập nhầm / cần gỡ hẳn.',
-    ].join('\n'),
-  )
-  if (!ok1) return false
+      ? `khoảng ${n.toLocaleString('vi-VN')} hồ sơ`
+      : 'tất cả hồ sơ khớp phạm vi'
 
-  const typed = browserPrompt(
-    `Để xác nhận, gõ chính xác:\n\n${BATCH_PHRASE}\n\n(Phạm vi: ${opts.scopeLabel})`,
-    '',
-  )
-  if (typed == null) return false
-  return normalizeConfirmPhrase(typed) === BATCH_PHRASE
+  return appConfirm({
+    variant: 'danger',
+    title: 'Xóa vĩnh viễn cả lô',
+    description: `Bạn sắp xóa ${countPart} thuộc ${opts.scopeLabel}.`,
+    details: [
+      'Không hoàn tác được — dữ liệu biến mất khỏi hệ thống (không vào thùng rác).',
+      'Chỉ tiếp tục nếu đây là lô nhập nhầm hoặc cần gỡ hẳn.',
+    ],
+    confirmLabel: 'Tiếp tục xóa',
+    cancelLabel: 'Giữ lại',
+    requirePhrase: BATCH_PHRASE,
+    phraseHint: `Gõ ${BATCH_PHRASE} để xác nhận phạm vi «${opts.scopeLabel}»`,
+  })
 }
 
 /**
- * Xóa các hồ sơ đã tick trên bảng — confirm rõ số lượng; ≥10 thì thêm bước gõ cụm.
+ * Xóa các hồ sơ đã tick trên bảng — ≥10 thì thêm bước gõ cụm.
  */
-export function confirmDangerousSelectedLeadsDelete(count: number): boolean {
+export async function confirmDangerousSelectedLeadsDelete(count: number): Promise<boolean> {
   const n = Math.max(0, Math.floor(count))
   if (n <= 0) return false
-  const ok1 = browserConfirm(
-    [
-      'CẢNH BÁO — XÓA VĨNH VIỄN',
-      '',
-      `Bạn sắp xóa ${n.toLocaleString('vi-VN')} hồ sơ đã chọn.`,
-      '',
-      'Không hoàn tác được.',
-    ].join('\n'),
-  )
-  if (!ok1) return false
-  if (n < 10) return true
 
-  const typed = browserPrompt(
-    `Bạn đang xóa ${n.toLocaleString('vi-VN')} hồ sơ.\nGõ chính xác «${BATCH_PHRASE}» để tiếp tục:`,
-    '',
-  )
-  if (typed == null) return false
-  return normalizeConfirmPhrase(typed) === BATCH_PHRASE
+  return appConfirm({
+    variant: 'danger',
+    title: n === 1 ? 'Xóa hồ sơ đã chọn' : `Xóa ${n.toLocaleString('vi-VN')} hồ sơ đã chọn`,
+    description:
+      n === 1
+        ? 'Hồ sơ sẽ bị gỡ khỏi hệ thống ngay.'
+        : `Bạn sắp xóa ${n.toLocaleString('vi-VN')} hồ sơ đã chọn trên danh sách.`,
+    details: ['Không hoàn tác được.', 'Chỉ Admin mới được xóa hồ sơ.'],
+    confirmLabel: n === 1 ? 'Xóa hồ sơ' : `Xóa ${n.toLocaleString('vi-VN')} hồ sơ`,
+    cancelLabel: 'Giữ lại',
+    ...(n >= 10
+      ? {
+          requirePhrase: BATCH_PHRASE,
+          phraseHint: `Đang xóa nhiều hồ sơ — gõ ${BATCH_PHRASE} để tiếp tục`,
+        }
+      : {}),
+  })
 }
 
 /** Xóa một hồ sơ từ chi tiết. */
-export function confirmDangerousSingleLeadDelete(leadLabel: string): boolean {
+export async function confirmDangerousSingleLeadDelete(leadLabel: string): Promise<boolean> {
   const label = leadLabel.trim() || 'hồ sơ này'
-  return browserConfirm(
-    [
-      'CẢNH BÁO — XÓA VĨNH VIỄN',
-      '',
-      `Xóa hồ sơ «${label}» khỏi hệ thống?`,
-      '',
-      'Không hoàn tác được. Chỉ Admin được xóa.',
-    ].join('\n'),
-  )
+  return appConfirm({
+    variant: 'danger',
+    title: 'Xóa hồ sơ',
+    description: `Xóa hồ sơ «${label}» khỏi hệ thống?`,
+    details: ['Không hoàn tác được.', 'Chỉ Admin được xóa.'],
+    confirmLabel: 'Xóa hồ sơ',
+    cancelLabel: 'Giữ lại',
+  })
 }
 
 /**
  * Xóa tài khoản nhân sự / quản lý (Auth + Firestore) — confirm + gõ cụm.
  */
-export function confirmDangerousStaffAccountDelete(accountLabel: string): boolean {
+export async function confirmDangerousStaffAccountDelete(accountLabel: string): Promise<boolean> {
   const label = accountLabel.trim() || 'tài khoản này'
-  const ok1 = browserConfirm(
-    [
-      'CẢNH BÁO — XÓA VĨNH VIỄN TÀI KHOẢN',
-      '',
-      `Xóa «${label}»?`,
-      '',
-      'Hồ sơ trên hệ thống và tài khoản đăng nhập sẽ bị gỡ — không hoàn tác được.',
-    ].join('\n'),
-  )
-  if (!ok1) return false
-  const typed = browserPrompt(
-    `Để xác nhận, gõ chính xác:\n\n${BATCH_PHRASE}\n\n(Tài khoản: ${label})`,
-    '',
-  )
-  if (typed == null) return false
-  return normalizeConfirmPhrase(typed) === BATCH_PHRASE
+  return appConfirm({
+    variant: 'danger',
+    title: 'Xóa tài khoản',
+    description: `Xóa tài khoản «${label}»?`,
+    details: [
+      'Hồ sơ trên hệ thống và tài khoản đăng nhập sẽ bị gỡ.',
+      'Không hoàn tác được.',
+    ],
+    confirmLabel: 'Xóa tài khoản',
+    cancelLabel: 'Giữ lại',
+    requirePhrase: BATCH_PHRASE,
+    phraseHint: `Gõ ${BATCH_PHRASE} để xác nhận xóa «${label}»`,
+  })
+}
+
+/** Xác nhận lần cuối trước khi bắt đầu xóa lô đã quét được. */
+export async function confirmDangerousLeadBatchDeleteFinal(opts: {
+  scopeLabel: string
+  foundCount: number
+  mayHaveMore?: boolean
+}): Promise<boolean> {
+  const details = [
+    opts.mayHaveMore
+      ? 'Có thể còn thêm hồ sơ ngoài lô này — hệ thống sẽ quét tiếp sau khi xóa lô đầu.'
+      : null,
+    'Bấm xác nhận để xóa vĩnh viễn. Hủy để dừng.',
+  ].filter(Boolean) as string[]
+
+  return appConfirm({
+    variant: 'danger',
+    title: 'Bắt đầu xóa?',
+    description: `Đã tìm thấy ${opts.foundCount.toLocaleString('vi-VN')} hồ sơ thuộc ${opts.scopeLabel}.`,
+    details,
+    confirmLabel: 'Bắt đầu xóa',
+    cancelLabel: 'Dừng lại',
+  })
 }

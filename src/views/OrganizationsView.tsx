@@ -587,7 +587,7 @@ export function OrganizationsView() {
   }
 
   const onDeleteAdmin = async (admin: AdminRow) => {
-    if (!confirmDangerousStaffAccountDelete(admin.displayName || admin.email || admin.id)) return
+    if (!(await confirmDangerousStaffAccountDelete(admin.displayName || admin.email || admin.id))) return
     const db = getFirestoreDb()
     if (!db || !detailOrg || !actor.uid) return
     setBusy(true)

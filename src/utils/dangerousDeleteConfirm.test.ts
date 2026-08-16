@@ -26,36 +26,38 @@ describe('dangerousDeleteConfirm', () => {
     expect(normalizeDangerousDeletePhrase(dangerousDeleteBatchPhrase())).toBe('XOA VINH VIEN')
   })
 
-  it('batch delete requires confirm then typed phrase', () => {
+  it('batch delete requires confirm then typed phrase', async () => {
     confirmMock.mockReturnValue(true)
     promptMock.mockReturnValue('XOA VINH VIEN')
-    expect(confirmDangerousLeadBatchDelete({ scopeLabel: 'chương trình «Test»' })).toBe(true)
+    await expect(confirmDangerousLeadBatchDelete({ scopeLabel: 'chương trình «Test»' })).resolves.toBe(
+      true,
+    )
     expect(confirmMock).toHaveBeenCalled()
     expect(promptMock).toHaveBeenCalled()
   })
 
-  it('batch delete aborts if phrase wrong', () => {
+  it('batch delete aborts if phrase wrong', async () => {
     confirmMock.mockReturnValue(true)
     promptMock.mockReturnValue('xoa')
-    expect(confirmDangerousLeadBatchDelete({ scopeLabel: 'lọc' })).toBe(false)
+    await expect(confirmDangerousLeadBatchDelete({ scopeLabel: 'lọc' })).resolves.toBe(false)
   })
 
-  it('selected delete skips phrase when under 10', () => {
+  it('selected delete skips phrase when under 10', async () => {
     confirmMock.mockReturnValue(true)
-    expect(confirmDangerousSelectedLeadsDelete(3)).toBe(true)
+    await expect(confirmDangerousSelectedLeadsDelete(3)).resolves.toBe(true)
     expect(promptMock).not.toHaveBeenCalled()
   })
 
-  it('selected delete requires phrase when >= 10', () => {
+  it('selected delete requires phrase when >= 10', async () => {
     confirmMock.mockReturnValue(true)
     promptMock.mockReturnValue('XOA VINH VIEN')
-    expect(confirmDangerousSelectedLeadsDelete(10)).toBe(true)
+    await expect(confirmDangerousSelectedLeadsDelete(10)).resolves.toBe(true)
     expect(promptMock).toHaveBeenCalled()
   })
 
-  it('staff account delete requires typed phrase', () => {
+  it('staff account delete requires typed phrase', async () => {
     confirmMock.mockReturnValue(true)
     promptMock.mockReturnValue('XOA VINH VIEN')
-    expect(confirmDangerousStaffAccountDelete('a@b.com')).toBe(true)
+    await expect(confirmDangerousStaffAccountDelete('a@b.com')).resolves.toBe(true)
   })
 })

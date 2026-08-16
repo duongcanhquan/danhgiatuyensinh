@@ -161,6 +161,7 @@ import { BulkDeleteLeadsPartialError, bulkDeleteLeads } from '../utils/bulkDelet
 import { collectLeadIdsByClientMatch, collectLeadIdsByIntakeProgram, PURGE_PROGRAM_HARD_CAP } from '../utils/purgeLeadsByIntakeProgram'
 import {
   confirmDangerousLeadBatchDelete,
+  confirmDangerousLeadBatchDeleteFinal,
   confirmDangerousSelectedLeadsDelete,
   confirmDangerousSingleLeadDelete,
 } from '../utils/dangerousDeleteConfirm'
@@ -2888,7 +2889,7 @@ export function LeadManagement() {
     if (!db || !profile || !canDeleteLeads || !selectedIds.size || bulkBusy) return
     const ids = [...selectedIds]
     const n = ids.length
-    if (!confirmDangerousSelectedLeadsDelete(n)) return
+    if (!(await confirmDangerousSelectedLeadsDelete(n))) return
     setBulkBusy(true)
     setRescoreMsg(`Đang xóa ${n.toLocaleString('vi-VN')} hồ sơ đã chọn…`)
     try {
@@ -2988,10 +2989,10 @@ export function LeadManagement() {
             ? filtered.length || null
             : null
       if (
-        !confirmDangerousLeadBatchDelete({
+        !(await confirmDangerousLeadBatchDelete({
           scopeLabel,
           estimatedCount,
-        })
+        }))
       ) {
         return
       }
@@ -3037,19 +3038,12 @@ export function LeadManagement() {
             }
 
             if (round === 1) {
-              const moreHint = collected.mayHaveMore
-                ? '\n\nCó thể còn thêm hồ sơ ngoài lô này — hệ thống sẽ quét tiếp sau khi xóa lô đầu.'
-                : ''
               if (
-                !window.confirm(
-                  [
-                    'Xác nhận lần cuối trước khi xóa',
-                    '',
-                    `Đã tìm thấy ${collected.ids.length.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.${moreHint}`,
-                    '',
-                    'Bấm OK để bắt đầu xóa vĩnh viễn. Hủy để dừng.',
-                  ].join('\n'),
-                )
+                !(await confirmDangerousLeadBatchDeleteFinal({
+                  scopeLabel,
+                  foundCount: collected.ids.length,
+                  mayHaveMore: collected.mayHaveMore,
+                }))
               ) {
                 setRescoreMsg('Đã hủy — chưa xóa hồ sơ nào.')
                 return
@@ -3150,19 +3144,12 @@ export function LeadManagement() {
           }
 
           if (round === 1) {
-            const moreHint = collected.mayHaveMore
-              ? '\n\nCó thể còn thêm hồ sơ ngoài lô này — hệ thống sẽ quét tiếp sau khi xóa lô đầu.'
-              : ''
             if (
-              !window.confirm(
-                [
-                  'Xác nhận lần cuối trước khi xóa',
-                  '',
-                  `Đã tìm thấy ${collected.ids.length.toLocaleString('vi-VN')} hồ sơ thuộc ${scopeLabel}.${moreHint}`,
-                  '',
-                  'Bấm OK để bắt đầu xóa vĩnh viễn. Hủy để dừng.',
-                ].join('\n'),
-              )
+              !(await confirmDangerousLeadBatchDeleteFinal({
+                scopeLabel,
+                foundCount: collected.ids.length,
+                mayHaveMore: collected.mayHaveMore,
+              }))
             ) {
               setRescoreMsg('Đã hủy — chưa xóa hồ sơ nào.')
               return
@@ -4420,9 +4407,27 @@ export function LeadManagement() {
               />
             ) : null}
             {rescoreMsg ? (
-              <p className="text-xs font-medium text-sky-900" role="status">
-                {rescoreMsg}
-              </p>
+              <div
+                className={[
+                  'flex items-start justify-between gap-2 rounded-xl border px-3 py-2 text-sm shadow-sm',
+                  /không|lỗi|hủy|thiếu|ngoài phạm vi/i.test(rescoreMsg)
+                    ? 'border-rose-200 bg-rose-50 text-rose-950'
+                    : /đang|quét|chấm|lưu|xóa…|xóa \d/i.test(rescoreMsg)
+                      ? 'border-sky-200 bg-sky-50 text-sky-950'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-950',
+                ].join(' ')}
+                role="status"
+              >
+                <p className="min-w-0 flex-1 font-medium leading-snug">{rescoreMsg}</p>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold opacity-70 hover:bg-white/60 hover:opacity-100"
+                  onClick={() => setRescoreMsg(null)}
+                  aria-label="Đóng thông báo"
+                >
+                  Đóng
+                </button>
+              </div>
             ) : null}
             {(tagClientEval || callQueueNeedsScope || workModeNeedsScope || programNeedsScope) &&
             scopeFetchTruncated ? (
@@ -6321,7 +6326,7 @@ function LeadDetailPanel({
   const deleteThisLead = useCallback(async () => {
     if (!db || !profile || !canDeleteThisLead || deleteBusy) return
     const label = lead.fullName?.trim() || 'hồ sơ này'
-    if (!confirmDangerousSingleLeadDelete(label)) return
+    if (!(await confirmDangerousSingleLeadDelete(label))) return
     setDeleteBusy(true)
     setMsg(null)
     try {

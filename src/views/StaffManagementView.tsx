@@ -451,7 +451,7 @@ export function StaffManagementView({
   }
 
   const removeUser = async (u: VietMyUserProfile) => {
-    if (!confirmDangerousStaffAccountDelete(u.displayName || u.email || u.id)) return
+    if (!(await confirmDangerousStaffAccountDelete(u.displayName || u.email || u.id))) return
     setErr(null)
     setMsg(null)
     try {
