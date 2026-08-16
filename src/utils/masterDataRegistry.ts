@@ -40,9 +40,10 @@ export function masterDataEntriesForFirestore(entries: MasterDataEntry[]): Recor
     if (e.labelEn?.trim()) row.labelEn = e.labelEn.trim()
     if (e.departmentId) row.departmentId = e.departmentId
     if (Array.isArray(e.departmentIds) && e.departmentIds.length > 0) {
-      row.departmentIds = e.departmentIds.map(String).filter(Boolean)
+      const departmentIds = e.departmentIds.map(String).filter(Boolean)
+      row.departmentIds = departmentIds
       // Giữ departmentId = phần tử đầu để code cũ / Sheet vẫn đọc được.
-      if (!row.departmentId) row.departmentId = row.departmentIds[0]
+      if (!row.departmentId) row.departmentId = departmentIds[0]
     }
     if (e.annualCapacity !== undefined && Number.isFinite(Number(e.annualCapacity))) {
       row.annualCapacity = Number(e.annualCapacity)
