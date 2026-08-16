@@ -134,11 +134,6 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
         <h2 className="text-base font-bold text-slate-900">Hồ sơ &amp; danh mục tuyển sinh</h2>
 
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">
-          Quản lý danh mục trên form hồ sơ: nguồn, học bổng, hệ, ngành… Bảng{' '}
-          <strong>học phí kỳ 1</strong> nằm ở tab ngang <strong>Hồ sơ → Học phí kỳ 1</strong> (cạnh «Danh mục hồ sơ»).
-        </p>
-
         <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
           <p className="font-semibold">Cần khai học phí theo ngành?</p>
           <p className="mt-0.5 text-xs text-emerald-900/90">
