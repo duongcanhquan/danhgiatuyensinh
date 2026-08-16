@@ -440,8 +440,8 @@ export function LeadManagement() {
   const [callWorkBucketFilter, setCallWorkBucketFilter] = useState<CallWorkBucketFilter>('all')
   const [dispositionFilter, setDispositionFilter] = useState<CallDispositionFilter>('all')
   const [workModeFilter, setWorkModeFilter] = useState<'all' | LeadWorkMode>('all')
-  /** Tab nguồn nhập — mặc định data thô / chiến dịch. */
-  const [intakeOriginTab, setIntakeOriginTab] = useState<LeadIntakeOriginTab>('campaign_upload')
+  /** Tab nguồn nhập — mặc định Cổng đăng ký; chiến dịch chỉ khi bấm tab. */
+  const [intakeOriginTab, setIntakeOriginTab] = useState<LeadIntakeOriginTab>('public_portal')
   const [regionFilter, setRegionFilter] = useState<string>('ALL')
   const [majorFilter, setMajorFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
@@ -1617,12 +1617,12 @@ export function LeadManagement() {
     [mergeListFilterUrl, setPage],
   )
 
-  /** Tab nguồn nhập (chiến dịch / cổng). */
+  /** Tab nguồn nhập (cổng mặc định / chiến dịch khi bấm). */
   const applyIntakeOriginTab = useCallback(
     (origin: LeadIntakeOriginTab) => {
       setIntakeOriginTab(origin)
       mergeListFilterUrl({
-        [LWF.ORIGIN]: origin === 'campaign_upload' ? null : leadIntakeOriginToUrlParam(origin),
+        [LWF.ORIGIN]: origin === 'public_portal' ? null : leadIntakeOriginToUrlParam(origin),
       })
       setPage(1)
     },
@@ -1656,8 +1656,9 @@ export function LeadManagement() {
       // Một lần cập nhật URL: tab cổng + open — tránh race xóa `open` khi đổi origin.
       setSearchParams(
         (prev) => {
+          // Cổng đăng ký là mặc định — bỏ `origin` trên URL.
           const next = mergeLeadFiltersIntoSearchParams(prev, {
-            [LWF.ORIGIN]: leadIntakeOriginToUrlParam('public_portal'),
+            [LWF.ORIGIN]: null,
           })
           next.set('open', leadId)
           return next
@@ -1705,10 +1706,10 @@ export function LeadManagement() {
     setUploadedFromFilter(empty.uploadedFrom)
     setUploadedToFilter(empty.uploadedTo)
     setDraftFilters(empty)
-    // Giữ tab nguồn nhập (không coi là «lọc tạm»).
+    // Giữ tab nguồn nhập (không coi là «lọc tạm»). Cổng = mặc định (không ghi URL).
     setSearchParams((prev) => {
       const next = stripListFiltersKeepOpenView(prev)
-      if (intakeOriginTab !== 'campaign_upload') {
+      if (intakeOriginTab !== 'public_portal') {
         next.set(LWF.ORIGIN, leadIntakeOriginToUrlParam(intakeOriginTab))
       }
       return next
@@ -4402,7 +4403,8 @@ export function LeadManagement() {
                     </p>
                     {intakeOriginTab === 'public_portal' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Bấm «Tạo mới» để thêm hồ sơ, hoặc chờ sinh viên gửi form cổng. Data Excel nằm ở «Tải lên / chiến dịch».
+                        Bấm «Tạo mới» để thêm hồ sơ, chờ form cổng, hoặc nhập Sheet Mẫu 3 (Nhập liệu). Data Excel
+                        chiến dịch (Mẫu 1–2) nằm ở tab «Tải lên / chiến dịch».
                       </p>
                     ) : programFilter === '__UNSET__' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">

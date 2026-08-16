@@ -88,7 +88,7 @@ if (APPS_SCRIPT_SHEET_HEADERS.length !== APPS_SCRIPT_SHEET_COLUMN_COUNT) {
 
 /** Mô tả ngắn nhóm cột cho UI Mẫu 3. */
 export const APPS_SCRIPT_SHEET_UI_BLURB =
-  '71 cột (index 0–70) đúng Sheet DU_LIEU_SINH_VIEN: hồ sơ + TVV + bố/mẹ + 5 đợt tiền/bill/duyệt/ngày + Full NE + nguồn/HB. Data từ dòng 3. Import TVV trước (tab Nhập tư vấn viên).'
+  'Nhập Sheet cổng đăng ký (71 cột, index 0–70) — vào tab «Cổng đăng ký», không phải chiến dịch. Hồ sơ + TVV + bố/mẹ + tiền/bill + nguồn/HB. Data từ dòng 3. Import TVV trước (tab Nhập tư vấn viên).'
 
 export function appsScriptColumnGuideRows(): string[][] {
   return [

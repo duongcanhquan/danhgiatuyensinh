@@ -24,10 +24,10 @@ describe('parseLeadIntakeOrigin', () => {
 })
 
 describe('parseLeadIntakeOriginFromUrl', () => {
-  it('defaults to campaign', () => {
-    expect(parseLeadIntakeOriginFromUrl(null)).toBe('campaign_upload')
-    expect(parseLeadIntakeOriginFromUrl('')).toBe('campaign_upload')
-    expect(parseLeadIntakeOriginFromUrl('bogus')).toBe('campaign_upload')
+  it('defaults to public portal', () => {
+    expect(parseLeadIntakeOriginFromUrl(null)).toBe('public_portal')
+    expect(parseLeadIntakeOriginFromUrl('')).toBe('public_portal')
+    expect(parseLeadIntakeOriginFromUrl('bogus')).toBe('public_portal')
   })
 
   it('maps short codes; bookmark manual → portal tab', () => {
@@ -38,8 +38,8 @@ describe('parseLeadIntakeOriginFromUrl', () => {
 })
 
 describe('LEAD_INTAKE_ORIGIN_TABS', () => {
-  it('has campaign and portal only', () => {
-    expect([...LEAD_INTAKE_ORIGIN_TABS]).toEqual(['campaign_upload', 'public_portal'])
+  it('lists portal first, then campaign', () => {
+    expect([...LEAD_INTAKE_ORIGIN_TABS]).toEqual(['public_portal', 'campaign_upload'])
   })
 })
 
@@ -57,7 +57,7 @@ describe('leadMatchesIntakeOriginTab', () => {
 describe('leadIntakeOriginHint', () => {
   it('returns portal tab hint', () => {
     expect(leadIntakeOriginHint('public_portal')).toBe(
-      'Form cổng và hồ sơ tạo trong app — tải đủ để thao tác',
+      'Form cổng, tạo tay và nhập Sheet Apps Script — mặc định khi mở Hồ sơ',
     )
   })
 })

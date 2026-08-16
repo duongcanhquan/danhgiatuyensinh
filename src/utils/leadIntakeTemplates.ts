@@ -81,7 +81,7 @@ export const LEAD_INTAKE_TEMPLATES: readonly LeadIntakeTemplateDef[] = [
   },
   {
     id: 'appscript_sheet_v1',
-    label: `Mẫu 3 — Sheet Apps Script (${APPS_SCRIPT_SHEET_COLUMN_COUNT} cột)`,
+    label: `Mẫu 3 — Sheet cổng đăng ký (${APPS_SCRIPT_SHEET_COLUMN_COUNT} cột)`,
     description: APPS_SCRIPT_SHEET_UI_BLURB,
     headerRowIndex: 1,
     columns: APPSCRIPT_SHEET_V1_INTAKE_COLUMNS,

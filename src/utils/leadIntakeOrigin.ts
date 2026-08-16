@@ -11,8 +11,8 @@ export const LEAD_INTAKE_ORIGINS: readonly LeadIntakeOrigin[] = [
 export type LeadIntakeOriginTab = 'campaign_upload' | 'public_portal'
 
 export const LEAD_INTAKE_ORIGIN_TABS: readonly LeadIntakeOriginTab[] = [
-  'campaign_upload',
   'public_portal',
+  'campaign_upload',
 ] as const
 
 const LABELS: Record<LeadIntakeOrigin, string> = {
@@ -22,9 +22,9 @@ const LABELS: Record<LeadIntakeOrigin, string> = {
 }
 
 const HINTS: Record<LeadIntakeOrigin, string> = {
-  campaign_upload: 'Data thô / Excel — xem từng trang',
+  campaign_upload: 'Data thô / Excel chiến dịch — bấm tab để xem',
   manual: 'Hồ sơ TVV tạo trong app',
-  public_portal: 'Form cổng và hồ sơ tạo trong app — tải đủ để thao tác',
+  public_portal: 'Form cổng, tạo tay và nhập Sheet Apps Script — mặc định khi mở Hồ sơ',
 }
 
 /** URL short codes → tab */
@@ -57,11 +57,11 @@ export function parseLeadIntakeOrigin(raw: unknown): LeadIntakeOrigin | undefine
     : undefined
 }
 
-/** Mặc định tab chiến dịch. */
+/** Mặc định tab Cổng đăng ký (không có `origin` trên URL). */
 export function parseLeadIntakeOriginFromUrl(raw: string | null): LeadIntakeOriginTab {
   const key = (raw ?? '').trim().toLowerCase()
-  if (!key) return 'campaign_upload'
-  return URL_TO_ORIGIN[key] ?? 'campaign_upload'
+  if (!key) return 'public_portal'
+  return URL_TO_ORIGIN[key] ?? 'public_portal'
 }
 
 export function leadIntakeOriginToUrlParam(origin: LeadIntakeOrigin): string {

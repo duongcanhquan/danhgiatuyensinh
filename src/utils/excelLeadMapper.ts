@@ -516,9 +516,9 @@ export type LeadIntakeOwnershipMeta = {
   uploadedBy: string
   uploaderName: string
   uploadBatchId: string
-  /** Chương trình / đợt nhập — bắt buộc khi commit từ màn Nhập liệu. */
+  /** Nhãn đợt / ghi chú nhập (tuỳ chọn với Mẫu 3 cổng đăng ký). */
   intakeProgram?: string
-  /** Mặc định `campaign_upload` khi có ownership (Excel). */
+  /** Mẫu Excel chiến dịch → `campaign_upload`; Mẫu 3 Apps Script → `public_portal`. */
   intakeOrigin?: LeadIntakeOrigin
 }
 

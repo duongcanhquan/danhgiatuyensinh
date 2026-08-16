@@ -46,7 +46,7 @@ export function downloadAppsScriptSheetGuide(): void {
     ['1. Cài đặt → Dữ liệu → «Nhập tư vấn viên»: Excel có cột Tên hiển thị = tên TVV trên Sheet (cột index 18).'],
     ['2. Google Sheet DU_LIEU_SINH_VIEN → File → Tải về → Microsoft Excel (.xlsx).'],
     ['3. Không đổi thứ tự cột. Dữ liệu bắt đầu dòng 3.'],
-    ['4. Cài đặt → Dữ liệu → Nhập liệu → chọn «Mẫu 3 — Sheet Apps Script» → tải file → đặt tên đợt → Xác nhận.'],
+    ['4. Cài đặt → Dữ liệu → Nhập liệu → chọn «Mẫu 3 — Sheet cổng đăng ký» → tải file → Xác nhận (vào tab Cổng đăng ký trên Hồ sơ).'],
     ['5. Map: hồ sơ, TVV, 5 đợt tiền+bill+duyệt+ngày, Full NE, nguồn, HB, folder giấy mời.'],
     ['6. Trùng SĐT/CCCD → bỏ qua. TVV không khớp Tên hiển thị → gán Admin.'],
     [''],

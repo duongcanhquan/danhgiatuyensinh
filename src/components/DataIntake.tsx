@@ -99,6 +99,7 @@ type ImportPreview = {
   uploadBatchId: string
   uploadedBy: string
   uploaderName: string
+  templateId: LeadIntakeTemplateId
 }
 
 function activeStaffForExcelAssignMatch(users: VietMyUserProfile[]) {
@@ -225,6 +226,8 @@ export function DataIntake() {
   const [banner, setBanner] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
+  /** Khi bật: dòng trùng DB (SĐT/CCCD) sẽ cập nhật hồ sơ cũ thay vì bỏ qua. */
+  const [overwriteDbDuplicates, setOverwriteDbDuplicates] = useState(false)
   const [templateId, setTemplateId] = useState<LeadIntakeTemplateId>('standard_v1')
   const [intakeProgram, setIntakeProgram] = useState('')
   const [recentPrograms, setRecentPrograms] = useState<string[]>(() =>
@@ -262,10 +265,12 @@ export function DataIntake() {
     const total = prepared.length
     /** Dòng sau bản đầu tiên cùng fingerprint trong file — không nhập. */
     const rejectedInFile = prepared.filter((p) => p.inFileDuplicate).length
-    /** Đã tồn tại trên Firestore (cùng fingerprint) — không nhập, không ghi đè. */
+    /** Đã tồn tại trên Firestore (cùng fingerprint) — mặc định bỏ qua; có thể ghi đè nếu bật. */
     const rejectedOnDb = prepared.filter((p) => p.existingId && !p.inFileDuplicate).length
     const acceptedNew = prepared.filter((p) => !p.inFileDuplicate && !p.existingId).length
-    const rejectedTotal = rejectedInFile + rejectedOnDb
+    const acceptedOverwrite = overwriteDbDuplicates ? rejectedOnDb : 0
+    const willWrite = acceptedNew + acceptedOverwrite
+    const rejectedTotal = rejectedInFile + (overwriteDbDuplicates ? 0 : rejectedOnDb)
     let assignMatched = 0
     let assignUnresolvedRaw = 0
     let assignEmptyRouted = 0
@@ -280,7 +285,7 @@ export function DataIntake() {
       else withPhone += 1
       if ((p.row.fullName ?? '').trim()) withName += 1
       if (p.strength === 'weak') weakRows += 1
-      if (p.inFileDuplicate || p.existingId) {
+      if (p.inFileDuplicate || (p.existingId && !overwriteDbDuplicates)) {
         if (p.existingId && !p.inFileDuplicate && phoneKey && dbDupPhones.length < 5) {
           dbDupPhones.push(phoneKey)
         }
@@ -300,6 +305,8 @@ export function DataIntake() {
     return {
       total,
       acceptedNew,
+      acceptedOverwrite,
+      willWrite,
       rejectedInFile,
       rejectedOnDb,
       rejectedTotal,
@@ -313,7 +320,7 @@ export function DataIntake() {
       dbDupPhones,
       mappingSuspect,
     }
-  }, [preview, matchStaffForImport])
+  }, [preview, matchStaffForImport, overwriteDbDuplicates])
 
   const runParseAndPreview = useCallback(
     async (file: File) => {
@@ -336,6 +343,7 @@ export function DataIntake() {
       setBusy(true)
       setBanner('Đang đọc file Excel…')
       setPreview(null)
+      setOverwriteDbDuplicates(false)
       try {
         const buf = await file.arrayBuffer()
         await yieldToMain()
@@ -495,7 +503,7 @@ export function DataIntake() {
           (p) => normalizePhoneKey(p.row.phone ?? '', p.row.parentPhone).length >= 9,
         ).length
         const withName = prepared.filter((p) => (p.row.fullName ?? '').trim().length >= 2).length
-        setPreview({ fileName: file.name, prepared, uploadBatchId, uploadedBy, uploaderName })
+        setPreview({ fileName: file.name, prepared, uploadBatchId, uploadedBy, uploaderName, templateId })
         if (withPhone === 0 && withName < Math.max(1, Math.floor(prepared.length * 0.2))) {
           setBanner(
             `Đã đọc ${prepared.length} dòng nhưng hầu như không thấy SĐT / họ tên — kiểm tra đúng mẫu Excel (hàng 1 đúng tên cột) và sheet có dữ liệu. Hệ thống sẽ không báo trùng giả vì mã trống.`,
@@ -518,12 +526,14 @@ export function DataIntake() {
   const cancelPreview = () => {
     setPreview(null)
     setBanner(null)
+    setOverwriteDbDuplicates(false)
   }
 
   const commitImport = useCallback(async () => {
     if (!preview || !db || !profile) return
+    const isPortalSheet = preview.templateId === 'appscript_sheet_v1'
     const programLabel = normalizeIntakeProgramLabel(intakeProgram)
-    if (!programLabel) {
+    if (!isPortalSheet && !programLabel) {
       setBanner('Nhập tên chương trình / đợt trước khi xác nhận nhập (vd. «Đợt 9/2026 — OFF»).')
       return
     }
@@ -540,7 +550,8 @@ export function DataIntake() {
         uploadedBy,
         uploaderName,
         uploadBatchId,
-        intakeProgram: programLabel,
+        intakeOrigin: isPortalSheet ? ('public_portal' as const) : ('campaign_upload' as const),
+        ...(programLabel ? { intakeProgram: programLabel } : {}),
       }
       const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (isAdminLikeRole(profile.role) ? profile.id : null)
 
@@ -568,9 +579,14 @@ export function DataIntake() {
         }
       }
 
-      const toCreate: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
+      const toWrite: {
+        ref: ReturnType<typeof doc>
+        data: Record<string, unknown>
+        mode: 'create' | 'overwrite'
+      }[] = []
       let rejectedInFile = 0
       let rejectedOnDb = 0
+      let overwritten = 0
       let importAssignUnresolved = 0
       let scholarshipUnresolved = 0
 
@@ -579,7 +595,8 @@ export function DataIntake() {
           rejectedInFile += 1
           continue
         }
-        if (pr.existingId) {
+        const isOverwrite = Boolean(pr.existingId)
+        if (isOverwrite && !overwriteDbDuplicates) {
           rejectedOnDb += 1
           continue
         }
@@ -646,7 +663,7 @@ export function DataIntake() {
         let pillarPatch: Partial<Lead> = {}
         if (cls) {
           const provisionalLead = {
-            id: '',
+            id: pr.existingId ?? '',
             ...base,
             createdAt: now,
             updatedAt: now,
@@ -672,63 +689,90 @@ export function DataIntake() {
           priorityTag = ev.priorityTag
         }
 
-        const ref = doc(collection(db, FS_COLLECTIONS.leads))
         const source1 = (pr.row.source ?? '').trim()
         const workMode = resolveWorkModeForLeadIntake({
           source1,
           sources: leadSources,
         })
         const createdMs = extras ? parseAppsScriptCreatedAtMs(extras.createdAtRaw) : null
-        const createdAt =
+        const sheetCreatedAt =
           createdMs != null ? Timestamp.fromMillis(createdMs) : now
-        toCreate.push({
-          ref,
-          data: omitUndefined({
-            ...base,
-            orgId: effectiveOrgId,
-            calculatedScore,
-            priorityTag,
-            ...pillarPatch,
-            ...(workMode ? { workMode } : {}),
-            ...(extras?.systemCode ? { systemCode: extras.systemCode } : {}),
-            ...(extras?.finance ? { finance: extras.finance } : {}),
-            ...(extras?.inviteFolderUrl ? { inviteFolderUrl: extras.inviteFolderUrl } : {}),
-            ...(extras?.source2 ? { source2: extras.source2 } : {}),
-            ...(source1 ? { source1 } : {}),
-            ...(extras?.placeOfBirth ? { placeOfBirth: extras.placeOfBirth } : {}),
-            ...(extras?.ethnicity ? { ethnicity: extras.ethnicity } : {}),
-            ...(extras?.permanentAddress ? { permanentAddress: extras.permanentAddress } : {}),
-            ...(extras?.currentResidence ? { currentResidence: extras.currentResidence } : {}),
-            ...(extras?.fatherName ? { fatherName: extras.fatherName } : {}),
-            ...(extras?.fatherPhone ? { fatherPhone: extras.fatherPhone } : {}),
-            ...(extras?.motherName ? { motherName: extras.motherName } : {}),
-            ...(extras?.motherPhone ? { motherPhone: extras.motherPhone } : {}),
-            ...(extras?.guardian ? { guardian: extras.guardian } : {}),
-            ...(extras?.nationalIdNotAvailable ? { nationalIdNotAvailable: true } : {}),
-            ...(extras?.campus ? { campus: extras.campus } : {}),
-            ...(extras?.schoolYear ? { schoolYear: extras.schoolYear } : {}),
-            ...(scholarship1Id ? { scholarship1Id } : {}),
-            ...(scholarship2Id ? { scholarship2Id } : {}),
-            uploadedAt: createdAt,
-            importedAt: now,
-            createdAt,
-            updatedAt: now,
-            lastTouchedAt: now,
-          } as Record<string, unknown>) as Record<string, unknown>,
-        })
+
+        const payload = omitUndefined({
+          ...base,
+          orgId: effectiveOrgId,
+          calculatedScore,
+          priorityTag,
+          ...pillarPatch,
+          ...(workMode ? { workMode } : {}),
+          ...(extras?.systemCode ? { systemCode: extras.systemCode } : {}),
+          ...(extras?.finance ? { finance: extras.finance } : {}),
+          ...(extras?.inviteFolderUrl ? { inviteFolderUrl: extras.inviteFolderUrl } : {}),
+          ...(extras?.source2 ? { source2: extras.source2 } : {}),
+          ...(source1 ? { source1 } : {}),
+          ...(extras?.placeOfBirth ? { placeOfBirth: extras.placeOfBirth } : {}),
+          ...(extras?.ethnicity ? { ethnicity: extras.ethnicity } : {}),
+          ...(extras?.permanentAddress ? { permanentAddress: extras.permanentAddress } : {}),
+          ...(extras?.currentResidence ? { currentResidence: extras.currentResidence } : {}),
+          ...(extras?.fatherName ? { fatherName: extras.fatherName } : {}),
+          ...(extras?.fatherPhone ? { fatherPhone: extras.fatherPhone } : {}),
+          ...(extras?.motherName ? { motherName: extras.motherName } : {}),
+          ...(extras?.motherPhone ? { motherPhone: extras.motherPhone } : {}),
+          ...(extras?.guardian ? { guardian: extras.guardian } : {}),
+          ...(extras?.nationalIdNotAvailable ? { nationalIdNotAvailable: true } : {}),
+          ...(extras?.campus ? { campus: extras.campus } : {}),
+          ...(extras?.schoolYear ? { schoolYear: extras.schoolYear } : {}),
+          ...(scholarship1Id ? { scholarship1Id } : {}),
+          ...(scholarship2Id ? { scholarship2Id } : {}),
+          uploadedAt: sheetCreatedAt,
+          importedAt: now,
+          updatedAt: now,
+          lastTouchedAt: now,
+          // Tạo mới: gắn ngày tạo từ Sheet. Ghi đè: giữ createdAt cũ trên Firestore (không ghi trường này).
+          ...(!isOverwrite ? { createdAt: sheetCreatedAt } : {}),
+        } as Record<string, unknown>) as Record<string, unknown>
+
+        if (isOverwrite && pr.existingId) {
+          overwritten += 1
+          toWrite.push({
+            ref: doc(db, FS_COLLECTIONS.leads, pr.existingId),
+            data: payload,
+            mode: 'overwrite',
+          })
+        } else {
+          toWrite.push({
+            ref: doc(collection(db, FS_COLLECTIONS.leads)),
+            data: payload,
+            mode: 'create',
+          })
+        }
       }
 
-      for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
+      for (let i = 0; i < toWrite.length; i += BATCH_SIZE) {
         const batch = writeBatch(db)
-        for (const item of toCreate.slice(i, i + BATCH_SIZE)) {
-          batch.set(item.ref, omitUndefined(item.data as Record<string, unknown>))
+        for (const item of toWrite.slice(i, i + BATCH_SIZE)) {
+          const clean = omitUndefined(item.data as Record<string, unknown>)
+          if (item.mode === 'overwrite') batch.set(item.ref, clean, { merge: true })
+          else batch.set(item.ref, clean)
         }
         await batch.commit()
       }
 
+      const createdCount = toWrite.length - overwritten
+      const programPart = programLabel
+        ? isPortalSheet
+          ? ` · ghi chú «${programLabel}»`
+          : ` · chương trình «${programLabel}»`
+        : isPortalSheet
+          ? ' · Cổng đăng ký'
+          : ''
       const msg =
-        toCreate.length > 0
-          ? `Đã nhập ${toCreate.length} hồ sơ mới · chương trình «${programLabel}» (lô ${uploadBatchId.slice(0, 8)}…). Từ chối: ${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống.${
+        toWrite.length > 0
+          ? `Đã xử lý ${toWrite.length} hồ sơ${programPart} (lô ${uploadBatchId.slice(0, 8)}…): ${createdCount} mới${
+              overwritten > 0 ? `, ${overwritten} ghi đè trùng DB` : ''
+            }. Từ chối: ${rejectedInFile} trùng trong file${
+              rejectedOnDb > 0 ? `, ${rejectedOnDb} trùng DB (không ghi đè)` : ''
+            }.${
               importAssignUnresolved > 0
                 ? ` Trong đó ${importAssignUnresolved} dòng có «Tư vấn viên» không khớp danh bạ — đã gán Admin chờ điều phối.`
                 : ' Hồ sơ chưa ghi TVV trên Excel → gán Admin chờ điều phối (không tự chia tải).'
@@ -739,8 +783,9 @@ export function DataIntake() {
             }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
-      setRecentPrograms(rememberIntakeProgram(programLabel))
+      if (programLabel) setRecentPrograms(rememberIntakeProgram(programLabel))
       setPreview(null)
+      setOverwriteDbDuplicates(false)
     } catch (e) {
       console.error(e)
       setBanner('Lỗi khi ghi Firestore. Kiểm tra quyền ghi hoặc giới hạn batch.')
@@ -762,6 +807,7 @@ export function DataIntake() {
     intakeProgram,
     leadSources,
     scholarships,
+    overwriteDbDuplicates,
   ])
 
   const onDrop = (e: DragEvent) => {
@@ -875,11 +921,21 @@ export function DataIntake() {
                 <p className="mt-2 text-sm text-slate-600">
                   <span className="font-semibold text-slate-900">{previewStats.total}</span> dòng —{' '}
                   <span className="font-medium text-emerald-700">{previewStats.acceptedNew} nhập mới</span>
+                  {previewStats.acceptedOverwrite > 0 ? (
+                    <>
+                      {' '}
+                      · <span className="font-medium text-amber-800">{previewStats.acceptedOverwrite} ghi đè DB</span>
+                    </>
+                  ) : null}
                   {previewStats.rejectedTotal > 0 ? (
                     <>
                       {' '}
                       · <span className="font-medium text-rose-800">{previewStats.rejectedTotal} từ chối</span> (
-                      {previewStats.rejectedInFile} trùng file, {previewStats.rejectedOnDb} đã có DB)
+                      {previewStats.rejectedInFile} trùng file
+                      {!overwriteDbDuplicates && previewStats.rejectedOnDb > 0
+                        ? `, ${previewStats.rejectedOnDb} đã có DB`
+                        : ''}
+                      )
                     </>
                   ) : null}
                 </p>
@@ -890,8 +946,10 @@ export function DataIntake() {
                 ) : null}
                 {previewStats.rejectedOnDb > 0 ? (
                   <p className="mt-1 text-xs leading-relaxed text-rose-800">
-                    Trùng trên hệ thống theo <strong>số điện thoại</strong> (sinh viên hoặc người liên hệ) đã có hồ sơ
-                    trước đó — không phải trùng tên file.
+                    Trùng trên hệ thống theo <strong>số điện thoại</strong> (hoặc CCCD) đã có hồ sơ trước đó
+                    {overwriteDbDuplicates
+                      ? ' — đang chọn ghi đè các hồ sơ đó bằng dữ liệu Excel.'
+                      : ' — mặc định bỏ qua. Bật «Ghi đè» bên dưới nếu muốn cập nhật bản cũ.'}
                     {previewStats.dbDupPhones.length > 0 ? (
                       <>
                         {' '}
@@ -921,7 +979,7 @@ export function DataIntake() {
                     thoại» / «ĐT Người liên hệ».
                   </p>
                 ) : null}
-                {previewStats.acceptedNew > 0 ? (
+                {previewStats.willWrite > 0 ? (
                   <p className="mt-2 text-xs leading-relaxed text-slate-600">
                     <span className="font-semibold text-slate-800">Phân công:</span> {previewStats.assignMatched} khớp
                     cột «Tư vấn viên»; {previewStats.assignUnresolvedRaw} không khớp → Admin;{' '}
@@ -949,9 +1007,30 @@ export function DataIntake() {
                 <p className="text-lg font-bold text-emerald-800">{previewStats.acceptedNew}</p>
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mới</p>
               </div>
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2.5 text-center">
-                <p className="text-lg font-bold text-rose-800">{previewStats.rejectedOnDb}</p>
-                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Trùng DB</p>
+              <div
+                className={[
+                  'rounded-xl border px-2 py-2.5 text-center',
+                  overwriteDbDuplicates
+                    ? 'border-amber-300 bg-amber-50'
+                    : 'border-rose-200 bg-rose-50',
+                ].join(' ')}
+              >
+                <p
+                  className={[
+                    'text-lg font-bold',
+                    overwriteDbDuplicates ? 'text-amber-900' : 'text-rose-800',
+                  ].join(' ')}
+                >
+                  {previewStats.rejectedOnDb}
+                </p>
+                <p
+                  className={[
+                    'text-xs font-semibold uppercase tracking-wide',
+                    overwriteDbDuplicates ? 'text-amber-800' : 'text-rose-700',
+                  ].join(' ')}
+                >
+                  {overwriteDbDuplicates ? 'Sẽ ghi đè' : 'Trùng DB'}
+                </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-center">
                 <p className="text-lg font-bold text-slate-800">{previewStats.rejectedInFile}</p>
@@ -959,21 +1038,42 @@ export function DataIntake() {
               </div>
             </div>
 
+            {previewStats.rejectedOnDb > 0 ? (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3 py-3 text-sm text-amber-950">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 cursor-pointer rounded border-amber-400 accent-amber-700"
+                  checked={overwriteDbDuplicates}
+                  onChange={(e) => setOverwriteDbDuplicates(e.target.checked)}
+                />
+                <span>
+                  <span className="font-semibold">Ghi đè hồ sơ trùng trên hệ thống</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-amber-900/90">
+                    Cập nhật bản đã có (cùng SĐT/CCCD) bằng dữ liệu Excel: TVV, tình trạng, tiền/duyệt, nguồn…
+                    Giữ ngày tạo gốc trên hệ thống. Trùng trong cùng file vẫn chỉ lấy dòng đầu.
+                  </span>
+                </span>
+              </label>
+            ) : null}
+
             <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
-              Chỉ ghi dòng mới, không ghi đè. Mỗi hồ sơ mới mang tên đợt ở dưới — sau này lọc trên màn Hồ sơ.
-              «Người phụ trách»: khớp → gán đúng; không khớp → Admin — điều chuyển sau tại «Hồ sơ».
+              {overwriteDbDuplicates
+                ? 'Đang bật ghi đè: dòng trùng DB sẽ được cập nhật; dòng mới vẫn tạo mới.'
+                : 'Mặc định chỉ ghi dòng mới, không ghi đè. Bật ô phía trên nếu muốn cập nhật hồ sơ đã có.'}{' '}
+              Mỗi lần nhập mang tên đợt ở dưới — sau này lọc trên màn Hồ sơ. «Người phụ trách»: khớp → gán đúng; không
+              khớp → Admin.
             </div>
 
             <div className="flex flex-col items-center gap-1.5 pt-1">
               <button
                 type="button"
                 disabled={
-                  busy || previewStats.acceptedNew === 0 || !normalizeIntakeProgramLabel(intakeProgram)
+                  busy || previewStats.willWrite === 0 || !normalizeIntakeProgramLabel(intakeProgram)
                 }
                 onClick={() => void commitImport()}
                 title={
-                  previewStats.acceptedNew === 0
-                    ? 'Không có dòng mới để nhập'
+                  previewStats.willWrite === 0
+                    ? 'Không có dòng để nhập hoặc ghi đè'
                     : !normalizeIntakeProgramLabel(intakeProgram)
                       ? 'Nhập tên chương trình / đợt trước'
                       : undefined
@@ -981,10 +1081,14 @@ export function DataIntake() {
                 className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
               >
                 <Upload className="h-4 w-4 shrink-0" aria-hidden />
-                Xác nhận nhập ({previewStats.acceptedNew})
+                {overwriteDbDuplicates && previewStats.acceptedOverwrite > 0
+                  ? `Xác nhận (${previewStats.acceptedNew} mới + ${previewStats.acceptedOverwrite} ghi đè)`
+                  : `Xác nhận nhập (${previewStats.acceptedNew})`}
               </button>
-              {previewStats.acceptedNew === 0 ? (
-                <p className="text-center text-xs text-slate-600">Không có dòng mới để nhập.</p>
+              {previewStats.willWrite === 0 ? (
+                <p className="text-center text-xs text-slate-600">
+                  Không có dòng để ghi — bật «Ghi đè» nếu chỉ còn trùng DB, hoặc kiểm tra file.
+                </p>
               ) : !normalizeIntakeProgramLabel(intakeProgram) ? (
                 <p className="text-center text-xs font-medium text-rose-700">
                   Điền «Chương trình / đợt» bên dưới rồi mới xác nhận được.
@@ -1042,8 +1146,9 @@ export function DataIntake() {
                 })}
               </div>
               {selectedTemplate.positionalAppsScript ? (
-                <p className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-950">
-                  <strong>Trước khi nhập:</strong> Cài đặt → Dữ liệu → <strong>Nhập tư vấn viên</strong> (cột{' '}
+                <p className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-950">
+                  <strong>Cổng đăng ký:</strong> hồ sơ Mẫu 3 hiện ở tab «Cổng đăng ký» trên Hồ sơ (không vào «Tải lên /
+                  chiến dịch»). Trước khi nhập: Cài đặt → Dữ liệu → <strong>Nhập tư vấn viên</strong> (cột{' '}
                   <strong>Tên hiển thị</strong> = tên TVV trên Sheet, cột index 18). Rồi xuất{' '}
                   <code className="rounded bg-white px-1">DU_LIEU_SINH_VIEN</code> .xlsx — không đổi thứ tự cột.
                 </p>
@@ -1051,13 +1156,26 @@ export function DataIntake() {
             </fieldset>
 
             <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Chương trình / đợt nhập <span className="text-rose-600">*</span>
+              {selectedTemplate.positionalAppsScript ? (
+                <>
+                  Ghi chú đợt nhập{' '}
+                  <span className="font-normal normal-case tracking-normal text-slate-400">(tuỳ chọn)</span>
+                </>
+              ) : (
+                <>
+                  Chương trình / đợt nhập <span className="text-rose-600">*</span>
+                </>
+              )}
               <input
                 list="intake-program-suggestions"
                 value={intakeProgram}
                 onChange={(e) => setIntakeProgram(e.target.value)}
                 disabled={busy || !canIntake}
-                placeholder="Vd. Đợt 9/2026 — Offline Hà Nội"
+                placeholder={
+                  selectedTemplate.positionalAppsScript
+                    ? 'Vd. Sheet cổng 16/8 — không bắt buộc'
+                    : 'Vd. Đợt 9/2026 — Offline Hà Nội'
+                }
                 className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
               />
               <datalist id="intake-program-suggestions">
@@ -1066,7 +1184,9 @@ export function DataIntake() {
                 ))}
               </datalist>
               <span className="mt-1.5 block text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-500">
-                Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này.
+                {selectedTemplate.positionalAppsScript
+                  ? 'Mẫu 3 vào danh sách «Cổng đăng ký» (không phải chiến dịch). Ghi chú chỉ để dễ lọc sau này.'
+                  : 'Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này (tab Tải lên / chiến dịch).'}
               </span>
             </label>
 
