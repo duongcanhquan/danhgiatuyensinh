@@ -96,8 +96,8 @@ function bump(counts: OpsStatusCounts, lead: Lead): void {
   else if (crm === 'DEPOSIT_PAID') counts.deposit += 1
   else counts.open += 1
   const tag = lead.priorityTag
-  if (tag === 'HOT' || tag === 'HOT+') counts.hot += 1
-  if (tag === 'WARM' || tag === 'WARM+') counts.warm += 1
+  if (tag === 'HOT') counts.hot += 1
+  if (tag === 'WARM') counts.warm += 1
 }
 
 function leadSourceLabel(lead: Lead): string {
