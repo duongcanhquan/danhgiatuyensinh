@@ -13,18 +13,14 @@ import {
 import { foldFinanceStatusText } from '../../utils/paymentApprovalStatus'
 import { useAuth } from '../../hooks/useAuth'
 import { AccountantReceiptPreview } from './AccountantReceiptPreview'
-import { Check, Loader2, Phone, RotateCcw } from 'lucide-react'
+import { Check, Loader2, RotateCcw } from 'lucide-react'
 
-function telHref(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '')
-  if (digits.length < 9) return null
-  return `tel:${digits.startsWith('84') ? `+${digits}` : digits}`
-}
-
+/** Cổng kế toán: một cỡ chữ duy nhất (text-sm = 14px). */
+const T = 'text-sm'
 const INPUT =
-  'h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-[11px] text-slate-900 disabled:bg-slate-50'
+  `h-8 w-full rounded-md border border-slate-200 bg-white px-2 ${T} text-slate-900 disabled:bg-slate-50`
 const BTN =
-  'inline-flex h-7 items-center justify-center gap-0.5 rounded px-2 text-[11px] font-bold disabled:opacity-40'
+  `inline-flex h-8 items-center justify-center gap-1 rounded-md px-2.5 ${T} font-semibold disabled:opacity-40`
 
 function PaymentSlotActions({
   lead,
@@ -113,41 +109,41 @@ function PaymentSlotActions({
       setBusy(false)
     }
   }
+
   const statusCls =
     status === 'ĐỒNG Ý'
       ? 'bg-emerald-100 text-emerald-800'
       : status === 'TỪ CHỐI'
         ? 'bg-rose-100 text-rose-800'
         : 'bg-amber-100 text-amber-900'
+
   return (
-    <div className="rounded-md border border-slate-200/90 bg-slate-50/50 px-1.5 py-1">
+    <div className="rounded-md border border-slate-200/90 bg-slate-50/50 px-2 py-1.5">
       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-0.5">
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold text-slate-800">{slotLabel}</p>
-          <p className="font-mono text-xs font-bold tabular-nums text-slate-900">
+          <p className={`truncate font-semibold text-slate-800 ${T}`}>{slotLabel}</p>
+          <p className={`font-mono font-semibold tabular-nums text-slate-900 ${T}`}>
             {amountVnd.toLocaleString('vi-VN')}đ
           </p>
         </div>
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${statusCls}`}>
-          {status || 'Chờ duyệt'}
-        </span>
+        <span className={`rounded px-1.5 py-0.5 font-semibold ${T} ${statusCls}`}>{status || 'Chờ duyệt'}</span>
         <div className="flex items-center gap-1">
           {line?.receiptUrl ? (
             <AccountantReceiptPreview url={line.receiptUrl} label={`${slotLabel} — ${lead.fullName}`} />
           ) : (
-            <span className="text-[10px] text-amber-700">Chưa bill</span>
+            <span className={`text-amber-700 ${T}`}>Chưa bill</span>
           )}
         </div>
       </div>
       {line?.approvalNote && status === 'TỪ CHỐI' ? (
-        <p className="mt-0.5 truncate text-[10px] text-rose-800" title={line.approvalNote}>
+        <p className={`mt-0.5 truncate text-rose-800 ${T}`} title={line.approvalNote}>
           Lý do: {line.approvalNote}
         </p>
       ) : null}
       {!isDone ? (
-        <div className="mt-1 space-y-1 border-t border-slate-200/70 pt-1">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
-            <label className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="mt-1.5 space-y-1.5 border-t border-slate-200/70 pt-1.5">
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+            <label className={`block font-medium text-slate-600 ${T}`}>
               Ngày
               <input
                 type="date"
@@ -157,7 +153,7 @@ function PaymentSlotActions({
                 onChange={(e) => setDateVal(e.target.value)}
               />
             </label>
-            <label className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+            <label className={`block font-medium text-slate-600 ${T}`}>
               Tiền
               <input
                 inputMode="numeric"
@@ -167,7 +163,9 @@ function PaymentSlotActions({
                 onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
               />
             </label>
-            <label className="flex h-7 cursor-pointer items-center justify-center self-end rounded border border-dashed border-slate-300 bg-white text-[10px] font-medium text-slate-600">
+            <label
+              className={`flex h-8 cursor-pointer items-center justify-center self-end rounded-md border border-dashed border-slate-300 bg-white font-medium text-slate-600 ${T}`}
+            >
               {billFile ? billFile.name.slice(0, 12) : '+ Bill'}
               <input
                 type="file"
@@ -178,14 +176,14 @@ function PaymentSlotActions({
               />
             </label>
             {!rejectOpen ? (
-              <div className="col-span-3 flex gap-1 sm:col-span-3">
+              <div className="col-span-3 flex gap-1.5 sm:col-span-3">
                 <button
                   type="button"
                   disabled={disabled || busy}
                   onClick={() => void run('ĐỒNG Ý')}
                   className={`${BTN} flex-1 bg-emerald-600 text-white`}
                 >
-                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   Duyệt
                 </button>
                 <button
@@ -195,17 +193,17 @@ function PaymentSlotActions({
                   className={`${BTN} flex-1 border border-rose-300 bg-white text-rose-700`}
                   title="Từ chối — yêu cầu TVV làm lại"
                 >
-                  <RotateCcw className="h-3 w-3" />
+                  <RotateCcw className="h-3.5 w-3.5" />
                   Làm lại
                 </button>
               </div>
             ) : null}
           </div>
           {rejectOpen ? (
-            <div className="flex flex-wrap items-start gap-1 rounded border border-rose-200 bg-rose-50/80 p-1">
+            <div className="flex flex-wrap items-start gap-1.5 rounded-md border border-rose-200 bg-rose-50/80 p-1.5">
               <textarea
                 rows={1}
-                className="min-w-[12rem] flex-1 rounded border border-rose-200 bg-white px-1.5 py-1 text-[11px]"
+                className={`min-w-[12rem] flex-1 rounded-md border border-rose-200 bg-white px-2 py-1 text-slate-900 ${T}`}
                 value={rejectReason}
                 disabled={disabled || busy}
                 onChange={(e) => setRejectReason(e.target.value)}
@@ -225,7 +223,7 @@ function PaymentSlotActions({
                 onClick={() => void run('TỪ CHỐI', rejectReason.trim())}
                 className={`${BTN} bg-rose-600 text-white`}
               >
-                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Xác nhận
               </button>
             </div>
@@ -235,6 +233,7 @@ function PaymentSlotActions({
     </div>
   )
 }
+
 function FullNeBlock({
   lead,
   disabled,
@@ -251,7 +250,7 @@ function FullNeBlock({
   const fullNeAt = String(lead.finance?.fullNeAt ?? '').trim()
   if (stFolded.includes('DA FULL')) {
     return (
-      <p className="rounded bg-slate-800 px-1.5 py-1 text-center text-[10px] font-semibold text-amber-200">
+      <p className={`rounded-md bg-slate-800 px-2 py-1.5 text-center font-semibold text-amber-200 ${T}`}>
         Đã Full NE{fullNeAt ? ` · ${fullNeAt}` : ''}
       </p>
     )
@@ -273,7 +272,7 @@ function FullNeBlock({
           .finally(() => setBusy(false))
       }}
       className={[
-        'h-7 w-full rounded text-[11px] font-bold text-white disabled:opacity-40',
+        `h-8 w-full rounded-md font-semibold text-white disabled:opacity-40 ${T}`,
         isReq ? 'bg-rose-600' : 'bg-violet-700',
       ].join(' ')}
     >
@@ -281,6 +280,7 @@ function FullNeBlock({
     </button>
   )
 }
+
 export function AccountantLeadReviewCard({
   summary,
   lead,
@@ -297,15 +297,14 @@ export function AccountantLeadReviewCard({
   const pending = leadHasPendingAccountantReview(lead)
   const incomplete = !pending && leadHasIncompleteTuitionProgress(lead)
   const activePayments = summary.payments.filter((p) => p.hasActivity)
-  const phoneHref = summary.phone ? telHref(summary.phone) : null
-  const motherHref = summary.motherPhone ? telHref(summary.motherPhone) : null
   const metaBits = [summary.studentCode, summary.major !== '—' ? summary.major : '', summary.educationLevel]
     .filter(Boolean)
     .join(' · ')
+
   return (
     <article
       className={[
-        'rounded-lg border bg-white px-2 py-1.5 shadow-sm',
+        `rounded-lg border bg-white px-2.5 py-2 shadow-sm ${T} text-slate-800`,
         pending
           ? 'border-amber-400 ring-1 ring-amber-200'
           : incomplete
@@ -313,80 +312,59 @@ export function AccountantLeadReviewCard({
             : 'border-slate-200',
       ].join(' ')}
     >
-      {/* Dòng 1 — học sinh · mã/ngành · liên hệ + TVV */}
-      <div className="grid grid-cols-1 gap-1 border-b border-slate-100 pb-1 sm:grid-cols-3 sm:items-center sm:gap-2">
+      <div className="grid grid-cols-1 gap-1.5 border-b border-slate-100 pb-1.5 sm:grid-cols-3 sm:items-center sm:gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <h3 className="min-w-0 truncate text-sm font-bold text-emerald-950">{summary.studentName}</h3>
-          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${statusTagClass(summary.statusTag)}`}>
+          <h3 className={`min-w-0 truncate font-semibold text-emerald-950 ${T}`}>{summary.studentName}</h3>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 font-semibold ${T} ${statusTagClass(summary.statusTag)}`}>
             {summary.statusTag}
           </span>
           {incomplete ? (
-            <span className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-900">
+            <span className={`shrink-0 rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-900 ${T}`}>
               Nộp thiếu
             </span>
           ) : null}
         </div>
-        <p className="min-w-0 truncate text-[11px] text-slate-600" title={metaBits}>
+        <p className={`min-w-0 truncate text-slate-600 ${T}`} title={metaBits}>
           <span className="font-mono font-semibold text-emerald-800">{summary.studentCode}</span>
-          {summary.major && summary.major !== '—' ? (
-            <span className="text-slate-500"> · {summary.major}</span>
-          ) : null}
-          {summary.educationLevel ? <span className="text-slate-400"> · {summary.educationLevel}</span> : null}
+          {summary.major && summary.major !== '—' ? <span> · {summary.major}</span> : null}
+          {summary.educationLevel ? <span className="text-slate-500"> · {summary.educationLevel}</span> : null}
         </p>
-        <div className="flex min-w-0 flex-wrap items-center justify-start gap-1 sm:justify-end">
-          <span className="truncate text-[11px] font-semibold text-indigo-900" title={summary.counselorName}>
+        <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end">
+          <span className={`truncate font-semibold text-indigo-900 ${T}`} title={summary.counselorName}>
             TVV {summary.counselorName || '—'}
           </span>
-          {phoneHref ? (
-            <a
-              href={phoneHref}
-              className="inline-flex h-6 items-center gap-0.5 rounded border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-bold text-emerald-900"
-            >
-              <Phone className="h-3 w-3" aria-hidden />
-              HS
-            </a>
-          ) : null}
-          {motherHref ? (
-            <a
-              href={motherHref}
-              className="inline-flex h-6 items-center gap-0.5 rounded border border-sky-200 bg-sky-50 px-1.5 text-[10px] font-bold text-sky-900"
-            >
-              <Phone className="h-3 w-3" aria-hidden />
-              Mẹ
-            </a>
-          ) : null}
           {summary.nationalId ? (
-            <span className="inline-flex h-6 items-center rounded border border-slate-200 bg-slate-50 px-1.5 text-[10px] text-slate-600">
+            <span className={`inline-flex h-8 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-slate-600 ${T}`}>
               CCCD {summary.nationalId}
             </span>
           ) : null}
         </div>
       </div>
-      {/* Dòng 2 — tiền · học bổng · Full NE */}
-      <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-3 sm:items-center sm:gap-2">
-        <p className="rounded bg-emerald-50 px-1.5 py-1 font-mono text-[11px]" title="Tổng đã ghi nhận">
+
+      <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:items-center sm:gap-2">
+        <p className={`rounded-md bg-emerald-50 px-2 py-1.5 font-mono ${T}`} title="Tổng đã ghi nhận">
           <span className="text-emerald-800">Đã nộp </span>
-          <span className="font-bold text-emerald-950">{summary.totalRecordedLabel}</span>
+          <span className="font-semibold text-emerald-950">{summary.totalRecordedLabel}</span>
         </p>
-        <p className="rounded bg-slate-50 px-1.5 py-1 font-mono text-[11px]" title="Tổng đã duyệt Đồng ý">
+        <p className={`rounded-md bg-slate-50 px-2 py-1.5 font-mono ${T}`} title="Tổng đã duyệt Đồng ý">
           <span className="text-slate-500">Đã duyệt </span>
-          <span className="font-bold text-slate-800">{summary.totalApprovedLabel}</span>
+          <span className="font-semibold text-slate-800">{summary.totalApprovedLabel}</span>
         </p>
         <div className="min-w-0">
           {summary.scholarships.length ? (
-            <p className="truncate text-[11px] text-violet-800" title={summary.scholarships.join(', ')}>
+            <p className={`truncate text-violet-800 ${T}`} title={summary.scholarships.join(', ')}>
               {summary.scholarships.join(' · ')}
             </p>
           ) : (
-            <p className="text-[11px] text-slate-400">Không HB</p>
+            <p className={`text-slate-400 ${T}`}>Không HB</p>
           )}
-          <div className="mt-0.5">
+          <div className="mt-1">
             <FullNeBlock lead={lead} disabled={disabled} accountantName={accountantName} onDone={onDone} />
           </div>
         </div>
       </div>
-      {/* Dòng 3 — khoản thu + duyệt / làm lại */}
-      <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
+
+      <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {activePayments.map((p) => {
           const batch = PAYMENT_SLOT_DEFS.findIndex((d) => d.key === p.key) + 1
           return (

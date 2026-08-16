@@ -98,7 +98,7 @@ describe('accountantFinanceFilter', () => {
     expect(leadHasPendingAccountantReview(enoughMoney)).toBe(true)
   })
 
-  it('keeps pending when settled but a new unpaid slot appears', () => {
+  it('moves CỌC THÀNH CÔNG out of Cần xử lý even if a slot still has blank approval', () => {
     const settledButNew = {
       ...base,
       finance: {
@@ -109,8 +109,8 @@ describe('accountantFinanceFilter', () => {
         },
       },
     } as Lead
-    expect(leadHasPendingAccountantReview(settledButNew)).toBe(true)
-    expect(leadBelongsInAccountantWorkQueue(settledButNew)).toBe(true)
+    expect(leadHasPendingAccountantReview(settledButNew)).toBe(false)
+    expect(leadBelongsInAccountantWorkQueue(settledButNew)).toBe(false)
   })
 
   it('flags incomplete tuition when approved below threshold', () => {
@@ -176,7 +176,8 @@ describe('accountantFinanceFilter', () => {
         },
       },
     } as Lead
-    expect(leadPassesShowDoneFilter(settledButPending, false, false)).toBe(true)
+    // Đã cọc → không còn «cần xử lý» → Hiện CỌC vẫn ẩn trên tab chờ
+    expect(leadPassesShowDoneFilter(settledButPending, false, false)).toBe(false)
   })
 
   it('sorts pending approval before incomplete, newest first within group', () => {

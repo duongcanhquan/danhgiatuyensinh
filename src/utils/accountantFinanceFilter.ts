@@ -75,7 +75,8 @@ export function leadLooksLikeLegacySettledWithoutApprovals(
 
 /**
  * Còn việc kế toán phải xử lý trên khoản thu / Full NE.
- * Không đưa hồ sơ đã cọc/hoàn thiện từ Sheet cũ (tiền có, cột duyệt trống) vào chờ duyệt.
+ * Hồ sơ đã «Cọc thành công» / «Đã hoàn thiện» / Full NE → không còn «Cần xử lý»
+ * (chỉ mở lại nếu đang treo yêu cầu Full NE).
  */
 export function leadHasPendingAccountantReview(lead: Pick<Lead, 'finance'>): boolean {
   const finance = lead.finance
@@ -86,7 +87,8 @@ export function leadHasPendingAccountantReview(lead: Pick<Lead, 'finance'>): boo
     (Boolean(finance.reqFullNe) ||
       foldFinanceStatusText(String(finance.fullNeStatus ?? '')).includes('YEU CAU'))
 
-  if (leadLooksLikeLegacySettledWithoutApprovals(lead)) {
+  // Đã cọc / hoàn thiện phí / Full NE theo dữ liệu ghi danh → Đã xong
+  if (leadIsSettledCocOrComplete(lead) || isFullNeDone(finance)) {
     return fullNePending
   }
 
@@ -119,7 +121,7 @@ export function leadHasIncompleteTuitionProgress(
   return approved < need
 }
 
-/** Hàng đợi mặc định «Chờ duyệt»: treo duyệt / kiểm tra lại / nộp thiếu. */
+/** Hàng đợi «Cần xử lý»: treo duyệt khoản / nộp thiếu — không gồm đã cọc / hoàn thiện. */
 export function leadBelongsInAccountantWorkQueue(
   lead: Pick<Lead, 'finance' | 'educationLevel'>,
   thresholds?: FinanceDepositThresholds,

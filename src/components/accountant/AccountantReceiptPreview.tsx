@@ -27,7 +27,7 @@ export function AccountantReceiptPreview({
   const titleId = useId()
 
   if (!href) {
-    return <span className="text-[11px] font-medium text-amber-700">Chưa có bill</span>
+    return <span className="text-sm font-medium text-amber-700">Chưa có bill</span>
   }
 
   return (
@@ -35,7 +35,7 @@ export function AccountantReceiptPreview({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-8 items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 text-[11px] font-bold text-sky-900 hover:bg-sky-100"
+        className="inline-flex h-8 items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 text-sm font-semibold text-sky-900 hover:bg-sky-100"
       >
         <Eye className="h-3.5 w-3.5" aria-hidden />
         Xem bill

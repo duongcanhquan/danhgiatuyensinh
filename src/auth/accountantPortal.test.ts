@@ -18,6 +18,11 @@ describe('canAccessAccountantPortal', () => {
     expect(canAccessAccountantPortal(canFrom('accountant'), { role: 'accountant', isActive: true })).toBe(true)
   })
 
+  it('allows accountant role even if can() denies finance (role gate)', () => {
+    const denyAll = () => false
+    expect(canAccessAccountantPortal(denyAll, { role: 'accountant', isActive: true })).toBe(true)
+  })
+
   it('blocks counselor and inactive users', () => {
     expect(canAccessAccountantPortal(canFrom('counselor'), { role: 'counselor', isActive: true })).toBe(false)
     expect(canAccessAccountantPortal(canFrom('super_admin'), { role: 'super_admin', isActive: false })).toBe(false)

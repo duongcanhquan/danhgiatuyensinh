@@ -3,9 +3,10 @@ import { LayoutDashboard, LogOut, Wallet } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { ChangePasswordPanel } from '../ChangePasswordPanel'
 
+/** Cổng kế toán: chữ đồng nhất text-sm. */
 function navClass(isActive: boolean) {
   return [
-    'inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-bold transition sm:h-9 sm:gap-1.5 sm:px-2.5 sm:text-xs',
+    'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-semibold transition',
     isActive
       ? 'bg-indigo-600 text-white shadow-sm'
       : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-900',
@@ -17,23 +18,23 @@ export function AccountantLayout() {
   const displayName = profile?.displayName?.trim() || profile?.email?.trim() || 'Kế toán'
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-gradient-to-br from-indigo-50 via-white to-slate-100">
+    <div className="flex min-h-[100dvh] flex-col bg-gradient-to-br from-indigo-50 via-white to-slate-100 text-sm text-slate-800">
       <header className="sticky top-0 z-30 border-b border-indigo-200/80 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] items-center gap-2 px-2 py-1.5 sm:px-4 sm:py-2">
+        <div className="mx-auto flex max-w-[1800px] items-center gap-2 px-3 py-2 sm:px-4">
           <nav className="flex min-w-0 flex-1 items-center gap-1" aria-label="Cổng kế toán">
             <NavLink to="/ke-toan" end className={({ isActive }) => navClass(isActive)}>
-              <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <Wallet className="h-4 w-4 shrink-0" aria-hidden />
               Hàng đợi
             </NavLink>
             <NavLink to="/ke-toan/bao-cao" className={({ isActive }) => navClass(isActive)}>
-              <LayoutDashboard className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden />
               Tổng quan
             </NavLink>
           </nav>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <span
-              className="max-w-[7.5rem] truncate text-[11px] font-semibold text-slate-700 sm:max-w-[14rem] sm:text-xs"
+              className="max-w-[7.5rem] truncate text-sm font-semibold text-slate-700 sm:max-w-[14rem]"
               title={displayName}
             >
               {displayName}
@@ -42,9 +43,9 @@ export function AccountantLayout() {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 active:bg-slate-50 sm:h-9 sm:px-2.5 sm:text-xs"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 active:bg-slate-50"
             >
-              <LogOut className="h-3.5 w-3.5" aria-hidden />
+              <LogOut className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">Thoát</span>
             </button>
           </div>

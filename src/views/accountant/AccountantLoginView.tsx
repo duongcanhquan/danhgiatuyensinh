@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, Lock, ShieldCheck, Wallet } from 'lucide-react'
-import { AuthSessionExitBar } from '../../components/AuthSessionControls'
-import { AuthSessionBootScreen, useAuthBootMinHold } from '../../components/AuthSessionBootScreen'
+import { Eye, EyeOff, Lock, Wallet } from 'lucide-react'
+import { AuthSessionBootScreen } from '../../components/AuthSessionBootScreen'
 import { useAuth } from '../../hooks/useAuth'
 import { canAccessAccountantPortal } from '../../auth/accountantPortal'
 import { getFirebaseAuth, getFirebaseMissingKeys, isFirebaseConfigured } from '../../services/firebase'
@@ -22,7 +21,6 @@ export function AccountantLoginView() {
   const [busy, setBusy] = useState(false)
 
   const hasAuth = Boolean(isFirebaseConfigured() && getFirebaseAuth())
-  const bootHold = useAuthBootMinHold(Boolean(firebaseUser && status === 'authenticated' && profile))
 
   if (!hasAuth) {
     const missing = getFirebaseMissingKeys()
@@ -43,20 +41,23 @@ export function AccountantLoginView() {
     )
   }
 
+  // Đã có quyền → vào thẳng cổng, không màn «Bạn đang đăng nhập / vào cổng».
   if (firebaseUser && status === 'authenticated' && profile && canAccessAccountantPortal(can, profile)) {
-    if (bootHold) {
-      return (
-        <AuthSessionBootScreen
-          statusLabel="Đang mở cổng kế toán"
-          detail="Đăng nhập thành công."
-        />
-      )
-    }
     return <Navigate to={from} replace />
   }
 
+  // Đang xác thực / tải hồ sơ sau đăng nhập — chỉ màn chờ ngắn, không form + nút trung gian.
+  if (firebaseUser && (status === 'unknown' || status === 'authenticating')) {
+    return (
+      <AuthSessionBootScreen
+        statusLabel="Đang mở cổng kế toán"
+        detail="Đăng nhập thành công."
+      />
+    )
+  }
+
   const loggedInWithoutPortalAccess =
-    firebaseUser && status === 'authenticated' && profile && !canAccessAccountantPortal(can, profile)
+    Boolean(firebaseUser && status === 'authenticated' && profile && !canAccessAccountantPortal(can, profile))
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -84,21 +85,9 @@ export function AccountantLoginView() {
               <h1 className="text-xl font-extrabold tracking-tight">Cổng kế toán</h1>
             </div>
           </div>
-          <p className="mt-3 text-sm leading-relaxed text-indigo-50/90">
-            Khu vực riêng — duyệt thu, Full NE, thông báo n8n → Google Chat.
-          </p>
         </div>
 
         <div className="space-y-4 px-6 py-6">
-          <AuthSessionExitBar tone="indigo" />
-          <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden />
-            <p>
-              Dùng tài khoản <strong>kế toán</strong> hoặc <strong>quản trị / super admin</strong>. Không chia sẻ mật
-              khẩu; đăng xuất khi rời máy.
-            </p>
-          </div>
-
           <form onSubmit={(e) => void submit(e)} className="space-y-4">
             <label className="block text-sm font-medium text-slate-700">
               Email kế toán
@@ -140,8 +129,8 @@ export function AccountantLoginView() {
                   Tài khoản này không có quyền cổng kế toán.{' '}
                   <Link to="/login" className="font-semibold underline">
                     Đăng nhập CRM
-                  </Link>{' '}
-                  nếu bạn là TVV tuyển sinh.
+                  </Link>
+                  .
                 </div>
                 <button
                   type="button"
@@ -157,21 +146,16 @@ export function AccountantLoginView() {
                 {error}
               </div>
             ) : null}
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-900/20 hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {busy ? 'Đang xác thực…' : 'Đăng nhập an toàn'}
-            </button>
+            {!loggedInWithoutPortalAccess ? (
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-900/20 hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {busy ? 'Đang xác thực…' : 'Đăng nhập'}
+              </button>
+            ) : null}
           </form>
-
-          <p className="text-center text-xs text-slate-500">
-            TVV / quản trị?{' '}
-            <Link to="/login" className="font-semibold text-indigo-800 underline">
-              Quay lại đăng nhập CRM
-            </Link>
-          </p>
         </div>
       </div>
     </div>

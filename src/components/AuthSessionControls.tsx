@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { LogOut, UserRound } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
@@ -79,12 +79,9 @@ export function AuthSessionExitBar({
   )
 }
 
-/** Màn cổng đăng nhập khi đã có phiên — chọn vào hệ thống hoặc đăng xuất để đổi tài khoản. */
+/** Màn cổng đăng nhập khi đã có phiên — giữ API cũ; ưu tiên Navigate thẳng vào hệ thống thay vì dùng gate này. */
 export function LoggedInPortalGate({
   continueTo,
-  portalTitle,
-  continueLabel,
-  tone = 'onDark',
   children,
 }: {
   continueTo: string
@@ -93,64 +90,11 @@ export function LoggedInPortalGate({
   tone?: 'onDark' | 'indigo'
   children?: ReactNode
 }) {
-  const { firebaseUser, profile, signOut, status } = useAuth()
-  const navigate = useNavigate()
+  const { firebaseUser, status } = useAuth()
 
-  if (!firebaseUser || (status !== 'authenticated' && status !== 'authenticating')) {
-    return children ?? null
+  if (firebaseUser && (status === 'authenticated' || status === 'authenticating')) {
+    return <Navigate to={continueTo} replace />
   }
 
-  const roleLabel = profile ? USER_ROLE_LABELS[profile.role] : '…'
-  const name = profile?.displayName || profile?.email || firebaseUser.email || 'Tài khoản'
-  const shell =
-    tone === 'indigo'
-      ? 'min-h-[100dvh] bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-950 px-4 py-10'
-      : 'relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4 py-10'
-  const card =
-    tone === 'indigo'
-      ? 'w-full max-w-md rounded-3xl border border-indigo-400/25 bg-white p-6 shadow-2xl'
-      : 'liquid-glass w-full max-w-sm rounded-2xl border border-white/20 bg-slate-900/90 p-6 text-white shadow-2xl'
-
-  return (
-    <div className={shell}>
-      <div className={card}>
-        <p className={tone === 'indigo' ? 'text-xs font-bold uppercase tracking-wider text-indigo-700' : 'text-xs font-semibold uppercase tracking-[0.2em] text-blue-200/80'}>
-          {portalTitle}
-        </p>
-        <h1 className={tone === 'indigo' ? 'mt-2 text-xl font-extrabold text-slate-900' : 'mt-2 text-xl font-bold text-white'}>
-          Bạn đang đăng nhập
-        </h1>
-        <p className={tone === 'indigo' ? 'mt-2 text-sm text-slate-600' : 'mt-2 text-sm text-slate-300'}>
-          <strong>{name}</strong> · {roleLabel}
-        </p>
-        <p className={tone === 'indigo' ? 'mt-1 text-xs text-slate-500' : 'mt-1 text-xs text-slate-400'}>
-          Đăng xuất nếu cần đổi sang tài khoản khác trên máy này.
-        </p>
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-          <Link
-            to={continueTo}
-            className={
-              tone === 'indigo'
-                ? 'inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-indigo-700'
-                : 'vm-btn vm-btn-primary min-h-11 flex-1 justify-center'
-            }
-          >
-            {continueLabel}
-          </Link>
-          <button
-            type="button"
-            onClick={() => void signOut().then(() => navigate('/login', { replace: true }))}
-            className={
-              tone === 'indigo'
-                ? 'inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50'
-                : 'vm-btn vm-btn-secondary min-h-11 flex-1 justify-center border-white/20 bg-white/10 text-white hover:bg-white/15'
-            }
-          >
-            <LogOut className="h-4 w-4" aria-hidden />
-            Đăng xuất
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  return children ?? null
 }

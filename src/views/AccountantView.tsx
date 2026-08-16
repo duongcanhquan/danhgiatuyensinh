@@ -8,7 +8,6 @@ import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import {
   leadHasFinanceActivity,
   leadBelongsInAccountantWorkQueue,
-  leadPassesShowDoneFilter,
   compareAccountantWorkQueueOrder,
   countEnrollmentStatusStats,
 } from '../utils/accountantFinanceFilter'
@@ -53,7 +52,6 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
   const [search, setSearch] = useState('')
   const [filterTag, setFilterTag] = useState<AccountantStatusTag | ''>('')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('pending')
-  const [showDone, setShowDone] = useState(false)
 
   useEffect(() => {
     setRows(leads)
@@ -100,18 +98,10 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
 
   const filtered = useMemo(() => {
     const q = normalizeSearch(search)
-    const statusFilterActive = Boolean(filterTag)
     return financeRows
       .filter((lead) => {
         if (queueFilter === 'pending' && !leadBelongsInAccountantWorkQueue(lead)) return false
         if (queueFilter === 'done' && leadBelongsInAccountantWorkQueue(lead)) return false
-        // «Hiện CỌC» chỉ áp khi đang xem cần xử lý — tab Đã xong / Tất cả luôn hiện hồ sơ đã chốt.
-        if (
-          queueFilter === 'pending' &&
-          !leadPassesShowDoneFilter(lead, showDone, statusFilterActive)
-        ) {
-          return false
-        }
         const summary = summaryByLeadId.get(lead.id)
         if (filterTag && summary && summary.statusTag !== filterTag) return false
         if (!q) return true
@@ -121,9 +111,6 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
           lead.customerId,
           summary?.studentCode,
           lead.id,
-          lead.phone,
-          lead.motherPhone,
-          lead.fatherPhone,
           lead.nationalId,
           lead.studentEmail,
           lead.majorInterest,
@@ -135,7 +122,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         return hay.some((h) => h.includes(q))
       })
       .sort(compareAccountantWorkQueueOrder)
-  }, [financeRows, search, filterTag, queueFilter, showDone, summaryByLeadId])
+  }, [financeRows, search, filterTag, queueFilter, summaryByLeadId])
 
   const patchLead = (next: Lead) => {
     setRows((prev) => prev.map((l) => (l.id === next.id ? next : l)))
@@ -150,7 +137,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
   }
 
   const summaryBlock = (
-    <div className="flex flex-wrap items-stretch gap-1.5 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+    <div className="flex flex-wrap items-stretch gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm text-sm">
       {(
         [
           ['Chờ duyệt', stats.pending, 'text-amber-800 bg-amber-50 border-amber-200'],
@@ -164,28 +151,34 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
       ).map(([label, value, cls]) => (
         <div
           key={label}
-          className={`min-w-[4.25rem] flex-1 rounded-lg border px-2 py-1 text-center ${cls}`}
+          className={`min-w-[4.5rem] flex-1 rounded-lg border px-2 py-1.5 text-center ${cls}`}
         >
-          <p className="text-[9px] font-bold uppercase tracking-wide opacity-80">{label}</p>
-          <p className="text-base font-bold tabular-nums leading-tight">{value}</p>
+          <p className="font-semibold opacity-80">{label}</p>
+          <p className="font-semibold tabular-nums leading-tight">{value}</p>
         </div>
       ))}
       <button
         type="button"
         onClick={() => void reload()}
-        className="inline-flex min-h-[2.75rem] shrink-0 items-center gap-1.5 self-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-900 active:bg-emerald-100 sm:text-sm"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 self-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-900 active:bg-emerald-100"
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         Tải lại
       </button>
     </div>
   )
 
   return (
-    <div className={portalMode ? 'space-y-2.5' : 'mx-auto max-w-3xl space-y-2.5 pb-4 sm:max-w-5xl sm:space-y-3'}>
+    <div
+      className={
+        portalMode
+          ? 'space-y-2.5 text-sm text-slate-800'
+          : 'mx-auto max-w-3xl space-y-2.5 pb-4 text-sm text-slate-800 sm:max-w-5xl sm:space-y-3'
+      }
+    >
       {!portalMode ? (
         <header className="rounded-2xl border border-emerald-200/80 bg-white px-3 py-3 shadow-sm sm:px-4">
-          <h1 className="text-lg font-extrabold text-emerald-800 sm:text-xl">Hàng đợi duyệt</h1>
+          <h1 className="text-sm font-semibold text-emerald-800">Hàng đợi duyệt</h1>
           <div className="mt-2">{summaryBlock}</div>
         </header>
       ) : (
@@ -214,14 +207,14 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
                 aria-selected={queueFilter === id}
                 onClick={() => setQueueFilter(id)}
                 className={[
-                  'inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-extrabold sm:px-2.5 sm:text-xs',
+                  'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-semibold',
                   queueFilter === id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-white',
                 ].join(' ')}
               >
                 <span>{label}</span>
                 <span
                   className={[
-                    'rounded px-1 py-px text-[10px] font-bold tabular-nums',
+                    'rounded px-1.5 py-px font-semibold tabular-nums',
                     queueFilter === id ? 'bg-white/20' : 'bg-white text-slate-500',
                   ].join(' ')}
                 >
@@ -233,12 +226,12 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
 
           <div className="flex min-w-0 flex-col gap-1.5">
             <label className="relative block min-w-0">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 inputMode="search"
-                className="h-8 w-full rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-2.5 text-sm"
-                placeholder="Tìm tên, mã SV, SĐT, CCCD, TVV…"
+                className="h-8 w-full rounded-lg border border-slate-200 bg-white py-1 pl-9 pr-2.5 text-sm"
+                placeholder="Tìm tên, mã SV, CCCD, TVV…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 enterKeyHint="search"
@@ -250,7 +243,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
             </label>
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <select
-                className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold sm:text-sm"
+                className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-sm font-semibold"
                 value={filterTag}
                 onChange={(e) => setFilterTag(e.target.value as AccountantStatusTag | '')}
               >
@@ -261,17 +254,6 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
                   </option>
                 ))}
               </select>
-              {queueFilter === 'pending' ? (
-                <label className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={showDone}
-                    onChange={(e) => setShowDone(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-slate-300"
-                  />
-                  Hiện CỌC
-                </label>
-              ) : null}
             </div>
           </div>
         </div>
@@ -284,8 +266,8 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         </p>
       ) : null}
 
-      <p className="text-[11px] font-medium text-slate-500">
-        Đang hiện <strong className="text-slate-800">{filtered.length}</strong> hồ sơ
+      <p className="text-sm text-slate-500">
+        Đang hiện <strong className="font-semibold text-slate-800">{filtered.length}</strong> hồ sơ
       </p>
 
       <div className="space-y-1.5">

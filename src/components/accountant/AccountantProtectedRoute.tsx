@@ -62,8 +62,8 @@ export function AccountantProtectedRoute() {
           Tài khoản này không có quyền cổng kế toán. Dùng{' '}
           <a href="/login" className="font-semibold underline">
             đăng nhập CRM
-          </a>{' '}
-          nếu bạn là TVV / quản trị.
+          </a>
+          .
         </div>
       </div>
     )
