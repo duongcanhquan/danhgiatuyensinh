@@ -48,9 +48,18 @@ describe('accountantFinanceStatusTag', () => {
     const lead = {
       id: '1',
       fullName: 'A',
-      finance: { fullNeStatus: 'YÊU CẦU FULL NE', enrollmentStatus: 'CỌC THÀNH CÔNG' },
+      finance: { fullNeStatus: 'YÊU CẦU FULL NE', enrollmentStatus: 'ĐANG HOÀN THIỆN' },
     } as Lead
     expect(accountantFinanceStatusTag(lead)).toBe('Chờ Full NE')
+  })
+
+  it('Cọc thành công thắng nhãn Chờ Full NE', () => {
+    const lead = {
+      id: '1',
+      fullName: 'A',
+      finance: { fullNeStatus: 'YÊU CẦU FULL NE', enrollmentStatus: 'CỌC THÀNH CÔNG', reqFullNe: true },
+    } as Lead
+    expect(accountantFinanceStatusTag(lead)).toBe('Cọc')
   })
 
   it('prefers Full NE / Kiểm tra lại over CRM ENROLLED', () => {

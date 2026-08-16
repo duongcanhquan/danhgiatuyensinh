@@ -19,6 +19,8 @@ export type ScholarshipSavePayload = {
   amountVnd: number
   sortOrder: number
   isActive: boolean
+  /** Bắt buộc khi tạo mới — query danh mục theo trường. */
+  orgId?: string
   validFrom?: string
   validTo?: string
   applySlots?: ScholarshipApplySlot[]
@@ -28,6 +30,10 @@ export type ScholarshipSavePayload = {
   adminNotes?: string
   applicationMethod?: string
   quantityLimit?: number
+  /** Số kỳ phân bổ học bổng. */
+  termCount?: number
+  /** Tiền từng kỳ (kỳ 1 = phần trừ học phí kỳ đầu). */
+  termAllocationsVnd?: number[]
 }
 
 function seedToPayload(row: DefaultScholarshipSeed, sortOrder: number): ScholarshipSavePayload {
@@ -157,6 +163,8 @@ export async function saveScholarshipRow(
 ): Promise<string> {
   const ref = id ? doc(db, FS_COLLECTIONS.scholarships, id) : doc(collection(db, FS_COLLECTIONS.scholarships))
   const now = Timestamp.now()
+  const org = String(payload.orgId ?? '').trim()
+  if (!id && !org) throw new Error('Thiếu mã trường khi thêm học bổng.')
   const body: Record<string, unknown> = {
     label: payload.label.trim(),
     category: payload.category,
@@ -165,6 +173,7 @@ export async function saveScholarshipRow(
     isActive: payload.isActive,
     updatedAt: now,
     ...(id ? {} : { createdAt: now }),
+    ...(org ? { orgId: org } : {}),
   }
   const optionalStrings = ['validFrom', 'validTo', 'targetAudience', 'eligibilityNotes', 'adminNotes', 'applicationMethod'] as const
   for (const key of optionalStrings) {
@@ -178,6 +187,12 @@ export async function saveScholarshipRow(
   else if (id) body.applySlots = null
   if (payload.audienceTags?.length) body.audienceTags = payload.audienceTags
   else if (id) body.audienceTags = null
+  const termCount = Math.round(Number(payload.termCount) || 0)
+  if (termCount > 0) body.termCount = termCount
+  else if (id) body.termCount = null
+  if (payload.termAllocationsVnd?.length) {
+    body.termAllocationsVnd = payload.termAllocationsVnd.map((n) => Math.max(0, Math.round(Number(n) || 0)))
+  } else if (id) body.termAllocationsVnd = null
   await setDoc(ref, body, { merge: true })
   return ref.id
 }

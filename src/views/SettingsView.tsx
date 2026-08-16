@@ -59,6 +59,7 @@ import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
 import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
 import { FinanceThresholdsSettingsPanel } from '../components/FinanceThresholdsSettingsPanel'
+import { FinanceTuitionCatalogPanel } from '../components/FinanceTuitionCatalogPanel'
 import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSettingsPanel'
 import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
 import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
@@ -326,8 +327,8 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Chứng từ &amp; ngưỡng cọc</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Nơi lưu bill (R2 / Drive / Firebase) và ngưỡng tiền cọc / LPXT dùng khi kế toán duyệt và báo cáo — không
-            đặt trong Webhook n8n.
+            Nơi lưu bill, ngưỡng cọc / LPXT, và bảng học phí kỳ 1 theo ngành — dùng khi kế toán duyệt và tính hoàn thiện
+            phí.
           </p>
         </>
       )
@@ -1363,6 +1364,9 @@ export function SettingsView() {
             <ReceiptStorageSettingsPanel hideTitle />
             <div className="border-t border-slate-200 pt-4">
               <FinanceThresholdsSettingsPanel />
+            </div>
+            <div className="border-t border-slate-200 pt-4">
+              <FinanceTuitionCatalogPanel />
             </div>
           </div>
         </div>

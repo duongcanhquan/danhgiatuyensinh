@@ -1,43 +1,76 @@
-import type { LeadCounselorStatus } from '../types'
+import type { Lead, LeadCounselorStatus } from '../types'
 import { LEAD_COUNSELOR_STATUS_LABELS, LEAD_COUNSELOR_STATUS_ORDER } from '../types'
+import { foldFinanceStatusText } from './paymentApprovalStatus'
 
 /**
- * Hồ sơ «Đã cọc» gần như xong — ẩn khỏi danh sách mặc định;
- * chỉ hiện khi lọc Tình trạng = Đã cọc (hoặc đang tìm theo mã/SĐT).
+ * Hồ sơ đã ghi danh / đã hoàn thiện phí — ẩn khỏi danh sách mặc định;
+ * chỉ hiện khi lọc Tình trạng / Thu phí tương ứng, hoặc đang tìm mã/SĐT, hoặc xuất Excel.
+ * «Đã cọc» vẫn hiện để TVV ưu tiên đẩy phí / hồ sơ mới.
  */
 export const LEAD_COUNSELOR_STATUS_HIDDEN_BY_DEFAULT: readonly LeadCounselorStatus[] = [
-  'DEPOSIT_PAID',
+  'ENROLLED',
 ] as const
+
+/** Lọc «Thu phí» mà cần thấy hồ sơ đã bàn giao. */
+const ENROLLMENT_FILTERS_SHOW_HANDOVER = new Set(['DA_HOAN_THIEN', 'GHI_DANH', 'FULL_NE'])
 
 /** Trạng thái còn hiện khi lọc «Tất cả». */
 export const LEAD_COUNSELOR_STATUS_DEFAULT_VISIBLE: readonly LeadCounselorStatus[] =
   LEAD_COUNSELOR_STATUS_ORDER.filter((s) => !LEAD_COUNSELOR_STATUS_HIDDEN_BY_DEFAULT.includes(s))
 
-export function leadIsDepositDoneHiddenByDefault(lead: { status?: LeadCounselorStatus | string | null }): boolean {
-  return lead.status === 'DEPOSIT_PAID'
+function leadIsHandoverForList(lead: Pick<Lead, 'status' | 'pipelineStatus' | 'finance'>): boolean {
+  if (lead.status === 'ENROLLED' || lead.pipelineStatus === 'ENROLLED') return true
+  const finance = lead.finance
+  if (!finance) return false
+  const fn = foldFinanceStatusText(String(finance.fullNeStatus ?? ''))
+  if (fn.includes('DA FULL')) return true
+  const es = foldFinanceStatusText(String(finance.enrollmentStatus ?? ''))
+  return es.includes('DA HOAN THIEN')
+}
+
+/** @deprecated dùng leadIsHandoverHiddenByDefault — giữ tên cũ cho import cũ. */
+export function leadIsDepositDoneHiddenByDefault(
+  lead: Pick<Lead, 'status' | 'pipelineStatus' | 'finance'> | { status?: LeadCounselorStatus | string | null },
+): boolean {
+  return leadIsHandoverHiddenByDefault(lead as Pick<Lead, 'status' | 'pipelineStatus' | 'finance'>)
+}
+
+export function leadIsHandoverHiddenByDefault(
+  lead: Pick<Lead, 'status' | 'pipelineStatus' | 'finance'>,
+): boolean {
+  return leadIsHandoverForList(lead)
 }
 
 /**
  * @param crmFilter — lọc Tình trạng CRM (`ALL` | LeadCounselorStatus)
- * @param searching — đang tìm theo ô tìm (mã/SĐT) → vẫn hiện Đã cọc nếu khớp
+ * @param searching — đang tìm theo ô tìm (mã/SĐT) → vẫn hiện hồ sơ đã bàn giao nếu khớp
+ * @param enrollmentFilter — lọc Thu phí; khi chọn Đã hoàn thiện / Ghi danh / Full NE thì không ẩn mặc định
  */
 export function leadMatchesCrmListVisibility(
-  lead: { status?: LeadCounselorStatus | string | null },
+  lead: Pick<Lead, 'status' | 'pipelineStatus' | 'finance'> | { status?: LeadCounselorStatus | string | null },
   crmFilter: string,
   searching: boolean,
+  enrollmentFilter: string = 'ALL',
 ): boolean {
   if (searching) return true
+  if (crmFilter === 'ENROLLED') {
+    return lead.status === 'ENROLLED' || (lead as Lead).pipelineStatus === 'ENROLLED'
+  }
   if (crmFilter === 'DEPOSIT_PAID') return lead.status === 'DEPOSIT_PAID'
   if (crmFilter !== 'ALL') return true
-  return !leadIsDepositDoneHiddenByDefault(lead)
+
+  const ef = String(enrollmentFilter || 'ALL').trim().toUpperCase()
+  if (ENROLLMENT_FILTERS_SHOW_HANDOVER.has(ef)) return true
+
+  return !leadIsHandoverHiddenByDefault(lead as Pick<Lead, 'status' | 'pipelineStatus' | 'finance'>)
 }
 
 /** Gợi ý ngắn dưới nhãn nút tình trạng. */
 export const LEAD_COUNSELOR_STATUS_HINTS: Record<LeadCounselorStatus, string> = {
   NEW: 'Chưa nộp / mới vào',
   INTERESTED: 'Nộp tiền xét tuyển (LPXT)',
-  DEPOSIT_PAID: 'Đã đóng cọc — ít cần gọi thêm',
-  ENROLLED: 'Đã nhập học',
+  DEPOSIT_PAID: 'Đã cọc — còn theo dõi học phí kỳ 1',
+  ENROLLED: 'Đã nhập học / hoàn thiện — bàn giao',
   SUMMER_MELT: 'Rút / hủy sau khi đã tiến xa',
   DEAD: 'Không còn theo đuổi',
 }

@@ -14,6 +14,7 @@ import {
   SCHOLARSHIP_CATEGORY_LABELS,
 } from '../types'
 import { useScholarships } from '../hooks/useScholarships'
+import { useOrg } from '../contexts/OrgProvider'
 import {
   saveScholarshipRow,
   seedDefaultScholarships,
@@ -27,6 +28,7 @@ import {
   scholarshipScheduleStatus,
   SCHOLARSHIP_SCHEDULE_STATUS_LABELS,
 } from '../utils/scholarshipEligibility'
+import { equalSplitTermAllocations } from '../utils/financeObligation'
 
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30 disabled:bg-slate-50'
@@ -54,6 +56,8 @@ function emptyDraft(sortOrder: number): Draft {
     adminNotes: '',
     applicationMethod: '',
     quantityLimit: undefined,
+    termCount: undefined,
+    termAllocationsVnd: undefined,
   }
 }
 
@@ -74,16 +78,19 @@ function draftFromRow(row: ScholarshipRecord): Draft {
     adminNotes: row.adminNotes ?? '',
     applicationMethod: row.applicationMethod ?? '',
     quantityLimit: row.quantityLimit,
+    termCount: row.termCount,
+    termAllocationsVnd: row.termAllocationsVnd,
   }
 }
 
-function payloadFromDraft(d: Draft): ScholarshipSavePayload {
+function payloadFromDraft(d: Draft, orgId?: string): ScholarshipSavePayload {
   return {
     label: d.label,
     category: d.category,
     amountVnd: d.amountVnd,
     sortOrder: d.sortOrder,
     isActive: d.isActive,
+    ...(orgId ? { orgId } : {}),
     validFrom: d.validFrom?.trim() || undefined,
     validTo: d.validTo?.trim() || undefined,
     applySlots: d.applySlots?.length ? d.applySlots : ['slot1', 'slot2'],
@@ -93,6 +100,11 @@ function payloadFromDraft(d: Draft): ScholarshipSavePayload {
     adminNotes: d.adminNotes?.trim() || undefined,
     applicationMethod: d.applicationMethod?.trim() || undefined,
     quantityLimit: d.quantityLimit != null && d.quantityLimit >= 0 ? d.quantityLimit : undefined,
+    termCount: d.termCount != null && d.termCount > 0 ? Math.round(d.termCount) : undefined,
+    termAllocationsVnd:
+      d.termAllocationsVnd?.length && (d.termCount ?? 0) > 0
+        ? d.termAllocationsVnd.slice(0, Math.round(d.termCount!)).map((n) => Math.max(0, Math.round(n || 0)))
+        : undefined,
   }
 }
 
@@ -111,6 +123,7 @@ function statusBadgeClass(status: ReturnType<typeof scholarshipScheduleStatus>):
 
 export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit: boolean }) {
   const { items, loading, error } = useScholarships()
+  const { effectiveOrgId } = useOrg()
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
@@ -149,7 +162,7 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
   const onCreate = (e: FormEvent) => {
     e.preventDefault()
     void run(async () => {
-      await saveScholarshipRow(db, null, payloadFromDraft(newDraft))
+      await saveScholarshipRow(db, null, payloadFromDraft(newDraft, effectiveOrgId))
       setMsg('Đã thêm học bổng.')
       setNewDraft(emptyDraft(nextSort + 10))
       setEditingId(null)
@@ -297,6 +310,7 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
                   <ScholarshipEditorInline
                     row={row}
                     busy={busy}
+                    orgId={effectiveOrgId}
                     onCancel={() => setEditingId(null)}
                     onSave={(payload) =>
                       run(async () => {
@@ -324,11 +338,13 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 function ScholarshipEditorInline({
   row,
   busy,
+  orgId,
   onCancel,
   onSave,
 }: {
   row: ScholarshipRecord
   busy: boolean
+  orgId: string
   onCancel: () => void
   onSave: (payload: ScholarshipSavePayload) => void
 }) {
@@ -340,7 +356,7 @@ function ScholarshipEditorInline({
         <button
           type="button"
           disabled={busy || !draft.label.trim()}
-          onClick={() => onSave(payloadFromDraft(draft))}
+          onClick={() => onSave(payloadFromDraft(draft, orgId))}
           className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
         >
           Lưu
@@ -454,6 +470,66 @@ function ScholarshipFormFields({
           onChange={(e) => patch('amountVnd', Number(e.target.value) || 0)}
         />
       </label>
+      <label className="text-xs font-semibold">
+        Số kỳ phân bổ (n)
+        <input
+          type="number"
+          className={`${INPUT} mt-0.5`}
+          value={draft.termCount ?? ''}
+          disabled={busy}
+          min={0}
+          max={20}
+          placeholder="VD: 5"
+          onChange={(e) => {
+            const n = e.target.value === '' ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0))
+            const nextAlloc =
+              n && n > 0
+                ? equalSplitTermAllocations(draft.amountVnd, n)
+                : undefined
+            onChange({ ...draft, termCount: n, termAllocationsVnd: nextAlloc })
+          }}
+        />
+      </label>
+      {draft.termCount && draft.termCount > 0 ? (
+        <div className="sm:col-span-2 lg:col-span-3 space-y-2 rounded-lg border border-violet-100 bg-violet-50/40 p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-violet-950">Tiền từng kỳ (kỳ 1 trừ vào học phí đầu)</p>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-md border border-violet-200 bg-white px-2 py-1 text-xs font-semibold text-violet-900 disabled:opacity-40"
+              onClick={() =>
+                onChange({
+                  ...draft,
+                  termAllocationsVnd: equalSplitTermAllocations(draft.amountVnd, draft.termCount!),
+                })
+              }
+            >
+              Chia đều
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: draft.termCount }, (_, i) => (
+              <label key={i} className="text-xs font-medium text-slate-700">
+                Kỳ {i + 1}
+                <input
+                  type="number"
+                  className={`${INPUT} mt-0.5`}
+                  min={0}
+                  disabled={busy}
+                  value={draft.termAllocationsVnd?.[i] ?? ''}
+                  onChange={(e) => {
+                    const arr = [...(draft.termAllocationsVnd ?? Array(draft.termCount!).fill(0))]
+                    while (arr.length < draft.termCount!) arr.push(0)
+                    arr[i] = Number(e.target.value) || 0
+                    patch('termAllocationsVnd', arr)
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <label className="text-xs font-semibold">
         Số lượng suất
         <input

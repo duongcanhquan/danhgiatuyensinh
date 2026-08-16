@@ -1,4 +1,4 @@
-import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
+import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey, ScholarshipRecord } from '../types'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
 import {
   activeFinanceDepositThresholds,
@@ -6,6 +6,11 @@ import {
   resolveDepositThresholdVnd,
 } from './financeThresholds'
 import { normalizePaymentApprovalStatus } from './paymentApprovalStatus'
+import {
+  computeFinanceObligation,
+  obligationMeetsTerm1Due,
+} from './financeObligation'
+import type { FinanceTuitionCatalog } from './financeTuitionCatalog'
 
 const PAYMENT_KEYS: LeadPaymentSlotKey[] = PAYMENT_SLOT_DEFS.map((s) => s.key)
 
@@ -61,20 +66,58 @@ export function isLeadProfileCompleteForEnrollment(lead: Lead): boolean {
   return checks.every(Boolean)
 }
 
-/** Sau khi kế toán duyệt / từ chối — giống `processPaymentDecision` hệ cũ (cột 39). */
+export type EnrollmentDecisionContext = {
+  thresholds?: FinanceDepositThresholds
+  catalog?: FinanceTuitionCatalog
+  scholarshipsById?: Map<string, ScholarshipRecord> | Record<string, ScholarshipRecord>
+}
+
+function isThresholdsOnly(
+  v: FinanceDepositThresholds | EnrollmentDecisionContext,
+): v is FinanceDepositThresholds {
+  return (
+    typeof v === 'object' &&
+    v != null &&
+    'depositStandardVnd' in v &&
+    !('catalog' in v) &&
+    !('scholarshipsById' in v) &&
+    !('thresholds' in v)
+  )
+}
+
+/**
+ * Sau khi kế toán duyệt / từ chối.
+ * ĐÃ HOÀN THIỆN = đủ «phải đóng kỳ 1» (học phí − HB kỳ 1) + đủ field hồ sơ.
+ * CỌC = đã đạt ngưỡng cọc nhưng chưa đủ điều kiện hoàn thiện.
+ */
 export function computeEnrollmentStatusAfterDecision(
   lead: Lead,
   finance: LeadFinanceRecord,
   decision: 'ĐỒNG Ý' | 'TỪ CHỐI',
-  thresholds: FinanceDepositThresholds = activeFinanceDepositThresholds(),
+  thresholdsOrCtx: FinanceDepositThresholds | EnrollmentDecisionContext = activeFinanceDepositThresholds(),
 ): string {
   if (decision === 'TỪ CHỐI') return 'KIỂM TRA LẠI'
 
+  const ctx: EnrollmentDecisionContext = isThresholdsOnly(thresholdsOrCtx)
+    ? { thresholds: thresholdsOrCtx }
+    : thresholdsOrCtx
+
+  const thresholds = ctx.thresholds ?? activeFinanceDepositThresholds()
   const total = approvedTotal(finance)
-  const threshold = resolveDepositThresholdVnd(lead.educationLevel, thresholds)
-  if (total >= threshold) {
-    return isLeadProfileCompleteForEnrollment(lead) ? 'ĐÃ HOÀN THIỆN' : 'CỌC THÀNH CÔNG'
+  const deposit = resolveDepositThresholdVnd(lead.educationLevel, thresholds)
+  const snap = computeFinanceObligation(
+    { ...lead, finance },
+    {
+      catalog: ctx.catalog,
+      thresholds,
+      scholarshipsById: ctx.scholarshipsById,
+    },
+  )
+
+  if (obligationMeetsTerm1Due(snap) && isLeadProfileCompleteForEnrollment(lead)) {
+    return 'ĐÃ HOÀN THIỆN'
   }
+  if (total >= deposit) return 'CỌC THÀNH CÔNG'
   if (total > 0) return 'ĐANG HOÀN THIỆN'
   return finance.enrollmentStatus?.trim() || 'MỚI'
 }

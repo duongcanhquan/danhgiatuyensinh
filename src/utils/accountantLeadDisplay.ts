@@ -5,6 +5,9 @@ import { foldFinanceStatusText, normalizePaymentApprovalStatus } from './account
 import { scholarshipSelectLabel } from './leadProfileCatalog'
 import { resolveStudentDisplayCode } from './studentDisplayCode'
 import { looksLikeUserIdCode, resolveCounselorDisplayName } from './counselorDisplay'
+import { computeFinanceObligation, type FinanceObligationSnapshot } from './financeObligation'
+import type { FinanceTuitionCatalog } from './financeTuitionCatalog'
+import type { FinanceDepositThresholds } from './financeThresholds'
 
 export type AccountantStatusTag =
   | 'Mới'
@@ -30,12 +33,12 @@ const STATUS_STYLES: Record<AccountantStatusTag, string> = {
 export function accountantFinanceStatusTag(lead: Lead): AccountantStatusTag {
   const es = foldFinanceStatusText(String(lead.finance?.enrollmentStatus ?? ''))
   const fn = foldFinanceStatusText(String(lead.finance?.fullNeStatus ?? ''))
-  // Finance trước CRM ENROLLED — tránh che Full NE / Kiểm tra lại
+  // Cọc / hoàn thiện phí thắng «Chờ Full NE» — đủ tiền cọc đã xong việc chính trên hàng đợi.
   if (fn.includes('DA FULL')) return 'Full NE'
-  if (fn.includes('YEU CAU') || (lead.finance?.reqFullNe && !fn.includes('DA FULL'))) return 'Chờ Full NE'
   if (es.includes('KIEM TRA')) return 'Kiểm tra lại'
   if (es.includes('COC THANH CONG')) return 'Cọc'
   if (es.includes('DA HOAN THIEN')) return 'Hoàn thiện phí'
+  if (fn.includes('YEU CAU') || (lead.finance?.reqFullNe && !fn.includes('DA FULL'))) return 'Chờ Full NE'
   if (es.includes('DANG HOAN THIEN')) return 'Đang hoàn thiện'
   if (lead.status === 'ENROLLED' || lead.pipelineStatus === 'ENROLLED') return 'Ghi danh'
   return 'Mới'
@@ -76,6 +79,8 @@ export type AccountantLeadSummary = {
   nationalId: string
   /** TVV phụ trách — ưu tiên người được gán, không lấy tên admin nạp hồ sơ. */
   counselorName: string
+  /** Nghĩa vụ kỳ 1 (học phí − HB); null nếu chưa tính được. */
+  obligation: FinanceObligationSnapshot | null
 }
 
 function scholarshipLines(
@@ -137,6 +142,8 @@ export function buildAccountantLeadSummary(
     codeSequenceIndex?: Map<string, number>
     directoryNames?: Map<string, string>
     directoryUsers?: readonly Pick<VietMyUserProfile, 'id' | 'displayName' | 'email'>[]
+    catalog?: FinanceTuitionCatalog
+    thresholds?: FinanceDepositThresholds
   },
 ): AccountantLeadSummary {
   const finance = lead.finance
@@ -157,6 +164,12 @@ export function buildAccountantLeadSummary(
       approvalNote: String(line?.approvalNote ?? '').trim(),
       hasActivity: amountVnd > 0 || Boolean(receiptUrl) || Boolean(approvalStatus),
     }
+  })
+
+  const obligation = computeFinanceObligation(lead, {
+    catalog: opts.catalog,
+    thresholds: opts.thresholds,
+    scholarshipsById: opts.scholarshipById,
   })
 
   return {
@@ -180,5 +193,6 @@ export function buildAccountantLeadSummary(
       directoryNames: opts.directoryNames,
       directoryUsers: opts.directoryUsers,
     }),
+    obligation,
   }
 }

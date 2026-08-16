@@ -7,6 +7,7 @@ import { getFirestoreDb, isFirebaseConfigured } from '../services/firebase'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { resolveEffectiveOrgId } from '../tenancy/effectiveOrgId'
 import { loadFinanceDepositThresholds } from '../utils/financeThresholds'
+import { loadFinanceTuitionCatalog } from '../utils/financeTuitionCatalog'
 import { loadOrgN8nWebhooks } from '../utils/n8nWebhooksConfig'
 import { loadReceiptStorageConfig } from '../utils/receiptStorageConfig'
 import { loadOrgIntegrationHub } from '../integrations/orgIntegrationHub'
@@ -69,6 +70,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     const db = getFirestoreDb()
     if (!db) return
     void loadFinanceDepositThresholds(db, effectiveOrgId)
+    void loadFinanceTuitionCatalog(db, effectiveOrgId)
     void loadOrgN8nWebhooks(db, effectiveOrgId)
     void loadReceiptStorageConfig(db, effectiveOrgId)
     // Hub + comms phải nạp khi vào org — không chỉ khi mở panel Cài đặt.

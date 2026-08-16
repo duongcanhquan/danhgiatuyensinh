@@ -1414,6 +1414,16 @@ export interface ScholarshipRecord {
   adminNotes?: string
   /** Hình thức áp dụng — vd. «Cộng dồn 5 kỳ: 3-3-3-3-3 triệu», «Trừ học phí HK1» */
   applicationMethod?: string
+  /**
+   * Số kỳ phân bổ học bổng (admin). Kỳ 1 dùng khi tính «phải đóng kỳ 1».
+   * Bỏ trống / 0 = không trừ theo kỳ (fallback: không trừ vào nghĩa vụ trừ khi có `termAllocationsVnd`).
+   */
+  termCount?: number
+  /**
+   * Số tiền VNĐ từng kỳ — độ dài = `termCount`.
+   * `termAllocationsVnd[0]` = phần trừ học phí kỳ 1.
+   */
+  termAllocationsVnd?: number[]
   /** Số lượng suất học bổng (theo kế hoạch) */
   quantityLimit?: number
   createdAt?: Timestamp

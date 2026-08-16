@@ -458,6 +458,7 @@ export function LeadManagement() {
   const { runtime: classificationRuntime } = useLeadClassificationRules()
   const { users: directoryUsers, fieldStaff: fieldStaffUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
   const { items: leadSources } = useLeadSources()
+  const { byId: scholarshipsById } = useScholarships()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const urlQuery = (searchParams.get(LWF.Q) ?? '').trim().toLowerCase()
@@ -698,7 +699,7 @@ export function LeadManagement() {
     if (!clientKeepMatchNeeded) return undefined
     return (l: Lead) => {
       if (!leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
-      if (!leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery))) return false
+      if (!leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery), enrollmentFilter)) return false
       if (programNeedsScope && !leadMatchesNguonFilter(l, programFilter)) return false
       if (enrollmentNeedsScope && !leadMatchesTinhTrangFilter(l, enrollmentFilter)) return false
       if (
@@ -783,7 +784,7 @@ export function LeadManagement() {
         ? intakeOriginTab === 'public_portal'
           ? (l: Lead) =>
               leadMatchesIntakeOriginTab(l, 'public_portal') &&
-              leadMatchesCrmListVisibility(l, crmStatusFilter, false)
+              leadMatchesCrmListVisibility(l, crmStatusFilter, false, enrollmentFilter)
           : intakeOriginTab === 'campaign_upload'
             ? (l: Lead) => leadMatchesIntakeOrigin(l, 'campaign_upload')
             : undefined
@@ -791,7 +792,7 @@ export function LeadManagement() {
     pagedKeepMatchKey:
       !listNeedsFullScope && !urlQuery
         ? intakeOriginTab === 'public_portal'
-          ? `origin:public_portal_tab|crm:${crmStatusFilter}`
+          ? `origin:public_portal_tab|crm:${crmStatusFilter}|enr:${enrollmentFilter}`
           : intakeOriginTab === 'campaign_upload'
             ? 'origin:campaign_upload'
             : undefined
@@ -1294,7 +1295,9 @@ export function LeadManagement() {
     if (!urlQuery) {
       rows = rows.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab))
     }
-    rows = rows.filter((l) => leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery)))
+    rows = rows.filter((l) =>
+      leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery), enrollmentFilter),
+    )
     if (programFilter !== 'ALL') {
       rows = rows.filter((l) => leadMatchesNguonFilter(l, programFilter))
     }
@@ -1350,7 +1353,7 @@ export function LeadManagement() {
       if (enrollmentFilter !== 'ALL' && !leadMatchesTinhTrangFilter(l, enrollmentFilter)) {
         return false
       }
-      if (!leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery.trim()))) {
+      if (!leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery.trim()), enrollmentFilter)) {
         return false
       }
       if (assigneeFilter === '__UNASSIGNED__') {
@@ -1730,6 +1733,18 @@ export function LeadManagement() {
       setPage(1)
     },
     [mergeListFilterUrl, setPage],
+  )
+
+  /** Lọc nhanh thu phí trên thanh Tổng (Đã cọc / Mới / Đã hoàn thiện). Bấm lại = bỏ lọc. */
+  const applyEnrollmentFilterQuick = useCallback(
+    (enrollment: string) => {
+      const next = enrollmentFilter === enrollment ? 'ALL' : enrollment
+      setDraftFilters((prev) => ({ ...prev, enrollment: next }))
+      setEnrollmentFilter(next)
+      mergeListFilterUrl({ [LWF.ENROLL]: next === 'ALL' ? null : next })
+      setPage(1)
+    },
+    [enrollmentFilter, mergeListFilterUrl, setPage],
   )
 
   /** Hàng chờ gọi / ô tổng kết: áp dụng ngay. `pinMine` = lọc thêm hồ sơ gán cho mình. */
@@ -2169,6 +2184,7 @@ export function LeadManagement() {
     }
     exportEvaluatedLeadsToXlsx(sortedFiltered, m, {
       profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+      scholarshipsById,
     })
   }
 
@@ -3460,8 +3476,9 @@ export function LeadManagement() {
     const rows = leads.filter((l) => selectedIds.has(l.id))
     exportSelectedEvaluatedLeadsToXlsx(rows, selectedIds, evalMapForExport(rows), {
       profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+      scholarshipsById,
     })
-  }, [leads, selectedIds, evalMapForExport, activeScoringProfile])
+  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById])
 
   return (
     <div className="bento-board gap-4">
@@ -3500,10 +3517,11 @@ export function LeadManagement() {
       <BentoCell className="space-y-2 !p-2.5 sm:!p-3">
         {/* Tổng kết nhẹ — luôn hiện */}
         <div
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-xs text-slate-600"
+          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-xs text-slate-600"
           role="status"
           aria-live="polite"
         >
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <span>
             Tổng{' '}
             <strong className="tabular-nums text-slate-900">
@@ -3612,6 +3630,41 @@ export function LeadManagement() {
               </span>
             </>
           ) : null}
+          </div>
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-1"
+            role="group"
+            aria-label="Lọc nhanh thu phí"
+          >
+            {(
+              [
+                { v: 'COC_THANH_CONG', t: 'Đã cọc', on: 'border-emerald-500 bg-emerald-100 text-emerald-950', off: 'border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50' },
+                { v: 'MOI', t: 'Mới', on: 'border-slate-600 bg-slate-800 text-white', off: 'border-slate-300 bg-white text-slate-800 hover:bg-slate-100' },
+                { v: 'DA_HOAN_THIEN', t: 'Đã hoàn thiện', on: 'border-violet-500 bg-violet-100 text-violet-950', off: 'border-violet-200 bg-white text-violet-900 hover:bg-violet-50' },
+              ] as const
+            ).map((btn) => {
+              const active = enrollmentFilter === btn.v
+              return (
+                <button
+                  key={btn.v}
+                  type="button"
+                  title={
+                    active
+                      ? `Đang lọc «${btn.t}» — bấm lại để bỏ`
+                      : `Lọc nhanh hồ sơ «${btn.t}»`
+                  }
+                  aria-pressed={active}
+                  onClick={() => applyEnrollmentFilterQuick(btn.v)}
+                  className={[
+                    'inline-flex h-7 items-center rounded-md border px-2 text-[11px] font-bold uppercase tracking-wide transition',
+                    active ? btn.on : btn.off,
+                  ].join(' ')}
+                >
+                  {btn.t}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Tìm kiếm + nguồn nhập + thao tác (một hàng). */}
@@ -4062,7 +4115,7 @@ export function LeadManagement() {
                 <FilterSelect
                   compact
                   label="Tình trạng"
-                  title="Tình trạng tư vấn. Hồ sơ Đã cọc ẩn mặc định — chọn «Đã cọc» để xem lại."
+                  title="Tình trạng tư vấn. Đã ghi danh / đã hoàn thiện phí ẩn mặc định — lọc để xem lại hoặc xuất Excel."
                   value={draftFilters.crm}
                   onChange={(v) => patchDraftFilters({ crm: v })}
                   options={[
@@ -4614,7 +4667,8 @@ export function LeadManagement() {
                     {intakeOriginTab === 'public_portal' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
                         Bấm «Tạo mới» để thêm hồ sơ, chờ form cổng, hoặc nhập Sheet Mẫu 3 (Nhập liệu). Hồ sơ{' '}
-                        <strong>Đã cọc</strong> ẩn mặc định — lọc Tình trạng = Đã cọc để xem. Data Excel chiến dịch
+                        <strong>Đã ghi danh / đã hoàn thiện</strong> ẩn mặc định — lọc Tình trạng hoặc Thu phí để xem,
+                        hoặc xuất Excel tổng kết. Ưu tiên hồ sơ mới và đã nộp phí còn cần đẩy. Data Excel chiến dịch
                         (Mẫu 1–2) nằm ở tab «Tải lên / chiến dịch».
                       </p>
                     ) : programFilter === '__UNSET__' ? (

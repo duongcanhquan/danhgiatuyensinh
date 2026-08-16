@@ -170,12 +170,90 @@ function crmStatusUpgradeFromEnrollment(
   return suggested
 }
 
+async function loadTuitionCatalog(db: Firestore, orgId: string): Promise<
+  { majorLabel: string; educationLevel?: string; tuitionTerm1Vnd: number; isActive?: boolean }[]
+> {
+  try {
+    const snap = await db
+      .collection('orgSettings')
+      .doc(orgId)
+      .collection('settings')
+      .doc('financeTuitionCatalog')
+      .get()
+    const rows = snap.data()?.rows
+    return Array.isArray(rows) ? (rows as { majorLabel: string; educationLevel?: string; tuitionTerm1Vnd: number; isActive?: boolean }[]) : []
+  } catch {
+    return []
+  }
+}
+
+function foldLabel(s: string): string {
+  return s
+    .normalize('NFC')
+    .trim()
+    .toLowerCase()
+}
+
+function resolveTuitionTerm1(
+  majorInterest: string,
+  educationLevel: string,
+  rows: { majorLabel: string; educationLevel?: string; tuitionTerm1Vnd: number; isActive?: boolean }[],
+): { tuition: number; missing: boolean } {
+  const major = foldLabel(majorInterest)
+  if (!major) return { tuition: 0, missing: true }
+  const edu = foldLabel(educationLevel)
+  const active = rows.filter((r) => r.isActive !== false)
+  const withEdu = edu
+    ? active.find((r) => foldLabel(r.majorLabel) === major && foldLabel(String(r.educationLevel ?? '')) === edu)
+    : undefined
+  if (withEdu) return { tuition: Math.round(Number(withEdu.tuitionTerm1Vnd) || 0), missing: false }
+  const anyMajor = active.find(
+    (r) => foldLabel(r.majorLabel) === major && !String(r.educationLevel ?? '').trim(),
+  )
+  if (anyMajor) return { tuition: Math.round(Number(anyMajor.tuitionTerm1Vnd) || 0), missing: false }
+  const loose = active.find((r) => foldLabel(r.majorLabel) === major)
+  if (loose) return { tuition: Math.round(Number(loose.tuitionTerm1Vnd) || 0), missing: false }
+  return { tuition: 0, missing: true }
+}
+
+function scholarshipTerm1Credit(data: Record<string, unknown> | undefined): number {
+  if (!data) return 0
+  const alloc = Array.isArray(data.termAllocationsVnd) ? data.termAllocationsVnd : []
+  if (alloc.length > 0) {
+    const n = Number(alloc[0])
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 0
+  }
+  const terms = Math.round(Number(data.termCount) || 0)
+  const total = Math.round(Number(data.amountVnd) || 0)
+  if (terms >= 1 && total > 0) return Math.round(total / terms)
+  return 0
+}
+
+async function loadScholarshipTerm1Credits(
+  db: Firestore,
+  data: Record<string, unknown>,
+): Promise<number> {
+  const ids = [str(data.scholarship1Id), str(data.scholarship2Id)].filter(Boolean)
+  let sum = 0
+  for (const id of ids) {
+    try {
+      const snap = await db.collection('scholarships').doc(id).get()
+      if (snap.exists) sum += scholarshipTerm1Credit(snap.data() as Record<string, unknown>)
+    } catch {
+      /* ignore */
+    }
+  }
+  return sum
+}
+
 function enrollmentAfterDecision(
   data: Record<string, unknown>,
   finance: Record<string, unknown>,
   decision: 'ĐỒNG Ý' | 'TỪ CHỐI',
   thresholds: { std: number; nine: number },
   leadId: string,
+  tuitionRows: { majorLabel: string; educationLevel?: string; tuitionTerm1Vnd: number; isActive?: boolean }[],
+  scholarshipTerm1Vnd: number,
 ): string {
   if (decision === 'TỪ CHỐI') return 'KIỂM TRA LẠI'
   const payments = (finance.payments ?? {}) as Record<string, { amountVnd?: number; approvalStatus?: string }>
@@ -184,8 +262,16 @@ function enrollmentAfterDecision(
     const line = payments[key]
     if (isApprovedStatus(line?.approvalStatus) && line.amountVnd) total += line.amountVnd
   }
-  const threshold = depositThreshold(str(data.educationLevel), thresholds)
-  if (total >= threshold) return profileComplete(data, leadId) ? 'ĐÃ HOÀN THIỆN' : 'CỌC THÀNH CÔNG'
+  const deposit = depositThreshold(str(data.educationLevel), thresholds)
+  const { tuition, missing } = resolveTuitionTerm1(
+    str(data.majorInterest),
+    str(data.educationLevel),
+    tuitionRows,
+  )
+  const due = missing ? 0 : Math.max(0, tuition - scholarshipTerm1Vnd)
+  const meetsDue = !missing && (due <= 0 ? total > 0 : total >= due)
+  if (meetsDue && profileComplete(data, leadId)) return 'ĐÃ HOÀN THIỆN'
+  if (total >= deposit) return 'CỌC THÀNH CÔNG'
   if (total > 0) return 'ĐANG HOÀN THIỆN'
   return str(finance.enrollmentStatus) || 'MỚI'
 }
@@ -241,7 +327,11 @@ export function registerAccountantFinanceCallables() {
     if (!leadSnap.exists) throw new HttpsError('not-found', 'Không tìm thấy hồ sơ.')
     const leadData = leadSnap.data() as Record<string, unknown>
     const orgId = str(leadData.orgId) || 'vietmy'
-    const thresholds = await loadThresholds(db, orgId)
+    const [thresholds, tuitionRows, scholarshipTerm1Vnd] = await Promise.all([
+      loadThresholds(db, orgId),
+      loadTuitionCatalog(db, orgId),
+      loadScholarshipTerm1Credits(db, leadData),
+    ])
 
     const finance = await db.runTransaction(async (tx) => {
       const snap = await tx.get(leadRef)
@@ -285,6 +375,8 @@ export function registerAccountantFinanceCallables() {
         decision,
         thresholds,
         snap.id,
+        tuitionRows,
+        scholarshipTerm1Vnd,
       )
       const nextFinance = { ...financeBase, enrollmentStatus }
       const crmUpgrade = crmStatusUpgradeFromEnrollment(data.status, enrollmentStatus)

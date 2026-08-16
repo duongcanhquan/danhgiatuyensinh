@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import {
   leadHasPendingAccountantReview,
   leadHasIncompleteTuitionProgress,
+  leadIsFeeHandoverDone,
   normalizePaymentApprovalStatus,
 } from '../../utils/accountantFinanceFilter'
 import { foldFinanceStatusText } from '../../utils/paymentApprovalStatus'
@@ -256,6 +257,8 @@ function FullNeBlock({
     )
   }
   const isReq = stFolded.includes('YEU CAU') || Boolean(lead.finance?.reqFullNe)
+  // Đã bàn giao (hoàn thiện / ghi danh): không bắt xác nhận Full NE trên thẻ.
+  if (leadIsFeeHandoverDone(lead)) return null
   if (!isReq && (lead.finance?.declaredTotalVnd ?? 0) <= 0) return null
   return (
     <button
@@ -363,6 +366,40 @@ export function AccountantLeadReviewCard({
           </div>
         </div>
       </div>
+
+      {summary.obligation ? (
+        <p
+          className={`mt-1.5 rounded-md border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-slate-700 ${T}`}
+          title="Học phí kỳ 1 − học bổng kỳ 1"
+        >
+          {summary.obligation.tuitionMissing ? (
+            <span className="font-semibold text-amber-800">Chưa có bảng giá ngành — không tự hoàn thiện phí.</span>
+          ) : (
+            <>
+              <span>Học phí {summary.obligation.tuitionTerm1Vnd.toLocaleString('vi-VN')}đ</span>
+              <span className="text-slate-400"> · </span>
+              <span>HB kỳ 1 {summary.obligation.scholarshipTerm1Vnd.toLocaleString('vi-VN')}đ</span>
+              <span className="text-slate-400"> · </span>
+              <span className="font-semibold">
+                Phải đóng {summary.obligation.dueTerm1Vnd.toLocaleString('vi-VN')}đ
+              </span>
+              {summary.obligation.remainingVnd > 0 ? (
+                <>
+                  <span className="text-slate-400"> · </span>
+                  <span className="font-semibold text-amber-800">
+                    Còn thiếu {summary.obligation.remainingVnd.toLocaleString('vi-VN')}đ
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-slate-400"> · </span>
+                  <span className="font-semibold text-emerald-800">Đủ tiền kỳ 1</span>
+                </>
+              )}
+            </>
+          )}
+        </p>
+      ) : null}
 
       <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {activePayments.map((p) => {

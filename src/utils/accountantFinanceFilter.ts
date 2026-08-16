@@ -1,4 +1,4 @@
-import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey } from '../types'
+import type { Lead, LeadFinanceRecord, LeadPaymentSlotKey, ScholarshipRecord } from '../types'
 import { PAYMENT_SLOT_DEFS } from './leadFinance'
 import {
   activeFinanceDepositThresholds,
@@ -7,6 +7,12 @@ import {
 } from './financeThresholds'
 import { sumApprovedPaymentsVnd } from './accountantN8nPayload'
 import { foldFinanceStatusText, normalizePaymentApprovalStatus } from './paymentApprovalStatus'
+import {
+  computeFinanceObligation,
+  obligationMeetsTerm1Due,
+} from './financeObligation'
+import type { FinanceTuitionCatalog } from './financeTuitionCatalog'
+import { isLeadProfileCompleteForEnrollment } from './financeEnrollmentStatus'
 
 export { foldFinanceStatusText, normalizePaymentApprovalStatus } from './paymentApprovalStatus'
 
@@ -41,15 +47,33 @@ function isFullNeDone(finance: LeadFinanceRecord): boolean {
   return fn.includes('DA FULL')
 }
 
-/** Cọc / hoàn thiện phí theo trạng thái ghi danh (Sheet cột 39/42). */
+/** Cọc hoặc hoàn thiện phí (trạng thái ghi danh). */
 export function leadIsSettledCocOrComplete(lead: Pick<Lead, 'finance'>): boolean {
   const es = foldFinanceStatusText(String(lead.finance?.enrollmentStatus ?? ''))
   return (
-    es === 'COC THANH CONG' ||
     es.includes('COC THANH CONG') ||
-    es === 'DA HOAN THIEN' ||
     es.includes('DA HOAN THIEN')
   )
+}
+
+/** Chỉ cọc — vẫn theo dõi trên hàng đợi. */
+export function leadIsCocOnly(lead: Pick<Lead, 'finance'>): boolean {
+  const es = foldFinanceStatusText(String(lead.finance?.enrollmentStatus ?? ''))
+  return es.includes('COC THANH CONG') && !es.includes('DA HOAN THIEN')
+}
+
+/**
+ * Đã hoàn thiện phí / đã ghi danh / Full NE → bàn giao, ẩn khỏi theo dõi mặc định.
+ */
+export function leadIsFeeHandoverDone(
+  lead: Pick<Lead, 'finance' | 'status' | 'pipelineStatus'>,
+): boolean {
+  if (lead.status === 'ENROLLED' || lead.pipelineStatus === 'ENROLLED') return true
+  const finance = lead.finance
+  if (!finance) return false
+  if (isFullNeDone(finance)) return true
+  const es = foldFinanceStatusText(String(finance.enrollmentStatus ?? ''))
+  return es.includes('DA HOAN THIEN')
 }
 
 /**
@@ -74,23 +98,15 @@ export function leadLooksLikeLegacySettledWithoutApprovals(
 }
 
 /**
- * Còn việc kế toán phải xử lý trên khoản thu / Full NE.
- * Hồ sơ đã «Cọc thành công» / «Đã hoàn thiện» / Full NE → không còn «Cần xử lý»
- * (chỉ mở lại nếu đang treo yêu cầu Full NE).
+ * Còn khoản treo duyệt / Full NE (chưa bàn giao).
+ * Cọc thành công vẫn có thể treo Full NE hoặc khoản bổ sung chưa duyệt.
  */
-export function leadHasPendingAccountantReview(lead: Pick<Lead, 'finance'>): boolean {
+export function leadHasPendingAccountantReview(
+  lead: Pick<Lead, 'finance' | 'status' | 'pipelineStatus'>,
+): boolean {
   const finance = lead.finance
   if (!finance) return false
-
-  const fullNePending =
-    !isFullNeDone(finance) &&
-    (Boolean(finance.reqFullNe) ||
-      foldFinanceStatusText(String(finance.fullNeStatus ?? '')).includes('YEU CAU'))
-
-  // Đã cọc / hoàn thiện phí / Full NE theo dữ liệu ghi danh → Đã xong
-  if (leadIsSettledCocOrComplete(lead) || isFullNeDone(finance)) {
-    return fullNePending
-  }
+  if (leadIsFeeHandoverDone(lead)) return false
 
   for (const { line } of leadPaymentLines(finance)) {
     if (!lineHasMoneyOrBill(line)) continue
@@ -99,34 +115,65 @@ export function leadHasPendingAccountantReview(lead: Pick<Lead, 'finance'>): boo
     if (st === 'KIỂM TRA LẠI' || !st) return true
   }
 
+  const fullNePending =
+    Boolean(finance.reqFullNe) ||
+    foldFinanceStatusText(String(finance.fullNeStatus ?? '')).includes('YEU CAU')
   return fullNePending
 }
+
+export type AccountantObligationContext = {
+  thresholds?: FinanceDepositThresholds
+  catalog?: FinanceTuitionCatalog
+  scholarshipsById?: Map<string, ScholarshipRecord> | Record<string, ScholarshipRecord>
+}
+
 /**
- * Đã có tiền được duyệt nhưng chưa đủ ngưỡng cọc / chưa Full NE — «nộp thiếu».
- * Không gồm hồ sơ đang treo duyệt khoản (ưu tiên chờ duyệt).
+ * Đã duyệt tiền nhưng chưa đủ điều kiện bàn giao (chưa đủ học phí kỳ 1 / chưa đủ field / mới cọc).
  */
 export function leadHasIncompleteTuitionProgress(
-  lead: Pick<Lead, 'finance' | 'educationLevel'>,
+  lead: Pick<Lead, 'finance' | 'educationLevel' | 'majorInterest' | 'scholarship1Id' | 'scholarship2Id' | 'status' | 'pipelineStatus'> &
+    Partial<Lead>,
   thresholds: FinanceDepositThresholds = activeFinanceDepositThresholds(),
+  obligationCtx?: AccountantObligationContext,
 ): boolean {
   if (leadHasPendingAccountantReview(lead)) return false
+  if (leadIsFeeHandoverDone(lead)) return false
   const finance = lead.finance
   if (!finance) return false
-  if (isFullNeDone(finance)) return false
-  if (leadIsSettledCocOrComplete(lead)) return false
 
   const approved = sumApprovedPaymentsVnd(finance)
   if (approved <= 0) return false
-  const need = resolveDepositThresholdVnd(lead.educationLevel || '', thresholds)
-  return approved < need
+
+  const snap = computeFinanceObligation(lead, {
+    catalog: obligationCtx?.catalog,
+    thresholds: obligationCtx?.thresholds ?? thresholds,
+    scholarshipsById: obligationCtx?.scholarshipsById,
+  })
+
+  if (obligationMeetsTerm1Due(snap)) {
+    // Đủ tiền nhưng thiếu field → vẫn theo dõi (chưa ĐÃ HOÀN THIỆN)
+    return !isLeadProfileCompleteForEnrollment(lead as Lead)
+  }
+
+  // Chưa đủ phải đóng kỳ 1 (gồm chỉ mới đủ cọc, hoặc chưa đủ cọc)
+  if (leadIsCocOnly(lead)) return true
+  const needDeposit = resolveDepositThresholdVnd(lead.educationLevel || '', thresholds)
+  return approved < needDeposit || approved < snap.dueTerm1Vnd || snap.tuitionMissing
 }
 
-/** Hàng đợi «Cần xử lý»: treo duyệt khoản / nộp thiếu — không gồm đã cọc / hoàn thiện. */
+/** Hàng đợi «Cần xử lý»: treo duyệt, nộp thiếu, hoặc chỉ mới cọc — không gồm đã bàn giao. */
 export function leadBelongsInAccountantWorkQueue(
-  lead: Pick<Lead, 'finance' | 'educationLevel'>,
+  lead: Pick<Lead, 'finance' | 'educationLevel' | 'status' | 'pipelineStatus'> & Partial<Lead>,
   thresholds?: FinanceDepositThresholds,
+  obligationCtx?: AccountantObligationContext,
 ): boolean {
-  return leadHasPendingAccountantReview(lead) || leadHasIncompleteTuitionProgress(lead, thresholds)
+  if (leadIsFeeHandoverDone(lead)) return false
+  if (leadLooksLikeLegacySettledWithoutApprovals(lead)) return false
+  return (
+    leadHasPendingAccountantReview(lead) ||
+    leadHasIncompleteTuitionProgress(lead, thresholds, obligationCtx) ||
+    leadIsCocOnly(lead)
+  )
 }
 
 export function countFinanceSlotsWithAmount(lead: Pick<Lead, 'finance'>): number {
@@ -138,29 +185,27 @@ export function countFinanceSlotsWithAmount(lead: Pick<Lead, 'finance'>): number
 }
 
 /**
- * Toggle «Hiện CỌC THÀNH CÔNG» (Account.html `#showDone`).
- * Ẩn cọc/hoàn thiện trừ khi: bật toggle, đang lọc status, hoặc còn batch/Full NE treo.
+ * Tab mặc định ẩn hồ sơ đã bàn giao (ĐÃ HOÀN THIỆN / Full NE).
+ * Cọc thành công vẫn hiện (còn theo dõi).
  */
 export function leadPassesShowDoneFilter(
-  lead: Pick<Lead, 'finance'>,
+  lead: Pick<Lead, 'finance' | 'status' | 'pipelineStatus'>,
   showDone: boolean,
   statusFilterActive: boolean,
 ): boolean {
   if (showDone || statusFilterActive) return true
-  const finance = lead.finance
-  if (!finance) return true
-  if (!leadIsSettledCocOrComplete(lead) && !isFullNeDone(finance)) return true
+  if (!leadIsFeeHandoverDone(lead)) return true
   return leadHasPendingAccountantReview(lead)
 }
 
-/** Ưu tiên: chờ duyệt khoản (mới trước) → nộp thiếu → còn lại. */
+/** Ưu tiên: chờ duyệt khoản (mới trước) → nộp thiếu / chỉ cọc → còn lại. */
 export function compareAccountantWorkQueueOrder(a: Lead, b: Lead): number {
   const aPend = leadHasPendingAccountantReview(a) ? 0 : 1
   const bPend = leadHasPendingAccountantReview(b) ? 0 : 1
   if (aPend !== bPend) return aPend - bPend
 
-  const aInc = leadHasIncompleteTuitionProgress(a) ? 0 : 1
-  const bInc = leadHasIncompleteTuitionProgress(b) ? 0 : 1
+  const aInc = leadHasIncompleteTuitionProgress(a) || leadIsCocOnly(a) ? 0 : 1
+  const bInc = leadHasIncompleteTuitionProgress(b) || leadIsCocOnly(b) ? 0 : 1
   if (aInc !== bInc) return aInc - bInc
 
   const aMs = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? a.uploadedAt?.toMillis?.() ?? 0

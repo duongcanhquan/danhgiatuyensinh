@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Lead, LeadFinanceRecord } from '../types'
+import type { Lead, LeadFinanceRecord, ScholarshipRecord } from '../types'
 import {
   computeEnrollmentStatusAfterDecision,
   isLeadProfileCompleteForEnrollment,
 } from './financeEnrollmentStatus'
+import type { FinanceTuitionCatalog } from './financeTuitionCatalog'
 
 function lead(over: Partial<Lead> = {}): Lead {
   return {
@@ -50,6 +51,21 @@ function financeApproved(amount: number): LeadFinanceRecord {
   }
 }
 
+const catalog: FinanceTuitionCatalog = {
+  rows: [{ id: '1', majorLabel: 'CNTT', tuitionTerm1Vnd: 10_000_000 }],
+}
+
+const hb: ScholarshipRecord = {
+  id: 'hb1',
+  label: 'EB',
+  category: 'cdcq',
+  amountVnd: 5_000_000,
+  sortOrder: 1,
+  isActive: true,
+  termCount: 5,
+  termAllocationsVnd: [1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000],
+}
+
 describe('isLeadProfileCompleteForEnrollment (Apps Script required fields)', () => {
   it('true khi đủ field lõi + CCCD', () => {
     expect(isLeadProfileCompleteForEnrollment(lead())).toBe(true)
@@ -61,9 +77,7 @@ describe('isLeadProfileCompleteForEnrollment (Apps Script required fields)', () 
 
   it('cho phép CHƯA CÓ CCCD khi nationalIdNotAvailable', () => {
     expect(
-      isLeadProfileCompleteForEnrollment(
-        lead({ nationalId: '', nationalIdNotAvailable: true }),
-      ),
+      isLeadProfileCompleteForEnrollment(lead({ nationalId: '', nationalIdNotAvailable: true })),
     ).toBe(true)
   })
 
@@ -74,30 +88,65 @@ describe('isLeadProfileCompleteForEnrollment (Apps Script required fields)', () 
 })
 
 describe('computeEnrollmentStatusAfterDecision', () => {
-  it('ĐỒNG Ý đủ cọc + hồ sơ đủ → ĐÃ HOÀN THIỆN', () => {
+  it('đủ cọc nhưng chưa đủ học phí kỳ 1 → CỌC (kể cả hồ sơ đủ)', () => {
     expect(
-      computeEnrollmentStatusAfterDecision(lead(), financeApproved(1_000_000), 'ĐỒNG Ý'),
+      computeEnrollmentStatusAfterDecision(lead(), financeApproved(1_000_000), 'ĐỒNG Ý', {
+        catalog,
+        scholarshipsById: new Map([['hb1', hb]]),
+      }),
+    ).toBe('CỌC THÀNH CÔNG')
+  })
+
+  it('đủ phải đóng kỳ 1 + hồ sơ đủ → ĐÃ HOÀN THIỆN', () => {
+    const fin: LeadFinanceRecord = {
+      payments: {
+        deposit: { amountVnd: 1_000_000, approvalStatus: 'ĐỒNG Ý' },
+        supplementL1: { amountVnd: 8_000_000, approvalStatus: 'ĐỒNG Ý' },
+      },
+    }
+    expect(
+      computeEnrollmentStatusAfterDecision(lead({ scholarship1Id: 'hb1' }), fin, 'ĐỒNG Ý', {
+        catalog,
+        scholarshipsById: new Map([['hb1', hb]]),
+      }),
     ).toBe('ĐÃ HOÀN THIỆN')
   })
 
-  it('ĐỒNG Ý đủ cọc nhưng thiếu field → CỌC THÀNH CÔNG', () => {
+  it('đủ tiền kỳ 1 nhưng thiếu field → CỌC', () => {
+    const fin: LeadFinanceRecord = {
+      payments: {
+        deposit: { amountVnd: 10_000_000, approvalStatus: 'ĐỒNG Ý' },
+      },
+    }
     expect(
-      computeEnrollmentStatusAfterDecision(
-        lead({ majorInterest: '' }),
-        financeApproved(1_000_000),
-        'ĐỒNG Ý',
-      ),
+      computeEnrollmentStatusAfterDecision(lead({ majorInterest: 'CNTT', nationalId: '' }), fin, 'ĐỒNG Ý', {
+        catalog,
+      }),
+    ).toBe('CỌC THÀNH CÔNG')
+  })
+
+  it('chưa có bảng giá ngành → không ĐÃ HOÀN THIỆN dù đủ cọc + hồ sơ', () => {
+    expect(
+      computeEnrollmentStatusAfterDecision(lead(), financeApproved(1_000_000), 'ĐỒNG Ý', {
+        catalog: { rows: [] },
+      }),
     ).toBe('CỌC THÀNH CÔNG')
   })
 
   it('hệ 9+ cần 2tr mới cọc', () => {
-    const l = lead({ educationLevel: 'Hệ 9+' })
-    expect(computeEnrollmentStatusAfterDecision(l, financeApproved(1_000_000), 'ĐỒNG Ý')).toBe(
-      'ĐANG HOÀN THIỆN',
-    )
-    expect(computeEnrollmentStatusAfterDecision(l, financeApproved(2_000_000), 'ĐỒNG Ý')).toBe(
-      'ĐÃ HOÀN THIỆN',
-    )
+    const l = lead({ educationLevel: 'Hệ 9+', majorInterest: 'CNTT' })
+    expect(
+      computeEnrollmentStatusAfterDecision(l, financeApproved(1_000_000), 'ĐỒNG Ý', {
+        catalog,
+        thresholds: { lpxtMinVnd: 150_000, depositStandardVnd: 1_000_000, depositNinePlusVnd: 2_000_000 },
+      }),
+    ).toBe('ĐANG HOÀN THIỆN')
+    expect(
+      computeEnrollmentStatusAfterDecision(l, financeApproved(2_000_000), 'ĐỒNG Ý', {
+        catalog,
+        thresholds: { lpxtMinVnd: 150_000, depositStandardVnd: 1_000_000, depositNinePlusVnd: 2_000_000 },
+      }),
+    ).toBe('CỌC THÀNH CÔNG')
   })
 
   it('TỪ CHỐI → KIỂM TRA LẠI', () => {

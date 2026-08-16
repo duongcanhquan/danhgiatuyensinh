@@ -50,6 +50,11 @@ export function mapScholarshipDoc(id: string, data: Record<string, unknown>): Sc
     applicationMethod: String(data.applicationMethod ?? '').trim() || undefined,
     quantityLimit:
       data.quantityLimit != null && Number(data.quantityLimit) >= 0 ? Number(data.quantityLimit) : undefined,
+    termCount:
+      data.termCount != null && Number(data.termCount) > 0 ? Math.round(Number(data.termCount)) : undefined,
+    termAllocationsVnd: Array.isArray(data.termAllocationsVnd)
+      ? data.termAllocationsVnd.map((x) => Math.max(0, Math.round(Number(x) || 0)))
+      : undefined,
     createdAt: data.createdAt as ScholarshipRecord['createdAt'],
     updatedAt: data.updatedAt as ScholarshipRecord['updatedAt'],
   }

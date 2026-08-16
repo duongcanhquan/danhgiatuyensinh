@@ -7,7 +7,13 @@ import { PAYMENT_SLOT_DEFS, dateInputToStored } from './leadFinance'
 import { computeEnrollmentStatusAfterDecision } from './financeEnrollmentStatus'
 import { triggerAccountantDecisionN8n, triggerAccountantFullNeN8n } from './n8nIntegration'
 import { resolveCounselorForLead } from './accountantN8nPayload'
-import { resolveScholarshipLabels } from './scholarshipLabelResolver'
+import {
+  resolveScholarshipLabels,
+  resolveScholarshipRecordsForLead,
+} from './scholarshipLabelResolver'
+import { loadFinanceTuitionCatalog } from './financeTuitionCatalog'
+import { loadFinanceDepositThresholds } from './financeThresholds'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { leadTouchPatch } from './leadTouch'
 import { crmStatusUpgradeFromEnrollment } from './crmFinanceStatusSync'
 import {
@@ -156,7 +162,17 @@ export async function persistAccountantPaymentDecision(opts: {
     payments,
     declaredTotalVnd: sumPayments(payments),
   }
-  const enrollmentStatus = computeEnrollmentStatusAfterDecision(lead, financeBase, decision)
+  const orgId = String(lead.orgId ?? '').trim() || DEFAULT_ORG_ID
+  const [catalog, thresholds, scholarshipsById] = await Promise.all([
+    loadFinanceTuitionCatalog(db, orgId),
+    loadFinanceDepositThresholds(db, orgId),
+    resolveScholarshipRecordsForLead(db, lead),
+  ])
+  const enrollmentStatus = computeEnrollmentStatusAfterDecision(lead, financeBase, decision, {
+    catalog,
+    thresholds,
+    scholarshipsById,
+  })
   const finance: LeadFinanceRecord = { ...financeBase, enrollmentStatus }
   const crmUpgrade = crmStatusUpgradeFromEnrollment(lead.status, enrollmentStatus)
 
