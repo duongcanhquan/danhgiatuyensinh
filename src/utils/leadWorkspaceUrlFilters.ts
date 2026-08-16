@@ -22,8 +22,10 @@ export const LWF = {
   CQ: 'cq',
   /** Note kết quả sau gọi (disposition id) */
   DISP: 'disp',
-  /** Chương trình / đợt nhập */
+  /** Chương trình / đợt nhập — UI gộp thành «Nguồn» (khớp đợt hoặc kênh). */
   PROG: 'prog',
+  /** Tình trạng thu phí / hoàn thiện hồ sơ */
+  ENROLL: 'enroll',
   /** Chế độ xử lý hồ sơ: score_queue | volume_filter | care_close */
   WM: 'wm',
   /** Nguồn nhập: campaign | manual | portal */
@@ -114,6 +116,7 @@ export function leadFilterSignatureForHydrate(sp: URLSearchParams): string {
     LWF.CQ,
     LWF.DISP,
     LWF.PROG,
+    LWF.ENROLL,
     LWF.WM,
     LWF.ORIGIN,
   ] as const

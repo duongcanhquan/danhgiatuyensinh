@@ -238,11 +238,11 @@ export const LEAD_COUNSELOR_STATUS_ORDER: readonly LeadCounselorStatus[] = [
 
 export const LEAD_COUNSELOR_STATUS_LABELS: Record<LeadCounselorStatus, string> = {
   NEW: 'Mới',
-  INTERESTED: 'Quan tâm / đang tư vấn',
+  INTERESTED: 'Đăng ký XT',
   DEPOSIT_PAID: 'Đã cọc',
   ENROLLED: 'Nhập học',
   SUMMER_MELT: 'Hủy phút chót',
-  DEAD: 'Không tiềm năng / đóng',
+  DEAD: 'Không tiềm năng',
 }
 
 /** Institutional knowledge for RAG-backed copilot (`knowledgeDocuments/{id}`). */

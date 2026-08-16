@@ -67,8 +67,11 @@ describe('appsScriptStudentMapper', () => {
   it('map trạng thái Sheet → Kanban TVV', () => {
     expect(mapAppsScriptToCounselorStatus('CỌC THÀNH CÔNG', '')).toBe('DEPOSIT_PAID')
     expect(mapAppsScriptToCounselorStatus('ĐANG HOÀN THIỆN', '')).toBe('INTERESTED')
+    expect(mapAppsScriptToCounselorStatus('Đăng ký XT', '')).toBe('INTERESTED')
+    expect(mapAppsScriptToCounselorStatus('LPXT', '')).toBe('INTERESTED')
     expect(mapAppsScriptToCounselorStatus('MỚI', '')).toBe('NEW')
     expect(mapAppsScriptToCounselorStatus('CỌC THÀNH CÔNG', 'ĐÃ HOÀN THIỆN')).toBe('ENROLLED')
+    expect(mapAppsScriptToCounselorStatus('Không tiềm năng', '')).toBe('DEAD')
   })
 
   it('bỏ 2 hàng đầu khi parse AOA', () => {

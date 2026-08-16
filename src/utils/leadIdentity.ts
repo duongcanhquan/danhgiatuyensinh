@@ -20,6 +20,32 @@ export function coerceLeadCounselorStatus(raw: string): LeadCounselorStatus {
   const u = String(raw ?? '').toUpperCase()
   if (COUNSELOR_SET.has(u)) return u as LeadCounselorStatus
   if (LEGACY_COUNSELOR_STATUS[u]) return LEGACY_COUNSELOR_STATUS[u]
+  // Sheet / Excel tiếng Việt
+  const fold = u
+    .replace(/[Đ]/g, 'D')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+  if (fold.includes('NHAP HOC') || fold.includes('DA HOAN THIEN') || fold.includes('GHI DANH')) {
+    return 'ENROLLED'
+  }
+  if (fold.includes('COC THANH CONG') || fold.includes('DA COC') || fold.includes('COC DU')) {
+    return 'DEPOSIT_PAID'
+  }
+  if (
+    fold.includes('DANG KY XT') ||
+    fold.includes('LPXT') ||
+    fold.includes('XET TUYEN') ||
+    fold.includes('DANG HOAN THIEN') ||
+    fold.includes('KIEM TRA')
+  ) {
+    return 'INTERESTED'
+  }
+  if (fold.includes('HUY PHUT') || fold.includes('SUMMER') || fold.includes('MELT')) {
+    return 'SUMMER_MELT'
+  }
+  if (fold.includes('KHONG TIEM NANG') || fold.includes('THAT BAI')) return 'DEAD'
+  if (!fold || fold === 'MOI') return 'NEW'
   return 'NEW'
 }
 

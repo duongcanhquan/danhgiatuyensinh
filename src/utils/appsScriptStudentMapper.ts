@@ -143,13 +143,35 @@ export function mapAppsScriptToCounselorStatus(
       .replace(/\s+/g, ' ')
 
   const sit = fold(situationCol42)
-  if (sit.includes('DA HOAN THIEN')) return 'ENROLLED'
+  if (sit.includes('DA HOAN THIEN') || sit.includes('NHAP HOC')) return 'ENROLLED'
 
   const st = fold(statusCol39)
   if (!st || st === 'MOI') return 'NEW'
-  if (st.includes('DA HOAN THIEN')) return 'ENROLLED'
-  if (st.includes('COC THANH CONG') || st.includes('DA COC')) return 'DEPOSIT_PAID'
-  if (st.includes('DANG HOAN THIEN') || st.includes('KIEM TRA')) return 'INTERESTED'
+  if (st.includes('DA HOAN THIEN') || st.includes('NHAP HOC') || st.includes('GHI DANH')) {
+    return 'ENROLLED'
+  }
+  if (
+    st.includes('COC THANH CONG') ||
+    st.includes('DA COC') ||
+    st.includes('COC DU') ||
+    st === 'COC'
+  ) {
+    return 'DEPOSIT_PAID'
+  }
+  if (
+    st.includes('DANG KY XT') ||
+    st.includes('DK XT') ||
+    st.includes('LPXT') ||
+    st.includes('XET TUYEN') ||
+    st.includes('DANG HOAN THIEN') ||
+    st.includes('KIEM TRA')
+  ) {
+    return 'INTERESTED'
+  }
+  if (st.includes('HUY') || st.includes('SUMMER') || st.includes('MELT')) return 'SUMMER_MELT'
+  if (st.includes('KHONG TIEM NANG') || st.includes('THAT BAI') || st === 'DEAD') {
+    return 'DEAD'
+  }
   return 'NEW'
 }
 

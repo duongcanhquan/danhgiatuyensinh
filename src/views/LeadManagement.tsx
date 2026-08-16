@@ -174,6 +174,20 @@ import {
   sanitizeUploadedYmd,
 } from '../utils/leadUploadedDateRange'
 import {
+  compareLeadsPortalListOrder,
+  leadMatchesNguonFilter,
+  leadMatchesTinhTrangFilter,
+  leadNguonDisplay,
+  leadTinhTrangLabel,
+  LEAD_TINH_TRANG_FILTER_OPTIONS,
+  parseTinhTrangFromUrl,
+} from '../utils/leadListEnrollment'
+import {
+  LEAD_COUNSELOR_STATUS_HINTS,
+  leadCounselorStatusBadgeClass,
+  leadCounselorStatusButtonClass,
+} from '../utils/leadCounselorStatusUi'
+import {
   loadRecentIntakePrograms,
   normalizeIntakeProgramLabel,
   rememberIntakeProgram,
@@ -291,6 +305,8 @@ type LeadUiFilters = {
   crm: string
   source: string
   program: string
+  /** Tình trạng thu phí / hoàn thiện (Mẫu 3 / kế toán). */
+  enrollment: string
   school: string
   assignee: string
   scoreMin: string
@@ -313,6 +329,7 @@ function emptyLeadUiFilters(): LeadUiFilters {
     crm: 'ALL',
     source: 'ALL',
     program: 'ALL',
+    enrollment: 'ALL',
     school: 'ALL',
     assignee: '',
     scoreMin: '',
@@ -335,6 +352,7 @@ function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
     a.crm === b.crm &&
     a.source === b.source &&
     a.program === b.program &&
+    a.enrollment === b.enrollment &&
     a.school === b.school &&
     a.assignee === b.assignee &&
     a.scoreMin === b.scoreMin &&
@@ -366,7 +384,7 @@ function formatDescPreview(raw: string | undefined, max = 64): string {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`
 }
 
-const LEAD_TABLE_COL_COUNT = 12
+const LEAD_TABLE_COL_COUNT = 13
 
 /** Ngày nhập hồ sơ — ưu tiên uploadedAt (cổng / import), fallback createdAt. */
 function leadRegisteredAtMs(l: Lead): number {
@@ -449,8 +467,10 @@ export function LeadManagement() {
   const [sourceFilter, setSourceFilter] = useState<string>('ALL')
   const [sourceCatalogRequested, setSourceCatalogRequested] = useState(false)
   const [programCatalogRequested, setProgramCatalogRequested] = useState(false)
-  /** ALL | __UNSET__ | nhãn chương trình */
+  /** ALL | __UNSET__ | nhãn nguồn (đợt nhập hoặc kênh) */
   const [programFilter, setProgramFilter] = useState<string>('ALL')
+  /** Tình trạng thu phí / hoàn thiện — client filter. */
+  const [enrollmentFilter, setEnrollmentFilter] = useState<string>('ALL')
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
   /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
   const [assigneeFilter, setAssigneeFilter] = useState<string>('')
@@ -476,6 +496,7 @@ export function LeadManagement() {
       crm: crmStatusFilter,
       source: sourceFilter,
       program: programFilter,
+      enrollment: enrollmentFilter,
       school: schoolFilter,
       assignee: assigneeFilter,
       scoreMin: scoreMinInput,
@@ -495,6 +516,7 @@ export function LeadManagement() {
       crmStatusFilter,
       sourceFilter,
       programFilter,
+      enrollmentFilter,
       schoolFilter,
       assigneeFilter,
       scoreMinInput,
@@ -525,13 +547,13 @@ export function LeadManagement() {
   const intakeOriginNeedsScope = intakeOriginTab === 'public_portal'
   /** «Chưa gán» không query được trên Firestore → fullScope + lọc client. */
   const assigneeUnsetNeedsScope = assigneeFilter === '__UNASSIGNED__'
-  /** Có chọn chương trình (kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
+  /** Có chọn nguồn (đợt / kênh, kể cả «Chưa gắn») — dùng chip / nút xóa lô. */
   const programFilterActive = programFilter !== 'ALL'
   /**
-   * Chỉ «Chưa gắn» cần fullScope (thiếu field — không where được).
-   * Chương trình có nhãn → lọc server `intakeProgram` + phân trang (nhanh).
+   * Nguồn gộp đợt + kênh → lọc client (OR) → fullScope khi có chọn.
    */
-  const programNeedsScope = programFilter === '__UNSET__'
+  const programNeedsScope = programFilter !== 'ALL'
+  const enrollmentNeedsScope = enrollmentFilter !== 'ALL'
   /** Lọc ngày tải lên — chỉ có trên client → cần quét fullScope để chọn/xóa đủ. */
   const uploadedDateNeedsScope = Boolean(uploadedFromFilter.trim() || uploadedToFilter.trim())
   const uploadedDateFilterActive = uploadedDateNeedsScope
@@ -565,10 +587,7 @@ export function LeadManagement() {
     if (!tagClientEval && tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
-    if (sourceFilter !== 'ALL') o.source = sourceFilter
-    if (programFilter !== 'ALL' && programFilter !== '__UNSET__') {
-      o.intakeProgram = programFilter
-    }
+    // Nguồn UI gộp đợt + kênh → lọc client (không where exact intakeProgram / source).
     if (schoolFilter !== 'ALL') {
       o.highSchoolIn = [schoolFilter]
     }
@@ -594,8 +613,6 @@ export function LeadManagement() {
     tagFilter,
     regionFilter,
     majorFilter,
-    sourceFilter,
-    programFilter,
     schoolFilter,
     assigneeFilter,
     scoreMinInput,
@@ -615,16 +632,18 @@ export function LeadManagement() {
     intakeOriginNeedsScope ||
     assigneeUnsetNeedsScope ||
     programNeedsScope ||
+    enrollmentNeedsScope ||
     uploadedDateNeedsScope
 
   /**
-   * Lọc không where được trên Firestore (hàng chờ, chưa gắn chương trình, ngày tải, nhóm cổng…)
+   * Lọc không where được trên Firestore (hàng chờ, nguồn gộp, tình trạng, ngày tải, nhóm cổng…)
    * → quét theo docId + chỉ giữ hồ sơ khớp.
    * Tab cổng: keepMatch origin để gồm legacy manual-… và tránh OR server × team-lead.
    */
   const clientKeepMatchNeeded =
     intakeOriginNeedsScope ||
     programNeedsScope ||
+    enrollmentNeedsScope ||
     uploadedDateNeedsScope ||
     workModeNeedsScope ||
     callQueueNeedsScope ||
@@ -634,7 +653,8 @@ export function LeadManagement() {
     if (!clientKeepMatchNeeded) return undefined
     return (l: Lead) => {
       if (!leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
-      if (programNeedsScope && (l.intakeProgram ?? '').trim()) return false
+      if (programNeedsScope && !leadMatchesNguonFilter(l, programFilter)) return false
+      if (enrollmentNeedsScope && !leadMatchesTinhTrangFilter(l, enrollmentFilter)) return false
       if (
         uploadedDateNeedsScope &&
         !leadMatchesUploadedDateRange(l, uploadedFromFilter, uploadedToFilter)
@@ -657,6 +677,9 @@ export function LeadManagement() {
     clientKeepMatchNeeded,
     intakeOriginTab,
     programNeedsScope,
+    programFilter,
+    enrollmentNeedsScope,
+    enrollmentFilter,
     uploadedDateNeedsScope,
     uploadedFromFilter,
     uploadedToFilter,
@@ -700,7 +723,7 @@ export function LeadManagement() {
     fullScopeKeepMatch: urlQuery ? undefined : fullScopeKeepMatch,
     fullScopeMatchKey:
       !urlQuery && clientKeepMatchNeeded
-        ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
+        ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|enr:${enrollmentFilter}|prog:${programFilter}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
         : undefined,
     /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ.
      * Khi đang tìm (ô tìm có chữ): không lọc origin — tránh mất hồ sơ tạo tay / cổng
@@ -1141,6 +1164,24 @@ export function LeadManagement() {
     return [...byLower.values()].sort((a, b) => a.localeCompare(b, 'vi'))
   }, [leads, programFilter, scopeProgramOptions])
 
+  /** Nguồn = đợt nhập ∪ kênh nguồn (một ô lọc). */
+  const nguonOptions = useMemo(() => {
+    const byLower = new Map<string, string>()
+    const add = (raw: string) => {
+      const p = raw.trim()
+      if (!p) return
+      const k = p.toLowerCase()
+      if (!byLower.has(k)) byLower.set(k, p)
+    }
+    for (const p of programOptions) add(p)
+    for (const s of sources) add(s)
+    for (const l of leads) {
+      add(l.intakeProgram ?? '')
+      add(String(l.source1 ?? l.source ?? ''))
+    }
+    return [...byLower.values()].sort((a, b) => a.localeCompare(b, 'vi'))
+  }, [programOptions, sources, leads])
+
   const filtered = useMemo(() => {
     const minScore =
       scoreMinInput.trim() === '' || Number.isNaN(Number(scoreMinInput)) ? null : Number(scoreMinInput)
@@ -1173,11 +1214,11 @@ export function LeadManagement() {
     if (!urlQuery) {
       rows = rows.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab))
     }
-    if (programFilter === '__UNSET__') {
-      rows = rows.filter((l) => !(l.intakeProgram ?? '').trim())
-    } else if (programFilter !== 'ALL') {
-      // Client filter: bắt buộc khi fullScope (TVV / combo); idempotent khi server đã lọc exact.
-      rows = rows.filter((l) => intakeProgramsMatch(l.intakeProgram, programFilter))
+    if (programFilter !== 'ALL') {
+      rows = rows.filter((l) => leadMatchesNguonFilter(l, programFilter))
+    }
+    if (enrollmentFilter !== 'ALL') {
+      rows = rows.filter((l) => leadMatchesTinhTrangFilter(l, enrollmentFilter))
     }
     if (assigneeFilter === '__UNASSIGNED__') {
       rows = rows.filter((l) => !effectiveLeadAssigneeUid(l))
@@ -1206,6 +1247,7 @@ export function LeadManagement() {
     urlQuery,
     intakeOriginTab,
     programFilter,
+    enrollmentFilter,
     assigneeFilter,
     uploadedFromFilter,
     uploadedToFilter,
@@ -1220,10 +1262,11 @@ export function LeadManagement() {
       ) {
         return false
       }
-      if (programFilter === '__UNSET__') {
-        if ((l.intakeProgram ?? '').trim()) return false
-      } else if (programFilter !== 'ALL') {
-        if (!intakeProgramsMatch(l.intakeProgram, programFilter)) return false
+      if (programFilter !== 'ALL' && !leadMatchesNguonFilter(l, programFilter)) {
+        return false
+      }
+      if (enrollmentFilter !== 'ALL' && !leadMatchesTinhTrangFilter(l, enrollmentFilter)) {
+        return false
       }
       if (assigneeFilter === '__UNASSIGNED__') {
         if (effectiveLeadAssigneeUid(l)) return false
@@ -1271,6 +1314,7 @@ export function LeadManagement() {
       uploadedFromFilter,
       uploadedToFilter,
       programFilter,
+      enrollmentFilter,
       assigneeFilter,
       callWorkBucketFilter,
       dispositionFilter,
@@ -1293,7 +1337,11 @@ export function LeadManagement() {
   const sortedFiltered = useMemo(() => {
     const rows = [...filtered]
     if (sortKey === 'none') {
-      rows.sort(compareCallWorkQueueOrder)
+      if (intakeOriginTab === 'public_portal') {
+        rows.sort(compareLeadsPortalListOrder)
+      } else {
+        rows.sort(compareCallWorkQueueOrder)
+      }
       return rows
     }
     const dir = sortDir === 'asc' ? 1 : -1
@@ -1333,6 +1381,7 @@ export function LeadManagement() {
     filtered,
     sortKey,
     sortDir,
+    intakeOriginTab,
     effectiveLeadTag,
     profileScoringActive,
     scoreByLeadId,
@@ -1485,8 +1534,15 @@ export function LeadManagement() {
       major: sp.has(LWF.MAJOR) ? sp.get(LWF.MAJOR)!.trim() || 'ALL' : 'ALL',
       status: sp.has(LWF.PIPE) ? parsePipelineFromUrl(sp.get(LWF.PIPE)) : 'ALL',
       crm: sp.has(LWF.CRM) ? parseCrmFromUrl(sp.get(LWF.CRM)) : 'ALL',
-      source: sp.has(LWF.SOURCE) ? sp.get(LWF.SOURCE)!.trim() || 'ALL' : 'ALL',
-      program: (sp.get(LWF.PROG) ?? '').trim() || 'ALL',
+      source: 'ALL',
+      program: (() => {
+        const prog = (sp.get(LWF.PROG) ?? '').trim()
+        if (prog) return prog
+        // Bookmark cũ: `source=` → gộp vào Nguồn.
+        const src = (sp.get(LWF.SOURCE) ?? '').trim()
+        return src || 'ALL'
+      })(),
+      enrollment: sp.has(LWF.ENROLL) ? parseTinhTrangFromUrl(sp.get(LWF.ENROLL)) : 'ALL',
       assignee: sp.has(LWF.ASSIGN) ? sp.get(LWF.ASSIGN)!.trim() : '',
       callQueue: parseCallWorkBucketFromUrl(sp.get(LWF.CQ)),
       disposition: (() => {
@@ -1507,8 +1563,9 @@ export function LeadManagement() {
     setMajorFilter(next.major)
     setStatusFilter(next.status)
     setCrmStatusFilter(next.crm)
-    setSourceFilter(next.source)
+    setSourceFilter('ALL')
     setProgramFilter(next.program)
+    setEnrollmentFilter(next.enrollment)
     setAssigneeFilter(next.assignee)
     setCallWorkBucketFilter(next.callQueue)
     setDispositionFilter(next.disposition)
@@ -1541,8 +1598,9 @@ export function LeadManagement() {
     setMajorFilter(d.major)
     setStatusFilter(d.status)
     setCrmStatusFilter(d.crm)
-    setSourceFilter(d.source)
+    setSourceFilter('ALL')
     setProgramFilter(d.program)
+    setEnrollmentFilter(d.enrollment)
     setSchoolFilter(d.school)
     setAssigneeFilter(d.assignee)
     setScoreMinInput(d.scoreMin)
@@ -1552,7 +1610,7 @@ export function LeadManagement() {
     const to = sanitizeUploadedYmd(d.uploadedTo)
     setUploadedFromFilter(from)
     setUploadedToFilter(to)
-    setDraftFilters((prev) => ({ ...prev, uploadedFrom: from, uploadedTo: to }))
+    setDraftFilters((prev) => ({ ...prev, source: 'ALL', uploadedFrom: from, uploadedTo: to }))
     mergeListFilterUrl({
       [LWF.TAG]: d.tag === 'ALL' ? null : d.tag,
       [LWF.CQ]: d.callQueue === 'all' ? null : d.callQueue,
@@ -1562,8 +1620,9 @@ export function LeadManagement() {
       [LWF.MAJOR]: d.major === 'ALL' ? null : d.major,
       [LWF.PIPE]: d.status === 'ALL' ? null : d.status,
       [LWF.CRM]: d.crm === 'ALL' ? null : d.crm,
-      [LWF.SOURCE]: d.source === 'ALL' ? null : d.source,
+      [LWF.SOURCE]: null,
       [LWF.PROG]: d.program === 'ALL' ? null : d.program,
+      [LWF.ENROLL]: d.enrollment === 'ALL' ? null : d.enrollment,
       [LWF.SCHOOL]: d.school === 'ALL' ? null : d.school,
       [LWF.ASSIGN]: d.assignee ? d.assignee : null,
       [LWF.DATE_FROM]: from || null,
@@ -1574,12 +1633,13 @@ export function LeadManagement() {
     setPage(1)
   }, [draftFilters, mergeListFilterUrl, setPage])
 
-  /** Chip chương trình: chọn + áp dụng ngay (không cần bấm «Áp dụng lọc»). */
+  /** Chip nguồn: chọn + áp dụng ngay (không cần bấm «Áp dụng lọc»). */
   const applyProgramFilterQuick = useCallback(
     (program: string) => {
-      setDraftFilters((prev) => ({ ...prev, program }))
+      setDraftFilters((prev) => ({ ...prev, program, source: 'ALL' }))
       setProgramFilter(program)
-      mergeListFilterUrl({ [LWF.PROG]: program === 'ALL' ? null : program })
+      setSourceFilter('ALL')
+      mergeListFilterUrl({ [LWF.PROG]: program === 'ALL' ? null : program, [LWF.SOURCE]: null })
       setPage(1)
     },
     [mergeListFilterUrl, setPage],
@@ -1698,6 +1758,7 @@ export function LeadManagement() {
     setCrmStatusFilter(empty.crm)
     setSourceFilter(empty.source)
     setProgramFilter(empty.program)
+    setEnrollmentFilter(empty.enrollment)
     setSchoolFilter(empty.school)
     setAssigneeFilter(empty.assignee)
     setScoreMinInput(empty.scoreMin)
@@ -1817,22 +1878,26 @@ export function LeadManagement() {
     if (crmStatusFilter !== 'ALL') {
       out.push({
         id: 'crm',
-        label: `Tư vấn: ${LEAD_COUNSELOR_STATUS_LABELS[crmStatusFilter as LeadCounselorStatus]}`,
+        label: `Tình trạng: ${LEAD_COUNSELOR_STATUS_LABELS[crmStatusFilter as LeadCounselorStatus]}`,
         onClear: () => {
           setCrmStatusFilter('ALL')
+          setDraftFilters((prev) => ({ ...prev, crm: 'ALL' }))
           setPage(1)
           mergeListFilterUrl({ [LWF.CRM]: null })
         },
       })
     }
-    if (sourceFilter !== 'ALL') {
+    if (enrollmentFilter !== 'ALL') {
+      const enLabel =
+        LEAD_TINH_TRANG_FILTER_OPTIONS.find((o) => o.v === enrollmentFilter)?.t ?? enrollmentFilter
       out.push({
-        id: 'source',
-        label: `Nguồn: ${sourceFilter.length > 18 ? `${sourceFilter.slice(0, 18)}…` : sourceFilter}`,
+        id: 'enroll',
+        label: `Thu phí: ${enLabel}`,
         onClear: () => {
-          setSourceFilter('ALL')
+          setEnrollmentFilter('ALL')
+          setDraftFilters((prev) => ({ ...prev, enrollment: 'ALL' }))
           setPage(1)
-          mergeListFilterUrl({ [LWF.SOURCE]: null })
+          mergeListFilterUrl({ [LWF.ENROLL]: null })
         },
       })
     }
@@ -1841,12 +1906,13 @@ export function LeadManagement() {
         id: 'prog',
         label:
           programFilter === '__UNSET__'
-            ? 'Chương trình: Chưa gắn'
-            : `Chương trình: ${programFilter.length > 18 ? `${programFilter.slice(0, 18)}…` : programFilter}`,
+            ? 'Nguồn: Chưa gắn'
+            : `Nguồn: ${programFilter.length > 18 ? `${programFilter.slice(0, 18)}…` : programFilter}`,
         onClear: () => {
           setProgramFilter('ALL')
+          setDraftFilters((prev) => ({ ...prev, program: 'ALL', source: 'ALL' }))
           setPage(1)
-          mergeListFilterUrl({ [LWF.PROG]: null })
+          mergeListFilterUrl({ [LWF.PROG]: null, [LWF.SOURCE]: null })
         },
       })
     }
@@ -1935,7 +2001,7 @@ export function LeadManagement() {
     majorFilter,
     statusFilter,
     crmStatusFilter,
-    sourceFilter,
+    enrollmentFilter,
     programFilter,
     schoolFilter,
     assigneeFilter,
@@ -3358,7 +3424,7 @@ export function LeadManagement() {
               <span className="hidden h-3 w-px bg-slate-200 sm:inline" aria-hidden />
               <span className="min-w-0 flex-1 basis-full sm:basis-auto">
                 <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  Chương trình{programSummary.sampleOnly ? ' (trang này)' : ''}
+                  Nguồn{programSummary.sampleOnly ? ' (trang này)' : ''}
                 </span>
                 <span className="inline-flex flex-wrap gap-1">
                   {programSummary.rows.map(([name, n]) => (
@@ -3373,7 +3439,7 @@ export function LeadManagement() {
                     >
                       <button
                         type="button"
-                        title={`Lọc chương trình «${name}»`}
+                        title={`Lọc nguồn «${name}»`}
                         onClick={() => applyProgramFilterQuick(name)}
                         className="inline-flex min-w-0 max-w-[11rem] items-center gap-1 truncate px-1.5 text-[11px] font-medium transition hover:bg-amber-50/80"
                       >
@@ -3383,7 +3449,7 @@ export function LeadManagement() {
                       {canDeleteLeads ? (
                         <button
                           type="button"
-                          title={`Xóa cả lô chương trình «${name}»`}
+                          title={`Xóa cả lô nguồn «${name}»`}
                           disabled={bulkBusy || selectScopeBusy}
                           onClick={() => void deleteEntireBatch('program', name)}
                           className="inline-flex shrink-0 items-center border-l border-inherit px-1 text-rose-700 transition hover:bg-rose-100 disabled:opacity-40"
@@ -3601,8 +3667,8 @@ export function LeadManagement() {
                 className={`${LEAD_BTN} border-rose-400 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40`}
                 title={
                   (programFilterActive ? programFilter : draftFilters.program) === '__UNSET__'
-                    ? 'Xóa hết hồ sơ chưa gắn chương trình — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa'
-                    : `Xóa hết hồ sơ chương trình «${programFilterActive ? programFilter : draftFilters.program}» — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa`
+                    ? 'Xóa hết hồ sơ chưa gắn nguồn — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa'
+                    : `Xóa hết hồ sơ nguồn «${programFilterActive ? programFilter : draftFilters.program}» — sẽ hỏi xác nhận 2 lần và yêu cầu gõ cụm khóa`
                 }
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -3839,131 +3905,9 @@ export function LeadManagement() {
             ) : null}
           </summary>
           <div className="space-y-3 border-t border-slate-200/60 px-3 pb-3 pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                title="Chỉ hiện hồ sơ AI Shortlist"
-                onClick={() => {
-                  const next = !draftFilters.aiShortlistOnly
-                  patchDraftFilters({ aiShortlistOnly: next })
-                }}
-                className={[
-                  LEAD_BTN,
-                  draftFilters.aiShortlistOnly
-                    ? 'border-amber-400 bg-amber-400 text-amber-950'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
-                ].join(' ')}
-              >
-                <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
-                AI Shortlist
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiShortlistGuideOpen(true)}
-                className={`${LEAD_BTN} border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80`}
-                title="Hướng dẫn AI Shortlist"
-              >
-                <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
-                Hướng dẫn
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-              <FilterSelect
-                compact
-                label="Nhãn"
-                title="Nhãn HOT / WARM / COLD theo bộ chấm điểm."
-                value={draftFilters.tag}
-                onChange={(v) => patchDraftFilters({ tag: v })}
-                options={[
-                  { v: 'ALL', t: 'Tất cả' },
-                  ...TAG_OPTIONS.map((t) => ({ v: t, t })),
-                ]}
-              />
-              <SearchableFilterSelect
-                compact
-                label="Vùng"
-                title="Tỉnh / thành trên hồ sơ."
-                value={draftFilters.region}
-                onChange={(v) => patchDraftFilters({ region: v })}
-                options={regions.map((p) => ({ v: p, t: p }))}
-              />
-              <FilterSelect
-                compact
-                label="Hệ ĐT"
-                title="Ngành / hệ đào tạo ghi trên hồ sơ."
-                value={draftFilters.major}
-                onChange={(v) => patchDraftFilters({ major: v })}
-                options={[
-                  { v: 'ALL', t: 'Tất cả' },
-                  ...majors.map((p) => ({ v: p, t: p })),
-                ]}
-              />
-              <FilterSelect
-                compact
-                label="Funnel"
-                title="Giai đoạn tuyển sinh trên hồ sơ."
-                value={draftFilters.status}
-                onChange={(v) => patchDraftFilters({ status: v })}
-                options={[
-                  { v: 'ALL', t: 'Tất cả' },
-                  ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
-                    v: k,
-                    t: PIPELINE_LABEL[k],
-                  })),
-                ]}
-              />
-              <FilterSelect
-                compact
-                label="Tư vấn"
-                title="Tiến độ làm việc với tư vấn viên."
-                value={draftFilters.crm}
-                onChange={(v) => patchDraftFilters({ crm: v })}
-                options={[
-                  { v: 'ALL', t: 'Tất cả' },
-                  ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({ v: k, t: LEAD_COUNSELOR_STATUS_LABELS[k] })),
-                ]}
-              />
-              <FilterSelect
-                compact
-                label="Nguồn"
-                title="Kênh hồ sơ đến (web, Zalo, giới thiệu…)."
-                value={draftFilters.source}
-                onFocus={() => {
-                  if (!sourceCatalogRequested) setSourceCatalogRequested(true)
-                  else void fetchScopeSourceOptions()
-                }}
-                onChange={(v) => patchDraftFilters({ source: v })}
-                options={[{ v: 'ALL', t: 'Tất cả' }, ...sources.map((s) => ({ v: s, t: s }))]}
-              />
-              <FilterSelect
-                compact
-                label="Chương trình"
-                title="Đợt / chương trình gắn khi nhập Excel hoặc gán hàng loạt."
-                value={draftFilters.program}
-                onFocus={() => {
-                  if (!programCatalogRequested) setProgramCatalogRequested(true)
-                  else void fetchScopeProgramOptions()
-                }}
-                onChange={(v) => patchDraftFilters({ program: v })}
-                options={[
-                  { v: 'ALL', t: 'Tất cả' },
-                  { v: '__UNSET__', t: 'Chưa gắn chương trình' },
-                  ...programOptions.map((p) => ({ v: p, t: p })),
-                ]}
-              />
-              <SearchableFilterSelect
-                compact
-                label="Trường THPT"
-                title="Trường THPT của thí sinh."
-                value={draftFilters.school}
-                onChange={(v) => patchDraftFilters({ school: v })}
-                options={schoolOptions.map((sc) => ({
-                  v: sc,
-                  t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
-                }))}
-              />
-              <label className={LEAD_FILTER_LABEL} title="Ngày tải hồ sơ lên hệ thống (cổng / Excel / tạo mới).">
-                <span>Từ ngày tải</span>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4">
+              <label className={LEAD_FILTER_LABEL} title="Ngày hồ sơ vào hệ thống (cổng / Excel / tạo mới).">
+                <span>Từ ngày</span>
                 <input
                   type="date"
                   value={draftFilters.uploadedFrom}
@@ -3971,8 +3915,8 @@ export function LeadManagement() {
                   className={`${LEAD_FILTER_CONTROL} tabular-nums`}
                 />
               </label>
-              <label className={LEAD_FILTER_LABEL} title="Ngày tải hồ sơ lên hệ thống (cổng / Excel / tạo mới).">
-                <span>Đến ngày tải</span>
+              <label className={LEAD_FILTER_LABEL} title="Ngày hồ sơ vào hệ thống (cổng / Excel / tạo mới).">
+                <span>Đến ngày</span>
                 <input
                   type="date"
                   value={draftFilters.uploadedTo}
@@ -3980,44 +3924,186 @@ export function LeadManagement() {
                   className={`${LEAD_FILTER_CONTROL} tabular-nums`}
                 />
               </label>
-              <FilterSelect
-                compact
-                label="Nhân viên"
-                title="Lọc theo người phụ trách."
-                value={draftFilters.assignee}
-                onChange={(v) => patchDraftFilters({ assignee: v })}
-                options={[
-                  { v: '', t: 'Tất cả nhân viên' },
-                  { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
-                  ...reassignPickList.map((c) => ({
-                    v: c.id,
-                    t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
-                  })),
-                ]}
-              />
-              <label className={LEAD_FILTER_LABEL} title="Lọc theo điểm (cột Điểm).">
-                <span>Điểm từ</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  placeholder="—"
-                  value={draftFilters.scoreMin}
-                  onChange={(e) => patchDraftFilters({ scoreMin: e.target.value })}
-                  className={`${LEAD_FILTER_CONTROL} tabular-nums`}
-                />
-              </label>
-              <label className={LEAD_FILTER_LABEL} title="Lọc theo điểm (cột Điểm).">
-                <span>Điểm đến</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  placeholder="—"
-                  value={draftFilters.scoreMax}
-                  onChange={(e) => patchDraftFilters({ scoreMax: e.target.value })}
-                  className={`${LEAD_FILTER_CONTROL} tabular-nums`}
-                />
-              </label>
             </div>
+
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Lọc chính
+              </p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                <FilterSelect
+                  compact
+                  label="Nhãn"
+                  title="Nhãn HOT / WARM / COLD theo bộ chấm điểm."
+                  value={draftFilters.tag}
+                  onChange={(v) => patchDraftFilters({ tag: v })}
+                  options={[
+                    { v: 'ALL', t: 'Tất cả' },
+                    ...TAG_OPTIONS.map((t) => ({ v: t, t })),
+                  ]}
+                />
+                <FilterSelect
+                  compact
+                  label="Tình trạng"
+                  title="Tình trạng tư vấn: Mới, Đăng ký XT, Đã cọc, Nhập học…"
+                  value={draftFilters.crm}
+                  onChange={(v) => patchDraftFilters({ crm: v })}
+                  options={[
+                    { v: 'ALL', t: 'Tất cả' },
+                    ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({
+                      v: k,
+                      t: LEAD_COUNSELOR_STATUS_LABELS[k],
+                    })),
+                  ]}
+                />
+                <FilterSelect
+                  compact
+                  label="Nguồn"
+                  title="Đợt nhập hoặc kênh nguồn (Zalo, web…)."
+                  value={draftFilters.program}
+                  onFocus={() => {
+                    if (!programCatalogRequested) setProgramCatalogRequested(true)
+                    else void fetchScopeProgramOptions()
+                    if (!sourceCatalogRequested) setSourceCatalogRequested(true)
+                    else void fetchScopeSourceOptions()
+                  }}
+                  onChange={(v) => patchDraftFilters({ program: v, source: 'ALL' })}
+                  options={[
+                    { v: 'ALL', t: 'Tất cả' },
+                    { v: '__UNSET__', t: 'Chưa gắn nguồn' },
+                    ...nguonOptions.map((p) => ({ v: p, t: p })),
+                  ]}
+                />
+                <FilterSelect
+                  compact
+                  label="Nhân viên"
+                  title="Lọc theo người phụ trách."
+                  value={draftFilters.assignee}
+                  onChange={(v) => patchDraftFilters({ assignee: v })}
+                  options={[
+                    { v: '', t: 'Tất cả nhân viên' },
+                    { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
+                    ...reassignPickList.map((c) => ({
+                      v: c.id,
+                      t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
+                    })),
+                  ]}
+                />
+              </div>
+            </div>
+
+            <details className="rounded-lg border border-slate-200/70 bg-slate-50/50 open:bg-white">
+              <summary className="cursor-pointer list-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden">
+                Lọc thêm · Thu phí, Trường THPT, Hệ ĐT, Vùng, Funnel, Điểm…
+              </summary>
+              <div className="space-y-2 border-t border-slate-200/60 px-2.5 pb-2.5 pt-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    title="Chỉ hiện hồ sơ AI Shortlist"
+                    onClick={() => {
+                      const next = !draftFilters.aiShortlistOnly
+                      patchDraftFilters({ aiShortlistOnly: next })
+                    }}
+                    className={[
+                      LEAD_BTN,
+                      draftFilters.aiShortlistOnly
+                        ? 'border-amber-400 bg-amber-400 text-amber-950'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
+                    ].join(' ')}
+                  >
+                    <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                    AI Shortlist
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiShortlistGuideOpen(true)}
+                    className={`${LEAD_BTN} border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80`}
+                    title="Hướng dẫn AI Shortlist"
+                  >
+                    <CircleHelp className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.25} aria-hidden />
+                    Hướng dẫn
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+                  <FilterSelect
+                    compact
+                    label="Thu phí"
+                    title="Tình trạng thu phí trên Sheet / kế toán (Mới, Đang hoàn thiện, Cọc thành công…)."
+                    value={draftFilters.enrollment}
+                    onChange={(v) => patchDraftFilters({ enrollment: v })}
+                    options={[...LEAD_TINH_TRANG_FILTER_OPTIONS]}
+                  />
+                  <SearchableFilterSelect
+                    compact
+                    label="Trường THPT"
+                    title="Trường THPT của thí sinh."
+                    value={draftFilters.school}
+                    onChange={(v) => patchDraftFilters({ school: v })}
+                    options={schoolOptions.map((sc) => ({
+                      v: sc,
+                      t: sc.length > 48 ? `${sc.slice(0, 48)}…` : sc,
+                    }))}
+                  />
+                  <FilterSelect
+                    compact
+                    label="Hệ ĐT"
+                    title="Ngành / hệ đào tạo ghi trên hồ sơ."
+                    value={draftFilters.major}
+                    onChange={(v) => patchDraftFilters({ major: v })}
+                    options={[
+                      { v: 'ALL', t: 'Tất cả' },
+                      ...majors.map((p) => ({ v: p, t: p })),
+                    ]}
+                  />
+                  <SearchableFilterSelect
+                    compact
+                    label="Vùng"
+                    title="Tỉnh / thành trên hồ sơ."
+                    value={draftFilters.region}
+                    onChange={(v) => patchDraftFilters({ region: v })}
+                    options={regions.map((p) => ({ v: p, t: p }))}
+                  />
+                  <FilterSelect
+                    compact
+                    label="Funnel"
+                    title="Giai đoạn tuyển sinh trên hồ sơ."
+                    value={draftFilters.status}
+                    onChange={(v) => patchDraftFilters({ status: v })}
+                    options={[
+                      { v: 'ALL', t: 'Tất cả' },
+                      ...(Object.keys(PIPELINE_LABEL) as LeadPipelineStatus[]).map((k) => ({
+                        v: k,
+                        t: PIPELINE_LABEL[k],
+                      })),
+                    ]}
+                  />
+                  <label className={LEAD_FILTER_LABEL} title="Lọc theo điểm (cột Điểm).">
+                    <span>Điểm từ</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      placeholder="—"
+                      value={draftFilters.scoreMin}
+                      onChange={(e) => patchDraftFilters({ scoreMin: e.target.value })}
+                      className={`${LEAD_FILTER_CONTROL} tabular-nums`}
+                    />
+                  </label>
+                  <label className={LEAD_FILTER_LABEL} title="Lọc theo điểm (cột Điểm).">
+                    <span>Điểm đến</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      placeholder="—"
+                      value={draftFilters.scoreMax}
+                      onChange={(e) => patchDraftFilters({ scoreMax: e.target.value })}
+                      className={`${LEAD_FILTER_CONTROL} tabular-nums`}
+                    />
+                  </label>
+                </div>
+              </div>
+            </details>
+
             <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/50 pt-2">
               <button
                 type="button"
@@ -4291,10 +4377,16 @@ export function LeadManagement() {
                   </button>
                 </th>
                 <th
-                  className="w-[10%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
-                  title="Chương trình / đợt gắn khi nhập hoặc gán hàng loạt"
+                  className="w-[9%] max-w-[8rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Tình trạng tư vấn: Mới, Đăng ký XT, Đã cọc, Nhập học…"
                 >
-                  Chương trình
+                  Tình trạng
+                </th>
+                <th
+                  className="w-[10%] max-w-[9rem] px-1.5 py-2 font-semibold normal-case tracking-normal"
+                  title="Đợt nhập hoặc kênh nguồn"
+                >
+                  Nguồn
                 </th>
                 <th className="w-[9%] max-w-[7.5rem] px-1.5 py-2 font-semibold">
                   <button
@@ -4408,13 +4500,13 @@ export function LeadManagement() {
                       </p>
                     ) : programFilter === '__UNSET__' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Bộ lọc «Chưa gắn chương trình» tìm hồ sơ không có nhãn chương trình. Nếu trước đây đã gán
-                        chương trình hoặc đã xóa lô, danh sách sẽ trống.
+                        Bộ lọc «Chưa gắn nguồn» tìm hồ sơ không có đợt nhập / kênh nguồn. Nếu trước đây đã gán hoặc đã
+                        xóa lô, danh sách sẽ trống.
                       </p>
                     ) : programFilter !== 'ALL' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Không thấy hồ sơ thuộc chương trình đã chọn trong phạm vi quét hiện tại. Thử bỏ lọc chương
-                        trình hoặc kiểm tra tên chương trình trên cột «Chương trình».
+                        Không thấy hồ sơ thuộc nguồn đã chọn trong phạm vi quét hiện tại. Thử bỏ lọc nguồn hoặc kiểm
+                        tra cột «Nguồn».
                       </p>
                     ) : null}
                   </td>
@@ -4497,12 +4589,32 @@ export function LeadManagement() {
                     {formatLeadRegisteredAt(l)}
                   </td>
                   <td
-                    className="truncate px-1.5 py-1.5 text-slate-700"
-                    title={(l.intakeProgram ?? '').trim() || undefined}
+                    className="px-1.5 py-1.5"
+                    title={[
+                      LEAD_COUNSELOR_STATUS_LABELS[l.status],
+                      l.finance?.enrollmentStatus ? `Thu phí: ${leadTinhTrangLabel(l)}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   >
-                    {(l.intakeProgram ?? '').trim() ? (
+                    <span
+                      className={`inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[11px] font-semibold ${leadCounselorStatusBadgeClass(l.status)}`}
+                    >
+                      {LEAD_COUNSELOR_STATUS_LABELS[l.status]}
+                    </span>
+                    {l.finance?.enrollmentStatus?.trim() ? (
+                      <p className="mt-0.5 truncate text-[10px] text-slate-500" title={leadTinhTrangLabel(l)}>
+                        {leadTinhTrangLabel(l)}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td
+                    className="truncate px-1.5 py-1.5 text-slate-700"
+                    title={leadNguonDisplay(l) || undefined}
+                  >
+                    {leadNguonDisplay(l) ? (
                       <span className="rounded bg-indigo-50 px-1 py-0.5 text-[12px] font-medium text-indigo-900">
-                        {formatDescPreview(l.intakeProgram ?? '', 28)}
+                        {formatDescPreview(leadNguonDisplay(l), 28)}
                       </span>
                     ) : (
                       <span className="text-slate-400">—</span>
@@ -5764,7 +5876,7 @@ function LeadCrmQuickBlock({
             : 'mt-2 block text-sm font-medium text-slate-700'
         }
       >
-        Tình trạng tư vấn
+        Tình trạng
         <select
           value={crmCounselorStatus}
           onChange={(e) => setCrmCounselorStatus(e.target.value as LeadCounselorStatus)}
@@ -5995,7 +6107,8 @@ function LeadDetailPanel({
   const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
-  const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
+  const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('assign')
+  const [statusQuickBusy, setStatusQuickBusy] = useState(false)
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
 
   const consultingDataOn = playbookPopupOpen || playbookDataEnabled
@@ -6150,6 +6263,72 @@ function LeadDetailPanel({
   const leadIsMineForCrm = (lead.assignedTo ?? lead.assignedCounselorId) === profile?.id
   const crmQuickBlockVisible =
     canReassignLead && Boolean(db) && !(peerModeForCrmBlock && !leadIsMineForCrm)
+
+  const saveCrmStatusQuick = useCallback(
+    async (next: LeadCounselorStatus) => {
+      if (!db || !profile || !showCounselorProgressForm) return
+      if (next === lead.status) {
+        setCrmDirty(null)
+        return
+      }
+      setStatusQuickBusy(true)
+      setMsg(null)
+      try {
+        const touch = leadTouchPatch()
+        const assignPatch = {
+          status: next,
+          pipelineStatus: counselorStatusToPipeline(next),
+        } as Partial<Lead>
+        const scoreFields = persistedLeadScoringFields(
+          lead,
+          assignPatch,
+          activeScoringProfile,
+          scoringMasterBuckets,
+          schoolTvvSignalDefs ?? null,
+          detailScoringOpts,
+        )
+        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
+          ...assignPatch,
+          ...scoreFields,
+          ...touch,
+        })
+        const performer = profile.displayName?.trim() || profile.email || profile.id
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'STATUS_CHANGE',
+          description: `Tình trạng: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[next]}`,
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+        setCrmDirty(null)
+        onUpdated({
+          status: next,
+          pipelineStatus: counselorStatusToPipeline(next),
+          ...scoreFields,
+          updatedAt: touch.updatedAt,
+          lastTouchedAt: touch.lastTouchedAt,
+        })
+        setMsg(`Đã chuyển tình trạng → ${LEAD_COUNSELOR_STATUS_LABELS[next]}`)
+      } catch (e) {
+        console.error(e)
+        setMsg(e instanceof Error ? e.message : 'Không đổi được tình trạng.')
+      } finally {
+        setStatusQuickBusy(false)
+      }
+    },
+    [
+      db,
+      profile,
+      showCounselorProgressForm,
+      lead,
+      activeScoringProfile,
+      scoringMasterBuckets,
+      schoolTvvSignalDefs,
+      detailScoringOpts,
+      onUpdated,
+    ],
+  )
+
   const dispositionChanged =
     (dispositionDraft || null) !== (lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
       ? lead.lastCallDispositionId
@@ -7015,6 +7194,56 @@ function LeadDetailPanel({
         </div>
       </header>
 
+      <section
+        className="shrink-0 border-b border-slate-200/90 bg-white px-3 py-2.5 sm:px-4"
+        aria-label="Tình trạng tư vấn"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Tình trạng
+            {!showCounselorProgressForm ? (
+              <span className="ml-1 font-normal normal-case tracking-normal text-slate-400">
+                · chỉ xem
+              </span>
+            ) : statusQuickBusy ? (
+              <span className="ml-1 font-normal normal-case tracking-normal text-amber-700">· đang lưu…</span>
+            ) : null}
+          </p>
+          {lead.finance?.enrollmentStatus?.trim() ? (
+            <p className="text-[11px] text-slate-500" title="Thu phí trên Sheet / kế toán">
+              Thu phí: <span className="font-semibold text-slate-700">{leadTinhTrangLabel(lead)}</span>
+            </p>
+          ) : null}
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Chọn tình trạng">
+          {LEAD_COUNSELOR_STATUS_ORDER.map((s) => {
+            const selected = crmForForm === s
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={!showCounselorProgressForm || statusQuickBusy}
+                title={LEAD_COUNSELOR_STATUS_HINTS[s]}
+                onClick={() => void saveCrmStatusQuick(s)}
+                className={[
+                  'min-h-9 rounded-lg border px-2.5 py-1.5 text-left text-xs font-bold leading-snug transition disabled:cursor-not-allowed disabled:opacity-50',
+                  leadCounselorStatusButtonClass(s, selected),
+                ].join(' ')}
+              >
+                <span className="block">{LEAD_COUNSELOR_STATUS_LABELS[s]}</span>
+                <span
+                  className={`mt-0.5 block text-[10px] font-normal leading-snug ${
+                    selected ? 'opacity-90' : 'text-slate-500'
+                  }`}
+                >
+                  {LEAD_COUNSELOR_STATUS_HINTS[s]}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
       {lead.isAiShortlisted ? (
         <section className="relative shrink-0 border-b border-amber-400/35 bg-gradient-to-r from-amber-50/95 via-yellow-50/85 to-amber-100/80 px-3 py-4 shadow-[inset_0_0_48px_rgba(251,191,36,0.12)] backdrop-blur-xl sm:px-6">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(251,191,36,0.22),_transparent_55%)]" />
@@ -7345,10 +7574,14 @@ function LeadDetailPanel({
                                   <div className="flex w-full min-w-0 flex-nowrap items-end gap-1.5 sm:w-auto sm:max-w-[min(100%,24rem)] sm:justify-end">
                                     {showCounselorProgressForm ? (
                                       <label className="block min-w-0 flex-1 basis-0 text-[10px] font-semibold text-amber-950">
-                                        Tư vấn
+                                        Tình trạng
                                         <select
                                           value={crmForForm}
-                                          onChange={(e) => setCrmDirty(e.target.value as LeadCounselorStatus)}
+                                          onChange={(e) => {
+                                            const next = e.target.value as LeadCounselorStatus
+                                            setCrmDirty(next)
+                                            void saveCrmStatusQuick(next)
+                                          }}
                                           className="mt-0.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
                                         >
                                           {LEAD_COUNSELOR_STATUS_ORDER.map((s) => (
@@ -7360,7 +7593,7 @@ function LeadDetailPanel({
                                       </label>
                                     ) : (
                                       <span className="shrink-0 rounded-md border border-amber-200 bg-white/90 px-1.5 py-1 text-[11px] font-semibold text-slate-800">
-                                        Tư vấn: {LEAD_COUNSELOR_STATUS_LABELS[crmForForm]}
+                                        Tình trạng: {LEAD_COUNSELOR_STATUS_LABELS[crmForForm]}
                                       </span>
                                     )}
                                     <label className="block min-w-0 flex-1 basis-0 text-[10px] font-semibold text-amber-950">
