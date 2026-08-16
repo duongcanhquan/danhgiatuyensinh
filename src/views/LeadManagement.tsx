@@ -320,10 +320,9 @@ type LeadUiFilters = {
 
 /** TVV / trưởng nhóm / quản lý có danh sách TVV: mặc định xem hồ sơ của mình. */
 function defaultAssigneeFilterId(profile: VietMyUserProfile | null | undefined): string {
-  const uid = profile?.id?.trim()
-  if (!uid) return ''
+  if (!profile?.id?.trim()) return ''
   if (isFieldStaffRole(profile.role) || isTeamLeadRole(profile.role) || profileHasTeamRoster(profile)) {
-    return uid
+    return profile.id.trim()
   }
   return ''
 }
