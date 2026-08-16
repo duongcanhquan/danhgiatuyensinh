@@ -1,6 +1,37 @@
 import type { LeadCounselorStatus } from '../types'
 import { LEAD_COUNSELOR_STATUS_LABELS, LEAD_COUNSELOR_STATUS_ORDER } from '../types'
 
+/**
+ * Hồ sơ «Đã cọc» gần như xong — ẩn khỏi danh sách mặc định;
+ * chỉ hiện khi lọc Tình trạng = Đã cọc (hoặc đang tìm theo mã/SĐT).
+ */
+export const LEAD_COUNSELOR_STATUS_HIDDEN_BY_DEFAULT: readonly LeadCounselorStatus[] = [
+  'DEPOSIT_PAID',
+] as const
+
+/** Trạng thái còn hiện khi lọc «Tất cả». */
+export const LEAD_COUNSELOR_STATUS_DEFAULT_VISIBLE: readonly LeadCounselorStatus[] =
+  LEAD_COUNSELOR_STATUS_ORDER.filter((s) => !LEAD_COUNSELOR_STATUS_HIDDEN_BY_DEFAULT.includes(s))
+
+export function leadIsDepositDoneHiddenByDefault(lead: { status?: LeadCounselorStatus | string | null }): boolean {
+  return lead.status === 'DEPOSIT_PAID'
+}
+
+/**
+ * @param crmFilter — lọc Tình trạng CRM (`ALL` | LeadCounselorStatus)
+ * @param searching — đang tìm theo ô tìm (mã/SĐT) → vẫn hiện Đã cọc nếu khớp
+ */
+export function leadMatchesCrmListVisibility(
+  lead: { status?: LeadCounselorStatus | string | null },
+  crmFilter: string,
+  searching: boolean,
+): boolean {
+  if (searching) return true
+  if (crmFilter === 'DEPOSIT_PAID') return lead.status === 'DEPOSIT_PAID'
+  if (crmFilter !== 'ALL') return true
+  return !leadIsDepositDoneHiddenByDefault(lead)
+}
+
 /** Gợi ý ngắn dưới nhãn nút tình trạng. */
 export const LEAD_COUNSELOR_STATUS_HINTS: Record<LeadCounselorStatus, string> = {
   NEW: 'Chưa nộp / mới vào',

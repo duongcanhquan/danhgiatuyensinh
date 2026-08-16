@@ -183,9 +183,11 @@ import {
   parseTinhTrangFromUrl,
 } from '../utils/leadListEnrollment'
 import {
+  LEAD_COUNSELOR_STATUS_DEFAULT_VISIBLE,
   LEAD_COUNSELOR_STATUS_HINTS,
   leadCounselorStatusBadgeClass,
   leadCounselorStatusButtonClass,
+  leadMatchesCrmListVisibility,
 } from '../utils/leadCounselorStatusUi'
 import {
   loadRecentIntakePrograms,
@@ -583,6 +585,10 @@ export function LeadManagement() {
     if (scoreMaxParsed != null) o.scoreMax = scoreMaxParsed
     if (statusFilter !== 'ALL') o.pipelineStatus = statusFilter as LeadPipelineStatus
     if (crmStatusFilter !== 'ALL') o.crmStatus = crmStatusFilter as LeadCounselorStatus
+    else if (!urlQuery.trim()) {
+      // Ẩn «Đã cọc» khỏi danh sách mặc định — chỉ hiện khi lọc đúng tình trạng hoặc đang tìm.
+      o.crmStatusIn = [...LEAD_COUNSELOR_STATUS_DEFAULT_VISIBLE]
+    }
     if (!tagClientEval && tagFilter !== 'ALL') o.priorityTag = tagFilter as PriorityTag
     if (regionFilter !== 'ALL') o.province = regionFilter
     if (majorFilter !== 'ALL') o.educationLevel = majorFilter
@@ -620,6 +626,7 @@ export function LeadManagement() {
     tagClientEval,
     can,
     intakeOriginTab,
+    urlQuery,
   ])
 
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
@@ -652,6 +659,7 @@ export function LeadManagement() {
     if (!clientKeepMatchNeeded) return undefined
     return (l: Lead) => {
       if (!leadMatchesIntakeOriginTab(l, intakeOriginTab)) return false
+      if (!leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery))) return false
       if (programNeedsScope && !leadMatchesNguonFilter(l, programFilter)) return false
       if (enrollmentNeedsScope && !leadMatchesTinhTrangFilter(l, enrollmentFilter)) return false
       if (
@@ -675,6 +683,8 @@ export function LeadManagement() {
   }, [
     clientKeepMatchNeeded,
     intakeOriginTab,
+    crmStatusFilter,
+    urlQuery,
     programNeedsScope,
     programFilter,
     enrollmentNeedsScope,
@@ -722,7 +732,7 @@ export function LeadManagement() {
     fullScopeKeepMatch: urlQuery ? undefined : fullScopeKeepMatch,
     fullScopeMatchKey:
       !urlQuery && clientKeepMatchNeeded
-        ? `keep|origin:${intakeOriginTab}|unset:${programNeedsScope ? 1 : 0}|enr:${enrollmentFilter}|prog:${programFilter}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
+        ? `keep|origin:${intakeOriginTab}|crm:${crmStatusFilter}|unset:${programNeedsScope ? 1 : 0}|enr:${enrollmentFilter}|prog:${programFilter}|up:${uploadedFromFilter}|to:${uploadedToFilter}|cq:${callWorkBucketFilter}|disp:${dispositionFilter}|wm:${workModeFilter}|as:${assigneeFilter}`
         : undefined,
     /** Tab chiến dịch + phân trang: oversample để trang không bị cổng/tạo tay chiếm chỗ.
      * Khi đang tìm (ô tìm có chữ): không lọc origin — tránh mất hồ sơ tạo tay / cổng
@@ -1213,6 +1223,7 @@ export function LeadManagement() {
     if (!urlQuery) {
       rows = rows.filter((l) => leadMatchesIntakeOriginTab(l, intakeOriginTab))
     }
+    rows = rows.filter((l) => leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery)))
     if (programFilter !== 'ALL') {
       rows = rows.filter((l) => leadMatchesNguonFilter(l, programFilter))
     }
@@ -1245,6 +1256,7 @@ export function LeadManagement() {
     leadSources,
     urlQuery,
     intakeOriginTab,
+    crmStatusFilter,
     programFilter,
     enrollmentFilter,
     assigneeFilter,
@@ -1265,6 +1277,9 @@ export function LeadManagement() {
         return false
       }
       if (enrollmentFilter !== 'ALL' && !leadMatchesTinhTrangFilter(l, enrollmentFilter)) {
+        return false
+      }
+      if (!leadMatchesCrmListVisibility(l, crmStatusFilter, Boolean(urlQuery.trim()))) {
         return false
       }
       if (assigneeFilter === '__UNASSIGNED__') {
@@ -1314,6 +1329,7 @@ export function LeadManagement() {
       uploadedToFilter,
       programFilter,
       enrollmentFilter,
+      crmStatusFilter,
       assigneeFilter,
       callWorkBucketFilter,
       dispositionFilter,
@@ -3944,11 +3960,11 @@ export function LeadManagement() {
                 <FilterSelect
                   compact
                   label="Tình trạng"
-                  title="Tình trạng tư vấn: Mới, Đăng ký XT, Đã cọc, Nhập học…"
+                  title="Tình trạng tư vấn. Hồ sơ Đã cọc ẩn mặc định — chọn «Đã cọc» để xem lại."
                   value={draftFilters.crm}
                   onChange={(v) => patchDraftFilters({ crm: v })}
                   options={[
-                    { v: 'ALL', t: 'Tất cả' },
+                    { v: 'ALL', t: 'Tất cả (ẩn Đã cọc)' },
                     ...LEAD_COUNSELOR_STATUS_ORDER.map((k) => ({
                       v: k,
                       t: LEAD_COUNSELOR_STATUS_LABELS[k],
@@ -4494,8 +4510,9 @@ export function LeadManagement() {
                     </p>
                     {intakeOriginTab === 'public_portal' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Bấm «Tạo mới» để thêm hồ sơ, chờ form cổng, hoặc nhập Sheet Mẫu 3 (Nhập liệu). Data Excel
-                        chiến dịch (Mẫu 1–2) nằm ở tab «Tải lên / chiến dịch».
+                        Bấm «Tạo mới» để thêm hồ sơ, chờ form cổng, hoặc nhập Sheet Mẫu 3 (Nhập liệu). Hồ sơ{' '}
+                        <strong>Đã cọc</strong> ẩn mặc định — lọc Tình trạng = Đã cọc để xem. Data Excel chiến dịch
+                        (Mẫu 1–2) nằm ở tab «Tải lên / chiến dịch».
                       </p>
                     ) : programFilter === '__UNSET__' ? (
                       <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">

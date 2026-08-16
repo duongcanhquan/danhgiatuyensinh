@@ -488,6 +488,8 @@ function impossibleUid(): string {
 export type LeadListServerFilters = {
   pipelineStatus?: LeadPipelineStatus
   crmStatus?: LeadCounselorStatus
+  /** Khi không chọn một tình trạng: chỉ lấy các status còn làm việc (ẩn Đã cọc). */
+  crmStatusIn?: LeadCounselorStatus[]
   priorityTag?: PriorityTag
   /** Admin: nhiều nhãn — Firestore `in` (tối đa 10). */
   priorityTagsIn?: PriorityTag[]
@@ -668,6 +670,10 @@ function filterConstraints(
   }
   if (f.crmStatus) {
     c.push(where('status', '==', f.crmStatus))
+  } else if (f.crmStatusIn?.length) {
+    const st = f.crmStatusIn.slice(0, 10)
+    if (st.length === 1) c.push(where('status', '==', st[0]))
+    else if (st.length > 1) c.push(where('status', 'in', st))
   }
   if (f.priorityTagsIn?.length) {
     const t = f.priorityTagsIn.slice(0, 10)
