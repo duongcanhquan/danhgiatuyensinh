@@ -49,9 +49,22 @@ function parseScholarshipDoc(id: string, data: Record<string, unknown>): Scholar
     isActive: data.isActive === false ? false : true,
     ...(termCount ? { termCount } : {}),
     ...(termAllocationsVnd?.length ? { termAllocationsVnd } : {}),
-    ...(String(data.trainingProgramId ?? '').trim()
-      ? { trainingProgramId: String(data.trainingProgramId).trim() }
-      : {}),
+    ...(() => {
+      const fromArr = Array.isArray(data.trainingProgramIds)
+        ? data.trainingProgramIds.map((x) => String(x ?? '').trim()).filter(Boolean)
+        : []
+      const single = String(data.trainingProgramId ?? '').trim()
+      const seen = new Set<string>()
+      const trainingProgramIds: string[] = []
+      for (const raw of [...fromArr, single]) {
+        if (!raw || seen.has(raw)) continue
+        seen.add(raw)
+        trainingProgramIds.push(raw)
+      }
+      return trainingProgramIds.length
+        ? { trainingProgramIds, trainingProgramId: trainingProgramIds[0] }
+        : {}
+    })(),
     eligibilityNotes: data.eligibilityNotes != null ? String(data.eligibilityNotes) : undefined,
     applicationMethod: data.applicationMethod != null ? String(data.applicationMethod) : undefined,
     targetAudience: data.targetAudience != null ? String(data.targetAudience) : undefined,

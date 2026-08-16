@@ -34,64 +34,95 @@ export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = [
 ]
 
 export const SETTINGS_MAIN_LABELS: Record<SettingsMainTabId, string> = {
-  data: 'Hồ sơ',
-  rules: 'Chấm điểm',
-  advise: 'Tư vấn',
-  connect: 'Kênh',
-  people: 'Nhân sự',
+  data: 'Cài đặt trường',
+  rules: 'Cài đặt profile',
+  advise: 'Cấu hình AI Tư vấn',
+  connect: 'Cài đặt kết nối',
+  people: 'Cài đặt Nhân sự',
 }
 
-/** Màu phân vùng — active / sub / track (Tailwind classes). */
+/**
+ * Màu «ghim sách» từng nhóm — ribbon active / idle + tab con nhỏ.
+ * Dùng gradient sáng, shadow nhẹ; active nổi lên như đánh dấu trang.
+ */
 export const SETTINGS_MAIN_THEME: Record<
   SettingsMainTabId,
   {
+    /** Nền dải ghim (idle track) */
     track: string
-    active: string
-    idle: string
+    /** Ghim đang chọn */
+    ribbonActive: string
+    /** Ghim chưa chọn */
+    ribbonIdle: string
+    /** Chấm màu góc ghim */
+    dot: string
+    /** Thanh dưới khớp màu nhóm */
+    accentBar: string
+    /** Nền hàng tab con */
+    subTrack: string
     subActive: string
     subIdle: string
-    accentBar: string
   }
 > = {
   data: {
-    track: 'bg-sky-100/90 ring-1 ring-sky-200/80',
-    active: 'bg-sky-700 text-white shadow-sm',
-    idle: 'text-sky-950/75 hover:bg-sky-50/90 hover:text-sky-950',
-    subActive: 'border-sky-300/70 bg-sky-50 text-sky-950 shadow-sm',
-    subIdle: 'border-transparent text-slate-700 hover:border-sky-200 hover:bg-sky-50/70',
-    accentBar: 'border-sky-200/90',
+    track: 'bg-gradient-to-b from-sky-50/80 to-transparent',
+    ribbonActive:
+      'z-20 -mb-px translate-y-0 bg-gradient-to-br from-sky-500 via-cyan-500 to-teal-500 text-white shadow-[0_8px_20px_-6px_rgba(14,165,233,0.55)] ring-1 ring-sky-300/50',
+    ribbonIdle:
+      'z-10 translate-y-1 bg-gradient-to-br from-sky-100 to-cyan-50 text-sky-900/80 ring-1 ring-sky-200/70 hover:-translate-y-0 hover:from-sky-200/90 hover:to-cyan-100 hover:text-sky-950',
+    dot: 'bg-cyan-200',
+    accentBar: 'border-sky-200/80',
+    subTrack: 'border-sky-200/60 bg-sky-50/70',
+    subActive: 'bg-sky-600 text-white shadow-sm ring-1 ring-sky-500/40',
+    subIdle: 'bg-white/90 text-sky-900/75 ring-1 ring-sky-200/80 hover:bg-sky-100 hover:text-sky-950',
   },
   rules: {
-    track: 'bg-amber-100/90 ring-1 ring-amber-200/80',
-    active: 'bg-amber-700 text-white shadow-sm',
-    idle: 'text-amber-950/75 hover:bg-amber-50/90 hover:text-amber-950',
-    subActive: 'border-amber-300/70 bg-amber-50 text-amber-950 shadow-sm',
-    subIdle: 'border-transparent text-slate-700 hover:border-amber-200 hover:bg-amber-50/70',
-    accentBar: 'border-amber-200/90',
+    track: 'bg-gradient-to-b from-amber-50/80 to-transparent',
+    ribbonActive:
+      'z-20 -mb-px translate-y-0 bg-gradient-to-br from-amber-500 via-orange-500 to-rose-400 text-white shadow-[0_8px_20px_-6px_rgba(245,158,11,0.55)] ring-1 ring-amber-300/50',
+    ribbonIdle:
+      'z-10 translate-y-1 bg-gradient-to-br from-amber-100 to-orange-50 text-amber-950/80 ring-1 ring-amber-200/70 hover:-translate-y-0 hover:from-amber-200/90 hover:to-orange-100 hover:text-amber-950',
+    dot: 'bg-amber-200',
+    accentBar: 'border-amber-200/80',
+    subTrack: 'border-amber-200/60 bg-amber-50/70',
+    subActive: 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-500/40',
+    subIdle: 'bg-white/90 text-amber-950/75 ring-1 ring-amber-200/80 hover:bg-amber-100 hover:text-amber-950',
   },
   advise: {
-    track: 'bg-emerald-100/90 ring-1 ring-emerald-200/80',
-    active: 'bg-emerald-700 text-white shadow-sm',
-    idle: 'text-emerald-950/75 hover:bg-emerald-50/90 hover:text-emerald-950',
-    subActive: 'border-emerald-300/70 bg-emerald-50 text-emerald-950 shadow-sm',
-    subIdle: 'border-transparent text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/70',
-    accentBar: 'border-emerald-200/90',
+    track: 'bg-gradient-to-b from-emerald-50/80 to-transparent',
+    ribbonActive:
+      'z-20 -mb-px translate-y-0 bg-gradient-to-br from-emerald-500 via-teal-500 to-lime-500 text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.55)] ring-1 ring-emerald-300/50',
+    ribbonIdle:
+      'z-10 translate-y-1 bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-950/80 ring-1 ring-emerald-200/70 hover:-translate-y-0 hover:from-emerald-200/90 hover:to-teal-100 hover:text-emerald-950',
+    dot: 'bg-emerald-200',
+    accentBar: 'border-emerald-200/80',
+    subTrack: 'border-emerald-200/60 bg-emerald-50/70',
+    subActive: 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500/40',
+    subIdle: 'bg-white/90 text-emerald-950/75 ring-1 ring-emerald-200/80 hover:bg-emerald-100 hover:text-emerald-950',
   },
   connect: {
-    track: 'bg-indigo-100/90 ring-1 ring-indigo-200/80',
-    active: 'bg-indigo-700 text-white shadow-sm',
-    idle: 'text-indigo-950/75 hover:bg-indigo-50/90 hover:text-indigo-950',
-    subActive: 'border-indigo-300/70 bg-indigo-50 text-indigo-950 shadow-sm',
-    subIdle: 'border-transparent text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/70',
-    accentBar: 'border-indigo-200/90',
+    track: 'bg-gradient-to-b from-violet-50/80 to-transparent',
+    ribbonActive:
+      'z-20 -mb-px translate-y-0 bg-gradient-to-br from-violet-500 via-indigo-500 to-blue-500 text-white shadow-[0_8px_20px_-6px_rgba(99,102,241,0.55)] ring-1 ring-violet-300/50',
+    ribbonIdle:
+      'z-10 translate-y-1 bg-gradient-to-br from-violet-100 to-indigo-50 text-violet-950/80 ring-1 ring-violet-200/70 hover:-translate-y-0 hover:from-violet-200/90 hover:to-indigo-100 hover:text-violet-950',
+    dot: 'bg-violet-200',
+    accentBar: 'border-violet-200/80',
+    subTrack: 'border-violet-200/60 bg-violet-50/70',
+    subActive: 'bg-violet-600 text-white shadow-sm ring-1 ring-violet-500/40',
+    subIdle: 'bg-white/90 text-violet-950/75 ring-1 ring-violet-200/80 hover:bg-violet-100 hover:text-violet-950',
   },
   people: {
-    track: 'bg-rose-100/90 ring-1 ring-rose-200/80',
-    active: 'bg-rose-700 text-white shadow-sm',
-    idle: 'text-rose-950/75 hover:bg-rose-50/90 hover:text-rose-950',
-    subActive: 'border-rose-300/70 bg-rose-50 text-rose-950 shadow-sm',
-    subIdle: 'border-transparent text-slate-700 hover:border-rose-200 hover:bg-rose-50/70',
-    accentBar: 'border-rose-200/90',
+    track: 'bg-gradient-to-b from-rose-50/80 to-transparent',
+    ribbonActive:
+      'z-20 -mb-px translate-y-0 bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500 text-white shadow-[0_8px_20px_-6px_rgba(244,63,94,0.5)] ring-1 ring-rose-300/50',
+    ribbonIdle:
+      'z-10 translate-y-1 bg-gradient-to-br from-rose-100 to-pink-50 text-rose-950/80 ring-1 ring-rose-200/70 hover:-translate-y-0 hover:from-rose-200/90 hover:to-pink-100 hover:text-rose-950',
+    dot: 'bg-rose-200',
+    accentBar: 'border-rose-200/80',
+    subTrack: 'border-rose-200/60 bg-rose-50/70',
+    subActive: 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-500/40',
+    subIdle: 'bg-white/90 text-rose-950/75 ring-1 ring-rose-200/80 hover:bg-rose-100 hover:text-rose-950',
   },
 }
 
@@ -99,8 +130,8 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   intake: 'Nhập liệu',
   intake_staff: 'Nhập tư vấn viên',
   master: 'Danh mục nâng cao',
-  lead_profile: 'Danh mục hồ sơ',
-  tuition: 'Học phí kỳ 1',
+  lead_profile: 'Cài đặt thông tin',
+  tuition: 'Học phí',
   scoring_profiles: 'Profile chấm điểm',
   scoring: 'Điểm thông tin',
   classification: 'Phân loại nhãn',
@@ -125,7 +156,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
  * Tư vấn tách riêng; Kênh chỉ lưới đầu nối (+ URL sâu).
  */
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
-  data: ['intake', 'intake_staff', 'lead_profile', 'tuition', 'master'],
+  data: ['intake', 'intake_staff', 'lead_profile', 'master'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
   advise: ['consulting'],
   connect: ['hub'],
@@ -169,9 +200,9 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   master: { main: 'data', sub: 'master' },
   lead_profile: { main: 'data', sub: 'lead_profile' },
   scholarships: { main: 'data', sub: 'lead_profile' },
-  tuition: { main: 'data', sub: 'tuition' },
-  hoc_phi: { main: 'data', sub: 'tuition' },
-  bang_hoc_phi: { main: 'data', sub: 'tuition' },
+  tuition: { main: 'data', sub: 'lead_profile' },
+  hoc_phi: { main: 'data', sub: 'lead_profile' },
+  bang_hoc_phi: { main: 'data', sub: 'lead_profile' },
   catalog_profile: { main: 'data', sub: 'master' },
   scoring_profiles: { main: 'rules', sub: 'scoring_profiles' },
   scoring: { main: 'rules', sub: 'scoring' },
@@ -283,6 +314,18 @@ export function resolveSettingsRoute(
     isSettingsSubEnabled('consulting', ctx)
   ) {
     return { main: 'advise', sub: 'consulting' }
+  }
+
+  // Học phí chỉ còn trong «Cài đặt thông tin» (profileSub=tuition).
+  if (
+    subParam === 'tuition' ||
+    tabParam === 'tuition' ||
+    tabParam === 'hoc_phi' ||
+    tabParam === 'bang_hoc_phi'
+  ) {
+    if (isSettingsSubEnabled('lead_profile', ctx)) {
+      return { main: 'data', sub: 'lead_profile' }
+    }
   }
 
   if (

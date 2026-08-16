@@ -8,7 +8,7 @@ import { OmicallCallButton } from './OmicallCallButton'
 import { SCHOLARSHIP_CATEGORY_LABELS } from '../types'
 import { scholarshipSelectLabel, validateNationalIdInput } from '../utils/leadProfileCatalog'
 import { activeScholarshipsForSlot } from '../utils/scholarshipEligibility'
-import { filterScholarshipsForLeadEducation } from '../utils/scholarshipTrainingLink'
+import { filterScholarshipsForLeadEducation, resolveScholarshipTrainingProgramIds } from '../utils/scholarshipTrainingLink'
 import { CatalogCombobox } from './CatalogCombobox'
 import { DEFAULT_ETHNICITY_LABELS } from '../utils/ethnicityOptions'
 import { labelsFromEntries, majorsForTrainingProgram, resolveTrainingProgramId } from '../utils/masterDataCatalogOps'
@@ -371,21 +371,40 @@ function ScholarshipSelect({
   const display = selected ? scholarshipSelectLabel(selected) : '— Không có học bổng —'
 
   const groupKeys = useMemo(() => {
+    const leadProgId = resolveTrainingProgramId(trainingPrograms, educationLevel || '')
     const keys: string[] = []
     const seen = new Set<string>()
     for (const s of options) {
-      const k = String(s.trainingProgramId ?? s.category)
+      const ids = resolveScholarshipTrainingProgramIds(s)
+      const k =
+        ids.length === 0
+          ? `cat:${s.category}`
+          : leadProgId && ids.includes(leadProgId)
+            ? leadProgId
+            : ids[0]!
       if (seen.has(k)) continue
       seen.add(k)
       keys.push(k)
     }
     return keys
-  }, [options])
+  }, [options, trainingPrograms, educationLevel])
 
   const groupLabel = (key: string) => {
+    if (key.startsWith('cat:')) {
+      const cat = key.slice(4) as ScholarshipCategoryId
+      return SCHOLARSHIP_CATEGORY_LABELS[cat] ?? key
+    }
     const byProg = trainingPrograms?.find((p) => p.id === key)
     if (byProg) return byProg.label
-    return SCHOLARSHIP_CATEGORY_LABELS[key as ScholarshipCategoryId] ?? key
+    return key
+  }
+
+  const optionGroupKey = (s: ScholarshipRecord) => {
+    const leadProgId = resolveTrainingProgramId(trainingPrograms, educationLevel || '')
+    const ids = resolveScholarshipTrainingProgramIds(s)
+    if (!ids.length) return `cat:${s.category}`
+    if (leadProgId && ids.includes(leadProgId)) return leadProgId
+    return ids[0]!
   }
 
   const listPanel =
@@ -415,7 +434,7 @@ function ScholarshipSelect({
           </button>
         </li>
         {groupKeys.map((key) => {
-          const rows = options.filter((s) => String(s.trainingProgramId ?? s.category) === key)
+          const rows = options.filter((s) => optionGroupKey(s) === key)
           if (!rows.length) return null
           return (
             <li key={key}>

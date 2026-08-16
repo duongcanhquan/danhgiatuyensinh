@@ -346,7 +346,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     group: 'storage',
     maturity: 'live',
     summary:
-      'Ngưỡng cọc / LPXT và nơi lưu bill. Bảng học phí kỳ 1: Cài đặt → Hồ sơ → Học phí kỳ 1.',
+      'Ngưỡng cọc / LPXT và nơi lưu bill. Bảng học phí: Cài đặt → Hồ sơ → Cài đặt thông tin → Học phí.',
     settingsHref: '/settings?tab=connect&sub=receipts',
     fields: [],
   },

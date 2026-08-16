@@ -306,16 +306,6 @@ export function KpiSettingsPanel({ canEdit }: { canEdit: boolean }) {
 
       {tab === 'targets' ? (
         <section role="tabpanel" className="space-y-4 rounded-2xl border border-[var(--color-primary)]/35 bg-white p-4 shadow-sm">
-          {!v2Ctx.docExists ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              Chưa lưu trên Firestore — đang xem mặc định PDF.
-            </p>
-          ) : null}
-
-          <p className="text-xs text-slate-500" title="Ngày hành chính trong tháng">
-            {monthKey} · {bizDays} ngày làm việc
-          </p>
-
           <div>
             <p className="text-sm font-semibold text-slate-900">Chỉ tiêu ngày &amp; điểm tháng theo vai trò</p>
             <div

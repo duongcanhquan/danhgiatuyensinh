@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useOrg } from '../contexts/OrgProvider'
 import { useMasterData } from '../hooks/useMasterData'
 import { getFirestoreDb } from '../services/firebase'
+import { activeMasterEntries } from '../utils/masterDataCatalogOps'
 import {
   defaultFinanceTuitionCatalog,
   loadFinanceTuitionCatalog,
@@ -18,10 +19,10 @@ function newRowId(): string {
   return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 }
 
-/** Bảng học phí kỳ 1 theo ngành — dùng tính «phải đóng» trên kế toán / TVV. */
+/** Bảng học phí theo ngành + hệ — dùng tính «phải đóng» trên kế toán / TVV. */
 export function FinanceTuitionCatalogPanel() {
   const { can, profile } = useAuth()
-  const { effectiveOrgId, currentOrgLabel } = useOrg()
+  const { effectiveOrgId } = useOrg()
   const { byKind } = useMasterData()
   const canEdit = can('config:master_data') || can('config:omicall')
   const db = getFirestoreDb()
@@ -30,7 +31,11 @@ export function FinanceTuitionCatalogPanel() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const majorOptions = (byKind.majors ?? []).filter((e) => e.isActive !== false)
+  const majorOptions = useMemo(() => activeMasterEntries(byKind.majors), [byKind.majors])
+  const trainingPrograms = useMemo(
+    () => activeMasterEntries(byKind.training_programs),
+    [byKind.training_programs],
+  )
 
   useEffect(() => {
     if (!db) return
@@ -66,7 +71,7 @@ export function FinanceTuitionCatalogPanel() {
         profile?.email ?? profile?.id ?? 'admin',
       )
       setRows(saved.rows)
-      setMsg('Đã lưu bảng học phí — áp dụng ngay khi duyệt tiền và tính phải đóng kỳ 1.')
+      setMsg('Đã lưu bảng học phí.')
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không lưu được.')
     } finally {
@@ -80,20 +85,14 @@ export function FinanceTuitionCatalogPanel() {
 
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="text-base font-semibold text-slate-900">Bảng học phí kỳ 1 theo ngành</h3>
-        <p className="mt-0.5 text-sm text-slate-600">
-          Mỗi ngành (và hệ, nếu cần) có một mức học phí kỳ đầu. Hệ thống trừ học bổng kỳ 1 rồi so với tổng đã duyệt
-          để biết còn thiếu bao nhiêu. Trường: {currentOrgLabel || effectiveOrgId}.
-        </p>
-      </div>
+      <h3 className="text-base font-semibold text-slate-900">Bảng học phí</h3>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
             <tr>
               <th className="px-2 py-2">Ngành</th>
-              <th className="px-2 py-2">Hệ (tuỳ chọn)</th>
+              <th className="px-2 py-2">Hệ</th>
               <th className="px-2 py-2">Học phí kỳ 1 (đ)</th>
               <th className="px-2 py-2 w-16" />
             </tr>
@@ -116,17 +115,27 @@ export function FinanceTuitionCatalogPanel() {
                   />
                 </td>
                 <td className="px-2 py-1.5">
-                  <input
+                  <select
                     className={INPUT}
                     disabled={!canEdit || busy}
                     value={row.educationLevel ?? ''}
                     onChange={(e) => {
                       const next = [...rows]
-                      next[idx] = { ...row, educationLevel: e.target.value }
+                      next[idx] = { ...row, educationLevel: e.target.value || undefined }
                       setRows(next)
                     }}
-                    placeholder="Để trống = mọi hệ"
-                  />
+                  >
+                    <option value="">— Mọi hệ —</option>
+                    {trainingPrograms.map((p) => (
+                      <option key={p.id} value={p.label}>
+                        {p.label}
+                      </option>
+                    ))}
+                    {row.educationLevel &&
+                    !trainingPrograms.some((p) => p.label === row.educationLevel) ? (
+                      <option value={row.educationLevel}>{row.educationLevel} (cũ)</option>
+                    ) : null}
+                  </select>
                 </td>
                 <td className="px-2 py-1.5">
                   <input
@@ -164,6 +173,12 @@ export function FinanceTuitionCatalogPanel() {
         </datalist>
       </div>
 
+      {trainingPrograms.length === 0 ? (
+        <p className="text-xs text-amber-800">
+          Chưa có hệ trong danh mục — thêm ở tab <strong>Hệ đào tạo</strong> rồi chọn ở cột Hệ.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -177,7 +192,7 @@ export function FinanceTuitionCatalogPanel() {
           }
         >
           <Plus className="h-4 w-4" />
-          Thêm ngành
+          Thêm dòng
         </button>
         <button
           type="button"

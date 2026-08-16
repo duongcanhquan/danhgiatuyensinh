@@ -4,7 +4,6 @@ import { Plus, Trash2 } from 'lucide-react'
 import type {
   ScholarshipApplySlot,
   ScholarshipAudienceTag,
-  ScholarshipCategoryId,
   ScholarshipRecord,
 } from '../types'
 import {
@@ -32,7 +31,8 @@ import {
 import { equalSplitTermAllocations } from '../utils/financeObligation'
 import {
   findTrainingProgramEntry,
-  resolveTrainingProgramTermCount,
+  resolveScholarshipTermCountFromPrograms,
+  resolveScholarshipTrainingProgramIds,
   scholarshipCategoryFromTrainingLabel,
 } from '../utils/scholarshipTrainingLink'
 import { activeMasterEntries } from '../utils/masterDataCatalogOps'
@@ -43,7 +43,6 @@ const INPUT =
 
 const AUDIENCE_OPTIONS = Object.keys(SCHOLARSHIP_AUDIENCE_LABELS) as ScholarshipAudienceTag[]
 const SLOT_OPTIONS = Object.keys(SCHOLARSHIP_APPLY_SLOT_LABELS) as ScholarshipApplySlot[]
-const CATEGORY_OPTIONS = Object.keys(SCHOLARSHIP_CATEGORY_LABELS) as ScholarshipCategoryId[]
 
 type Draft = ScholarshipSavePayload & { id: string | null }
 
@@ -64,6 +63,7 @@ function emptyDraft(sortOrder: number): Draft {
     adminNotes: '',
     applicationMethod: '',
     quantityLimit: undefined,
+    trainingProgramIds: undefined,
     trainingProgramId: undefined,
     termCount: undefined,
     termAllocationsVnd: undefined,
@@ -71,6 +71,7 @@ function emptyDraft(sortOrder: number): Draft {
 }
 
 function draftFromRow(row: ScholarshipRecord): Draft {
+  const trainingProgramIds = resolveScholarshipTrainingProgramIds(row)
   return {
     id: row.id,
     label: row.label,
@@ -87,13 +88,15 @@ function draftFromRow(row: ScholarshipRecord): Draft {
     adminNotes: row.adminNotes ?? '',
     applicationMethod: row.applicationMethod ?? '',
     quantityLimit: row.quantityLimit,
-    trainingProgramId: row.trainingProgramId,
+    trainingProgramIds: trainingProgramIds.length ? trainingProgramIds : undefined,
+    trainingProgramId: trainingProgramIds[0],
     termCount: row.termCount,
     termAllocationsVnd: row.termAllocationsVnd,
   }
 }
 
 function payloadFromDraft(d: Draft, orgId?: string): ScholarshipSavePayload {
+  const trainingProgramIds = [...new Set((d.trainingProgramIds ?? []).map((x) => x.trim()).filter(Boolean))]
   return {
     label: d.label,
     category: d.category,
@@ -101,7 +104,8 @@ function payloadFromDraft(d: Draft, orgId?: string): ScholarshipSavePayload {
     sortOrder: d.sortOrder,
     isActive: d.isActive,
     ...(orgId ? { orgId } : {}),
-    trainingProgramId: d.trainingProgramId?.trim() || undefined,
+    trainingProgramIds: trainingProgramIds.length ? trainingProgramIds : undefined,
+    trainingProgramId: trainingProgramIds[0],
     validFrom: d.validFrom?.trim() || undefined,
     validTo: d.validTo?.trim() || undefined,
     applySlots: d.applySlots?.length ? d.applySlots : ['slot1', 'slot2'],
@@ -117,6 +121,19 @@ function payloadFromDraft(d: Draft, orgId?: string): ScholarshipSavePayload {
         ? d.termAllocationsVnd.slice(0, Math.round(d.termCount!)).map((n) => Math.max(0, Math.round(n || 0)))
         : undefined,
   }
+}
+
+function scholarshipProgramBadge(
+  row: ScholarshipRecord,
+  trainingPrograms: readonly MasterDataEntry[],
+): string {
+  const ids = resolveScholarshipTrainingProgramIds(row)
+  if (!ids.length) return 'Mọi hệ'
+  const labels = ids
+    .map((id) => findTrainingProgramEntry(trainingPrograms, id)?.label)
+    .filter(Boolean) as string[]
+  if (labels.length) return labels.join(' · ')
+  return SCHOLARSHIP_CATEGORY_LABELS[row.category]
 }
 
 function statusBadgeClass(status: ReturnType<typeof scholarshipScheduleStatus>): string {
@@ -187,8 +204,9 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
       <header className="space-y-1">
         <h3 className="text-sm font-bold uppercase tracking-wide text-violet-900">Cài đặt học bổng</h3>
         <p className="text-sm text-slate-600">
-          Gắn học bổng với <strong>hệ đào tạo</strong> trong danh mục (Cao đẳng 6 kỳ, Trung cấp, Sơ cấp…). Chọn hệ → tự
-          hiện đủ ô phân bổ theo số kỳ. Trên hồ sơ, TVV chỉ thấy HB đúng hệ và trừ ngay vào phải đóng kỳ 1.
+          Gắn học bổng với một hoặc nhiều <strong>hệ đào tạo</strong> (Cao đẳng, Trung cấp, Sơ cấp…). Chọn hệ → tự
+          hiện đủ ô phân bổ theo số kỳ (lấy kỳ nhiều nhất nếu chọn nhiều hệ). Trên hồ sơ, TVV chỉ thấy HB đúng hệ của
+          SV; không chọn hệ nào = hiện mọi hồ sơ.
         </p>
       </header>
 
@@ -268,8 +286,7 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
                       {SCHOLARSHIP_SCHEDULE_STATUS_LABELS[status]}
                     </span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                      {findTrainingProgramEntry(trainingPrograms, row.trainingProgramId)?.label ??
-                        SCHOLARSHIP_CATEGORY_LABELS[row.category]}
+                      {scholarshipProgramBadge(row, trainingPrograms)}
                     </span>
                     {row.termCount ? (
                       <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-900">
@@ -474,20 +491,34 @@ function ScholarshipFormFields({
     patch('audienceTags', cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag])
   }
 
-  const applyTrainingProgram = (programId: string) => {
-    if (!programId) {
-      onChange({ ...draft, trainingProgramId: undefined })
-      return
-    }
-    const entry = findTrainingProgramEntry(trainingPrograms, programId)
-    const n = resolveTrainingProgramTermCount(entry)
+  const selectedProgramIds = draft.trainingProgramIds ?? []
+
+  const applyTrainingProgramIds = (ids: string[]) => {
+    const unique = [...new Set(ids.map((x) => x.trim()).filter(Boolean))]
+    const first = unique[0]
+    const firstEntry = findTrainingProgramEntry(trainingPrograms, first)
+    const n = resolveScholarshipTermCountFromPrograms(trainingPrograms, unique)
     onChange({
       ...draft,
-      trainingProgramId: programId,
-      category: scholarshipCategoryFromTrainingLabel(entry?.label ?? ''),
-      termCount: n,
-      termAllocationsVnd: equalSplitTermAllocations(draft.amountVnd, n),
+      trainingProgramIds: unique.length ? unique : undefined,
+      trainingProgramId: first,
+      category: firstEntry
+        ? scholarshipCategoryFromTrainingLabel(firstEntry.label)
+        : draft.category,
+      ...(n
+        ? {
+            termCount: n,
+            termAllocationsVnd: equalSplitTermAllocations(draft.amountVnd, n),
+          }
+        : {}),
     })
+  }
+
+  const toggleTrainingProgram = (programId: string) => {
+    const cur = new Set(selectedProgramIds)
+    if (cur.has(programId)) cur.delete(programId)
+    else cur.add(programId)
+    applyTrainingProgramIds([...cur])
   }
 
   return (
@@ -496,41 +527,44 @@ function ScholarshipFormFields({
         Tên học bổng
         <input className={`${INPUT} mt-0.5`} value={draft.label} disabled={busy} onChange={(e) => patch('label', e.target.value)} required />
       </label>
-      <label className="text-xs font-semibold sm:col-span-2">
-        Hệ đào tạo (danh mục)
-        <select
-          className={`${INPUT} mt-0.5`}
-          value={draft.trainingProgramId ?? ''}
-          disabled={busy}
-          onChange={(e) => applyTrainingProgram(e.target.value)}
-        >
-          <option value="">— Chọn hệ để gắn số kỳ —</option>
-          {trainingPrograms.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-              {p.termCount ? ` · ${p.termCount} kỳ` : ` · gợi ý ${resolveTrainingProgramTermCount(p)} kỳ`}
-            </option>
-          ))}
-        </select>
+      <div className="text-xs font-semibold sm:col-span-2 lg:col-span-3">
+        Áp dụng cho hệ đào tạo
+        <div className="mt-0.5 max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+          {trainingPrograms.length === 0 ? (
+            <p className="text-xs font-normal text-slate-500">Chưa có hệ — tạo ở tab «Hệ đào tạo».</p>
+          ) : (
+            trainingPrograms.map((p) => {
+              const checked = selectedProgramIds.includes(p.id)
+              return (
+                <label key={p.id} className="flex cursor-pointer items-start gap-1.5 text-xs font-normal text-slate-800">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    disabled={busy}
+                    checked={checked}
+                    onChange={() => toggleTrainingProgram(p.id)}
+                  />
+                  <span>
+                    {p.label}
+                    <span className="text-slate-500">
+                      {' '}
+                      ·{' '}
+                      {p.termCount
+                        ? `${p.termCount} kỳ`
+                        : `gợi ý ${resolveScholarshipTermCountFromPrograms(trainingPrograms, [p.id])} kỳ`}
+                    </span>
+                  </span>
+                </label>
+              )
+            })
+          )}
+        </div>
         <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
-          Thêm hệ (Trung cấp, Sơ cấp…) ở tab «Hệ đào tạo» và khai số kỳ — chọn ở đây để tự hiện đủ ô phân bổ.
+          {selectedProgramIds.length === 0
+            ? 'Đang: mọi hệ (TVV thấy HB trên mọi hồ sơ).'
+            : `Đã chọn ${selectedProgramIds.length} hệ — trên hồ sơ chỉ hiện khi SV thuộc một trong các hệ này.`}
         </span>
-      </label>
-      <label className="text-xs font-semibold">
-        Nhóm hiển thị (cũ)
-        <select
-          className={`${INPUT} mt-0.5`}
-          value={draft.category}
-          disabled={busy}
-          onChange={(e) => patch('category', e.target.value as ScholarshipCategoryId)}
-        >
-          {CATEGORY_OPTIONS.map((k) => (
-            <option key={k} value={k}>
-              {SCHOLARSHIP_CATEGORY_LABELS[k]}
-            </option>
-          ))}
-        </select>
-      </label>
+      </div>
       <label className="text-xs font-semibold">
         Mức học bổng (VNĐ)
         <input

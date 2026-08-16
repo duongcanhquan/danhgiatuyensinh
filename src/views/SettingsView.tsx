@@ -59,7 +59,6 @@ import { OmicallSettingsTab } from '../components/OmicallSettingsTab'
 import { PublicRegistrationSettingsPanel } from '../components/PublicRegistrationSettingsPanel'
 import { N8nWebhooksSettingsPanel } from '../components/N8nWebhooksSettingsPanel'
 import { FinanceThresholdsSettingsPanel } from '../components/FinanceThresholdsSettingsPanel'
-import { FinanceTuitionCatalogPanel } from '../components/FinanceTuitionCatalogPanel'
 import { InviteDocumentsSettingsPanel } from '../components/InviteDocumentsSettingsPanel'
 import { ReceiptStorageSettingsPanel } from '../components/ReceiptStorageSettingsPanel'
 import { IntegrationHubPanel } from '../components/IntegrationHubPanel'
@@ -156,20 +155,18 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'lead_profile':
       return (
         <>
-          <p className="font-semibold text-slate-900">Danh mục trên form hồ sơ</p>
+          <p className="font-semibold text-slate-900">Cài đặt thông tin</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Chỉnh nguồn, học bổng, hệ đào tạo, cơ sở, niên khóa, ngành, tỉnh… theo tab dễ đọc. Bảng giá học phí kỳ 1 nằm ở
-            tab riêng <strong>Học phí kỳ 1</strong> (cùng nhóm Hồ sơ).
+            Chỉnh nguồn, học bổng, học phí, hệ đào tạo, cơ sở, niên khóa, ngành, tỉnh… theo từng tab.
           </p>
         </>
       )
     case 'tuition':
       return (
         <>
-          <p className="font-semibold text-slate-900">Học phí kỳ 1 theo ngành</p>
+          <p className="font-semibold text-slate-900">Học phí</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Khai mức học phí kỳ đầu theo tên ngành trên hồ sơ. Hệ thống trừ học bổng kỳ 1 để tính phải đóng và hoàn thiện
-            phí.
+            Mở <strong>Cài đặt thông tin → Học phí</strong>.
           </p>
         </>
       )
@@ -178,7 +175,7 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Danh mục (nâng cao)</p>
           <p className="mt-1.5">
-            Cùng kho dữ liệu với <strong>Danh mục hồ sơ</strong>, xem theo từng loại catalog (kỹ thuật). Khi chấm điểm,
+            Cùng kho dữ liệu với <strong>Cài đặt thông tin</strong>, xem theo từng loại catalog (kỹ thuật). Khi chấm điểm,
             điều kiện <strong>IN_LIST</strong> trên trường trùng id catalog (vd. <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">province</code>,{' '}
             <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">financialStatus</code>) sẽ{' '}
             <strong>đối chiếu lead với danh sách mục ở đây</strong> — profile không “sao chép” cả catalog, mà chọn những
@@ -336,8 +333,8 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Ngưỡng cọc &amp; chứng từ</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Ngưỡng cọc / LPXT và nơi lưu bill. <strong>Bảng học phí kỳ 1 theo ngành</strong> nằm ở nhóm{' '}
-            <strong>Hồ sơ → Danh mục hồ sơ → Học phí kỳ 1</strong>.
+            Ngưỡng cọc / LPXT và nơi lưu bill. <strong>Bảng học phí</strong> nằm ở{' '}
+            <strong>Hồ sơ → Cài đặt thông tin → Học phí</strong>.
           </p>
         </>
       )
@@ -657,6 +654,24 @@ export function SettingsView() {
       )
       return
     }
+    if (
+      subParam === 'tuition' ||
+      tabParam === 'tuition' ||
+      tabParam === 'hoc_phi' ||
+      tabParam === 'bang_hoc_phi'
+    ) {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'data')
+          n.set('sub', 'lead_profile')
+          n.set('profileSub', 'tuition')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
     if (editSnippetParam && (tabParam !== 'advise' || subParam !== 'consulting')) {
       setSearchParams(
         (prev) => {
@@ -852,16 +867,13 @@ export function SettingsView() {
       {db && settingsAccess && !settingsWorkspaceOpen ? (
         <div
           className={[
-            'sticky top-0 z-30 shrink-0 border-b bg-[var(--vm-canvas)]/95 px-3 pb-2 pt-2 backdrop-blur-md sm:px-4',
+            'sticky top-0 z-30 shrink-0 border-b bg-[var(--vm-canvas)]/95 px-3 pb-2.5 pt-2.5 backdrop-blur-md sm:px-4',
             mainTheme.accentBar,
           ].join(' ')}
         >
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-end gap-2">
             <nav
-              className={[
-                'scroll-touch-x flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto rounded-xl p-1',
-                mainTheme.track,
-              ].join(' ')}
+              className={['scroll-touch-x flex min-w-0 flex-1 flex-nowrap items-end gap-1 overflow-x-auto pb-0 pt-1 sm:gap-1.5', mainTheme.track].join(' ')}
               role="tablist"
               aria-label="Nhóm cài đặt chính"
             >
@@ -874,18 +886,51 @@ export function SettingsView() {
                     type="button"
                     role="tab"
                     aria-selected={selected}
+                    title={SETTINGS_MAIN_LABELS[main]}
                     onClick={() => setMainTab(main)}
                     className={[
-                      'shrink-0 cursor-pointer rounded-lg px-2.5 py-1.5 text-sm font-semibold tracking-tight transition md:px-3 md:py-2',
-                      selected ? theme.active : theme.idle,
+                      'group relative flex max-w-[11rem] shrink-0 cursor-pointer flex-col items-stretch rounded-t-xl px-2.5 pb-2.5 pt-2 text-left transition-all duration-200 sm:max-w-none sm:px-3.5 sm:pb-3 sm:pt-2.5 md:min-w-[7.5rem]',
+                      selected ? theme.ribbonActive : theme.ribbonIdle,
                     ].join(' ')}
                   >
-                    {SETTINGS_MAIN_LABELS[main]}
+                    {/* Góc ghim sách */}
+                    <span
+                      className={[
+                        'pointer-events-none absolute right-0 top-0 h-0 w-0 border-b-[10px] border-l-[10px] border-l-transparent opacity-80',
+                        selected ? 'border-b-black/15' : 'border-b-black/10',
+                      ].join(' ')}
+                      aria-hidden
+                    />
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={[
+                          'h-1.5 w-1.5 shrink-0 rounded-full',
+                          selected ? 'bg-white/90' : theme.dot,
+                        ].join(' ')}
+                        aria-hidden
+                      />
+                      <span
+                        className={[
+                          'line-clamp-2 text-[11px] font-bold leading-snug tracking-tight sm:text-xs md:text-[13px]',
+                          selected ? 'text-white' : '',
+                        ].join(' ')}
+                      >
+                        {SETTINGS_MAIN_LABELS[main]}
+                      </span>
+                    </span>
+                    {selected ? (
+                      <span
+                        className="mt-1.5 h-0.5 w-full rounded-full bg-white/50"
+                        aria-hidden
+                      />
+                    ) : (
+                      <span className="mt-1.5 h-0.5 w-full rounded-full bg-transparent" aria-hidden />
+                    )}
                   </button>
                 )
               })}
             </nav>
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="mb-1 ml-auto flex shrink-0 items-center gap-1.5 self-center sm:self-end">
               {isPlatformSuperAdmin ? <OrgSwitcher tone="light" compact className="max-w-[16rem]" /> : null}
               <button
                 type="button"
@@ -902,7 +947,12 @@ export function SettingsView() {
           </div>
 
           {shouldShowSettingsSubNav(activeMainTab, subTabs, activeSubTab) ? (
-            <div className="mt-1.5 scroll-touch-x flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto md:gap-1.5">
+            <div
+              className={[
+                'mt-0 scroll-touch-x flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto rounded-b-xl rounded-tr-xl border border-t-0 px-2 py-1.5 md:gap-1.5',
+                mainTheme.subTrack,
+              ].join(' ')}
+            >
               <nav
                 className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 md:gap-1.5"
                 role="tablist"
@@ -927,8 +977,7 @@ export function SettingsView() {
                       aria-selected={selected}
                       onClick={() => setSubTab(sub)}
                       className={[
-                        'flex shrink-0 cursor-pointer items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
-                        settingsCopy,
+                        'flex shrink-0 cursor-pointer items-center rounded-md px-2 py-1 text-[11px] font-semibold tracking-tight transition sm:px-2.5 sm:text-xs',
                         selected ? mainTheme.subActive : mainTheme.subIdle,
                       ].join(' ')}
                     >
@@ -941,27 +990,32 @@ export function SettingsView() {
                 <button
                   type="button"
                   onClick={() => setMasterWorkspaceOpen(true)}
-                  className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                  className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-amber-800/25 bg-amber-50/95 px-2 py-1 text-[11px] font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 sm:text-xs`}
                 >
-                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Toàn màn
                 </button>
               ) : null}
             </div>
           ) : (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <div
+              className={[
+                'mt-0 flex flex-wrap items-center gap-2 rounded-b-xl rounded-tr-xl border border-t-0 px-2.5 py-1.5',
+                mainTheme.subTrack,
+              ].join(' ')}
+            >
               {isConnectDetailSub(activeSubTab) ? (
-                <span className="text-xs font-medium text-slate-500">
+                <span className="text-[11px] font-medium text-slate-600 sm:text-xs">
                   {SETTINGS_MAIN_LABELS.connect}
                   <span className="text-slate-300"> / </span>
                   {SETTINGS_SUB_LABELS[activeSubTab]}
                 </span>
               ) : activeMainTab === 'advise' ? (
-                <span className="text-xs font-medium text-emerald-800/80">
+                <span className="text-[11px] font-medium text-emerald-900/80 sm:text-xs">
                   Tri thức → Mẫu → Mảnh thoại → AI — một khu nạp tư vấn
                 </span>
               ) : activeMainTab === 'connect' ? (
-                <span className="text-xs font-medium text-indigo-800/80">
+                <span className="text-[11px] font-medium text-violet-900/80 sm:text-xs">
                   Bấm ô kênh để mở cấu hình chi tiết
                 </span>
               ) : null}
@@ -969,9 +1023,9 @@ export function SettingsView() {
                 <button
                   type="button"
                   onClick={() => setConsultingWorkspaceOpen(true)}
-                  className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-emerald-800/20 bg-emerald-50/95 px-2.5 py-1.5 font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                  className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-emerald-800/20 bg-emerald-50/95 px-2 py-1 text-[11px] font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-100/90 sm:text-xs`}
                 >
-                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Toàn màn
                 </button>
               ) : null}
@@ -979,9 +1033,9 @@ export function SettingsView() {
                 <button
                   type="button"
                   onClick={() => setMasterWorkspaceOpen(true)}
-                  className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                  className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-amber-800/25 bg-amber-50/95 px-2 py-1 text-[11px] font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 sm:text-xs`}
                 >
-                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Toàn màn
                 </button>
               ) : null}
@@ -1191,18 +1245,8 @@ export function SettingsView() {
       ) : null}
 
       {db && activeSubTab === 'lead_profile' ? (
-        <div role="tabpanel" aria-label="Hồ sơ & danh mục" className="bento-cell min-w-0 max-w-full !p-3 sm:!p-4">
+        <div role="tabpanel" aria-label="Cài đặt thông tin" className="bento-cell min-w-0 max-w-full !p-3 sm:!p-4">
           <LeadProfileSettingsTab db={db} canEdit={canMaster} />
-        </div>
-      ) : null}
-
-      {db && activeSubTab === 'tuition' && canMaster ? (
-        <div role="tabpanel" aria-label="Học phí kỳ 1" className="bento-cell min-w-0 max-w-full space-y-3 !p-3 sm:!p-4">
-          <p className="text-sm text-slate-600">
-            Mỗi ngành một mức học phí kỳ đầu (khớp tên ngành trên hồ sơ). Dùng khi kế toán / TVV tính còn thiếu bao nhiêu
-            sau trừ học bổng.
-          </p>
-          <FinanceTuitionCatalogPanel />
         </div>
       ) : null}
 
@@ -1381,16 +1425,16 @@ export function SettingsView() {
           <div className="mx-auto w-full max-w-7xl space-y-4">
             <ConnectDetailBack title="Ngưỡng cọc & chứng từ" onBack={backToConnectHub} />
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-sm text-indigo-950">
-              <p className="font-semibold">Bảng học phí kỳ 1 nằm ở đâu?</p>
+              <p className="font-semibold">Bảng học phí nằm ở đâu?</p>
               <p className="mt-1 text-xs leading-relaxed text-indigo-900/90">
-                Vào <strong>Cài đặt → Hồ sơ → Học phí kỳ 1</strong> (tab ngang cạnh Danh mục hồ sơ). Trang này chỉ còn
-                ngưỡng cọc và nơi lưu bill.
+                Vào <strong>Cài đặt → Hồ sơ → Cài đặt thông tin → Học phí</strong>. Trang này chỉ còn ngưỡng cọc và nơi
+                lưu bill.
               </p>
               <Link
-                to="/settings?tab=data&sub=tuition"
+                to="/settings?tab=data&sub=lead_profile&profileSub=tuition"
                 className="mt-2 inline-flex text-xs font-semibold text-indigo-800 underline underline-offset-2 hover:text-indigo-950"
               >
-                Mở bảng học phí kỳ 1 →
+                Mở bảng học phí →
               </Link>
             </div>
             <div className="border-t border-slate-200 pt-4">

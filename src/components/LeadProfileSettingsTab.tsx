@@ -54,7 +54,7 @@ export type LeadProfileSettingsSubTab =
 const SUB_TABS: { id: LeadProfileSettingsSubTab; label: string; hint: string }[] = [
   { id: 'sources', label: 'Nguồn', hint: 'Nguồn 1 / 2 trên hồ sơ' },
   { id: 'scholarships', label: 'Học bổng', hint: 'Bảng học bổng — khớp tên khi import Sheet cũ' },
-  { id: 'tuition', label: 'Học phí kỳ 1', hint: 'Giá ngành — trừ HB để tính phải đóng / hoàn thiện' },
+  { id: 'tuition', label: 'Học phí', hint: 'Giá ngành theo hệ — trừ HB để tính phải đóng' },
   { id: 'training', label: 'Hệ đào tạo', hint: 'Danh sách hệ — học sinh chọn trên hồ sơ' },
   { id: 'majors', label: 'Chuyên ngành', hint: 'Một ngành gắn được nhiều hệ đào tạo' },
   { id: 'applicants', label: 'Đối tượng', hint: 'Đối tượng dự tuyển — cổng đăng ký & hồ sơ' },
@@ -132,40 +132,13 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
       <header className="rounded-xl border border-slate-200/90 bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/50 p-4 shadow-sm">
 
-        <h2 className="text-base font-bold text-slate-900">Hồ sơ &amp; danh mục tuyển sinh</h2>
-
-        <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-          <p className="font-semibold">Cần khai học phí theo ngành?</p>
-          <p className="mt-0.5 text-xs text-emerald-900/90">
-            Bấm tab <strong>Học phí kỳ 1</strong> trên thanh điều hướng nhóm Hồ sơ (cùng hàng với Nhập liệu / Danh mục hồ
-            sơ), hoặc nút bên dưới.
-          </p>
-          <button
-            type="button"
-            className="mt-2 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
-            onClick={() =>
-              setSearchParams(
-                (prev) => {
-                  const n = new URLSearchParams(prev)
-                  n.set('tab', 'data')
-                  n.set('sub', 'tuition')
-                  n.delete('profileSub')
-                  return n
-                },
-                { replace: true },
-              )
-            }
-          >
-            Mở Học phí kỳ 1
-          </button>
-        </div>
+        <h2 className="text-base font-bold text-slate-900">Cài đặt thông tin</h2>
 
         <nav className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Nhóm cài đặt hồ sơ">
 
           {SUB_TABS.map((t) => {
 
             const selected = sub === t.id
-            const isTuition = t.id === 'tuition'
 
             return (
 
@@ -181,22 +154,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
                 title={t.hint}
 
-                onClick={() => {
-                  if (isTuition) {
-                    setSearchParams(
-                      (prev) => {
-                        const n = new URLSearchParams(prev)
-                        n.set('tab', 'data')
-                        n.set('sub', 'tuition')
-                        n.delete('profileSub')
-                        return n
-                      },
-                      { replace: true },
-                    )
-                    return
-                  }
-                  setSub(t.id)
-                }}
+                onClick={() => setSub(t.id)}
 
                 className={[
 
@@ -206,9 +164,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
                     ? 'bg-indigo-700 text-white shadow-sm'
 
-                    : isTuition
-                      ? 'border-2 border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100'
-                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
 
                 ].join(' ')}
 
@@ -232,15 +188,7 @@ export function LeadProfileSettingsTab({ db, canEdit }: { db: Firestore; canEdit
 
       {sub === 'scholarships' ? <ScholarshipSettingsTab db={db} canEdit={canEdit} /> : null}
 
-      {sub === 'tuition' ? (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">
-            Khai mức học phí kỳ đầu theo ngành (khớp tên ngành trên hồ sơ). Hệ thống trừ học bổng kỳ 1 để biết phải đóng
-            bao nhiêu và khi nào hoàn thiện phí.
-          </p>
-          <FinanceTuitionCatalogPanel />
-        </div>
-      ) : null}
+      {sub === 'tuition' ? <FinanceTuitionCatalogPanel /> : null}
 
       {sub === 'training' ? (
         <MasterCatalogEditor

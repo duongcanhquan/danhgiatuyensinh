@@ -1403,9 +1403,11 @@ export interface ScholarshipRecord {
   label: string
   category: ScholarshipCategoryId
   /**
-   * Liên kết danh mục Hệ đào tạo (`masterData/training_programs`).
+   * Liên kết danh mục Hệ đào tạo (`masterData/training_programs`) — có thể nhiều hệ.
    * Quyết định số kỳ mặc định và lọc HB trên hồ sơ theo hệ của SV.
+   * `trainingProgramId` = phần tử đầu (tương thích dữ liệu cũ).
    */
+  trainingProgramIds?: DocumentId[]
   trainingProgramId?: DocumentId
   /** Số tiền VNĐ (hiển thị trên nhãn) */
   amountVnd: number

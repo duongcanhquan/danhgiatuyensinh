@@ -27,10 +27,11 @@ const fullAccess: SettingsAccessContext = {
 describe('settingsNavigation five groups', () => {
   it('five main groups with plain labels', () => {
     expect(enabledMainTabs(fullAccess)).toEqual(['data', 'rules', 'advise', 'connect', 'people'])
-    expect(SETTINGS_MAIN_LABELS.data).toBe('Hồ sơ')
-    expect(SETTINGS_MAIN_LABELS.advise).toBe('Tư vấn')
-    expect(SETTINGS_MAIN_LABELS.connect).toBe('Kênh')
-    expect(SETTINGS_MAIN_LABELS.people).toBe('Nhân sự')
+    expect(SETTINGS_MAIN_LABELS.data).toBe('Cài đặt trường')
+    expect(SETTINGS_MAIN_LABELS.rules).toBe('Cài đặt profile')
+    expect(SETTINGS_MAIN_LABELS.advise).toBe('Cấu hình AI Tư vấn')
+    expect(SETTINGS_MAIN_LABELS.connect).toBe('Cài đặt kết nối')
+    expect(SETTINGS_MAIN_LABELS.people).toBe('Cài đặt Nhân sự')
   })
 
   it('advise owns consulting; connect only hub (+ details deep)', () => {
@@ -67,12 +68,13 @@ describe('settingsNavigation five groups', () => {
     expect(resolveSettingsRoute('integrations', null, fullAccess).sub).toBe('hub')
   })
 
-  it('Hồ sơ includes Học phí kỳ 1 tab', () => {
-    expect(enabledSubsForMain('data', fullAccess)).toContain('tuition')
+  it('Học phí nằm trong Cài đặt thông tin (không còn tab ngang riêng)', () => {
+    expect(enabledSubsForMain('data', fullAccess)).not.toContain('tuition')
+    expect(enabledSubsForMain('data', fullAccess)).toContain('lead_profile')
     expect(resolveSettingsRoute('data', 'tuition', fullAccess)).toEqual({
       main: 'data',
-      sub: 'tuition',
+      sub: 'lead_profile',
     })
-    expect(resolveSettingsRoute('hoc_phi', null, fullAccess).sub).toBe('tuition')
+    expect(resolveSettingsRoute('hoc_phi', null, fullAccess).sub).toBe('lead_profile')
   })
 })

@@ -33,6 +33,17 @@ export function mapLeadSourceDoc(id: string, data: Record<string, unknown>): Lea
 export function mapScholarshipDoc(id: string, data: Record<string, unknown>): ScholarshipRecord {
   const cat = String(data.category ?? 'phcd')
   const category = cat === 'cdcq' ? 'cdcq' : 'phcd'
+  const fromArr = Array.isArray(data.trainingProgramIds)
+    ? data.trainingProgramIds.map((x) => String(x ?? '').trim()).filter(Boolean)
+    : []
+  const single = String(data.trainingProgramId ?? '').trim()
+  const seen = new Set<string>()
+  const trainingProgramIds: string[] = []
+  for (const raw of [...fromArr, single]) {
+    if (!raw || seen.has(raw)) continue
+    seen.add(raw)
+    trainingProgramIds.push(raw)
+  }
   return {
     id,
     label: String(data.label ?? '').trim(),
@@ -50,7 +61,9 @@ export function mapScholarshipDoc(id: string, data: Record<string, unknown>): Sc
     applicationMethod: String(data.applicationMethod ?? '').trim() || undefined,
     quantityLimit:
       data.quantityLimit != null && Number(data.quantityLimit) >= 0 ? Number(data.quantityLimit) : undefined,
-    trainingProgramId: String(data.trainingProgramId ?? '').trim() || undefined,
+    ...(trainingProgramIds.length
+      ? { trainingProgramIds, trainingProgramId: trainingProgramIds[0] }
+      : {}),
     termCount:
       data.termCount != null && Number(data.termCount) > 0 ? Math.round(Number(data.termCount)) : undefined,
     termAllocationsVnd: Array.isArray(data.termAllocationsVnd)
