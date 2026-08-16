@@ -111,7 +111,7 @@ export function ConsultingLiveAssistPanel({
   const kinds: ('all' | ConsultingChipKind)[] = ['all', 'objection', 'question', 'usp', 'snippet']
 
   return (
-    <div className={['flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain', compact ? 'gap-2 p-0' : 'gap-3 p-0.5'].join(' ')}>
+    <div className={['flex flex-col', compact ? 'gap-2 p-0' : 'gap-3 p-0.5'].join(' ')}>
       {!compact ? (
         <header className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-3 sm:p-4">
           <div className="flex items-start gap-2">

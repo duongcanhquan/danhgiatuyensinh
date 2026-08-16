@@ -145,8 +145,8 @@ export function LeadConsultingHub({
     : TAB_META
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-      <div className="shrink-0 flex flex-wrap gap-1 border-b border-slate-200/80 pb-1.5">
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-1 border-b border-slate-200/80 pb-1.5">
         {tabsShown.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -170,7 +170,7 @@ export function LeadConsultingHub({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="flex flex-col">
         {tab === 'assist' ? (
           <ConsultingLiveAssistPanel
             lead={lead}

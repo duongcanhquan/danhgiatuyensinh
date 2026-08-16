@@ -7150,9 +7150,10 @@ function LeadDetailPanel({
       role="dialog"
       aria-modal="true"
       aria-labelledby="lead-detail-title"
-      className="safe-area-pt safe-area-pb fixed inset-0 z-[100] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
+      className="safe-area-pt safe-area-pb fixed inset-0 z-[100] w-screen max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-gradient-to-b from-slate-50 via-white to-slate-50/90 text-slate-900 shadow-[0_-20px_80px_rgba(15,23,42,0.12)]"
     >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-2 shadow-sm sm:gap-2 sm:px-4">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1920px] flex-col">
+      <header className="sticky top-0 z-30 flex shrink-0 items-center justify-between gap-2 border-b border-slate-200/90 bg-white/95 px-3 py-2 shadow-sm backdrop-blur-md sm:gap-2 sm:px-4">
         <div className="min-w-0 flex-1">
           <h2
             id="lead-detail-title"
@@ -7300,12 +7301,12 @@ function LeadDetailPanel({
         </section>
       ) : null}
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 flex-col overflow-hidden px-2 sm:px-4 lg:px-6">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:bg-white/40">
-            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid lg:grid-cols-12 lg:overflow-hidden">
-              <div className="flex min-h-0 flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:h-full lg:min-h-0 lg:border-b-0 lg:border-r lg:overflow-hidden">
+      <div className="mx-auto w-full flex-1 px-2 pb-8 sm:px-4 lg:px-6">
+        <div className="flex flex-col lg:bg-white/40">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-start lg:gap-0">
+              <div className="flex flex-col gap-2 border-b border-slate-200/80 p-2 sm:p-3 lg:col-span-8 lg:border-b-0 lg:border-r">
                 <nav
-                  className="sticky top-0 z-10 flex shrink-0 items-stretch gap-1 rounded-xl border border-slate-200/90 bg-white/95 p-1 shadow-md backdrop-blur-sm"
+                  className="flex shrink-0 items-stretch gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-md"
                   role="tablist"
                   aria-label="Nội dung chính chi tiết hồ sơ"
                 >
@@ -7485,16 +7486,10 @@ function LeadDetailPanel({
                   </div>
                   </section>
                 </details>
-                <div
-                  className={
-                    detailLeftTab === 'profile'
-                      ? 'flex min-h-0 flex-1 flex-col max-lg:min-h-[min(70dvh,36rem)] lg:overflow-hidden'
-                      : 'scroll-touch flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain'
-                  }
-                >
+                <div className="flex flex-col">
                   {detailLeftTab === 'profile' ? (
-                    <aside className="flex min-h-0 flex-1 flex-col text-xs leading-snug text-slate-800 lg:overflow-hidden">
-                      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-indigo-200/90 bg-white p-1.5 shadow-sm ring-1 ring-indigo-100/80 sm:p-2">
+                    <aside className="flex flex-col text-xs leading-snug text-slate-800">
+                      <section className="flex flex-col rounded-xl border-2 border-indigo-200/90 bg-white p-1.5 shadow-sm ring-1 ring-indigo-100/80 sm:p-2">
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-b border-indigo-100 pb-1.5">
                           {showCounselorProgressForm ? (
                             <div className="flex flex-wrap items-center gap-2">
@@ -7515,7 +7510,7 @@ function LeadDetailPanel({
                         {msg && detailLeftTab === 'profile' ? (
                           <p className="mt-1 shrink-0 text-[11px] font-medium text-amber-900">{msg}</p>
                         ) : null}
-                        <div className="mt-1.5 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="mt-1.5 flex flex-col">
                           <LeadProfileCoreForm
                             draft={coreDraft}
                             onChange={setCoreDraft}
@@ -7526,7 +7521,7 @@ function LeadDetailPanel({
                             onEnsureCatalogEntry={onEnsureCatalogEntry}
                             layout="tabs"
                             wideGrid
-                            fillHeight
+                            fillHeight={false}
                             callContext={{
                               leadId: lead.id,
                               leadName: lead.fullName || lead.customerId || 'Hồ sơ',
@@ -7760,7 +7755,7 @@ function LeadDetailPanel({
                                         </div>
                                       </div>
                                     </dialog>
-                                    <div className="mt-1.5 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                                    <div className="mt-1.5 flex flex-col">
                                       <LeadScoringSignalsPanel
                                         key={`sig-${lead.id}`}
                                         lead={lead}
@@ -7834,7 +7829,7 @@ function LeadDetailPanel({
                 </div>
               </div>
 
-              <aside className="flex min-h-0 flex-col gap-1.5 border-b border-slate-200/80 p-1.5 sm:p-2 lg:col-span-4 lg:h-full lg:max-h-full lg:border-b-0 lg:overflow-hidden lg:overscroll-contain">
+              <aside className="flex flex-col gap-1.5 border-b border-slate-200/80 p-1.5 sm:p-2 lg:col-span-4 lg:border-b-0">
                 <nav
                   className="flex shrink-0 flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-md"
                   role="tablist"
@@ -7885,9 +7880,9 @@ function LeadDetailPanel({
                     AI tư vấn
                   </button>
                 </nav>
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex flex-col">
                   {detailRightTab === 'assign' && crmQuickBlockVisible && db ? (
-                    <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    <div className="flex flex-col">
                       <LeadCrmQuickBlock
                         key={lead.id}
                         lead={lead}
@@ -7908,7 +7903,7 @@ function LeadDetailPanel({
                     </div>
                   ) : null}
                   {detailRightTab === 'history' ? (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{interactionsHistorySection}</div>
+                    <div className="flex flex-col">{interactionsHistorySection}</div>
                   ) : null}
                   {detailRightTab === 'assist' ? (
                     <LeadDetailAssistRail
@@ -8028,6 +8023,7 @@ function LeadDetailPanel({
 
             </div>
         </div>
+      </div>
       </div>
 
       {llmAccessHelpOpen ? (

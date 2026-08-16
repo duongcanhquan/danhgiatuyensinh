@@ -39,7 +39,7 @@ export function LeadDetailAssistRail({
   }, [initialHubTab, lead.id])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-emerald-200/80 bg-white shadow-sm">
+    <div className="flex flex-col rounded-xl border border-emerald-200/80 bg-white shadow-sm">
       <div className="flex shrink-0 gap-1 border-b border-emerald-100 bg-gradient-to-r from-emerald-50/90 to-white p-1">
         <button
           type="button"
@@ -70,9 +70,9 @@ export function LeadDetailAssistRail({
       </div>
 
       {mode === 'hub' ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5 sm:p-2">
-          <p className="mb-1.5 shrink-0 text-[10px] leading-snug text-slate-600">
-            Gõ lời khách → bấm gợi ý. Chip / mẫu / tri thức nằm các tab bên dưới — hồ sơ vẫn xem được bên trái.
+        <div className="flex flex-col p-1.5 sm:p-2">
+          <p className="mb-1.5 text-[10px] leading-snug text-slate-600">
+            Gõ lời khách → bấm gợi ý. Kéo trang xuống để xem hết chip / mẫu / tri thức.
           </p>
           <LeadConsultingHub
             lead={lead}
@@ -89,7 +89,7 @@ export function LeadDetailAssistRail({
           />
         </div>
       ) : (
-        <div className="scroll-touch min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 sm:p-3">
+        <div className="flex flex-col p-2 sm:p-3">
           <div className="mb-2 flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/80 px-2.5 py-2">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" aria-hidden />
             <p className="text-[11px] leading-snug text-violet-950">

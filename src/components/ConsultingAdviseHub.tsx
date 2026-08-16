@@ -93,7 +93,7 @@ export function ConsultingAdviseHub({
   const meta = STEPS.find((s) => s.id === active)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex flex-col gap-3 pb-6">
       <div className="shrink-0 space-y-2">
         <div
           className="flex flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-sm"
@@ -128,7 +128,7 @@ export function ConsultingAdviseHub({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="flex flex-col">
         {active === 'facts' && canAiEngine ? (
           <KnowledgeBaseTab db={db} compactChrome={compactChrome} canEdit={canAiEngine} />
         ) : null}

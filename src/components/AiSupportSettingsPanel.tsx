@@ -12,7 +12,7 @@ import { AISettingsTab } from './AISettingsTab'
  * Bước AI trong Tư vấn — giao diện sáng, thử gợi ý trước; cấu hình sâu (API/tác vụ) thu gọn bên dưới.
  */
 export function AiSupportSettingsPanel({ db }: { db: Firestore }) {
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(true)
   const { documents: knowledgeDocs } = useKnowledgeDocuments({ enabled: true })
   const { playbooks } = useConsultingPlaybooks({ enabled: true })
   const cfg = resolveAIIntegrationConfig()

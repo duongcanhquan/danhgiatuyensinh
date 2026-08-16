@@ -1004,12 +1004,12 @@ export function SettingsView() {
           aria-labelledby="tab-master"
           className={
             masterWorkspaceOpen
-              ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
+              ? 'fixed inset-0 z-[195] flex flex-col overflow-y-auto overscroll-contain bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
               : 'bento-cell !p-3 sm:!p-4'
           }
         >
           {masterWorkspaceOpen ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 pb-3">
+            <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-slate-200/90 bg-gradient-to-b from-slate-50 via-white to-white/95 pb-3 backdrop-blur-md">
               <button
                 type="button"
                 onClick={() => setMasterWorkspaceOpen(false)}
@@ -1023,7 +1023,7 @@ export function SettingsView() {
           <div
             className={
               masterWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden overscroll-contain pt-4 md:gap-5 md:pt-5'
+                ? 'mx-auto flex w-full max-w-[1920px] flex-1 flex-col gap-4 pb-8 pt-4 md:gap-5 md:pt-5'
                 : 'mt-2 space-y-3'
             }
           >
@@ -1043,17 +1043,17 @@ export function SettingsView() {
             {mdError ? <p className={`text-rose-700 ${settingsCopy}`}>{mdError}</p> : null}
             <div
               className={[
-                'flex min-h-0 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3 shadow-inner md:p-4',
-                masterWorkspaceOpen ? 'min-h-0 flex-1 lg:min-h-[min(72vh,560px)]' : 'min-h-[22rem] lg:min-h-[28rem]',
+                'flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3 shadow-inner md:p-4',
+                masterWorkspaceOpen ? 'min-h-[min(85vh,52rem)]' : 'min-h-[22rem] lg:min-h-[28rem]',
               ].join(' ')}
             >
-              <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:overflow-hidden">
-                <aside className="flex min-h-0 max-h-[min(42vh,22rem)] shrink-0 flex-col gap-3 overflow-y-auto overscroll-contain rounded-xl border border-slate-200/90 bg-white/85 p-3 shadow-sm md:p-4 lg:h-full lg:max-h-full lg:w-[min(100%,19rem)] xl:w-80">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                <aside className="flex shrink-0 flex-col gap-3 rounded-xl border border-slate-200/90 bg-white/85 p-3 shadow-sm md:p-4 lg:w-[min(100%,19rem)] xl:w-80">
                   <p className={`shrink-0 font-semibold uppercase tracking-wide text-slate-600 ${settingsCopy}`}>
                     Chọn danh mục
                   </p>
                   <nav
-                    className="min-h-0 flex-1 select-none space-y-1.5 overflow-y-auto overscroll-contain pr-0.5"
+                    className="select-none space-y-1.5 pr-0.5"
                     aria-label="Danh sách danh mục theo nhóm"
                   >
                     {masterCatalogNavGroups.map(({ group, label, items }) => {
@@ -1126,9 +1126,9 @@ export function SettingsView() {
                   ) : null}
                 </aside>
 
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white/90 p-3 shadow-sm md:p-5">
+                <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-white/90 p-3 shadow-sm md:p-5">
                   {activeMasterCatalog && db ? (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex flex-col">
                       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
                         <div className="min-w-0">
                           <h3 className={settingsHeading}>
@@ -1148,7 +1148,7 @@ export function SettingsView() {
                       {canMaster ? (
                         <CatalogMatchMetaPanel db={db} catalogs={catalogs} active={activeMasterCatalog} />
                       ) : null}
-                      <div className="flex min-h-0 flex-1 flex-col">
+                      <div className="flex flex-col">
                         <MasterEntriesEditor
                           catalogId={activeMasterCatalog.id}
                           catalogDef={activeMasterCatalog}
@@ -1266,12 +1266,12 @@ export function SettingsView() {
           aria-labelledby="tab-consulting"
           className={
             consultingWorkspaceOpen
-              ? 'fixed inset-0 z-[195] flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
+              ? 'fixed inset-0 z-[195] flex flex-col overflow-y-auto overscroll-contain bg-gradient-to-b from-slate-50 via-white to-slate-50 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.07)] sm:p-4 md:p-5'
               : 'bento-cell flex flex-col gap-3 !p-3 sm:!p-4'
           }
         >
           {consultingWorkspaceOpen ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-200/90 pb-2">
+            <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-slate-200/90 bg-gradient-to-b from-slate-50 via-white to-white/95 pb-2 backdrop-blur-md">
               <button
                 type="button"
                 onClick={() => setConsultingWorkspaceOpen(false)}
@@ -1285,8 +1285,8 @@ export function SettingsView() {
           <div
             className={
               consultingWorkspaceOpen
-                ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                : 'min-h-[28rem]'
+                ? 'mx-auto w-full max-w-[1920px] flex-1 pb-8'
+                : 'min-h-[min(70vh,40rem)]'
             }
           >
             <ConsultingAdviseHub

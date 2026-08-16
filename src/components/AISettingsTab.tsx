@@ -308,9 +308,9 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   return (
     <section
       aria-label="AI hỗ trợ trên hồ sơ — Gemini, OpenAI hoặc DeepSeek"
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
-      <div className="flex max-h-[min(78vh,720px)] min-h-[320px] flex-col">
+      <div className="flex min-h-[280px] flex-col">
         {/* Header gọn */}
         <div className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-emerald-50/90 to-white px-4 py-3 md:px-5">
           <div className="flex flex-wrap items-center gap-2">
@@ -388,7 +388,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
 
         {/* Nội dung tab — cuộn trong khung */}
         <div
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-5 md:py-5"
+          className="px-4 py-4 md:px-5 md:py-5"
           role="tabpanel"
           id={`ai-settings-panel-${subTab}`}
         >
@@ -716,7 +716,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
                 Tác vụ đã lưu (Firestore)
               </VietMyAccentHeading>
               {loading ? <p className="text-sm text-slate-500">Đang tải…</p> : null}
-              <ul className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1">
+              <ul className="space-y-2 pr-1">
                 {tasks.map((t) => (
                   <li
                     key={t.id}
