@@ -244,7 +244,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorDef[] = [
     group: 'ai',
     maturity: 'live',
     summary: 'Khóa API, lọc khi gọi AI, tác vụ phân tích hồ sơ — nằm trong Tư vấn bước 4.',
-    settingsHref: '/settings?tab=connect&sub=consulting&adviseStep=ai',
+    settingsHref: '/settings?tab=advise&sub=consulting&adviseStep=ai',
     fields: [],
   },
   {

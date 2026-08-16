@@ -1,4 +1,4 @@
-export type SettingsMainTabId = 'data' | 'rules' | 'people' | 'connect'
+export type SettingsMainTabId = 'data' | 'rules' | 'advise' | 'connect' | 'people'
 
 export type SettingsSubTabId =
   | 'intake'
@@ -23,31 +23,92 @@ export type SettingsSubTabId =
   | 'public_registration'
   | 'comms'
 
-export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = ['data', 'rules', 'people', 'connect']
+/** Thứ tự nhóm — logic vận hành: hồ sơ → chấm → tư vấn → kênh → nhân sự. */
+export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = [
+  'data',
+  'rules',
+  'advise',
+  'connect',
+  'people',
+]
 
 export const SETTINGS_MAIN_LABELS: Record<SettingsMainTabId, string> = {
-  data: 'Dữ liệu',
+  data: 'Hồ sơ',
   rules: 'Chấm điểm',
-  people: 'KPI & Nhân sự',
-  connect: 'Kết nối',
+  advise: 'Tư vấn',
+  connect: 'Kênh',
+  people: 'Nhân sự',
+}
+
+/** Màu phân vùng — active / sub / track (Tailwind classes). */
+export const SETTINGS_MAIN_THEME: Record<
+  SettingsMainTabId,
+  {
+    track: string
+    active: string
+    idle: string
+    subActive: string
+    subIdle: string
+    accentBar: string
+  }
+> = {
+  data: {
+    track: 'bg-sky-100/90 ring-1 ring-sky-200/80',
+    active: 'bg-sky-700 text-white shadow-sm',
+    idle: 'text-sky-950/75 hover:bg-sky-50/90 hover:text-sky-950',
+    subActive: 'border-sky-300/70 bg-sky-50 text-sky-950 shadow-sm',
+    subIdle: 'border-transparent text-slate-700 hover:border-sky-200 hover:bg-sky-50/70',
+    accentBar: 'border-sky-200/90',
+  },
+  rules: {
+    track: 'bg-amber-100/90 ring-1 ring-amber-200/80',
+    active: 'bg-amber-700 text-white shadow-sm',
+    idle: 'text-amber-950/75 hover:bg-amber-50/90 hover:text-amber-950',
+    subActive: 'border-amber-300/70 bg-amber-50 text-amber-950 shadow-sm',
+    subIdle: 'border-transparent text-slate-700 hover:border-amber-200 hover:bg-amber-50/70',
+    accentBar: 'border-amber-200/90',
+  },
+  advise: {
+    track: 'bg-emerald-100/90 ring-1 ring-emerald-200/80',
+    active: 'bg-emerald-700 text-white shadow-sm',
+    idle: 'text-emerald-950/75 hover:bg-emerald-50/90 hover:text-emerald-950',
+    subActive: 'border-emerald-300/70 bg-emerald-50 text-emerald-950 shadow-sm',
+    subIdle: 'border-transparent text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/70',
+    accentBar: 'border-emerald-200/90',
+  },
+  connect: {
+    track: 'bg-indigo-100/90 ring-1 ring-indigo-200/80',
+    active: 'bg-indigo-700 text-white shadow-sm',
+    idle: 'text-indigo-950/75 hover:bg-indigo-50/90 hover:text-indigo-950',
+    subActive: 'border-indigo-300/70 bg-indigo-50 text-indigo-950 shadow-sm',
+    subIdle: 'border-transparent text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/70',
+    accentBar: 'border-indigo-200/90',
+  },
+  people: {
+    track: 'bg-rose-100/90 ring-1 ring-rose-200/80',
+    active: 'bg-rose-700 text-white shadow-sm',
+    idle: 'text-rose-950/75 hover:bg-rose-50/90 hover:text-rose-950',
+    subActive: 'border-rose-300/70 bg-rose-50 text-rose-950 shadow-sm',
+    subIdle: 'border-transparent text-slate-700 hover:border-rose-200 hover:bg-rose-50/70',
+    accentBar: 'border-rose-200/90',
+  },
 }
 
 export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   intake: 'Nhập liệu',
   intake_staff: 'Nhập tư vấn viên',
-  master: 'Danh mục (nâng cao)',
+  master: 'Danh mục nâng cao',
   lead_profile: 'Danh mục hồ sơ',
   scoring_profiles: 'Profile chấm điểm',
   scoring: 'Điểm thông tin',
   classification: 'Phân loại nhãn',
   rule_templates: 'Quy tắc mẫu',
-  consulting: 'Tư vấn',
+  consulting: 'Bộ tư vấn',
   knowledge: 'Tri thức tuyển sinh',
   llm: 'AI hỗ trợ',
   kpi: 'Quy tắc KPI',
   staff: 'Quản lý nhân sự',
   permissions: 'Phân quyền',
-  /** Lưới kênh — Gọi điện / n8n / email… mở từ đây, không tab ngang trùng. */
   hub: 'Các kênh',
   omicall: 'Gọi điện',
   webhooks: 'Tự động hóa (n8n)',
@@ -59,16 +120,17 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
 
 /**
  * Tab hiện trên thanh điều hướng.
- * Kết nối chỉ còn «Các kênh» + «Tư vấn» — chi tiết mở từ lưới / bước Tư vấn.
+ * Tư vấn tách riêng; Kênh chỉ lưới đầu nối (+ URL sâu).
  */
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
-  data: ['intake', 'intake_staff', 'master', 'lead_profile'],
+  data: ['intake', 'intake_staff', 'lead_profile', 'master'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
+  advise: ['consulting'],
+  connect: ['hub'],
   people: ['kpi', 'staff', 'permissions'],
-  connect: ['hub', 'consulting'],
 }
 
-/** Màn chi tiết mở từ Các kênh (URL sâu vẫn chạy, không hiện như tab ngang). */
+/** Màn chi tiết mở từ Các kênh (URL sâu, không hiện tab ngang). */
 export const SETTINGS_CONNECT_DETAIL_SUBS: readonly SettingsSubTabId[] = [
   'comms',
   'omicall',
@@ -78,11 +140,22 @@ export const SETTINGS_CONNECT_DETAIL_SUBS: readonly SettingsSubTabId[] = [
   'public_registration',
 ] as const
 
-/** AI chỉ nằm trong Tư vấn bước 4 — không còn màn `sub=llm` riêng. */
-export const SETTINGS_AI_ADVISE_HREF = '/settings?tab=connect&sub=consulting&adviseStep=ai'
+/** AI nằm trong Tư vấn bước 4. */
+export const SETTINGS_AI_ADVISE_HREF = '/settings?tab=advise&sub=consulting&adviseStep=ai'
 
 export function isConnectDetailSub(sub: SettingsSubTabId): boolean {
   return (SETTINGS_CONNECT_DETAIL_SUBS as readonly string[]).includes(sub)
+}
+
+/** Ẩn hàng tab con khi nhóm chỉ có 1 màn (trừ khi đang ở chi tiết kênh). */
+export function shouldShowSettingsSubNav(
+  main: SettingsMainTabId,
+  subs: readonly SettingsSubTabId[],
+  activeSub: SettingsSubTabId,
+): boolean {
+  if (isConnectDetailSub(activeSub)) return false
+  if (main === 'advise' || main === 'connect') return false
+  return subs.length > 1
 }
 
 const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: SettingsSubTabId }>> = {
@@ -99,15 +172,16 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   scoring: { main: 'rules', sub: 'scoring' },
   classification: { main: 'rules', sub: 'classification' },
   rule_templates: { main: 'rules', sub: 'rule_templates' },
-  consulting: { main: 'connect', sub: 'consulting' },
-  knowledge: { main: 'connect', sub: 'consulting' },
-  llm: { main: 'connect', sub: 'consulting' },
-  ai_lab: { main: 'connect', sub: 'consulting' },
+  consulting: { main: 'advise', sub: 'consulting' },
+  knowledge: { main: 'advise', sub: 'consulting' },
+  llm: { main: 'advise', sub: 'consulting' },
+  ai_lab: { main: 'advise', sub: 'consulting' },
+  advise: { main: 'advise', sub: 'consulting' },
   kpi: { main: 'people', sub: 'kpi' },
   staff: { main: 'people', sub: 'staff' },
   permissions: { main: 'people', sub: 'permissions' },
   kpi_permissions: { main: 'people', sub: 'kpi' },
-  knowledge_advisory: { main: 'connect', sub: 'consulting' },
+  knowledge_advisory: { main: 'advise', sub: 'consulting' },
   system: { main: 'connect', sub: 'hub' },
   hub: { main: 'connect', sub: 'hub' },
   integrations: { main: 'connect', sub: 'hub' },
@@ -158,9 +232,7 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
     case 'consulting':
       return ctx.canPlaybooks || ctx.canAiEngine
     case 'knowledge':
-      return false
     case 'llm':
-      // Gộp vào Tư vấn bước 4 — không còn tab/màn riêng.
       return false
     case 'omicall':
       return ctx.canOmicall
@@ -198,19 +270,26 @@ export function resolveSettingsRoute(
   const fallbackMain = mains[0] ?? 'data'
   const fallbackSub = enabledSubsForMain(fallbackMain, ctx)[0] ?? 'intake'
 
-  if (subParam === 'knowledge' && isSettingsSubEnabled('consulting', ctx)) {
-    return { main: 'connect', sub: 'consulting' }
-  }
-
-  // AI gộp vào Tư vấn bước 4 (không còn sub=llm).
+  // Legacy: Tư vấn / AI nằm dưới connect → advise
   if (
-    (subParam === 'llm' || tabParam === 'llm' || tabParam === 'ai_lab') &&
+    tabParam === 'connect' &&
+    (subParam === 'consulting' || subParam === 'knowledge' || subParam === 'llm') &&
     isSettingsSubEnabled('consulting', ctx)
   ) {
-    return { main: 'connect', sub: 'consulting' }
+    return { main: 'advise', sub: 'consulting' }
   }
 
-  // URL sâu từ Các kênh (Gọi điện, n8n…) — vẫn mở được dù không còn trên thanh tab.
+  if (
+    (subParam === 'knowledge' ||
+      subParam === 'llm' ||
+      tabParam === 'llm' ||
+      tabParam === 'ai_lab' ||
+      tabParam === 'consulting') &&
+    isSettingsSubEnabled('consulting', ctx)
+  ) {
+    return { main: 'advise', sub: 'consulting' }
+  }
+
   if (
     subParam &&
     isConnectDetailSub(subParam as SettingsSubTabId) &&
@@ -226,7 +305,6 @@ export function resolveSettingsRoute(
     if (subParam && subs.includes(subParam as SettingsSubTabId)) {
       return { main, sub: subParam as SettingsSubTabId }
     }
-    // tab=connect&sub=webhooks đã bắt ở trên; còn lại fallback hub
     if (main === 'connect' && subParam && isSettingsSubEnabled(subParam as SettingsSubTabId, ctx)) {
       if (isConnectDetailSub(subParam as SettingsSubTabId)) {
         return { main: 'connect', sub: subParam as SettingsSubTabId }

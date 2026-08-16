@@ -112,8 +112,8 @@ export function ConsultingAdviseHub({
                 className={[
                   'inline-flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition sm:flex-none sm:px-3',
                   selected
-                    ? 'bg-sky-800 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-sky-50',
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'text-emerald-950/80 hover:bg-emerald-50',
                 ].join(' ')}
               >
                 <s.Icon className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />

@@ -24,7 +24,7 @@ export function CrmAdminShortcuts() {
     tiles.push({ to: '/settings?tab=people&sub=kpi', label: 'KPI', icon: Target })
   }
   if (can('config:master_data') || can('config:omicall')) {
-    tiles.push({ to: '/settings?tab=connect&sub=hub', label: 'Kết nối', icon: Plug })
+    tiles.push({ to: '/settings?tab=connect&sub=hub', label: 'Kênh', icon: Plug })
   }
 
   return (

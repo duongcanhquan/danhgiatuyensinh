@@ -73,7 +73,7 @@ export function buildIntegrationStatusItems(input: IntegrationStatusInput): Inte
       label: 'AI hỗ trợ',
       health: input.llmConfigured ? 'ok' : 'off',
       detail: input.llmConfigured ? 'Đã có khóa API' : 'Chưa cấu hình khóa',
-      settingsHref: '/settings?tab=connect&sub=consulting&adviseStep=ai',
+      settingsHref: '/settings?tab=advise&sub=consulting&adviseStep=ai',
     },
   ]
 }

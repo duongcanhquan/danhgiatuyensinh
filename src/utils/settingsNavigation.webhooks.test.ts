@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  enabledMainTabs,
   enabledSubsForMain,
   isConnectDetailSub,
   isSettingsSubEnabled,
   resolveSettingsRoute,
+  shouldShowSettingsSubNav,
+  SETTINGS_MAIN_LABELS,
   type SettingsAccessContext,
 } from './settingsNavigation'
 
@@ -21,45 +24,47 @@ const fullAccess: SettingsAccessContext = {
   canPermMatrix: true,
 }
 
-describe('settingsNavigation connect hub', () => {
-  it('nav chỉ còn Các kênh + Tư vấn — không trùng tab Gọi điện/n8n/AI', () => {
-    const subs = enabledSubsForMain('connect', fullAccess)
-    expect(subs).toEqual(['hub', 'consulting'])
-    expect(subs).not.toContain('webhooks')
-    expect(subs).not.toContain('omicall')
-    expect(subs).not.toContain('llm')
-    expect(subs).not.toContain('comms')
-    expect(subs).not.toContain('invite_docs')
+describe('settingsNavigation five groups', () => {
+  it('five main groups with plain labels', () => {
+    expect(enabledMainTabs(fullAccess)).toEqual(['data', 'rules', 'advise', 'connect', 'people'])
+    expect(SETTINGS_MAIN_LABELS.data).toBe('Hồ sơ')
+    expect(SETTINGS_MAIN_LABELS.advise).toBe('Tư vấn')
+    expect(SETTINGS_MAIN_LABELS.connect).toBe('Kênh')
+    expect(SETTINGS_MAIN_LABELS.people).toBe('Nhân sự')
   })
 
-  it('URL sâu webhooks/omicall/comms vẫn mở được; llm gộp Tư vấn', () => {
+  it('advise owns consulting; connect only hub (+ details deep)', () => {
+    expect(enabledSubsForMain('advise', fullAccess)).toEqual(['consulting'])
+    expect(enabledSubsForMain('connect', fullAccess)).toEqual(['hub'])
+    expect(enabledSubsForMain('connect', fullAccess)).not.toContain('consulting')
+    expect(shouldShowSettingsSubNav('advise', ['consulting'], 'consulting')).toBe(false)
+    expect(shouldShowSettingsSubNav('connect', ['hub'], 'hub')).toBe(false)
+    expect(shouldShowSettingsSubNav('data', ['intake', 'master'], 'intake')).toBe(true)
+  })
+
+  it('legacy connect+consulting / llm → advise', () => {
+    expect(resolveSettingsRoute('connect', 'consulting', fullAccess)).toEqual({
+      main: 'advise',
+      sub: 'consulting',
+    })
+    expect(resolveSettingsRoute('connect', 'llm', fullAccess)).toEqual({
+      main: 'advise',
+      sub: 'consulting',
+    })
+    expect(resolveSettingsRoute('advise', 'consulting', fullAccess)).toEqual({
+      main: 'advise',
+      sub: 'consulting',
+    })
+  })
+
+  it('URL sâu kênh vẫn mở được', () => {
     expect(isConnectDetailSub('webhooks')).toBe(true)
-    expect(isConnectDetailSub('invite_docs')).toBe(true)
-    expect(isConnectDetailSub('llm')).toBe(false)
     expect(resolveSettingsRoute('connect', 'webhooks', fullAccess)).toEqual({
       main: 'connect',
       sub: 'webhooks',
     })
-    expect(resolveSettingsRoute('connect', 'llm', fullAccess)).toEqual({
-      main: 'connect',
-      sub: 'consulting',
-    })
-    expect(resolveSettingsRoute('connect', 'comms', fullAccess)).toEqual({
-      main: 'connect',
-      sub: 'comms',
-    })
     expect(resolveSettingsRoute('n8n', null, fullAccess).sub).toBe('webhooks')
-    expect(resolveSettingsRoute('giay_moi', null, fullAccess).sub).toBe('invite_docs')
-    expect(resolveSettingsRoute('chung_tu', null, fullAccess).sub).toBe('receipts')
     expect(resolveSettingsRoute('integrations', null, fullAccess).sub).toBe('hub')
-  })
-
-  it('knowledge legacy → Tư vấn; tab connect không có knowledge ngang', () => {
-    expect(resolveSettingsRoute('connect', 'knowledge', fullAccess)).toEqual({
-      main: 'connect',
-      sub: 'consulting',
-    })
-    expect(enabledSubsForMain('connect', fullAccess)).not.toContain('knowledge')
   })
 
   it('hides hub without master/omicall', () => {

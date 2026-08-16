@@ -72,12 +72,15 @@ import {
   isSettingsSubEnabled,
   resolveSettingsRoute,
   SETTINGS_MAIN_LABELS,
+  SETTINGS_MAIN_THEME,
   SETTINGS_SUB_LABELS,
+  shouldShowSettingsSubNav,
   subTabLabel,
   type SettingsAccessContext,
   type SettingsMainTabId,
   type SettingsSubTabId,
 } from '../utils/settingsNavigation'
+import { OrgSwitcher } from '../components/OrgSwitcher'
 
 /** Quay lưới kênh khi đang ở màn chi tiết (Gọi điện, n8n…). */
 function ConnectDetailBack({
@@ -282,10 +285,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'hub':
       return (
         <>
-          <p className="font-semibold text-slate-900">Các kênh — một lưới duy nhất</p>
+          <p className="font-semibold text-slate-900">Kênh — lưới đầu nối</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Bấm ô để mở cấu hình (Gọi điện, tự động hóa, email, chứng từ…). AI hỗ trợ nằm ở tab{' '}
-            <strong>Tư vấn → bước 4</strong>.
+            Bấm ô để mở cấu hình (Gọi điện, tự động hóa, email, chứng từ…). AI nằm ở nhóm{' '}
+            <strong>Tư vấn</strong> bước 4.
           </p>
         </>
       )
@@ -383,7 +386,7 @@ export function SettingsView() {
   const db = getFirestoreDb()
   const configured = isFirebaseConfigured()
   const { can, permissions, status: authStatus, firebaseUser, profile } = useAuth()
-  const { currentOrgLabel, effectiveOrgId, isPlatformSuperAdmin } = useOrg()
+  const { isPlatformSuperAdmin } = useOrg()
   const [searchParams, setSearchParams] = useSearchParams()
   const { profiles } = useScoringProfiles()
   const { catalogs, byKind, loading: mdLoading, error: mdError } = useMasterData()
@@ -597,14 +600,15 @@ export function SettingsView() {
 
   const route = useMemo(() => {
     if (db && editSnippetParam) {
-      return { main: 'connect' as SettingsMainTabId, sub: 'consulting' as SettingsSubTabId }
+      return { main: 'advise' as SettingsMainTabId, sub: 'consulting' as SettingsSubTabId }
     }
     return resolveSettingsRoute(tabParam, subParam, settingsAccessCtx)
   }, [db, editSnippetParam, tabParam, subParam, settingsAccessCtx])
   const activeMainTab = route.main
   const activeSubTab = route.sub
+  const mainTheme = SETTINGS_MAIN_THEME[activeMainTab]
   const { playbooks, loading: pbLoading, error: pbError } = useConsultingPlaybooks({
-    enabled: activeMainTab === 'connect' && activeSubTab === 'consulting',
+    enabled: activeMainTab === 'advise' && activeSubTab === 'consulting',
   })
 
   const mainTabs = useMemo(() => enabledMainTabs(settingsAccessCtx), [settingsAccessCtx])
@@ -643,11 +647,11 @@ export function SettingsView() {
       )
       return
     }
-    if (editSnippetParam && (tabParam !== 'connect' || subParam !== 'consulting')) {
+    if (editSnippetParam && (tabParam !== 'advise' || subParam !== 'consulting')) {
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
-          n.set('tab', 'connect')
+          n.set('tab', 'advise')
           n.set('sub', 'consulting')
           return n
         },
@@ -756,15 +760,29 @@ export function SettingsView() {
 
   const adviseStepParam = searchParams.get('adviseStep')
   useEffect(() => {
-    // Legacy URL AI → Tư vấn bước 4
+    // Legacy URL AI / Tư vấn cũ → advise
     if (subParam === 'llm' || tabParam === 'llm' || tabParam === 'ai_lab') {
       setAdviseHubStep('ai')
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
-          n.set('tab', 'connect')
+          n.set('tab', 'advise')
           n.set('sub', 'consulting')
           n.set('adviseStep', 'ai')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
+    if (tabParam === 'connect' && (subParam === 'consulting' || subParam === 'knowledge')) {
+      setAdviseHubStep(subParam === 'knowledge' ? 'facts' : parseAdviseHubStep(adviseStepParam) ?? 'facts')
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'advise')
+          n.set('sub', 'consulting')
+          if (subParam === 'knowledge') n.set('adviseStep', 'facts')
           return n
         },
         { replace: true },
@@ -789,7 +807,7 @@ export function SettingsView() {
     setSearchParams(
       (prev) => {
         const n = new URLSearchParams(prev)
-        n.set('tab', 'connect')
+        n.set('tab', 'advise')
         n.set('sub', 'consulting')
         n.set('adviseStep', s)
         return n
@@ -804,21 +822,6 @@ export function SettingsView() {
         settingsWorkspaceOpen ? '' : '-mx-3 -mb-3 min-h-[calc(100dvh-4.5rem)] sm:-mx-4 sm:min-h-[calc(100dvh-5rem)] md:-mx-6 lg:-mx-8'
       }`}
     >
-      {isPlatformSuperAdmin ? (
-        <BentoCell variant="muted" className="!p-3 text-sm text-indigo-950">
-          <p className="font-semibold">
-            Đang cấu hình: <span className="text-indigo-900">{currentOrgLabel}</span>
-            <span className="ml-1 font-mono text-xs font-normal text-indigo-800/80">({effectiveOrgId})</span>
-          </p>
-          <p className="mt-0.5 text-xs text-indigo-900/80">
-            Đổi trường trên thanh bên, hoặc vào{' '}
-            <Link to="/organizations" className="font-medium underline-offset-2 hover:underline">
-              Quản lý trường
-            </Link>
-            .
-          </p>
-        </BentoCell>
-      ) : null}
       {!configured || !db ? (
         <div className={`rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2.5 text-rose-900 ${settingsCopy}`}>
           Firebase chưa sẵn sàng — kiểm tra .env theo .env.example.
@@ -830,114 +833,150 @@ export function SettingsView() {
           <p className="font-semibold">Không có quyền cấu hình hệ thống</p>
           <p className="mt-1.5 text-sm leading-relaxed">
             Vai trò <strong>{profile ? USER_ROLE_LABELS[profile.role] : 'hiện tại'}</strong> chỉ làm việc trên Hồ sơ và
-            dashboard — không mở Playbook, Tri thức, Danh mục hay LLM. Nếu bạn là tư vấn viên và cần bộ chấm điểm riêng,
-            liên hệ quản trị để được cấp quyền hoặc dùng tài khoản đã được phân quyền.
+            dashboard — không mở Tư vấn, danh mục hay AI. Nếu bạn là tư vấn viên và cần bộ chấm điểm riêng, liên hệ quản
+            trị để được cấp quyền.
           </p>
         </div>
       ) : null}
 
       {db && settingsAccess && !settingsWorkspaceOpen ? (
-        <div className="sticky top-0 z-30 shrink-0 space-y-1.5 border-b border-slate-200/80 bg-[var(--vm-canvas)]/95 px-3 pb-2 pt-2 backdrop-blur-md sm:px-4">
-          <BentoCell className="min-w-0 max-w-full space-y-2 !rounded-xl !p-1.5 sm:!p-2">
-          <nav
-            className="app-tab-segmented scroll-touch-x flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto"
-            role="tablist"
-            aria-label="Nhóm cài đặt chính"
-          >
-            {mainTabs.map((main) => {
-              const selected = activeMainTab === main
-              return (
-                <button
-                  key={main}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  data-active={selected ? 'true' : 'false'}
-                  onClick={() => setMainTab(main)}
-                  className="app-tab-segmented-btn"
-                >
-                  {SETTINGS_MAIN_LABELS[main]}
-                </button>
-              )
-            })}
-          </nav>
-          <div className="scroll-touch-x flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto border-t border-slate-100 pt-1.5 md:gap-1.5">
+        <div
+          className={[
+            'sticky top-0 z-30 shrink-0 border-b bg-[var(--vm-canvas)]/95 px-3 pb-2 pt-2 backdrop-blur-md sm:px-4',
+            mainTheme.accentBar,
+          ].join(' ')}
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <nav
-              className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 md:gap-1.5"
+              className={[
+                'scroll-touch-x flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto rounded-xl p-1',
+                mainTheme.track,
+              ].join(' ')}
               role="tablist"
-              aria-label="Tab con"
+              aria-label="Nhóm cài đặt chính"
             >
-              {subTabs.map((sub) => {
-                const selected =
-                  activeSubTab === sub || (sub === 'hub' && isConnectDetailSub(activeSubTab))
+              {mainTabs.map((main) => {
+                const selected = activeMainTab === main
+                const theme = SETTINGS_MAIN_THEME[main]
                 return (
                   <button
-                    key={sub}
+                    key={main}
                     type="button"
                     role="tab"
-                    id={
-                      sub === 'master'
-                        ? 'tab-master'
-                        : sub === 'consulting'
-                          ? 'tab-consulting'
-                          : sub === 'hub'
-                            ? 'tab-hub'
-                            : undefined
-                    }
                     aria-selected={selected}
-                    onClick={() => setSubTab(sub)}
+                    onClick={() => setMainTab(main)}
                     className={[
-                      'flex shrink-0 cursor-pointer items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
-                      settingsCopy,
-                      selected
-                        ? 'border-[var(--color-primary)]/35 bg-[var(--color-primary-soft)] text-slate-900 shadow-sm'
-                        : 'border-transparent bg-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50',
+                      'shrink-0 cursor-pointer rounded-lg px-2.5 py-1.5 text-sm font-semibold tracking-tight transition md:px-3 md:py-2',
+                      selected ? theme.active : theme.idle,
                     ].join(' ')}
                   >
-                    {subTabLabel(sub, settingsAccessCtx)}
+                    {SETTINGS_MAIN_LABELS[main]}
                   </button>
                 )
               })}
             </nav>
-            {isConnectDetailSub(activeSubTab) ? (
-              <span className="hidden max-w-[12rem] truncate text-xs font-medium text-slate-500 sm:inline">
-                <span className="text-slate-300"> / </span>
-                {SETTINGS_SUB_LABELS[activeSubTab]}
-              </span>
-            ) : null}
-            {db && activeSubTab === 'master' && !masterWorkspaceOpen ? (
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {isPlatformSuperAdmin ? <OrgSwitcher tone="light" compact className="max-w-[16rem]" /> : null}
               <button
                 type="button"
-                onClick={() => setMasterWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                id="settings-guide-trigger"
+                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200/90 bg-white p-1.5 text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+                aria-label="Mô tả tab Cài đặt"
+                aria-expanded={guideOpen}
+                aria-controls="settings-guide-dialog"
+                onClick={() => setGuideOpen(true)}
               >
-                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-                Toàn màn
+                <CircleHelp className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
               </button>
-            ) : null}
-            {db && activeSubTab === 'consulting' && !consultingWorkspaceOpen ? (
-              <button
-                type="button"
-                onClick={() => setConsultingWorkspaceOpen(true)}
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
-              >
-                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-                Toàn màn
-              </button>
-            ) : null}
-            <button
-              type="button"
-              id="settings-guide-trigger"
-              className="ml-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-200/90 bg-white p-1.5 text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
-              aria-label="Mô tả tab Cài đặt"
-              aria-expanded={guideOpen}
-              aria-controls="settings-guide-dialog"
-              onClick={() => setGuideOpen(true)}
-            >
-              <CircleHelp className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-            </button>
+            </div>
           </div>
-          </BentoCell>
+
+          {shouldShowSettingsSubNav(activeMainTab, subTabs, activeSubTab) ? (
+            <div className="mt-1.5 scroll-touch-x flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto md:gap-1.5">
+              <nav
+                className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 md:gap-1.5"
+                role="tablist"
+                aria-label="Tab con"
+              >
+                {subTabs.map((sub) => {
+                  const selected = activeSubTab === sub
+                  return (
+                    <button
+                      key={sub}
+                      type="button"
+                      role="tab"
+                      id={
+                        sub === 'master'
+                          ? 'tab-master'
+                          : sub === 'consulting'
+                            ? 'tab-consulting'
+                            : sub === 'hub'
+                              ? 'tab-hub'
+                              : undefined
+                      }
+                      aria-selected={selected}
+                      onClick={() => setSubTab(sub)}
+                      className={[
+                        'flex shrink-0 cursor-pointer items-center rounded-lg border px-2.5 py-1.5 text-left font-medium tracking-tight transition md:px-3 md:py-2',
+                        settingsCopy,
+                        selected ? mainTheme.subActive : mainTheme.subIdle,
+                      ].join(' ')}
+                    >
+                      {subTabLabel(sub, settingsAccessCtx)}
+                    </button>
+                  )
+                })}
+              </nav>
+              {db && activeSubTab === 'master' && !masterWorkspaceOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setMasterWorkspaceOpen(true)}
+                  className={`inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                >
+                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Toàn màn
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              {isConnectDetailSub(activeSubTab) ? (
+                <span className="text-xs font-medium text-slate-500">
+                  {SETTINGS_MAIN_LABELS.connect}
+                  <span className="text-slate-300"> / </span>
+                  {SETTINGS_SUB_LABELS[activeSubTab]}
+                </span>
+              ) : activeMainTab === 'advise' ? (
+                <span className="text-xs font-medium text-emerald-800/80">
+                  Tri thức → Mẫu → Mảnh thoại → AI — một khu nạp tư vấn
+                </span>
+              ) : activeMainTab === 'connect' ? (
+                <span className="text-xs font-medium text-indigo-800/80">
+                  Bấm ô kênh để mở cấu hình chi tiết
+                </span>
+              ) : null}
+              {db && activeSubTab === 'consulting' && !consultingWorkspaceOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setConsultingWorkspaceOpen(true)}
+                  className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-emerald-800/20 bg-emerald-50/95 px-2.5 py-1.5 font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                >
+                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Toàn màn
+                </button>
+              ) : null}
+              {db && activeSubTab === 'master' && !masterWorkspaceOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setMasterWorkspaceOpen(true)}
+                  className={`ml-auto inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-amber-800/25 bg-amber-50/95 px-2.5 py-1.5 font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100/90 md:px-3 md:py-2 ${settingsCopy}`}
+                >
+                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Toàn màn
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
 

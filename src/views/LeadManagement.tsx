@@ -8144,7 +8144,7 @@ function LeadDetailPanel({
                   <p className="mt-1 text-xs leading-relaxed">
                     Siêu quản trị vào{' '}
                     <Link
-                      to="/settings?tab=connect&sub=consulting&adviseStep=ai"
+                      to="/settings?tab=advise&sub=consulting&adviseStep=ai"
                       className="font-semibold underline"
                       onClick={() => setLlmPopupOpen(false)}
                     >
@@ -8161,7 +8161,7 @@ function LeadDetailPanel({
                   <p className="mt-1 text-xs leading-relaxed">
                     Quản trị vào{' '}
                     <Link
-                      to="/settings?tab=connect&sub=consulting&adviseStep=ai"
+                      to="/settings?tab=advise&sub=consulting&adviseStep=ai"
                       className="font-semibold underline"
                       onClick={() => setLlmPopupOpen(false)}
                     >
