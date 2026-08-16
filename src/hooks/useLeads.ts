@@ -719,13 +719,19 @@ function filterConstraints(
     else if (p.length > 1) c.push(where('province', 'in', p))
   }
   if (f.assignedCounselorIn?.length) {
-    const canFilterByAssignee = isSuperAdminRole(profile.role) || canReadGlobal
+    const canFilterByAssignee =
+      isSuperAdminRole(profile.role) || canReadGlobal || canOwnFieldStaffTeam(profile.role)
     if (canFilterByAssignee) {
       const ids = f.assignedCounselorIn.filter(Boolean).slice(0, 10)
-      if (ids.length === 1) {
-        c.push(or(where('assignedTo', '==', ids[0]), where('assignedCounselorId', '==', ids[0])))
-      } else if (ids.length > 1) {
-        c.push(or(where('assignedTo', 'in', ids), where('assignedCounselorId', 'in', ids)))
+      const team =
+        canOwnFieldStaffTeam(profile.role) && !canReadGlobal && !isSuperAdminRole(profile.role)
+          ? new Set(teamLeadAssigneeScopeIds(profile))
+          : null
+      const allowedIds = team ? ids.filter((id) => team.has(id)) : ids
+      if (allowedIds.length === 1) {
+        c.push(or(where('assignedTo', '==', allowedIds[0]), where('assignedCounselorId', '==', allowedIds[0])))
+      } else if (allowedIds.length > 1) {
+        c.push(or(where('assignedTo', 'in', allowedIds), where('assignedCounselorId', 'in', allowedIds)))
       }
     }
   }
@@ -754,6 +760,48 @@ function composeQuery(col: ReturnType<typeof collection>, parts: QueryFilterCons
 }
 
 /**
+ * Khi chọn đúng 1 TVV trong phạm vi được phép: thu hẹp RBAC về người đó
+ * (tránh OR team × OR assignee → query lỗi / trang trống khi phân trang).
+ */
+function assigneeRbacOverride(
+  profile: VietMyUserProfile,
+  canReadGlobal: boolean,
+  filters: LeadListServerFilters | undefined,
+): QueryFilterConstraint | null {
+  const ids = (filters?.assignedCounselorIn ?? []).filter(Boolean)
+  if (ids.length !== 1) return null
+  const uid = ids[0]!
+  if (isSuperAdminRole(profile.role) || canReadGlobal) {
+    return or(where('assignedTo', '==', uid), where('assignedCounselorId', '==', uid))
+  }
+  if (canOwnFieldStaffTeam(profile.role)) {
+    const team = teamLeadAssigneeScopeIds(profile)
+    if (team.includes(uid)) {
+      return or(where('assignedTo', '==', uid), where('assignedCounselorId', '==', uid))
+    }
+  }
+  if (isFieldStaffRole(profile.role) && profile.id === uid) {
+    return or(where('assignedTo', '==', uid), where('assignedCounselorId', '==', uid))
+  }
+  return null
+}
+
+function resolveListRbacAndFilters(
+  profile: VietMyUserProfile,
+  hoDLabels: string[],
+  filters: LeadListServerFilters | undefined,
+  canReadGlobal: boolean,
+): { rbac: QueryFilterConstraint | null; extras: QueryFilterConstraint[] } {
+  const assigneeNarrow = assigneeRbacOverride(profile, canReadGlobal, filters)
+  const rbac = assigneeNarrow ?? rbacConstraint(profile, hoDLabels, canReadGlobal)
+  const filterInput =
+    assigneeNarrow && filters?.assignedCounselorIn?.length
+      ? { ...filters, assignedCounselorIn: undefined }
+      : filters
+  return { rbac, extras: filterConstraints(filterInput, profile, canReadGlobal) }
+}
+
+/**
  * Superadmin / Quản lý trường xem VietMy: bỏ where(orgId) để lấy cả hồ sơ cũ thiếu orgId.
  * (Rules `matchesOrgData` cho phép đọc doc thiếu orgId khi resolvedOrgId == vietmy;
  *  query `orgId==vietmy` thì không trả các doc đó — trông như «mất dữ liệu».)
@@ -779,8 +827,7 @@ function buildListDataQuery(
   orgFilter: 'auto' | 'strict' = 'auto',
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
-  const extras = filterConstraints(filters, profile, canReadGlobal)
+  const { rbac, extras } = resolveListRbacAndFilters(profile, hoDLabels, filters, canReadGlobal)
   const parts: QueryFilterConstraint[] = []
   if (orgId && !shouldOmitOrgServerFilter(profile, orgId, orgFilter)) {
     parts.push(orgIdEqualityConstraint(orgId))
@@ -800,13 +847,12 @@ function buildPriorityTagCountQuery(
   canReadGlobal: boolean,
 ): Query {
   const col = collection(firestore, FS_COLLECTIONS.leads)
-  const rbac = rbacConstraint(profile, hoDLabels, canReadGlobal)
-  const extras = [...filterConstraints(filters, profile, canReadGlobal), where('priorityTag', '==', tag)]
+  const { rbac, extras } = resolveListRbacAndFilters(profile, hoDLabels, filters, canReadGlobal)
   const parts: QueryFilterConstraint[] = []
   // Count luôn strict — tránh đếm lẫn trường khác khi Superadmin bỏ lọc list
   if (orgId) parts.push(orgIdEqualityConstraint(orgId))
   if (rbac) parts.push(rbac)
-  parts.push(...extras)
+  parts.push(...extras, where('priorityTag', '==', tag))
   return composeQuery(col, parts)
 }
 

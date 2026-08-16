@@ -58,7 +58,7 @@ import { useOrg } from '../hooks/useOrg'
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 import { canCreateLead, canWriteLead, leadAssignedUid } from '../auth/leadAccess'
-import { isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
+import { canOwnFieldStaffTeam, isAdminLikeRole, isFieldStaffRole, isTeamLeadRole } from '../auth/roleUtils'
 import { profileHasTeamRoster } from '../contexts/ManagementViewScopeContext'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
@@ -318,7 +318,17 @@ type LeadUiFilters = {
   uploadedTo: string
 }
 
-function emptyLeadUiFilters(): LeadUiFilters {
+/** TVV / trưởng nhóm / quản lý có danh sách TVV: mặc định xem hồ sơ của mình. */
+function defaultAssigneeFilterId(profile: VietMyUserProfile | null | undefined): string {
+  const uid = profile?.id?.trim()
+  if (!uid) return ''
+  if (isFieldStaffRole(profile.role) || isTeamLeadRole(profile.role) || profileHasTeamRoster(profile)) {
+    return uid
+  }
+  return ''
+}
+
+function emptyLeadUiFilters(profile?: VietMyUserProfile | null): LeadUiFilters {
   return {
     tag: 'ALL',
     callQueue: 'all',
@@ -332,13 +342,32 @@ function emptyLeadUiFilters(): LeadUiFilters {
     program: 'ALL',
     enrollment: 'ALL',
     school: 'ALL',
-    assignee: '',
+    assignee: defaultAssigneeFilterId(profile),
     scoreMin: '',
     scoreMax: '',
     aiShortlistOnly: false,
     uploadedFrom: '',
     uploadedTo: '',
   }
+}
+
+/** URL `assign=all` = cả nhóm; không có param = mặc định «Tôi» (nếu có). */
+function parseAssigneeFromUrl(
+  raw: string | null,
+  hasParam: boolean,
+  profile: VietMyUserProfile | null | undefined,
+): string {
+  if (!hasParam) return defaultAssigneeFilterId(profile)
+  const v = (raw ?? '').trim()
+  if (!v || v === 'all') return ''
+  return v
+}
+
+function assigneeToUrlParam(assignee: string, profile: VietMyUserProfile | null | undefined): string | null {
+  if (assignee === '__UNASSIGNED__') return '__UNASSIGNED__'
+  if (assignee) return assignee
+  // '' = cả nhóm — chỉ ghi URL khi vai trò mặc định là «Tôi» (để phân biệt lần mở đầu).
+  return defaultAssigneeFilterId(profile) ? 'all' : null
 }
 
 function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
@@ -468,8 +497,8 @@ export function LeadManagement() {
   /** Tình trạng thu phí / hoàn thiện — client filter. */
   const [enrollmentFilter, setEnrollmentFilter] = useState<string>('ALL')
   const [schoolFilter, setSchoolFilter] = useState<string>('ALL')
-  /** Lọc TVV phụ trách (client); '' = tất cả, __UNASSIGNED__ = chưa gán. */
-  const [assigneeFilter, setAssigneeFilter] = useState<string>('')
+  /** Lọc TVV phụ trách; mặc định = chính mình (TVV / trưởng nhóm / có danh sách). '' = cả nhóm. */
+  const [assigneeFilter, setAssigneeFilter] = useState<string>(() => defaultAssigneeFilterId(profile))
   const [scoreMinInput, setScoreMinInput] = useState('')
   const [scoreMaxInput, setScoreMaxInput] = useState('')
   const [aiShortlistOnly, setAiShortlistOnly] = useState(false)
@@ -478,7 +507,7 @@ export function LeadManagement() {
   const [aiShortlistGuideOpen, setAiShortlistGuideOpen] = useState(false)
 
   /** Lựa chọn trên UI — chưa chạy cho đến khi «Áp dụng lọc». */
-  const [draftFilters, setDraftFilters] = useState<LeadUiFilters>(() => emptyLeadUiFilters())
+  const [draftFilters, setDraftFilters] = useState<LeadUiFilters>(() => emptyLeadUiFilters(profile))
 
   const appliedFiltersSnapshot = useMemo(
     (): LeadUiFilters => ({
@@ -599,7 +628,11 @@ export function LeadManagement() {
     if (
       assigneeFilter &&
       assigneeFilter !== '__UNASSIGNED__' &&
-      can('leads:read:global')
+      (can('leads:read:global') ||
+        can('leads:read:team_scope') ||
+        canOwnFieldStaffTeam(profile?.role) ||
+        workListPreferTeam ||
+        isFieldStaffRole(profile?.role))
     ) {
       o.assignedCounselorIn = [assigneeFilter]
     }
@@ -627,6 +660,8 @@ export function LeadManagement() {
     can,
     intakeOriginTab,
     urlQuery,
+    profile?.role,
+    workListPreferTeam,
   ])
 
   const leadServerFiltersKey = useMemo(() => JSON.stringify(leadServerFilters ?? {}), [leadServerFilters])
@@ -848,9 +883,11 @@ export function LeadManagement() {
   const reassignPickList = useMemo(() => {
     const base = fieldStaffUsers
     const elevated = can('leads:read:global')
-    const teamLead = isTeamLeadRole(profile?.role)
+    const teamScoped =
+      (isTeamLeadRole(profile?.role) || profileHasTeamRoster(profile) || canOwnFieldStaffTeam(profile?.role)) &&
+      Boolean(profile)
 
-    if (teamLead && profile) {
+    if (teamScoped && profile) {
       const team = new Set(counselorIdsInManagerScope(profile, directoryUsers))
       team.add(profile.id)
       return base
@@ -1563,7 +1600,7 @@ export function LeadManagement() {
   useEffect(() => {
     const sp = searchParams
     const next: LeadUiFilters = {
-      ...emptyLeadUiFilters(),
+      ...emptyLeadUiFilters(profile),
       tag: sp.has(LWF.TAG) ? parseTagFromUrl(sp.get(LWF.TAG)) : 'ALL',
       region: sp.has(LWF.REGION) ? sp.get(LWF.REGION)!.trim() || 'ALL' : 'ALL',
       school: sp.has(LWF.SCHOOL) ? sp.get(LWF.SCHOOL)!.trim() || 'ALL' : 'ALL',
@@ -1579,7 +1616,7 @@ export function LeadManagement() {
         return src || 'ALL'
       })(),
       enrollment: sp.has(LWF.ENROLL) ? parseTinhTrangFromUrl(sp.get(LWF.ENROLL)) : 'ALL',
-      assignee: sp.has(LWF.ASSIGN) ? sp.get(LWF.ASSIGN)!.trim() : '',
+      assignee: parseAssigneeFromUrl(sp.get(LWF.ASSIGN), sp.has(LWF.ASSIGN), profile),
       callQueue: parseCallWorkBucketFromUrl(sp.get(LWF.CQ)),
       disposition: (() => {
         const d = parseDispositionFromUrl(sp.get(LWF.DISP))
@@ -1621,8 +1658,8 @@ export function LeadManagement() {
       mergeListFilterUrl({ [LWF.WM]: null })
     }
     // Chỉ hydrate khi chữ ký lọc đổi — không phụ thuộc cả `searchParams` (tránh mất nháp khi đổi `open` / `q`).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- filterHydrateSig
-  }, [filterHydrateSig])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filterHydrateSig + profile for default assignee
+  }, [filterHydrateSig, profile?.id, profile?.role])
 
   const applyDraftFilters = useCallback(() => {
     const d = draftFilters
@@ -1660,14 +1697,14 @@ export function LeadManagement() {
       [LWF.PROG]: d.program === 'ALL' ? null : d.program,
       [LWF.ENROLL]: d.enrollment === 'ALL' ? null : d.enrollment,
       [LWF.SCHOOL]: d.school === 'ALL' ? null : d.school,
-      [LWF.ASSIGN]: d.assignee ? d.assignee : null,
+      [LWF.ASSIGN]: assigneeToUrlParam(d.assignee, profile),
       [LWF.DATE_FROM]: from || null,
       [LWF.DATE_TO]: to || null,
     })
     setWorkspaceToolsOpen(true)
     setFilterPanelOpen(true)
     setPage(1)
-  }, [draftFilters, mergeListFilterUrl, setPage])
+  }, [draftFilters, mergeListFilterUrl, setPage, profile])
 
   /** Chip nguồn: chọn + áp dụng ngay (không cần bấm «Áp dụng lọc»). */
   const applyProgramFilterQuick = useCallback(
@@ -1783,7 +1820,7 @@ export function LeadManagement() {
   }, [appliedFiltersSnapshot])
 
   const clearQuickFilters = useCallback(() => {
-    const empty = emptyLeadUiFilters()
+    const empty = emptyLeadUiFilters(profile)
     setTagFilter(empty.tag)
     setCallWorkBucketFilter(empty.callQueue)
     setDispositionFilter(empty.disposition)
@@ -1809,10 +1846,12 @@ export function LeadManagement() {
       if (intakeOriginTab !== 'public_portal') {
         next.set(LWF.ORIGIN, leadIntakeOriginToUrlParam(intakeOriginTab))
       }
+      const assignParam = assigneeToUrlParam(empty.assignee, profile)
+      if (assignParam) next.set(LWF.ASSIGN, assignParam)
       return next
     }, { replace: true })
     setPage(1)
-  }, [setSearchParams, setPage, intakeOriginTab])
+  }, [setSearchParams, setPage, intakeOriginTab, profile])
 
   const activeFilterChips = useMemo(() => {
     type Chip = { id: string; label: string; onClear: () => void }
@@ -1963,21 +2002,45 @@ export function LeadManagement() {
         },
       })
     }
-    if (assigneeFilter) {
-      const al =
-        assigneeFilter === '__UNASSIGNED__'
-          ? 'Chưa gán TVV'
-          : counselorDisplayNameById.get(assigneeFilter) ??
-            reassignPickList.find((c) => c.id === assigneeFilter)?.displayName ??
-            assigneeFilter.slice(0, 8)
+    if (assigneeFilter === '__UNASSIGNED__') {
       out.push({
         id: 'assign',
-        label: `TVV: ${al}`,
+        label: 'Nhân viên: Chưa gán',
         onClear: () => {
-          setAssigneeFilter('')
-          setDraftFilters((prev) => ({ ...prev, assignee: '' }))
+          const mine = defaultAssigneeFilterId(profile)
+          setAssigneeFilter(mine)
+          setDraftFilters((prev) => ({ ...prev, assignee: mine }))
           setPage(1)
-          mergeListFilterUrl({ [LWF.ASSIGN]: null })
+          mergeListFilterUrl({ [LWF.ASSIGN]: assigneeToUrlParam(mine, profile) })
+        },
+      })
+    } else if (assigneeFilter === '' && defaultAssigneeFilterId(profile)) {
+      // «Cả nhóm» lệch mặc định «Tôi» → hiện chip.
+      out.push({
+        id: 'assign',
+        label: 'Nhân viên: Cả nhóm',
+        onClear: () => {
+          const mine = defaultAssigneeFilterId(profile)
+          setAssigneeFilter(mine)
+          setDraftFilters((prev) => ({ ...prev, assignee: mine }))
+          setPage(1)
+          mergeListFilterUrl({ [LWF.ASSIGN]: assigneeToUrlParam(mine, profile) })
+        },
+      })
+    } else if (assigneeFilter && assigneeFilter !== defaultAssigneeFilterId(profile)) {
+      const al =
+        counselorDisplayNameById.get(assigneeFilter) ??
+        reassignPickList.find((c) => c.id === assigneeFilter)?.displayName ??
+        assigneeFilter.slice(0, 8)
+      out.push({
+        id: 'assign',
+        label: `Nhân viên: ${al}`,
+        onClear: () => {
+          const mine = defaultAssigneeFilterId(profile)
+          setAssigneeFilter(mine)
+          setDraftFilters((prev) => ({ ...prev, assignee: mine }))
+          setPage(1)
+          mergeListFilterUrl({ [LWF.ASSIGN]: assigneeToUrlParam(mine, profile) })
         },
       })
     }
@@ -2050,6 +2113,7 @@ export function LeadManagement() {
     patchDraftFilters,
     counselorDisplayNameById,
     reassignPickList,
+    profile,
     setSearchParams,
     setPage,
   ])
@@ -4011,16 +4075,34 @@ export function LeadManagement() {
                 <FilterSelect
                   compact
                   label="Nhân viên"
-                  title="Lọc theo người phụ trách."
+                  title="Mặc định xem hồ sơ của bạn. Chọn người khác trong nhóm để xem hồ sơ của họ."
                   value={draftFilters.assignee}
                   onChange={(v) => patchDraftFilters({ assignee: v })}
                   options={[
-                    { v: '', t: 'Tất cả nhân viên' },
-                    { v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' },
-                    ...reassignPickList.map((c) => ({
-                      v: c.id,
-                      t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
-                    })),
+                    ...(defaultAssigneeFilterId(profile)
+                      ? [
+                          { v: defaultAssigneeFilterId(profile), t: 'Tôi' },
+                          ...(can('leads:read:team_scope') ||
+                          can('leads:read:global') ||
+                          isTeamLeadRole(profile?.role) ||
+                          profileHasTeamRoster(profile) ||
+                          canOwnFieldStaffTeam(profile?.role)
+                            ? [{ v: '', t: 'Cả nhóm' }]
+                            : []),
+                        ]
+                      : [{ v: '', t: 'Tất cả nhân viên' }]),
+                    ...(can('leads:read:global') ||
+                    can('leads:read:team_scope') ||
+                    isTeamLeadRole(profile?.role) ||
+                    profileHasTeamRoster(profile)
+                      ? [{ v: '__UNASSIGNED__', t: 'Chưa gán nhân viên' }]
+                      : []),
+                    ...reassignPickList
+                      .filter((c) => c.id !== defaultAssigneeFilterId(profile))
+                      .map((c) => ({
+                        v: c.id,
+                        t: `${formatStaffDirectoryLabel(c)}${assignmentLoadByUid.has(c.id) ? ` · ${assignmentLoadByUid.get(c.id)}` : ''}`,
+                      })),
                   ]}
                 />
               </div>

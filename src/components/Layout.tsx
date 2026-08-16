@@ -112,8 +112,8 @@ function sidebarLinkClass(isActive: boolean, expanded: boolean) {
 }
 
 function isNavActive(pathname: string, to: string) {
-  if (to === '/tong-ket') return pathname === '/tong-ket' || pathname === '/'
   if (to === '/leads') return pathname === '/leads' || pathname.startsWith('/leads/')
+  if (to === '/tong-ket') return pathname === '/tong-ket'
   return pathname.startsWith(to)
 }
 

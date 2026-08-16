@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { PhoneCall } from 'lucide-react'
+import { Download, PhoneCall } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { type KpiRangePreset, useCounselorKpi } from '../hooks/useCounselorKpi'
 import { sumKpiSummaries } from '../utils/kpiMap'
+import { htmlTable, printReportAsPdf } from '../utils/exportReportPdf'
 import { KpiCallHint } from '../components/KpiCallHint'
 import { KpiCounselorTable } from '../components/KpiCounselorTable'
 import { KpiMetricsSections } from '../components/KpiMetricsSections'
@@ -50,6 +51,51 @@ export function CounselorKpiView({ embedded = false }: { embedded?: boolean }) {
     : can('leads:read:team_scope')
       ? 'Nhóm của bạn'
       : profile?.displayName || 'Cá nhân'
+
+  const exportKpiPdf = () => {
+    const from = dates[0] ?? ''
+    const to = dates[dates.length - 1] ?? ''
+    const table = htmlTable({
+      headers: [
+        'Nhân viên',
+        'Gọi',
+        'Gọi hợp lệ',
+        'Lead chạm',
+        'LPXT',
+        'Cọc',
+        'Full NE',
+        'Doanh thu duyệt (đ)',
+      ],
+      numericCols: [1, 2, 3, 4, 5, 6, 7],
+      rows: [
+        ...tableRows.map(({ row, name }) => [
+          name,
+          String(row.totalCalls),
+          String(row.validCalls),
+          String(row.leadCham),
+          String(row.lpxtCount),
+          String(row.depositPaidCount),
+          String(row.fullNeCount),
+          String(row.approvedRevenueVnd),
+        ]),
+        [
+          'Tổng',
+          String(visibleTotals.totalCalls),
+          String(visibleTotals.validCalls),
+          String(visibleTotals.leadCham),
+          String(visibleTotals.lpxtCount),
+          String(visibleTotals.depositPaidCount),
+          String(visibleTotals.fullNeCount),
+          String(visibleTotals.approvedRevenueVnd),
+        ],
+      ],
+    })
+    printReportAsPdf({
+      title: 'Báo cáo đánh giá KPI',
+      subtitle: `${scopeLabel} · ${from} → ${to}`,
+      bodyHtml: table,
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -130,7 +176,19 @@ export function CounselorKpiView({ embedded = false }: { embedded?: boolean }) {
             <PhoneCall className="h-4 w-4 text-sky-700" aria-hidden />
             <h2 className="app-section-heading">Chi tiết theo nhân viên</h2>
           </div>
-          <p className="text-xs text-slate-500">{loading ? 'Đang tải…' : `${visibleSummaries.length} TVV`}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs text-slate-500">{loading ? 'Đang tải…' : `${visibleSummaries.length} TVV`}</p>
+            <button
+              type="button"
+              onClick={exportKpiPdf}
+              disabled={loading || tableRows.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Mở hộp thoại In → chọn Lưu thành PDF"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Tải PDF
+            </button>
+          </div>
         </div>
         <KpiCounselorTable
           rows={tableRows}

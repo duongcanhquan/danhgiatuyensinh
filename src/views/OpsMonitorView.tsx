@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Building2, Users } from 'lucide-react'
+import { Building2, Download, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useCounselorDirectory } from '../hooks/useCounselorDirectory'
 import { ANALYTICS_FULL_SCOPE_MAX, useLeads } from '../hooks/useLeads'
@@ -39,6 +39,7 @@ import {
   todayOpsDateKey,
   type OpsDatePreset,
 } from '../utils/opsMonitorSummary'
+import { htmlTable, printReportAsPdf } from '../utils/exportReportPdf'
 
 export type OpsMonitorMode = 'team' | 'school'
 
@@ -58,6 +59,7 @@ function leadsHref(opts: {
   to?: string
 }): string {
   const p = new URLSearchParams()
+  // `all` = cả nhóm (không để trống — Hồ sơ mặc định «Tôi» khi thiếu param).
   if (opts.assign) p.set(LWF.ASSIGN, opts.assign)
   if (opts.crm) p.set(LWF.CRM, opts.crm)
   // Hồ sơ dùng ngày tải lên cho dfrom/dto — khớp OpsMonitor.
@@ -147,6 +149,49 @@ export function OpsMonitorView({ mode }: { mode: OpsMonitorMode }) {
   )
   const totals = useMemo(() => sumOpsStatusCounts(rows), [rows])
   const loading = directoryLoading || leadsLoading
+
+  const exportOpsPdf = () => {
+    const personTable = htmlTable({
+      headers: ['Nhân sự', 'Tổng', 'Còn xử lý', 'Đã cọc', 'Nhập học', 'HOT'],
+      numericCols: [1, 2, 3, 4, 5],
+      rows: [
+        ...rows.map((r) => [
+          r.displayName,
+          String(r.total),
+          String(r.open),
+          String(r.deposit),
+          String(r.enrolled),
+          String(r.hot),
+        ]),
+        [
+          `Tổng (${rows.length} người)`,
+          String(totals.total),
+          String(totals.open),
+          String(totals.deposit),
+          String(totals.enrolled),
+          String(totals.hot),
+        ],
+      ],
+    })
+    const sourceTable =
+      sourceRows.length > 0
+        ? `<h2 style="font-size:14px;margin:20px 0 8px">Theo nguồn</h2>${htmlTable({
+            headers: ['Nguồn', 'Tổng', 'Đã cọc', 'Nhập học'],
+            numericCols: [1, 2, 3],
+            rows: sourceRows.slice(0, 40).map((r) => [
+              r.source,
+              String(r.total),
+              String(r.deposit),
+              String(r.enrolled),
+            ]),
+          })}`
+        : ''
+    printReportAsPdf({
+      title: mode === 'team' ? 'Quản lý team' : 'Quản lý trường',
+      subtitle: `Ngày tải hồ sơ ${fromKey} → ${toKey}${counselorUid ? ' · đã lọc nhân sự' : ''}${sourceFilter ? ` · nguồn ${sourceFilter}` : ''}`,
+      bodyHtml: personTable + sourceTable,
+    })
+  }
 
   const statusPie = useMemo(
     () =>
@@ -294,6 +339,17 @@ export function OpsMonitorView({ mode }: { mode: OpsMonitorMode }) {
                 <option value="INTERESTED">{LEAD_COUNSELOR_STATUS_LABELS.INTERESTED}</option>
               </select>
             </label>
+
+            <button
+              type="button"
+              onClick={exportOpsPdf}
+              disabled={loading || rows.length === 0}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Mở hộp thoại In → chọn Lưu thành PDF"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Tải PDF
+            </button>
           </div>
         </div>
         <p className="mt-2 text-xs text-slate-500">
@@ -326,7 +382,7 @@ export function OpsMonitorView({ mode }: { mode: OpsMonitorMode }) {
           >
             <Link
               to={leadsHref({
-                assign: counselorUid || undefined,
+                assign: counselorUid || 'all',
                 crm: card.crm,
                 from: fromKey,
                 to: toKey,

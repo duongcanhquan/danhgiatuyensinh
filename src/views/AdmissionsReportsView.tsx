@@ -31,6 +31,7 @@ import {
   type AdmissionsReportFilters,
 } from '../utils/admissionsReports'
 import { downloadTextCsv } from '../utils/kpiCsvExport'
+import { htmlTable, printReportAsPdf } from '../utils/exportReportPdf'
 import { todayOpsDateKey, shiftOpsDateKey, monthStartOpsKey } from '../utils/opsMonitorSummary'
 
 type TabId = 'tong-quan' | 'tvv' | 'mkt' | 'nganh' | 'nguon' | 'tuyen-sinh'
@@ -241,6 +242,46 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
     downloadTextCsv(`bao-cao-tuyen-sinh_${startIso}_${endIso}.csv`, lines.join('\n'))
   }
 
+  const exportOverviewPdf = () => {
+    const overview = htmlTable({
+      headers: ['Chỉ số', 'Giá trị'],
+      numericCols: [1],
+      rows: [
+        ['Tổng hồ sơ kỳ', String(report.overview.total)],
+        ['Mới', String(report.overview.moi)],
+        ['Đang hoàn thiện', String(report.overview.dang)],
+        ['LPXT', String(report.overview.lpxt)],
+        ['Cọc', String(report.overview.coc)],
+        ['Full NE', String(report.overview.fullNe)],
+      ],
+    })
+    const tvv = htmlTable({
+      headers: ['TVV', 'Tổng', 'NE', 'LPXT'],
+      numericCols: [1, 2, 3],
+      rows: report.tvvRanking.map((r) => [
+        r.name,
+        String(r.total),
+        String(r.neCount),
+        String(r.lpxtCount),
+      ]),
+    })
+    const sources = htmlTable({
+      headers: ['Nguồn', 'Tổng', 'NE', 'LPXT'],
+      numericCols: [1, 2, 3],
+      rows: report.bySource.map((r) => [
+        r.source,
+        String(r.total),
+        String(r.neCount),
+        String(r.lpxtCount),
+      ]),
+    })
+    printReportAsPdf({
+      title: 'Báo cáo tuyển sinh',
+      subtitle: `Kỳ ${startIso} → ${endIso}`,
+      bodyHtml: `${overview}<h2 style="font-size:14px;margin:20px 0 8px">Theo TVV</h2>${tvv}<h2 style="font-size:14px;margin:20px 0 8px">Theo nguồn</h2>${sources}`,
+    })
+  }
+
   const shellClass = embedded ? 'space-y-4' : 'mx-auto max-w-6xl space-y-5 px-4 py-6'
 
   return (
@@ -393,6 +434,15 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
             <Download className="h-4 w-4" />
             Xuất CSV
           </button>
+          <button
+            type="button"
+            onClick={exportOverviewPdf}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            title="Mở hộp thoại In → chọn Lưu thành PDF"
+          >
+            <Download className="h-4 w-4" />
+            Tải PDF
+          </button>
           {isAdminLikeRole(profile?.role) || can('leads:read:global') ? (
             <p className="text-[11px] text-slate-500">
               Phạm vi: {preferTeamScope || forceTeam ? 'theo nhóm đang xem' : 'toàn trường (theo quyền)'}.
@@ -463,7 +513,7 @@ export function AdmissionsReportsView({ embedded = false }: { embedded?: boolean
                   <p className="text-xl font-bold text-sky-900">{conversion.lpxtRate}%</p>
                 </div>
                 <Link
-                  to={leadsHref({ assign: tvvUid || undefined, from: startIso, to: endIso })}
+                  to={leadsHref({ assign: tvvUid || 'all', from: startIso, to: endIso })}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-sky-900 hover:bg-slate-50"
                 >
                   Mở danh sách hồ sơ theo kỳ →
