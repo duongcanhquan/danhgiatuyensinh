@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { Download, FileSpreadsheet, Upload } from 'lucide-react'
 import {
   collection,
+  deleteField,
   doc,
   getDocs,
   query,
@@ -101,6 +102,9 @@ type ImportPreview = {
   uploaderName: string
   templateId: LeadIntakeTemplateId
 }
+
+/** Mẫu 3: gắn Cổng đăng ký (không đợt) hoặc gắn thêm tên đợt để lọc. */
+type IntakeLabelMode = 'portal' | 'batch'
 
 function activeStaffForExcelAssignMatch(users: VietMyUserProfile[]) {
   return users.filter(
@@ -229,6 +233,8 @@ export function DataIntake() {
   /** Khi bật: dòng trùng DB (SĐT/CCCD) sẽ cập nhật hồ sơ cũ thay vì bỏ qua. */
   const [overwriteDbDuplicates, setOverwriteDbDuplicates] = useState(false)
   const [templateId, setTemplateId] = useState<LeadIntakeTemplateId>('standard_v1')
+  /** Mẫu 3: mặc định Cổng đăng ký; chọn «Theo đợt» mới bắt buộc ghi chú. */
+  const [intakeLabelMode, setIntakeLabelMode] = useState<IntakeLabelMode>('portal')
   const [intakeProgram, setIntakeProgram] = useState('')
   const [recentPrograms, setRecentPrograms] = useState<string[]>(() =>
     typeof localStorage !== 'undefined' ? loadRecentIntakePrograms() : [],
@@ -236,6 +242,10 @@ export function DataIntake() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
   const selectedTemplate = useMemo(() => getLeadIntakeTemplate(templateId), [templateId])
+  const isPortalSheetUi = Boolean(selectedTemplate.positionalAppsScript)
+  const requiresProgramLabel = !isPortalSheetUi || intakeLabelMode === 'batch'
+  const programLabelReady = Boolean(normalizeIntakeProgramLabel(intakeProgram))
+  const showProgramField = requiresProgramLabel
 
   /** Banner / preview từng nằm dưới cột danh sách — kéo lên view khi có phản hồi. */
   useEffect(() => {
@@ -532,9 +542,14 @@ export function DataIntake() {
   const commitImport = useCallback(async () => {
     if (!preview || !db || !profile) return
     const isPortalSheet = preview.templateId === 'appscript_sheet_v1'
+    const labelAsPortal = isPortalSheet && intakeLabelMode === 'portal'
     const programLabel = normalizeIntakeProgramLabel(intakeProgram)
-    if (!isPortalSheet && !programLabel) {
-      setBanner('Nhập tên chương trình / đợt trước khi xác nhận nhập (vd. «Đợt 9/2026 — OFF»).')
+    if (!labelAsPortal && !programLabel) {
+      setBanner(
+        isPortalSheet
+          ? 'Chọn «Theo đợt» thì cần nhập tên đợt trước khi xác nhận.'
+          : 'Nhập tên chương trình / đợt trước khi xác nhận nhập (vd. «Đợt 9/2026 — OFF»).',
+      )
       return
     }
     const importProfile = pickProfileForImport(profiles)
@@ -551,7 +566,7 @@ export function DataIntake() {
         uploaderName,
         uploadBatchId,
         intakeOrigin: isPortalSheet ? ('public_portal' as const) : ('campaign_upload' as const),
-        ...(programLabel ? { intakeProgram: programLabel } : {}),
+        ...(!labelAsPortal && programLabel ? { intakeProgram: programLabel } : {}),
       }
       const adminPoolUid = pickPrimaryAdminUid(directoryUsers) ?? (isAdminLikeRole(profile.role) ? profile.id : null)
 
@@ -730,6 +745,8 @@ export function DataIntake() {
           lastTouchedAt: now,
           // Tạo mới: gắn ngày tạo từ Sheet. Ghi đè: giữ createdAt cũ trên Firestore (không ghi trường này).
           ...(!isOverwrite ? { createdAt: sheetCreatedAt } : {}),
+          // Ghi đè theo Cổng: gỡ nhãn đợt cũ (merge không tự xóa field).
+          ...(isOverwrite && labelAsPortal ? { intakeProgram: deleteField() } : {}),
         } as Record<string, unknown>) as Record<string, unknown>
 
         if (isOverwrite && pr.existingId) {
@@ -759,12 +776,12 @@ export function DataIntake() {
       }
 
       const createdCount = toWrite.length - overwritten
-      const programPart = programLabel
-        ? isPortalSheet
-          ? ` · ghi chú «${programLabel}»`
-          : ` · chương trình «${programLabel}»`
-        : isPortalSheet
-          ? ' · Cổng đăng ký'
+      const programPart = labelAsPortal
+        ? ' · Cổng đăng ký'
+        : programLabel
+          ? isPortalSheet
+            ? ` · đợt «${programLabel}» (cổng)`
+            : ` · chương trình «${programLabel}»`
           : ''
       const msg =
         toWrite.length > 0
@@ -783,7 +800,7 @@ export function DataIntake() {
             }`
           : `Không nhập dòng nào — toàn bộ ${rejectedInFile + rejectedOnDb} dòng bị lọc (${rejectedInFile} trùng trong file, ${rejectedOnDb} đã có trên hệ thống).`
       setBanner(msg)
-      if (programLabel) setRecentPrograms(rememberIntakeProgram(programLabel))
+      if (!labelAsPortal && programLabel) setRecentPrograms(rememberIntakeProgram(programLabel))
       setPreview(null)
       setOverwriteDbDuplicates(false)
     } catch (e) {
@@ -805,6 +822,7 @@ export function DataIntake() {
     classificationRuntime,
     effectiveOrgId,
     intakeProgram,
+    intakeLabelMode,
     leadSources,
     scholarships,
     overwriteDbDuplicates,
@@ -987,9 +1005,15 @@ export function DataIntake() {
                   </p>
                 ) : null}
                 <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm text-amber-950">
-                  <span className="font-semibold">Đợt sẽ gắn:</span>{' '}
-                  {normalizeIntakeProgramLabel(intakeProgram) || (
-                    <span className="text-rose-700">chưa nhập — điền ô «Chương trình / đợt» bên dưới trước khi xác nhận</span>
+                  <span className="font-semibold">Gắn nguồn:</span>{' '}
+                  {preview.templateId === 'appscript_sheet_v1' && intakeLabelMode === 'portal' ? (
+                    <span className="text-sky-800">Cổng đăng ký (không gắn đợt)</span>
+                  ) : normalizeIntakeProgramLabel(intakeProgram) ? (
+                    normalizeIntakeProgramLabel(intakeProgram)
+                  ) : (
+                    <span className="text-rose-700">
+                      chưa nhập — điền tên đợt bên dưới trước khi xác nhận
+                    </span>
                   )}
                 </p>
               </div>
@@ -1060,22 +1084,26 @@ export function DataIntake() {
               {overwriteDbDuplicates
                 ? 'Đang bật ghi đè: dòng trùng DB sẽ được cập nhật; dòng mới vẫn tạo mới.'
                 : 'Mặc định chỉ ghi dòng mới, không ghi đè. Bật ô phía trên nếu muốn cập nhật hồ sơ đã có.'}{' '}
-              Mỗi lần nhập mang tên đợt ở dưới — sau này lọc trên màn Hồ sơ. «Người phụ trách»: khớp → gán đúng; không
-              khớp → Admin.
+              {preview.templateId === 'appscript_sheet_v1' && intakeLabelMode === 'portal'
+                ? 'Mẫu 3 đang gắn Cổng đăng ký — không cần tên đợt.'
+                : 'Mỗi lần nhập mang tên đợt ở dưới — sau này lọc trên màn Hồ sơ.'}{' '}
+              «Người phụ trách»: khớp → gán đúng; không khớp → Admin.
             </div>
 
             <div className="flex flex-col items-center gap-1.5 pt-1">
               <button
                 type="button"
                 disabled={
-                  busy || previewStats.willWrite === 0 || !normalizeIntakeProgramLabel(intakeProgram)
+                  busy ||
+                  previewStats.willWrite === 0 ||
+                  (requiresProgramLabel && !programLabelReady)
                 }
                 onClick={() => void commitImport()}
                 title={
                   previewStats.willWrite === 0
                     ? 'Không có dòng để nhập hoặc ghi đè'
-                    : !normalizeIntakeProgramLabel(intakeProgram)
-                      ? 'Nhập tên chương trình / đợt trước'
+                    : requiresProgramLabel && !programLabelReady
+                      ? 'Nhập tên đợt trước'
                       : undefined
                 }
                 className="inline-flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-amber-500 bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 disabled:opacity-40 sm:w-auto"
@@ -1089,9 +1117,9 @@ export function DataIntake() {
                 <p className="text-center text-xs text-slate-600">
                   Không có dòng để ghi — bật «Ghi đè» nếu chỉ còn trùng DB, hoặc kiểm tra file.
                 </p>
-              ) : !normalizeIntakeProgramLabel(intakeProgram) ? (
+              ) : requiresProgramLabel && !programLabelReady ? (
                 <p className="text-center text-xs font-medium text-rose-700">
-                  Điền «Chương trình / đợt» bên dưới rồi mới xác nhận được.
+                  Điền tên đợt bên dưới rồi mới xác nhận được.
                 </p>
               ) : null}
             </div>
@@ -1128,6 +1156,7 @@ export function DataIntake() {
                           setTemplateId(tpl.id)
                           setPreview(null)
                           setBanner(null)
+                          setIntakeLabelMode(tpl.positionalAppsScript ? 'portal' : 'batch')
                         }}
                       />
                       <span className="min-w-0">
@@ -1155,40 +1184,100 @@ export function DataIntake() {
               ) : null}
             </fieldset>
 
-            <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-              {selectedTemplate.positionalAppsScript ? (
-                <>
-                  Ghi chú đợt nhập{' '}
-                  <span className="font-normal normal-case tracking-normal text-slate-400">(tuỳ chọn)</span>
-                </>
-              ) : (
-                <>
-                  Chương trình / đợt nhập <span className="text-rose-600">*</span>
-                </>
-              )}
-              <input
-                list="intake-program-suggestions"
-                value={intakeProgram}
-                onChange={(e) => setIntakeProgram(e.target.value)}
-                disabled={busy || !canIntake}
-                placeholder={
-                  selectedTemplate.positionalAppsScript
-                    ? 'Vd. Sheet cổng 16/8 — không bắt buộc'
-                    : 'Vd. Đợt 9/2026 — Offline Hà Nội'
-                }
-                className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
-              />
-              <datalist id="intake-program-suggestions">
-                {recentPrograms.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-              <span className="mt-1.5 block text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-500">
-                {selectedTemplate.positionalAppsScript
-                  ? 'Mẫu 3 vào danh sách «Cổng đăng ký» (không phải chiến dịch). Ghi chú chỉ để dễ lọc sau này.'
-                  : 'Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này (tab Tải lên / chiến dịch).'}
-              </span>
-            </label>
+            {isPortalSheetUi ? (
+              <fieldset className="mb-4 text-left">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Gắn nguồn hồ sơ
+                </legend>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <label
+                    className={`flex flex-1 cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                      intakeLabelMode === 'portal'
+                        ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-300/70'
+                        : 'border-slate-200 bg-white hover:border-sky-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="intake-label-mode"
+                      className="mt-1 accent-sky-600"
+                      checked={intakeLabelMode === 'portal'}
+                      disabled={busy}
+                      onChange={() => setIntakeLabelMode('portal')}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-900">Theo Cổng đăng ký</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-slate-600">
+                        Không cần tên đợt — hồ sơ vào tab Cổng đăng ký trên Hồ sơ.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex flex-1 cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                      intakeLabelMode === 'batch'
+                        ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-300/70'
+                        : 'border-slate-200 bg-white hover:border-amber-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="intake-label-mode"
+                      className="mt-1 accent-amber-600"
+                      checked={intakeLabelMode === 'batch'}
+                      disabled={busy}
+                      onChange={() => setIntakeLabelMode('batch')}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-900">Theo đợt</span>
+                      <span className="mt-0.5 block text-xs leading-snug text-slate-600">
+                        Vẫn là Cổng đăng ký, thêm tên đợt để lọc sau này.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+            ) : null}
+
+            {showProgramField ? (
+              <label className="mb-4 block text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                {isPortalSheetUi ? (
+                  <>
+                    Tên đợt <span className="text-rose-600">*</span>
+                  </>
+                ) : (
+                  <>
+                    Chương trình / đợt nhập <span className="text-rose-600">*</span>
+                  </>
+                )}
+                <input
+                  list="intake-program-suggestions"
+                  value={intakeProgram}
+                  onChange={(e) => setIntakeProgram(e.target.value)}
+                  disabled={busy || !canIntake}
+                  placeholder={
+                    isPortalSheetUi
+                      ? 'Vd. Sheet cổng tuần 16/8'
+                      : 'Vd. Đợt 9/2026 — Offline Hà Nội'
+                  }
+                  className="mt-1 w-full rounded-lg border border-amber-300/90 bg-white px-3 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-50"
+                />
+                <datalist id="intake-program-suggestions">
+                  {recentPrograms.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+                <span className="mt-1.5 block text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-500">
+                  {isPortalSheetUi
+                    ? 'Điền khi chọn «Theo đợt». Hồ sơ vẫn nằm tab Cổng đăng ký.'
+                    : 'Điền trước khi chọn file. Tên này gắn vào mọi hồ sơ nhập lần này (tab Tải lên / chiến dịch).'}
+                </span>
+              </label>
+            ) : (
+              <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-sky-950">
+                Đang chọn <strong>Theo Cổng đăng ký</strong> — bấm «Xác nhận nhập» không cần tên đợt. Muốn gắn đợt
+                để lọc, chọn «Theo đợt» phía trên.
+              </p>
+            )}
 
             <input
               ref={fileInputRef}
