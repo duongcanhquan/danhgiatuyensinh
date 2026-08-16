@@ -1,5 +1,6 @@
 /**
  * Một onSnapshot dùng chung cho nhiều consumer (tránh N listener cùng collection).
+ * Giữ cache rows khi hết listener → mở lại UI nhận data ngay (stale-while-revalidate).
  */
 import type { Firestore, Query } from 'firebase/firestore'
 import { onSnapshot } from 'firebase/firestore'
@@ -14,6 +15,39 @@ type SharedEntry<T> = {
 }
 
 const registry = new Map<string, SharedEntry<unknown>>()
+
+function attachSnapshot<T>(
+  entry: SharedEntry<T>,
+  buildQuery: (db: Firestore) => Query,
+  mapSnap: (id: string, data: Record<string, unknown>) => T | null,
+  db: Firestore,
+): void {
+  if (entry.unsub) return
+  const hadWarmRows = entry.rows.length > 0 || entry.error != null
+  if (!hadWarmRows) entry.loading = true
+  const q = buildQuery(db)
+  entry.unsub = onSnapshot(
+    q,
+    (snap) => {
+      const next: T[] = []
+      snap.forEach((d) => {
+        const row = mapSnap(d.id, d.data() as Record<string, unknown>)
+        if (row) next.push(row)
+      })
+      entry.rows = next
+      entry.error = null
+      entry.loading = false
+      for (const fn of entry.listeners) fn(next, null)
+    },
+    (err) => {
+      console.error(err)
+      const msg = firestoreReadErrorMessage(err, 'Lỗi đọc Firestore')
+      entry.error = msg
+      entry.loading = false
+      for (const fn of entry.listeners) fn(entry.rows, msg)
+    },
+  )
+}
 
 export function subscribeSharedFirestoreQuery<T>(
   key: string,
@@ -32,44 +66,23 @@ export function subscribeSharedFirestoreQuery<T>(
       loading: true,
     }
     registry.set(key, entry as SharedEntry<unknown>)
-    const q = buildQuery(db)
-    entry.unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next: T[] = []
-        snap.forEach((d) => {
-          const row = mapSnap(d.id, d.data() as Record<string, unknown>)
-          if (row) next.push(row)
-        })
-        entry!.rows = next
-        entry!.error = null
-        entry!.loading = false
-        for (const fn of entry!.listeners) fn(next, null)
-      },
-      (err) => {
-        console.error(err)
-        const msg = firestoreReadErrorMessage(err, 'Lỗi đọc Firestore')
-        entry!.error = msg
-        entry!.loading = false
-        for (const fn of entry!.listeners) fn(entry!.rows, msg)
-      },
-    )
   }
+
+  attachSnapshot(entry, buildQuery, mapSnap, db)
 
   const listener = (rows: T[], error: string | null) => {
     onChange(rows, error, false)
   }
   entry.listeners.add(listener)
-  onChange(entry.rows, entry.error, entry.loading)
+  // Cache ấm → loading false ngay; lần đầu vẫn loading đến khi snapshot.
+  onChange(entry.rows, entry.error, entry.loading && entry.rows.length === 0 && !entry.error)
 
   return () => {
     entry!.listeners.delete(listener)
     if (entry!.listeners.size === 0) {
       entry!.unsub?.()
       entry!.unsub = null
-      if (registry.get(key) === entry && entry!.listeners.size === 0) {
-        registry.delete(key)
-      }
+      // Giữ entry.rows trong registry — không xóa key (warm reopen).
     }
   }
 }

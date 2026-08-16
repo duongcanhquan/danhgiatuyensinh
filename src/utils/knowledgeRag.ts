@@ -89,11 +89,13 @@ export function knowledgeDocDisplayScore(lead: Lead, doc: KnowledgeDocument): nu
   let score = docRelevanceScore(blob, doc)
   if (doc.type === 'GENERAL') score += 50
   if (doc.type === 'FAQ') score += 20
+  if (!blob) return score
   const text = `${doc.title} ${doc.content}`.toLowerCase()
-  if (blob) {
-    for (const token of blob.split(/\s+/).filter((t) => t.length >= 3)) {
-      if (text.includes(token)) score += 8
-    }
+  // Chỉ quét token trên title + đoạn đầu nội dung (tránh O(tokens × full body) khi mở Playbook).
+  const scan = text.length > 2_400 ? text.slice(0, 2_400) : text
+  for (const token of blob.split(/\s+/)) {
+    if (token.length < 3) continue
+    if (scan.includes(token)) score += 8
   }
   return score
 }

@@ -10,11 +10,17 @@ import {
 
 const DOC_PATH = { collection: 'scoringAux', id: 'knowledgeCategories' } as const
 
-export function useKnowledgeCategories() {
+export function useKnowledgeCategories(opts?: { enabled?: boolean }) {
+  const enabled = opts?.enabled !== false
   const [custom, setCustom] = useState<KnowledgeCategoryDef[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!enabled) {
+      queueMicrotask(() => setLoading(false))
+      return
+    }
+
     const db = getFirestoreDb()
     if (!db) {
       queueMicrotask(() => {
@@ -46,7 +52,7 @@ export function useKnowledgeCategories() {
       },
     )
     return () => unsub()
-  }, [])
+  }, [enabled])
 
   const categories = useMemo(() => mergeKnowledgeCategories(custom), [custom])
 

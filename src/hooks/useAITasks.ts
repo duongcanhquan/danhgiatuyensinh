@@ -33,7 +33,8 @@ function mapAITask(id: string, data: Record<string, unknown>): AITask | null {
   }
 }
 
-export function useAITasks() {
+export function useAITasks(opts?: { enabled?: boolean }) {
+  const enabled = opts?.enabled !== false
   const { can } = useAuth()
   const { effectiveOrgId } = useOrg()
   const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
@@ -45,6 +46,13 @@ export function useAITasks() {
   const seedAttemptedRef = useRef(false)
 
   useEffect(() => {
+    if (!enabled) {
+      queueMicrotask(() => {
+        setLoading(false)
+      })
+      return
+    }
+
     const firestore = getFirestoreDb()
     if (!firestore) {
       queueMicrotask(() => {
@@ -55,6 +63,7 @@ export function useAITasks() {
       return
     }
 
+    setLoading(true)
     const q = query(collection(firestore, FS_COLLECTIONS.ai_tasks), where('orgId', '==', orgKey))
     const unsub = onSnapshot(
       q,
@@ -82,7 +91,7 @@ export function useAITasks() {
       },
     )
     return () => unsub()
-  }, [configured, canSeedTasks, orgKey])
+  }, [configured, canSeedTasks, orgKey, enabled])
 
-  return { tasks, loading, error }
+  return { tasks, loading: enabled ? loading : false, error: enabled ? error : null }
 }

@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'motion/react'
 import {
   BookOpen,
   Pencil,
@@ -67,20 +66,17 @@ function SnippetCard({
   const parsed = isObjection ? parseObjectionBlock(snippet.content) : null
 
   const shell = isUsp
-    ? 'border-amber-200 bg-amber-50/90 shadow-[0_8px_24px_rgba(251,191,36,0.12)]'
+    ? 'border-amber-200 bg-amber-50'
     : isObjection
-      ? 'border-rose-200 bg-rose-50/85 shadow-[0_8px_24px_rgba(244,63,94,0.08)]'
+      ? 'border-rose-200 bg-rose-50'
       : isClosing
-        ? 'border-emerald-200 bg-emerald-50/90 shadow-[0_8px_24px_rgba(52,211,153,0.1)]'
-        : 'border-slate-200/90 bg-white/85'
+        ? 'border-emerald-200 bg-emerald-50'
+        : 'border-slate-200/90 bg-white'
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       className={[
-        'relative rounded-xl border shadow-sm backdrop-blur-md',
+        'relative rounded-xl border shadow-sm',
         comfortable ? 'px-4 py-3.5 sm:px-5 sm:py-4' : 'px-3 py-2.5',
         shell,
       ].join(' ')}
@@ -98,20 +94,16 @@ function SnippetCard({
         ) : null}
       </div>
       {isObjection && parsed ? (
-        <div
-          className={`mt-2 space-y-2 leading-relaxed text-sm`}
-        >
+        <div className={`mt-2 space-y-2 leading-relaxed text-sm`}>
           <p className="font-medium text-amber-900">{parsed.concern}</p>
           <p className="border-t border-slate-200/80 pt-2 text-slate-700">{parsed.script}</p>
         </div>
       ) : (
-        <p
-          className={`mt-2 whitespace-pre-wrap leading-relaxed text-slate-700 text-sm`}
-        >
+        <p className={`mt-2 whitespace-pre-wrap leading-relaxed text-slate-700 text-sm`}>
           {snippet.content}
         </p>
       )}
-    </motion.div>
+    </div>
   )
 }
 
@@ -142,25 +134,27 @@ export function ConsultingAssistantPanel({
   /** Nội dung nhúng trong popup chi tiết — phóng to chữ & khoảng cách cho dễ đọc. */
   const embeddedInDialog = variant === 'embedded' && !showHeader
   const shell = isRail
-    ? 'relative fixed inset-y-0 right-0 z-[52] hidden h-full w-full max-w-[min(24rem,100vw)] flex-col border-l border-slate-200/80 bg-white/55 text-slate-900 shadow-[-12px_0_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl lg:flex'
+    ? 'relative fixed inset-y-0 right-0 z-[52] hidden h-full w-full max-w-[min(24rem,100vw)] flex-col border-l border-slate-200/80 bg-white/95 text-slate-900 shadow-[-12px_0_40px_rgba(15,23,42,0.08)] lg:flex'
     : showHeader
-      ? 'relative flex w-full flex-col border-b border-slate-200/80 bg-white/50 p-4 text-slate-900 shadow-sm backdrop-blur-2xl'
+      ? 'relative flex w-full flex-col border-b border-slate-200/80 bg-white/95 p-4 text-slate-900 shadow-sm'
       : 'relative flex min-h-0 w-full flex-1 flex-col bg-transparent p-0 text-slate-900'
 
   return (
     <aside className={shell} aria-label="Trợ lý tư vấn động">
-      <div
-        className={
-          isRail
-            ? 'pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(56,189,248,0.12),transparent_55%),radial-gradient(ellipse_at_100%_60%,rgba(167,139,250,0.1),transparent_50%)]'
-            : 'pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_0%,rgba(167,139,250,0.08),transparent_50%)]'
-        }
-      />
+      {isRail || showHeader ? (
+        <div
+          className={
+            isRail
+              ? 'pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(56,189,248,0.08),transparent_55%)]'
+              : 'pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_0%,rgba(167,139,250,0.06),transparent_50%)]'
+          }
+        />
+      ) : null}
 
       <div className={`relative flex min-h-0 flex-1 flex-col ${isRail ? 'p-4' : embeddedInDialog ? 'px-3 py-2 sm:px-6 sm:py-4' : ''}`}>
         {showHeader ? (
           <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200/80 pb-3">
-            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-200/90 bg-white/90 shadow-md shadow-amber-500/10">
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-200/90 bg-white shadow-md shadow-amber-500/10">
               <Sparkles className="h-5 w-5 text-amber-600" strokeWidth={1.6} />
             </span>
             <div className="min-w-0 flex-1">
@@ -168,7 +162,7 @@ export function ConsultingAssistantPanel({
               <p className="text-xs text-slate-600">Luồng kịch bản theo hồ sơ (Script Hub)</p>
             </div>
             <div
-              className="flex cursor-help items-center gap-2 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-amber-50/50 px-2.5 py-1.5 shadow-[0_0_20px_rgba(167,139,250,0.2)]"
+              className="flex cursor-help items-center gap-2 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-amber-50/50 px-2.5 py-1.5"
               title={buildMlWinHoverText(ml)}
             >
               <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
@@ -195,15 +189,13 @@ export function ConsultingAssistantPanel({
         <div className={`relative ${showHeader ? 'mt-3' : 'mt-0'} min-h-0 flex-1 overflow-y-auto ${isRail ? 'pr-1' : ''}`}>
           {!loading && !totalSteps ? (
             <div
-              className={`rounded-2xl border border-slate-200/90 bg-white/80 text-center shadow-inner backdrop-blur-md ${embeddedInDialog ? 'p-6 sm:p-8' : 'p-4'}`}
+              className={`rounded-2xl border border-slate-200/90 bg-white text-center shadow-inner ${embeddedInDialog ? 'p-6 sm:p-8' : 'p-4'}`}
             >
               <BookOpen
                 className={`mx-auto text-amber-600 ${embeddedInDialog ? 'h-10 w-10 sm:h-12 sm:w-12' : 'h-8 w-8'}`}
                 strokeWidth={1.25}
               />
-              <p
-                className={`mt-3 leading-relaxed text-slate-700 text-sm`}
-              >
+              <p className={`mt-3 leading-relaxed text-slate-700 text-sm`}>
                 Chưa có kịch bản đặc thù cho hồ sơ này, hãy tư vấn theo quy chuẩn chung.
               </p>
             </div>
@@ -219,7 +211,7 @@ export function ConsultingAssistantPanel({
                 {flow.map((step, stepIndex) => (
                   <li key={step.category} className="relative">
                     <div
-                      className={`absolute -left-1 top-1 flex items-center justify-center rounded-full border border-amber-300 bg-white shadow-md shadow-amber-500/15 ${embeddedInDialog ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-6 w-6'}`}
+                      className={`absolute -left-1 top-1 flex items-center justify-center rounded-full border border-amber-300 bg-white shadow-sm ${embeddedInDialog ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-6 w-6'}`}
                     >
                       <span
                         className={`font-bold text-amber-800 ${embeddedInDialog ? 'text-sm sm:text-base' : 'text-xs'}`}

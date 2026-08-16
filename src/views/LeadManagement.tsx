@@ -96,6 +96,7 @@ import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
 import { buildLeadConsultingInsights } from '../utils/leadConsultingInsights'
+import { scheduleIdleAttach } from '../utils/scheduleIdleAttach'
 import {
   formatLeadCounselorNotePreview,
   formatLeadLatestInteractionLine,
@@ -5861,11 +5862,7 @@ function LeadDetailPanel({
     [lead, allLeadSources],
   )
   const workFocus = leadWorkModePrimaryFocus(effectiveWorkMode)
-  const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(lead.id)
   const { interactions } = useInteractions(lead.id)
-  const { playbooks } = useConsultingPlaybooks()
-  const { documents: knowledgeDocuments } = useKnowledgeDocuments()
-  const { categories: knowledgeCategories } = useKnowledgeCategories()
   const { items: scholarships } = useScholarships()
   const { catalogs: profileCatalogs, onEnsureCatalogEntry } = useLeadProfileCatalogs()
 
@@ -5948,15 +5945,6 @@ function LeadDetailPanel({
     onUpdated,
   ])
 
-  const consultingInsights = useMemo(
-    () =>
-      buildLeadConsultingInsights(lead, playbooks, knowledgeDocuments, {
-        infoScoreRuntime,
-        priorityTag: detailScoringPreview?.priorityTag,
-        calculatedScore: detailScoringPreview?.calculatedScore,
-      }),
-    [lead, playbooks, knowledgeDocuments, infoScoreRuntime, detailScoringPreview],
-  )
 
   const [financeDraft, setFinanceDraft] = useState(() => leadToFinanceDraft(lead))
   const financeDirty = useMemo(() => isFinanceDraftDirty(lead, financeDraft), [lead, financeDraft])
@@ -5990,12 +5978,46 @@ function LeadDetailPanel({
   const [llmPopupOpen, setLlmPopupOpen] = useState(false)
   const [llmAccessHelpOpen, setLlmAccessHelpOpen] = useState(false)
   const [assistantPopupOpen, setAssistantPopupOpen] = useState(false)
+  const [assistantMounted, setAssistantMounted] = useState(false)
   const [playbookPopupOpen, setPlaybookPopupOpen] = useState(false)
+  const [playbookDataEnabled, setPlaybookDataEnabled] = useState(false)
+  const [llmDataEnabled, setLlmDataEnabled] = useState(false)
   const [playbookPopupTab, setPlaybookPopupTab] = useState<'consulting' | 'general'>('consulting')
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history'>('history')
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
+
+  const consultingDataOn = playbookPopupOpen || playbookDataEnabled
+  const llmDataOn = canRunLlmAnalysis && (llmPopupOpen || llmDataEnabled)
+  const { playbooks } = useConsultingPlaybooks({ enabled: consultingDataOn })
+  const { documents: knowledgeDocuments } = useKnowledgeDocuments({ enabled: consultingDataOn })
+  const { categories: knowledgeCategories } = useKnowledgeCategories({ enabled: consultingDataOn })
+  const { tasksById: aiInsightTasksById } = useLeadAiInsightTasks(llmDataOn ? lead.id : null)
+
+  const consultingInsights = useMemo(() => {
+    if (!consultingDataOn) {
+      return { quickSearchTerms: [] as string[] }
+    }
+    return buildLeadConsultingInsights(lead, playbooks, knowledgeDocuments, {
+      infoScoreRuntime,
+      priorityTag: detailScoringPreview?.priorityTag,
+      calculatedScore: detailScoringPreview?.calculatedScore,
+    })
+  }, [consultingDataOn, lead, playbooks, knowledgeDocuments, infoScoreRuntime, detailScoringPreview])
+
+  useEffect(() => {
+    setAssistantMounted(false)
+    setPlaybookDataEnabled(false)
+    setLlmDataEnabled(false)
+    return scheduleIdleAttach(
+      () => {
+        setAssistantMounted(true)
+      },
+      { timeoutMs: 450 },
+    )
+  }, [lead.id])
+
 
   const noteBaseline = (lead.lastCounselorNote ?? '').trim()
   const noteChanged = note.trim() !== noteBaseline
@@ -6084,7 +6106,9 @@ function LeadDetailPanel({
   }, [playbookPopupOpen, llmPopupOpen, assistantPopupOpen, onClose])
 
   const { orgConfig } = useOrgAiIntegration()
-  const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks()
+  const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks({
+    enabled: llmDataOn,
+  })
   const aiIntegrationDiag = useMemo(() => getAiIntegrationDiagnostics(), [orgConfig])
   const llmDialogHint = useMemo(() => {
     const parts: string[] = ['✓ Tài khoản đã được phép dùng AI trên hồ sơ.']
@@ -6908,7 +6932,10 @@ function LeadDetailPanel({
         <div className="flex shrink-0 flex-wrap items-stretch justify-end gap-1">
           <button
             type="button"
-            onClick={() => setPlaybookPopupOpen(true)}
+            onClick={() => {
+              setPlaybookDataEnabled(true)
+              setPlaybookPopupOpen(true)
+            }}
             title="Playbook"
             className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-amber-400/70 bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-amber-600"
           >
@@ -6918,7 +6945,10 @@ function LeadDetailPanel({
           {dynamicAssistantSlot ? (
             <button
               type="button"
-              onClick={() => setAssistantPopupOpen(true)}
+              onClick={() => {
+                setAssistantMounted(true)
+                setAssistantPopupOpen(true)
+              }}
               title="Trợ lý"
               className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-sky-300/80 bg-sky-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-sky-700"
             >
@@ -6929,7 +6959,10 @@ function LeadDetailPanel({
           {canRunAi ? (
             <button
               type="button"
-              onClick={() => setLlmPopupOpen(true)}
+              onClick={() => {
+                setLlmDataEnabled(true)
+                setLlmPopupOpen(true)
+              }}
               title="LLM"
               className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-[var(--color-primary)]/50 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:brightness-110"
             >
@@ -7710,7 +7743,7 @@ function LeadDetailPanel({
         <>
           <button
             type="button"
-            className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[110] cursor-default bg-slate-900/40"
             aria-label="Đóng cửa sổ phân tích AI"
             onClick={() => setLlmPopupOpen(false)}
           />
@@ -7852,19 +7885,25 @@ function LeadDetailPanel({
         </>
       ) : null}
 
-      {dynamicAssistantSlot && assistantPopupOpen ? (
+      {dynamicAssistantSlot && assistantMounted ? (
         <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[110] cursor-default bg-slate-900/45 backdrop-blur-[2px]"
-            aria-label="Đóng cửa sổ trợ lý kịch bản"
-            onClick={() => setAssistantPopupOpen(false)}
-          />
+          {assistantPopupOpen ? (
+            <button
+              type="button"
+              className="fixed inset-0 z-[110] cursor-default bg-slate-900/40"
+              aria-label="Đóng cửa sổ trợ lý kịch bản"
+              onClick={() => setAssistantPopupOpen(false)}
+            />
+          ) : null}
           <div
             role="dialog"
-            aria-modal="true"
+            aria-modal={assistantPopupOpen}
             aria-labelledby="lead-assistant-dialog-title"
-            className="fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,88dvh)] max-h-[92dvh] w-[min(calc(100vw-1rem),85rem)] max-w-[min(96vw,85rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl sm:h-[min(92dvh,76dvh)]"
+            aria-hidden={!assistantPopupOpen}
+            className={[
+              'fixed left-1/2 top-1/2 z-[120] flex h-[min(92dvh,88dvh)] max-h-[92dvh] w-[min(calc(100vw-1rem),85rem)] max-w-[min(96vw,85rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-sky-200/90 bg-white text-slate-900 shadow-2xl sm:h-[min(92dvh,76dvh)]',
+              assistantPopupOpen ? '' : 'pointer-events-none hidden',
+            ].join(' ')}
           >
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200/90 bg-gradient-to-r from-sky-50/90 to-white px-4 py-3 sm:px-5 sm:py-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">

@@ -29,7 +29,8 @@ function mapDoc(id: string, data: Record<string, unknown>): KnowledgeDocument | 
 }
 
 /** Real-time institutional knowledge for RAG — shared listener across mounts. */
-export function useKnowledgeDocuments() {
+export function useKnowledgeDocuments(opts?: { enabled?: boolean }) {
+  const enabled = opts?.enabled !== false
   const { effectiveOrgId } = useOrg()
   const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
@@ -38,6 +39,13 @@ export function useKnowledgeDocuments() {
   const configured = useMemo(() => isFirebaseConfigured(), [])
 
   useEffect(() => {
+    if (!enabled) {
+      queueMicrotask(() => {
+        setLoading(false)
+      })
+      return
+    }
+
     const firestore = getFirestoreDb()
     if (!firestore) {
       queueMicrotask(() => {
@@ -65,7 +73,7 @@ export function useKnowledgeDocuments() {
         setLoading(isLoading)
       },
     )
-  }, [configured, orgKey])
+  }, [configured, orgKey, enabled])
 
-  return { documents, loading, error }
+  return { documents, loading: enabled ? loading : false, error: enabled ? error : null }
 }
