@@ -61,7 +61,13 @@ export function leadMatchesTinhTrangFilter(lead: Lead, filter: string): boolean 
     case 'COC_THANH_CONG':
       return tag === 'Cọc'
     case 'DA_HOAN_THIEN':
-      return tag === 'Hoàn thiện phí'
+      // «Đã hoàn thiện» trên thanh Tổng = đã nộp xong / bàn giao (cọc · hoàn thiện phí · Full NE · ghi danh).
+      return (
+        tag === 'Hoàn thiện phí' ||
+        tag === 'Cọc' ||
+        tag === 'Full NE' ||
+        tag === 'Ghi danh'
+      )
     case 'KIEM_TRA_LAI':
       return tag === 'Kiểm tra lại'
     case 'CHO_FULL_NE':
@@ -73,6 +79,17 @@ export function leadMatchesTinhTrangFilter(lead: Lead, filter: string): boolean 
     default:
       return true
   }
+}
+
+/** Lọc Thu phí cần nạp cả hồ sơ đã bàn giao (kể cả CRM ENROLLED). */
+export function enrollmentFilterShowsHandoverLeads(filter: string): boolean {
+  const f = String(filter || '').trim().toUpperCase()
+  return (
+    f === 'COC_THANH_CONG' ||
+    f === 'DA_HOAN_THIEN' ||
+    f === 'GHI_DANH' ||
+    f === 'FULL_NE'
+  )
 }
 
 /** Nhãn cột Nguồn: đợt nhập hoặc kênh nguồn. */

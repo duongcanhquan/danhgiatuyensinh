@@ -61,6 +61,36 @@ describe('tinh trang filter', () => {
       ),
     ).toBe('Chưa thu phí')
   })
+
+  it('Đã hoàn thiện gồm cọc / hoàn thiện phí / Full NE / ghi danh', () => {
+    expect(
+      leadMatchesTinhTrangFilter(
+        stub({ id: '1', finance: { enrollmentStatus: 'CỌC THÀNH CÔNG' } }),
+        'DA_HOAN_THIEN',
+      ),
+    ).toBe(true)
+    expect(
+      leadMatchesTinhTrangFilter(
+        stub({ id: '2', finance: { enrollmentStatus: 'ĐÃ HOÀN THIỆN' } }),
+        'DA_HOAN_THIEN',
+      ),
+    ).toBe(true)
+    expect(
+      leadMatchesTinhTrangFilter(
+        stub({ id: '3', finance: { fullNeStatus: 'ĐÃ FULL NE' } }),
+        'DA_HOAN_THIEN',
+      ),
+    ).toBe(true)
+    expect(
+      leadMatchesTinhTrangFilter(stub({ id: '4', status: 'ENROLLED', finance: {} }), 'DA_HOAN_THIEN'),
+    ).toBe(true)
+    expect(
+      leadMatchesTinhTrangFilter(
+        stub({ id: '5', finance: { enrollmentStatus: 'ĐANG HOÀN THIỆN' } }),
+        'DA_HOAN_THIEN',
+      ),
+    ).toBe(false)
+  })
 })
 
 describe('portal list sort', () => {
