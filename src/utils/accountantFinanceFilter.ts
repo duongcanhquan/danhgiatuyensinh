@@ -57,7 +57,7 @@ export function leadIsSettledCocOrComplete(lead: Pick<Lead, 'finance'>): boolean
  * Chỉ áp dụng khi trạng thái ghi danh đã xong — không ẩn khoản TVV mới nộp đủ tiền chưa duyệt.
  */
 export function leadLooksLikeLegacySettledWithoutApprovals(
-  lead: Pick<Lead, 'finance' | 'educationLevel'>,
+  lead: Pick<Lead, 'finance'>,
 ): boolean {
   const finance = lead.finance
   if (!finance) return false

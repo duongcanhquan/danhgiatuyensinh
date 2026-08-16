@@ -15,6 +15,7 @@ export const LEAD_TINH_TRANG_FILTER_OPTIONS: readonly { v: string; t: string }[]
   { v: 'COC_THANH_CONG', t: 'Cọc thành công' },
   { v: 'DA_HOAN_THIEN', t: 'Đã hoàn thiện' },
   { v: 'KIEM_TRA_LAI', t: 'Kiểm tra lại' },
+  { v: 'CHO_FULL_NE', t: 'Chờ Full NE' },
   { v: 'FULL_NE', t: 'Full NE' },
   { v: 'GHI_DANH', t: 'Ghi danh' },
 ] as const
@@ -26,6 +27,7 @@ const TINH_TRANG_LABEL: Record<AccountantStatusTag, string> = {
   'Ghi danh': 'Ghi danh',
   'Hoàn thiện phí': 'Đã hoàn thiện',
   'Kiểm tra lại': 'Kiểm tra lại',
+  'Chờ Full NE': 'Chờ Full NE',
   'Full NE': 'Full NE',
 }
 
@@ -62,6 +64,8 @@ export function leadMatchesTinhTrangFilter(lead: Lead, filter: string): boolean 
       return tag === 'Hoàn thiện phí'
     case 'KIEM_TRA_LAI':
       return tag === 'Kiểm tra lại'
+    case 'CHO_FULL_NE':
+      return tag === 'Chờ Full NE'
     case 'FULL_NE':
       return tag === 'Full NE'
     case 'GHI_DANH':
@@ -103,7 +107,7 @@ function isSparseLead(lead: Lead): boolean {
  */
 export function leadPortalListSortRank(lead: Lead): number {
   const tag = leadTinhTrangTag(lead)
-  if (tag === 'Mới' || tag === 'Đang hoàn thiện' || tag === 'Kiểm tra lại') {
+  if (tag === 'Mới' || tag === 'Đang hoàn thiện' || tag === 'Kiểm tra lại' || tag === 'Chờ Full NE') {
     return isSparseLead(lead) ? 25 : 10
   }
   if (tag === 'Full NE' || tag === 'Hoàn thiện phí') return 20
