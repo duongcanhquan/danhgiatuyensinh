@@ -4669,40 +4669,13 @@ export function LeadManagement() {
                 : null}
               {!loading && !loadingPage && !sortedFiltered.length ? (
                 <tr>
-                  <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-12 text-center text-slate-500">
-                    <p>
-                      {enrollmentFilter !== 'ALL'
-                        ? `Không có hồ sơ «${
-                            LEAD_TINH_TRANG_FILTER_OPTIONS.find((o) => o.v === enrollmentFilter)?.t ??
-                            enrollmentFilter
-                          }» trong phạm vi đang xem.`
-                        : intakeOriginTab === 'public_portal'
-                          ? 'Chưa có hồ sơ cổng đăng ký trong phạm vi này.'
-                          : 'Không có hồ sơ khớp bộ lọc.'}
-                    </p>
-                    {enrollmentFilter !== 'ALL' ? (
-                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Đang lọc thu phí — hồ sơ đã nộp xong chỉ hiện khi khớp bộ lọc này. Thử «Đã cọc» nếu hồ sơ dừng ở
-                        Cọc thành công, hoặc bỏ lọc / xuất Excel để xem toàn bộ.
-                      </p>
-                    ) : intakeOriginTab === 'public_portal' ? (
-                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Bấm «Tạo mới» để thêm hồ sơ, chờ form cổng, hoặc nhập Sheet Mẫu 3 (Nhập liệu). Hồ sơ{' '}
-                        <strong>đã cọc / đã hoàn thiện / ghi danh</strong> ẩn mặc định — bấm lọc nhanh «Đã cọc» hoặc «Đã
-                        hoàn thiện» trên thanh Tổng để xem lại, hoặc xuất Excel. Data Excel chiến dịch (Mẫu 1–2) nằm ở tab
-                        «Tải lên / chiến dịch».
-                      </p>
-                    ) : programFilter === '__UNSET__' ? (
-                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Bộ lọc «Chưa gắn nguồn» tìm hồ sơ không có đợt nhập / kênh nguồn. Nếu trước đây đã gán hoặc đã
-                        xóa lô, danh sách sẽ trống.
-                      </p>
-                    ) : programFilter !== 'ALL' ? (
-                      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
-                        Không thấy hồ sơ thuộc nguồn đã chọn trong phạm vi quét hiện tại. Thử bỏ lọc nguồn hoặc kiểm
-                        tra cột «Nguồn».
-                      </p>
-                    ) : null}
+                  <td colSpan={LEAD_TABLE_COL_COUNT} className="px-4 py-10 text-center text-sm text-slate-500">
+                    {enrollmentFilter !== 'ALL'
+                      ? `Không có hồ sơ «${
+                          LEAD_TINH_TRANG_FILTER_OPTIONS.find((o) => o.v === enrollmentFilter)?.t ??
+                          enrollmentFilter
+                        }» trong phạm vi đang xem.`
+                      : 'Không có hồ sơ khớp bộ lọc.'}
                   </td>
                 </tr>
               ) : null}
