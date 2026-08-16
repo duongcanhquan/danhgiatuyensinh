@@ -1,4 +1,12 @@
 {
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "dangky.vietmycollege.com" }],
+      "destination": "/dang-ky/vietmy",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/deepseek-proxy/:path*",

@@ -12,6 +12,6 @@ bucket_name = "vietmy-lead-receipts"
 PUBLIC_BASE_URL = "https://vietmy-receipt-r2.duongcanhquan.workers.dev"
 
 # CORS — domain frontend (phẩy nếu nhiều), * chỉ dev
-ALLOWED_ORIGINS = "http://localhost:5173,https://danhgiatuyensinh.vercel.app,https://admission.vietmycollege.com"
+ALLOWED_ORIGINS = "http://localhost:5173,https://danhgiatuyensinh.vercel.app,https://admission.vietmycollege.com,https://ts.vietmycollege.com,https://dangky.vietmycollege.com"
 
 # wrangler secret put UPLOAD_TOKEN

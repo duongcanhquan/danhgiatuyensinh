@@ -10,6 +10,7 @@ import { SharedFirestoreDataProviders } from './contexts/SharedFirestoreDataProv
 import { InfoScoreRulesProvider } from './contexts/InfoScoreRulesContext'
 import { LeadClassificationRulesProvider } from './contexts/LeadClassificationRulesContext'
 import { OmicallAutoBootstrap } from './components/OmicallAutoBootstrap'
+import { DangkyDomainGate } from './components/DangkyDomainGate'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginView } from './views/LoginView'
@@ -107,6 +108,7 @@ export default function App() {
             <InfoScoreRulesProvider>
               <LeadClassificationRulesProvider>
                 <BrowserRouter basename={basename}>
+                  <DangkyDomainGate>
                   <CallSessionConfigProvider>
                     <OmicallProvider>
                       <OmicallAutoBootstrap />
@@ -158,9 +160,10 @@ export default function App() {
                       </Route>
                     </Routes>
                   </Suspense>
-                </OmicallProvider>
-              </CallSessionConfigProvider>
-            </BrowserRouter>
+                    </OmicallProvider>
+                  </CallSessionConfigProvider>
+                  </DangkyDomainGate>
+                </BrowserRouter>
               </LeadClassificationRulesProvider>
             </InfoScoreRulesProvider>
           </SharedFirestoreDataProviders>
