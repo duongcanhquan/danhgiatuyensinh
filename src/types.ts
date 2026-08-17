@@ -1267,6 +1267,7 @@ export const FS_COLLECTIONS = {
   leads: 'leads',
   /** Hồ sơ đã cất (không còn trong thao tác hàng ngày). */
   leadsArchive: 'leads_archive',
+  portalRegistrations: 'portal_registrations',
   /** Dành cho mở rộng (chưa có hook đọc/ghi trong app hiện tại). */
   scoringRuleSets: 'scoringRuleSets',
   /** Mỗi doc = một `ScoringProfile` (rules + thresholds nhúng trong doc) */

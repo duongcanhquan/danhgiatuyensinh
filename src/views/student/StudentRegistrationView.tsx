@@ -200,6 +200,7 @@ export function StudentRegistrationView() {
           successMessage: result.successMessage,
           counselorName: result.counselorName,
           n8nOk: result.n8nOk,
+          queued: Boolean(result.queued),
           lang,
         },
       })

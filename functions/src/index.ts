@@ -2234,6 +2234,7 @@ const publicRegistrationFns = registerPublicRegistrationFunctions(db)
 export const getPublicRegistrationMeta = publicRegistrationFns.getPublicRegistrationMeta
 export const submitPublicLead = publicRegistrationFns.submitPublicLead
 export const notifyCrmPortalRegistration = publicRegistrationFns.notifyCrmPortalRegistration
+export const resolvePortalRegistration = publicRegistrationFns.resolvePortalRegistration
 
 const accountantFinanceFns = registerAccountantFinanceCallables()
 export const accountantApplyPaymentDecision = accountantFinanceFns.accountantApplyPaymentDecision

@@ -74,6 +74,8 @@ export type SubmitPublicLeadResult = {
   counselorName: string | null
   n8nOk: boolean
   n8nError: string | null
+  queued?: boolean
+  registrationId?: string
 }
 
 function functionsRegion() {

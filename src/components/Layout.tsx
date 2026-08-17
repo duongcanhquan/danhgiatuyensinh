@@ -6,6 +6,7 @@ import {
   BookOpen,
   Building2,
   CalendarDays,
+  ClipboardCheck,
   LayoutDashboard,
   LineChart,
   LogOut,
@@ -20,6 +21,7 @@ import { useAuth } from '../hooks/useAuth'
 import { canAccessSettingsPage } from '../auth/permissions'
 import type { Permission } from '../types'
 import { USER_ROLE_LABELS } from '../types'
+import { canAccessPortalRegistrationControl } from '../utils/portalRegistrationControl'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
@@ -55,6 +57,14 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: 
 
 const mainNav: NavDef[] = [
   { to: '/leads', label: 'Hồ sơ', shortLabel: 'Hồ sơ', icon: Users, group: 'work', bottomPrimary: true },
+  {
+    to: '/kiem-soat-dang-ky',
+    label: 'Kiểm soát đăng ký',
+    shortLabel: 'Đăng ký',
+    icon: ClipboardCheck,
+    group: 'work',
+    show: () => false,
+  },
   {
     to: '/tong-ket',
     label: 'Tổng kết',
@@ -169,7 +179,12 @@ export function Layout() {
             ...item,
             show: () => isPlatformSuperAdminRole(profile?.role, profile?.orgId ?? null),
           }
-        : item,
+        : item.to === '/kiem-soat-dang-ky'
+          ? {
+              ...item,
+              show: () => canAccessPortalRegistrationControl(profile?.role),
+            }
+          : item,
     )
     .filter((item) => navAllowed(item, can, permissions))
 

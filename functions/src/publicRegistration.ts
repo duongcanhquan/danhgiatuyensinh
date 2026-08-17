@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto'
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import {
+  findLiveLeadsByUniqueHash,
+  findPendingPortalRegistration,
+  findPortalLeadMatches,
+  registerResolvePortalRegistration,
+  upsertPendingPortalRegistration,
+} from './portalRegistrationControl.js'
 
 const PUBLIC_REGISTRATION_DOC_ID = 'publicRegistrationConfig'
 const COUNTERS_DOC_ID = 'systemLeadCodeCounters'
@@ -702,6 +709,124 @@ function buildLeadDoc(
 }
 
 export function registerPublicRegistrationFunctions(db: Firestore) {
+  async function fireRegistrationN8n(opts: {
+    config: PublicRegistrationConfig & { orgId: string }
+    leadId: string
+    systemCode: string
+    createdVia: string
+    student: Record<string, unknown>
+    counselor: { id: string; name: string; email: string } | null
+  }): Promise<{ n8nOk: boolean; n8nError: string | null }> {
+    const webhook = opts.config.n8nWebhookUrl
+    if (!opts.config.n8nEnabled || !webhook.startsWith('http')) {
+      return {
+        n8nOk: false,
+        n8nError: opts.config.n8nEnabled
+          ? 'Chưa cấu hình URL webhook cổng đăng ký.'
+          : 'Webhook cổng đăng ký đang tắt.',
+      }
+    }
+    try {
+      await triggerRegistrationN8n(webhook, {
+        action: 'student_registration',
+        leadId: opts.leadId,
+        systemCode: opts.systemCode,
+        registeredAt: new Date().toISOString(),
+        portalUrl: opts.config.portalPublicUrl || null,
+        createdVia: opts.createdVia,
+        student: opts.student,
+        counselor: opts.counselor,
+      })
+      return { n8nOk: true, n8nError: null }
+    } catch (e) {
+      return { n8nOk: false, n8nError: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async function createLivePublicLead(opts: {
+    input: PublicLeadInput
+    counselor: CounselorLite
+    uniqueHash: string
+    nationalIdHash: string | null
+    config: PublicRegistrationConfig & { orgId: string }
+  }) {
+    if (opts.uniqueHash) {
+      const existing = await findLiveLeadsByUniqueHash(db, opts.config.orgId, opts.uniqueHash)
+      if (existing.length) {
+        throw new HttpsError('already-exists', 'Hồ sơ trùng số điện thoại đã tồn tại. Vui lòng gộp thay vì tạo mới.')
+      }
+    }
+    const systemCode = await allocateSystemCode(db)
+    const now = Timestamp.now()
+    const ref = db.collection('leads').doc()
+    const portalWorkMode = await resolvePortalWorkMode(db, opts.config.orgId, opts.config)
+    const leadDoc = buildLeadDoc(opts.input, {
+      systemCode,
+      source1: opts.config.defaultSource1,
+      uniqueHash: opts.uniqueHash,
+      nationalIdHash: opts.nationalIdHash,
+      assignedCounselorId: opts.counselor.id,
+      orgId: opts.config.orgId,
+      now,
+      ...(portalWorkMode ? { workMode: portalWorkMode } : {}),
+    })
+    await ref.set(leadDoc)
+    const n8n = await fireRegistrationN8n({
+      config: opts.config,
+      leadId: ref.id,
+      systemCode,
+      createdVia: 'public_portal',
+      student: {
+        fullName: str(opts.input.fullName),
+        phone: str(opts.input.phone),
+        parentPhone: str(opts.input.parentPhone),
+        motherPhone: str(opts.input.motherPhone),
+        fatherPhone: str(opts.input.fatherPhone),
+        email: str(opts.input.studentEmail),
+        dateOfBirth: str(opts.input.dateOfBirth),
+        gender: str(opts.input.gender),
+        placeOfBirth: str(opts.input.placeOfBirth),
+        ethnicity: str(opts.input.ethnicity),
+        nationalId: str(opts.input.nationalId),
+        address: str(opts.input.permanentAddress) || str(opts.input.address),
+        province: str(opts.input.schoolProvince) || str(opts.input.province),
+        highSchool: str(opts.input.highSchool),
+        applicantCategory: str(opts.input.applicantCategory),
+        educationLevel: str(opts.input.studyIntention) || str(opts.input.educationLevel),
+        majorInterest: str(opts.input.majorInterest),
+        academicPerformance: str(opts.input.academicPerformance),
+        description: str(opts.input.description),
+        source1: opts.config.defaultSource1,
+      },
+      counselor: {
+        id: opts.counselor.id,
+        name: opts.counselor.displayName,
+        email: opts.counselor.email,
+      },
+    })
+    await ref.set(
+      {
+        publicRegistrationMeta: {
+          n8nOk: n8n.n8nOk,
+          n8nError: n8n.n8nError,
+          notifiedAt: FieldValue.serverTimestamp(),
+          createdVia: 'public_portal',
+        },
+      },
+      { merge: true },
+    )
+    return {
+      ok: true as const,
+      queued: false as const,
+      leadId: ref.id,
+      systemCode,
+      successMessage: opts.config.successMessage,
+      counselorName: opts.counselor.displayName,
+      n8nOk: n8n.n8nOk,
+      n8nError: n8n.n8nError,
+    }
+  }
+
   const getPublicRegistrationMeta = onCall({ invoker: 'public' }, async (request) => {
     const slug = normalizeOrgSlugParam((request.data as { orgSlug?: string } | undefined)?.orgSlug)
     const orgId = await resolveActiveOrgId(db, slug)
@@ -751,9 +876,11 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       throw new HttpsError('failed-precondition', 'Cổng đăng ký đang tắt. Vui lòng liên hệ trường.')
     }
 
+    const rawFullName = str(data.fullName)
+    const studentPhoneRaw = str(data.phone)
     const input: PublicLeadInput = {
       ...data,
-      fullName: str(data.fullName).toUpperCase(),
+      fullName: rawFullName.toUpperCase(),
       nationalId: str(data.nationalId).toUpperCase(),
       studyIntention: str(data.studyIntention) || str(data.educationLevel),
       educationLevel: str(data.educationLevel) || str(data.studyIntention),
@@ -761,7 +888,7 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       schoolProvince: str(data.schoolProvince) || str(data.province),
       permanentAddress: str(data.permanentAddress) || str(data.address),
       parentPhone: str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
-      phone: str(data.phone) || str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
+      phone: studentPhoneRaw || str(data.motherPhone) || str(data.fatherPhone) || str(data.parentPhone),
     }
 
     const [trainingPrograms, majors, applicantCategoriesRaw, allCounselors] = await Promise.all([
@@ -804,125 +931,90 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
       gradeClass: str(input.gradeClass),
       dateOfBirth: str(input.dateOfBirth),
     }
-    const uniqueHash = computeLeadUniqueHash(row)
-    const dupSnap = await db
-      .collection('leads')
-      .where('orgId', '==', config.orgId)
-      .where('uniqueHash', '==', uniqueHash)
-      .limit(1)
-      .get()
-    if (!dupSnap.empty) {
-      throw new HttpsError(
-        'already-exists',
-        'Đã có hồ sơ trùng trên hệ thống (cùng số điện thoại). Vui lòng liên hệ tư vấn viên.',
-      )
-    }
-
+    const persistUniqueHash = computeLeadUniqueHash(row)
+    const matchUniqueHash = studentPhoneRaw
+      ? computeLeadUniqueHash({ phone: studentPhoneRaw })
+      : ''
     const nationalIdNotAvailable =
       input.nationalIdNotAvailable === true || str(input.nationalId).toUpperCase() === 'CHƯA CÓ'
     const nationalIdHash = computeNationalIdHash(
       normalizeNationalIdKey(str(input.nationalId), nationalIdNotAvailable),
     )
-    if (nationalIdHash) {
-      const nidDup = await db
-        .collection('leads')
-        .where('orgId', '==', config.orgId)
-        .where('nationalIdHash', '==', nationalIdHash)
-        .limit(1)
-        .get()
-      if (!nidDup.empty) {
-        throw new HttpsError(
-          'already-exists',
-          'Đã có hồ sơ trùng trên hệ thống (cùng CCCD/Passport). Vui lòng liên hệ tư vấn viên.',
-        )
-      }
-    }
-
-    const systemCode = await allocateSystemCode(db)
-    const now = Timestamp.now()
-    const ref = db.collection('leads').doc()
-    const portalWorkMode = await resolvePortalWorkMode(db, config.orgId, config)
-    const leadDoc = buildLeadDoc(input, {
-      systemCode,
-      source1: config.defaultSource1,
-      uniqueHash,
-      nationalIdHash,
-      assignedCounselorId: counselor?.id ?? null,
-      orgId: config.orgId,
-      now,
-      ...(portalWorkMode ? { workMode: portalWorkMode } : {}),
-    })
-    await ref.set(leadDoc)
-
-    let n8nOk = false
-    let n8nError: string | null = null
-    const webhook = config.n8nWebhookUrl
-    if (config.n8nEnabled && webhook.startsWith('http')) {
-      try {
-        await triggerRegistrationN8n(webhook, {
-          action: 'student_registration',
-          leadId: ref.id,
-          systemCode,
-          registeredAt: now.toDate().toISOString(),
-          portalUrl: config.portalPublicUrl || null,
-          createdVia: 'public_portal',
-          student: {
-            fullName: str(input.fullName),
-            phone: str(input.phone),
-            parentPhone: str(input.parentPhone),
-            motherPhone: str(input.motherPhone),
-            fatherPhone: str(input.fatherPhone),
-            email: str(input.studentEmail),
-            dateOfBirth: str(input.dateOfBirth),
-            gender: str(input.gender),
-            placeOfBirth: str(input.placeOfBirth),
-            ethnicity: str(input.ethnicity),
-            nationalId: str(input.nationalId),
-            address: str(input.permanentAddress) || str(input.address),
-            province: str(input.schoolProvince) || str(input.province),
-            highSchool: str(input.highSchool),
-            applicantCategory: str(input.applicantCategory),
-            educationLevel: str(input.studyIntention) || str(input.educationLevel),
-            majorInterest: str(input.majorInterest),
-            academicPerformance: str(input.academicPerformance),
-            description: str(input.description),
-            source1: config.defaultSource1,
-          },
-          counselor: counselor
-            ? {
-                id: counselor.id,
-                name: counselor.displayName,
-                email: counselor.email,
-              }
-            : null,
-        })
-        n8nOk = true
-      } catch (e) {
-        n8nError = e instanceof Error ? e.message : String(e)
-        console.warn('[submitPublicLead] n8n error', n8nError)
-      }
-    }
-
-    await ref.set(
-      {
-        publicRegistrationMeta: {
-          n8nOk,
-          n8nError,
-          notifiedAt: FieldValue.serverTimestamp(),
-          createdVia: 'public_portal',
-        },
-      },
-      { merge: true },
+    const payload = { ...input, studentPhoneRaw }
+    const nameVariants = [...new Set([rawFullName.replace(/\s+/g, ' ').trim(), rawFullName.replace(/\s+/g, ' ').trim().toUpperCase()])].filter(
+      (n) => n.length >= 4,
     )
 
-    return {
-      ok: true,
-      leadId: ref.id,
-      systemCode,
-      successMessage: config.successMessage,
-      counselorName: counselor?.displayName ?? null,
-      n8nOk,
-      n8nError,
+    const queuePending = async (match: Awaited<ReturnType<typeof findPortalLeadMatches>>) => {
+      const registrationId = await upsertPendingPortalRegistration(db, {
+        orgId: config.orgId,
+        counselorId: counselor.id,
+        counselorName: counselor.displayName,
+        uniqueHash: persistUniqueHash,
+        nationalIdHash,
+        payload,
+        match,
+      })
+      return {
+        ok: true as const,
+        queued: true as const,
+        registrationId,
+        leadId: '',
+        systemCode: '',
+        successMessage: config.successMessage,
+        counselorName: counselor.displayName,
+        n8nOk: false,
+        n8nError: null,
+      }
+    }
+
+    let match = await findPortalLeadMatches(db, config.orgId, input as unknown as Record<string, unknown>, {
+      uniqueHash: matchUniqueHash,
+      nationalIdHash,
+      nameVariants,
+    })
+    if (match.kind !== 'none') return queuePending(match)
+
+    const stalePendingId = await findPendingPortalRegistration(db, config.orgId, persistUniqueHash)
+    try {
+      const created = await createLivePublicLead({
+        input,
+        counselor,
+        uniqueHash: persistUniqueHash,
+        nationalIdHash,
+        config,
+      })
+      if (stalePendingId) {
+        await db.collection('portal_registrations').doc(stalePendingId).set(
+          {
+            status: 'created',
+            createdLeadId: created.leadId,
+            resolvedAction: 'auto_create_after_no_match',
+            resolvedAt: Timestamp.now(),
+          },
+          { merge: true },
+        )
+      }
+      return created
+    } catch (e) {
+      if (e instanceof HttpsError && e.code === 'already-exists') {
+        const live = await findLiveLeadsByUniqueHash(db, config.orgId, persistUniqueHash)
+        if (live.length) {
+          return queuePending({
+            kind: 'phone',
+            suggestedLeadId: live[0].id,
+            suggestedLeadIds: live.map((s) => s.id),
+            suggestedLeads: live,
+          })
+        }
+        match = await findPortalLeadMatches(db, config.orgId, input as unknown as Record<string, unknown>, {
+          uniqueHash: persistUniqueHash,
+          nationalIdHash,
+          nameVariants,
+        })
+        if (match.kind !== 'none') return queuePending(match)
+      }
+      throw e
     }
   })
 
@@ -1071,5 +1163,85 @@ export function registerPublicRegistrationFunctions(db: Firestore) {
     return { ok: true, n8nOk, n8nError, systemCode, leadId }
   })
 
-  return { getPublicRegistrationMeta, submitPublicLead, notifyCrmPortalRegistration }
+  const { resolvePortalRegistration } = registerResolvePortalRegistration(db, {
+    createLiveLead: async (payload, counselorId, orgId) => {
+      const config = await loadPublicRegistrationConfig(db, orgId || 'vietmy')
+      const allCounselors = await loadCounselors(db, config.orgId)
+      const counselor =
+        allCounselors.find((c) => c.id === counselorId) ??
+        ({
+          id: counselorId,
+          email: '',
+          displayName: counselorId,
+          role: 'counselor',
+          isActive: true,
+          showOnPublicRegistrationPortal: true,
+        } satisfies CounselorLite)
+      const input = payload as PublicLeadInput
+      const uniqueHash = computeLeadUniqueHash({
+        fullName: str(input.fullName),
+        phone: str(input.phone),
+        parentPhone: str(input.parentPhone),
+        customerId: '',
+        educationLevel: str(input.studyIntention) || str(input.educationLevel),
+        gradeClass: str(input.gradeClass),
+        dateOfBirth: str(input.dateOfBirth),
+      })
+      const nationalIdNotAvailable =
+        input.nationalIdNotAvailable === true || str(input.nationalId).toUpperCase() === 'CHƯA CÓ'
+      const nationalIdHash = computeNationalIdHash(
+        normalizeNationalIdKey(str(input.nationalId), nationalIdNotAvailable),
+      )
+      const created = await createLivePublicLead({
+        input,
+        counselor,
+        uniqueHash,
+        nationalIdHash,
+        config,
+      })
+      return { leadId: created.leadId, systemCode: created.systemCode, n8nOk: created.n8nOk, n8nError: created.n8nError }
+    },
+    mergeNotify: async (leadId, orgId) => {
+      const config = await loadPublicRegistrationConfig(db, orgId)
+      const leadSnap = await db.collection('leads').doc(leadId).get()
+      const lead = (leadSnap.data() ?? {}) as Record<string, unknown>
+      const counselorId = str(lead.assignedCounselorId) || str(lead.assignedTo)
+      let counselorName = ''
+      let counselorEmail = ''
+      if (counselorId) {
+        const u = await db.collection('users').doc(counselorId).get()
+        counselorName = str(u.get('displayName'))
+        counselorEmail = str(u.get('email'))
+      }
+      const n8n = await fireRegistrationN8n({
+        config,
+        leadId,
+        systemCode: str(lead.systemCode),
+        createdVia: 'public_portal_merge',
+        student: {
+          fullName: str(lead.fullName),
+          phone: str(lead.phone),
+          email: str(lead.studentEmail),
+          source1: str(lead.source1) || str(lead.source),
+        },
+        counselor: counselorId
+          ? { id: counselorId, name: counselorName, email: counselorEmail }
+          : null,
+      })
+      await db.collection('leads').doc(leadId).set(
+        {
+          publicRegistrationMeta: {
+            n8nOk: n8n.n8nOk,
+            n8nError: n8n.n8nError,
+            notifiedAt: FieldValue.serverTimestamp(),
+            createdVia: 'public_portal_merge',
+          },
+        },
+        { merge: true },
+      )
+      return n8n
+    },
+  })
+
+  return { getPublicRegistrationMeta, submitPublicLead, notifyCrmPortalRegistration, resolvePortalRegistration }
 }

@@ -290,6 +290,15 @@ service cloud.firestore {
       }
     }
 
+    match /portal_registrations/{id} {
+      allow read: if isPlatform()
+        || (isSchoolAdmin() && hasResolvedOrg() && schoolOrgActive() && matchesOrgData(resource.data))
+        || (signedIn() && schoolOrgActive() && hasResolvedOrg()
+            && resource.data.counselorId == request.auth.uid
+            && matchesOrgData(resource.data));
+      allow create, update, delete: if false;
+    }
+
     match /leads_archive/{leadId} {
       allow read: if isPlatform()
         || (isSchoolAdmin() && hasResolvedOrg() && schoolOrgActive() && matchesOrgData(resource.data));

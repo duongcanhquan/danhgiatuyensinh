@@ -9,6 +9,7 @@ type SuccessState = {
   successMessage: string
   counselorName: string | null
   n8nOk?: boolean
+  queued?: boolean
   lang?: PublicRegLang
 }
 
@@ -17,7 +18,10 @@ export function StudentRegistrationSuccessView() {
   const state = location.state as SuccessState | null
   const [copied, setCopied] = useState(false)
 
-  if (!state?.systemCode) {
+  if (!state) {
+    return <Navigate to="/dang-ky" replace />
+  }
+  if (!state.queued && !state.systemCode) {
     return <Navigate to="/dang-ky" replace />
   }
 
@@ -59,6 +63,9 @@ export function StudentRegistrationSuccessView() {
           </div>
           <p className="mt-4 text-sm leading-relaxed text-slate-700">{successBody}</p>
 
+          {state.queued || !state.systemCode ? (
+            <p className="mt-6 text-sm text-slate-600">Tư vấn viên đã nhận thông tin đăng ký và sẽ liên hệ với bạn.</p>
+          ) : (
           <div className="mx-auto mt-6 max-w-sm rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('yourCode')}</p>
             <p className="mt-1 font-mono text-2xl font-extrabold tracking-wide text-emerald-800">{state.systemCode}</p>
@@ -71,6 +78,7 @@ export function StudentRegistrationSuccessView() {
               {copied ? t('copied') : t('copyCode')}
             </button>
           </div>
+          )}
 
           {state.counselorName ? (
             <p className="mt-4 text-sm text-slate-600">
