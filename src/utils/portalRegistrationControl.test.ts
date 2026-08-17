@@ -8,7 +8,11 @@ import {
   fullNameQueryVariants,
   leadActivityWarningFromRecord,
   leadHasCounselorActivity,
+  portalCompareKind,
+  portalCompareKindLabel,
+  portalCompareRows,
   portalNameMatchScore,
+  portalPayloadFieldValue,
   portalRegistrationIsOpen,
   portalResolveLockActive,
   resolveAllowedMergeLeadId,
@@ -260,5 +264,38 @@ describe('portalRegistrationControl', () => {
     expect(portalRegistrationIsOpen('resolving', now - 10_000, now)).toBe(false)
     expect(portalRegistrationIsOpen('resolving', now - 3 * 60 * 1000, now)).toBe(true)
     expect(portalRegistrationIsOpen('resolving', null, now)).toBe(true)
+  })
+
+  it('builds field-by-field portal vs system compare rows and flags diffs', () => {
+    const rows = portalCompareRows(
+      {
+        fullName: 'NGUYEN VAN A',
+        studentPhoneRaw: '0911111111',
+        highSchool: 'THPT ABC',
+        nationalId: '001234567890',
+        majorInterest: 'CNTT',
+      },
+      {
+        fullName: 'NGUYEN VAN A',
+        phone: '0922222222',
+        highSchool: 'THPT ABC',
+        nationalId: '001234567890',
+      },
+    )
+    const phone = rows.find((r) => r.key === 'phone')
+    const school = rows.find((r) => r.key === 'highSchool')
+    const major = rows.find((r) => r.key === 'majorInterest')
+    expect(phone?.portal).toBe('0911111111')
+    expect(phone?.system).toBe('0922222222')
+    expect(phone?.kind).toBe('diff')
+    expect(school?.kind).toBe('same')
+    expect(major?.kind).toBe('added')
+    expect(rows[0]?.kind).toBe('diff')
+    expect(portalCompareKind('a', '')).toBe('added')
+    expect(portalCompareKind('', 'b')).toBe('system_only')
+    expect(portalCompareKindLabel('added')).toBe('Thêm mới')
+    expect(portalPayloadFieldValue({ nationalIdNotAvailable: true, nationalId: 'CHƯA CÓ' }, 'nationalId')).toBe(
+      'CHƯA CÓ',
+    )
   })
 })

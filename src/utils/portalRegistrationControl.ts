@@ -280,3 +280,153 @@ export function resolveAllowedMergeLeadId(
   if (chosen && allowed.includes(chosen)) return chosen
   return suggestedLeadId.trim() || allowed[0]
 }
+
+export type PortalCompareField = {
+  key: string
+  label: string
+}
+
+/** Các trường đối chiếu bản khai cổng ↔ hồ sơ hệ thống. */
+export const PORTAL_COMPARE_FIELDS: PortalCompareField[] = [
+  { key: 'fullName', label: 'Họ tên' },
+  { key: 'phone', label: 'SĐT sinh viên' },
+  { key: 'nationalId', label: 'CCCD / Hộ chiếu' },
+  { key: 'dateOfBirth', label: 'Ngày sinh' },
+  { key: 'gender', label: 'Giới tính' },
+  { key: 'placeOfBirth', label: 'Nơi sinh' },
+  { key: 'ethnicity', label: 'Dân tộc' },
+  { key: 'studentEmail', label: 'Email' },
+  { key: 'highSchool', label: 'Trường THPT' },
+  { key: 'gradeClass', label: 'Lớp' },
+  { key: 'province', label: 'Tỉnh / TP' },
+  { key: 'permanentAddress', label: 'Địa chỉ' },
+  { key: 'applicantCategory', label: 'Đối tượng' },
+  { key: 'educationLevel', label: 'Hệ đào tạo' },
+  { key: 'majorInterest', label: 'Ngành quan tâm' },
+  { key: 'academicPerformance', label: 'Học lực' },
+  { key: 'motherName', label: 'Họ tên mẹ' },
+  { key: 'motherPhone', label: 'SĐT mẹ' },
+  { key: 'fatherName', label: 'Họ tên bố' },
+  { key: 'fatherPhone', label: 'SĐT bố' },
+  { key: 'parentPhone', label: 'SĐT liên hệ' },
+  { key: 'description', label: 'Ghi chú' },
+]
+
+function displayStr(v: unknown): string {
+  return String(v ?? '').trim()
+}
+
+export function portalPayloadFieldValue(payload: Record<string, unknown>, key: string): string {
+  switch (key) {
+    case 'phone':
+      return displayStr(payload.studentPhoneRaw) || displayStr(payload.phone)
+    case 'province':
+      return displayStr(payload.schoolProvince) || displayStr(payload.province)
+    case 'permanentAddress':
+      return displayStr(payload.permanentAddress) || displayStr(payload.address)
+    case 'educationLevel':
+      return displayStr(payload.studyIntention) || displayStr(payload.educationLevel)
+    case 'nationalId': {
+      const raw = displayStr(payload.nationalId).toUpperCase()
+      if (payload.nationalIdNotAvailable === true || raw === 'CHƯA CÓ') return 'CHƯA CÓ'
+      return raw
+    }
+    default:
+      return displayStr(payload[key])
+  }
+}
+
+export function systemLeadFieldValue(lead: Record<string, unknown>, key: string): string {
+  switch (key) {
+    case 'province':
+      return displayStr(lead.province) || displayStr(lead.schoolProvince)
+    case 'permanentAddress':
+      return displayStr(lead.permanentAddress) || displayStr(lead.address)
+    case 'educationLevel':
+      return displayStr(lead.studyIntention) || displayStr(lead.educationLevel)
+    case 'nationalId': {
+      const raw = displayStr(lead.nationalId).toUpperCase()
+      if (lead.nationalIdNotAvailable === true || raw === 'CHƯA CÓ') return 'CHƯA CÓ'
+      return raw
+    }
+    case 'systemCode':
+      return displayStr(lead.systemCode) || displayStr(lead.customerId)
+    default:
+      return displayStr(lead[key])
+  }
+}
+
+export function portalCompareRows(
+  payload: Record<string, unknown>,
+  lead: Record<string, unknown> | null,
+): Array<{
+  key: string
+  label: string
+  portal: string
+  system: string
+  differs: boolean
+  kind: PortalCompareKind
+}> {
+  const rows = PORTAL_COMPARE_FIELDS.map((f) => {
+    const portal = portalPayloadFieldValue(payload, f.key)
+    const system = lead ? systemLeadFieldValue(lead, f.key) : ''
+    const kind = portalCompareKind(portal, system)
+    return {
+      key: f.key,
+      label: f.label,
+      portal,
+      system,
+      differs: kind === 'diff',
+      kind,
+    }
+  }).filter((r) => r.kind !== 'empty')
+
+  const rank: Record<PortalCompareKind, number> = {
+    diff: 0,
+    added: 1,
+    system_only: 2,
+    same: 3,
+    empty: 4,
+  }
+  return rows.sort((a, b) => rank[a.kind] - rank[b.kind] || a.label.localeCompare(b.label, 'vi'))
+}
+
+export type PortalCompareKind = 'same' | 'diff' | 'added' | 'system_only' | 'empty'
+
+export function portalCompareKind(portal: string, system: string): PortalCompareKind {
+  const p = portal.trim()
+  const s = system.trim()
+  if (!p && !s) return 'empty'
+  if (p && !s) return 'added'
+  if (!p && s) return 'system_only'
+  if (p.toUpperCase() === s.toUpperCase()) return 'same'
+  return 'diff'
+}
+
+export function portalCompareKindLabel(kind: PortalCompareKind): string {
+  switch (kind) {
+    case 'same':
+      return 'Trùng'
+    case 'diff':
+      return 'Khác'
+    case 'added':
+      return 'Thêm mới'
+    case 'system_only':
+      return 'Chỉ hệ thống'
+    default:
+      return ''
+  }
+}
+
+export function portalMatchKindTone(kind: PortalMatchKind): string {
+  switch (kind) {
+    case 'national_id':
+      return 'bg-rose-100 text-rose-900 ring-rose-200'
+    case 'phone':
+      return 'bg-orange-100 text-orange-950 ring-orange-200'
+    case 'name':
+      return 'bg-sky-100 text-sky-950 ring-sky-200'
+    default:
+      return 'bg-slate-100 text-slate-700 ring-slate-200'
+  }
+}

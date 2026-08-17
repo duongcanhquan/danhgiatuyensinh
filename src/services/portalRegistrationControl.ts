@@ -32,6 +32,8 @@ export type PortalRegistrationRow = {
   studentHighSchool?: string
   studentDob?: string
   studentGradeClass?: string
+  /** Bản khai cổng đầy đủ để đối chiếu. */
+  payload: Record<string, unknown>
 }
 
 function fns() {
