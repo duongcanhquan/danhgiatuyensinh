@@ -354,12 +354,13 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
                 </div>
                 <div className="mt-4 space-y-4 text-sm leading-relaxed text-slate-800 sm:text-[15px]">
                   <p>
-                    Con số % đo độ đầy <strong>thông tin tĩnh</strong> trên hồ sơ (đã nhập trên form / import),{' '}
-                    <strong>không</strong> đo chất lượng tư vấn, <strong>không</strong> thay cho nhãn HOT/WARM và{' '}
-                    <strong>không phải</strong> kết quả AI. Điểm nền + các tiêu chí đang bật và khớp điều kiện được cộng,
-                    rồi kẹp trong khoảng min–max %. Cột <code className="rounded bg-slate-100 px-1 font-mono text-xs">id</code>{' '}
-                    gắn với logic cố định trong app — muốn thêm loại trường hoàn toàn mới cần cập nhật phần mềm; trong
-                    phạm vi hiện tại bạn có thể bật/tắt, đổi điểm và đổi nhãn cho từng tiêu chí có sẵn.
+                    Con số % đo độ đầy <strong>thông tin tĩnh</strong> trên hồ sơ (đã nhập trên form / import).{' '}
+                    <strong>Không</strong> cộng vào điểm hồ sơ, <strong>không</strong> quyết định nhãn HOT/WARM (trừ khi
+                    bật phân loại tỷ trọng), <strong>không</strong> phải kết quả AI. Điểm nền + các tiêu chí đang bật và khớp
+                    được cộng, rồi kẹp min–max thành %. Cột{' '}
+                    <code className="rounded bg-slate-100 px-1 font-mono text-xs">id</code> gắn với logic cố định trong app —
+                    muốn thêm loại trường hoàn toàn mới cần cập nhật phần mềm; trong phạm vi hiện tại bạn có thể bật/tắt,
+                    đổi điểm và đổi nhãn cho từng tiêu chí có sẵn.
                   </p>
                   <p className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 text-xs text-slate-700 sm:text-sm">
                     Dòng trạng thái <strong>«Đang áp dụng…»</strong> ngay trên form cho biết đang dùng cấu hình server hay

@@ -10,7 +10,7 @@ export function MlWinGauge({ value, title }: { value: number; title?: string }) 
   const r = 17
   const c = 2 * Math.PI * r
   const offset = c - (v / 100) * c
-  const tip = title ?? `Điểm thông tin ${v}% (0–100). Đặt chuột để xem cách tính.`
+  const tip = title ?? `Độ đầy đủ ${v}% (0–100). Độc lập với điểm hồ sơ / HOT-WARM. Đặt chuột để xem cách tính.`
   return (
     <div
       className="relative flex h-10 w-10 shrink-0 cursor-help items-center justify-center"

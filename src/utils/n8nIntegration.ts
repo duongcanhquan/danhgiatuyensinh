@@ -15,6 +15,7 @@ import {
   resolveInviteDocumentGroups,
 } from './inviteDocumentsConfig'
 import { ensureInviteDriveFolder } from './ensureInviteDriveFolder'
+import { combineInvitationErrors, userFacingWebhookBodyError } from './inviteDriveErrors'
 import { VIETMY_DEFAULT_DRIVE_FOLDERS } from './vietmyIntegrationDefaults'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { getFirestoreDb } from '../services/firebase'
@@ -206,7 +207,11 @@ export function buildN8nFullData(
 
 import { fetchWithTimeout } from './fetchWithTimeout'
 
-async function postJson(url: string, body: unknown): Promise<Response> {
+const N8N_DEFAULT_TIMEOUT_MS = 8_000
+/** Tạo Google Docs + folder trên n8n thường > 8s trên máy/mạng chậm. */
+const N8N_INVITE_TIMEOUT_MS = 45_000
+
+async function postJson(url: string, body: unknown, timeoutMs = N8N_DEFAULT_TIMEOUT_MS): Promise<Response> {
   return fetchWithTimeout(
     url,
     {
@@ -214,7 +219,7 @@ async function postJson(url: string, body: unknown): Promise<Response> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     },
-    8_000,
+    timeoutMs,
     'Webhook n8n quá lâu',
   )
 }
@@ -381,10 +386,11 @@ export async function triggerInvitationN8n(opts: {
   scholarship: { label: string; amountVnd?: number } | null
   scholarship2Label?: string
   inviteFolderUrl?: string
-}): Promise<{ folderUrl?: string }> {
+}): Promise<{ folderUrl?: string; folderWarning?: string }> {
   const { lead, docType, scholarship, scholarship2Label } = opts
   let inviteFolderUrl = opts.inviteFolderUrl
   let folderId = inviteFolderUrl ? extractDriveFolderId(inviteFolderUrl) : ''
+  let folderWarning: string | undefined
 
   const orgId = resolveLeadOrgId(lead)
   const db = getFirestoreDb()
@@ -401,12 +407,17 @@ export async function triggerInvitationN8n(opts: {
     String(inviteCfg?.driveRootFolderId ?? '').trim() ||
     VIETMY_DEFAULT_DRIVE_FOLDERS.inviteRootFolderId
 
-  // Apps Script: nếu chưa có folder → tạo dưới FOLDER_INVITE_ROOT trước khi gửi n8n
+  // Tạo folder trước khi n8n in — lỗi máy/CORS không chặn gửi giấy nếu n8n tự tạo được folder.
   if (!folderId && autoCreate && driveRoot) {
-    const ensured = await ensureInviteDriveFolder({ lead, rootFolderId: driveRoot })
-    if (ensured?.folderUrl) {
-      inviteFolderUrl = ensured.folderUrl
-      folderId = ensured.folderId || extractDriveFolderId(ensured.folderUrl)
+    try {
+      const ensured = await ensureInviteDriveFolder({ lead, rootFolderId: driveRoot })
+      if (ensured?.folderUrl) {
+        inviteFolderUrl = ensured.folderUrl
+        folderId = ensured.folderId || extractDriveFolderId(ensured.folderUrl)
+      }
+    } catch (e) {
+      folderWarning = e instanceof Error ? e.message : String(e)
+      console.warn('[triggerInvitationN8n] ensure folder', e)
     }
   }
 
@@ -455,22 +466,35 @@ export async function triggerInvitationN8n(opts: {
   await ensureWebhooksForOrg(orgId)
   const webhook = webhookGiayMoi(orgId)
   if (!webhook) {
-    throw new Error('Chưa cấu hình webhook giấy mời — vào Cài đặt → Tích hợp → Webhook n8n.')
+    throw new Error(
+      combineInvitationErrors(
+        folderWarning,
+        'Chưa cấu hình webhook giấy mời — vào Cài đặt → Tích hợp → Webhook n8n.',
+      ),
+    )
   }
-  const res = await postJson(webhook, payload)
+  let res: Response
+  try {
+    res = await postJson(webhook, payload, N8N_INVITE_TIMEOUT_MS)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(combineInvitationErrors(folderWarning, msg))
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(text || `n8n trả về ${res.status}`)
+    throw new Error(
+      combineInvitationErrors(folderWarning, userFacingWebhookBodyError(text, res.status, 'n8n giấy mời lỗi')),
+    )
   }
   fanOutHubQuietly(orgId, 'document.requested', payload as Record<string, unknown>, lead)
   try {
     const json = (await res.json()) as { folderUrl?: string }
-    if (json?.folderUrl) return { folderUrl: json.folderUrl }
+    if (json?.folderUrl) return { folderUrl: json.folderUrl, folderWarning }
   } catch {
     /* response không phải JSON */
   }
-  if (inviteFolderUrl?.includes('drive.google.com')) return { folderUrl: inviteFolderUrl }
-  return {}
+  if (inviteFolderUrl?.includes('drive.google.com')) return { folderUrl: inviteFolderUrl, folderWarning }
+  return { folderWarning }
 }
 
 export const INVITE_DOCUMENT_GROUPS: {

@@ -192,8 +192,15 @@ function normPriorityTag(v: unknown): Lead['priorityTag'] {
   return 'COLD'
 }
 
-export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
+export function mapDoc(
+  id: string,
+  data: Record<string, unknown>,
+  opts?: { includeArchived?: boolean },
+): Lead | null {
   try {
+    if (!opts?.includeArchived && String(data.lifecycle ?? '').trim().toLowerCase() === 'archived') {
+      return null
+    }
     const semantic = readLeadSemanticFieldsFromFirestore(data)
     const legacyAssigned =
       data.assignedCounselorId === null || data.assignedCounselorId === undefined
@@ -437,6 +444,15 @@ export function mapDoc(id: string, data: Record<string, unknown>): Lead | null {
         return b === 'uncalled' || b === 'callback' || b === 'called' ? b : undefined
       })(),
       workMode: parseLeadWorkMode(data.workMode),
+      ...(String(data.lifecycle ?? '').trim().toLowerCase() === 'archived'
+        ? { lifecycle: 'archived' as const }
+        : String(data.lifecycle ?? '').trim().toLowerCase() === 'active'
+          ? { lifecycle: 'active' as const }
+          : {}),
+      ...(asFirestoreTimestamp(data.archivedAt) ? { archivedAt: asFirestoreTimestamp(data.archivedAt)! } : {}),
+      ...(String(data.archivedBy ?? '').trim() ? { archivedBy: String(data.archivedBy).trim() } : {}),
+      ...(String(data.archiveLabel ?? '').trim() ? { archiveLabel: String(data.archiveLabel).trim() } : {}),
+      ...(String(data.archiveBatchId ?? '').trim() ? { archiveBatchId: String(data.archiveBatchId).trim() } : {}),
       callAttemptCount:
         data.callAttemptCount !== undefined && data.callAttemptCount !== null
           ? Math.max(0, Math.floor(Number(data.callAttemptCount)))

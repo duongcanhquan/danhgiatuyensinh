@@ -9,6 +9,9 @@ import { scholarshipSelectLabel } from './leadProfileCatalog'
 import { resolveStudentDisplayCode } from './studentDisplayCode'
 import { accountantFinanceStatusTag } from './accountantLeadDisplay'
 import { leadAssignedUid } from '../auth/leadAccess'
+import { resolveMlWinDisplay } from './mlWinMock'
+import type { InfoScoreRuntime } from './infoScoreRules'
+import { INFO_SCORE_COLUMN_LABEL, PROFILE_SCORE_COLUMN_LABEL } from './leadScoreDisplayCopy'
 
 const PIPELINE_LABEL: Record<LeadPipelineStatus, string> = {
   NEW: 'Mới',
@@ -28,6 +31,7 @@ export type LeadProfileExportOptions = {
   counselorNameById?: Map<string, string>
   evaluatedByLeadId?: Map<string, { calculatedScore: number; priorityTag: PriorityTag }>
   studentCodeIndex?: Map<string, number>
+  infoScoreRuntime?: InfoScoreRuntime | null
 }
 
 function cellText(v: unknown): string {
@@ -118,7 +122,8 @@ export function buildLeadProfileExportRow(
     'Tình trạng tư vấn': LEAD_COUNSELOR_STATUS_LABELS[lead.status] ?? lead.status,
     'Tình trạng hồ sơ': PIPELINE_LABEL[lead.pipelineStatus] ?? lead.pipelineStatus,
     'Nhãn ưu tiên': ev?.priorityTag ?? lead.priorityTag ?? '',
-    Điểm: ev?.calculatedScore ?? lead.calculatedScore ?? '',
+    [PROFILE_SCORE_COLUMN_LABEL]: ev?.calculatedScore ?? lead.calculatedScore ?? '',
+    [`${INFO_SCORE_COLUMN_LABEL} (%)`]: resolveMlWinDisplay(lead, options.infoScoreRuntime).mlWinProbability,
     'Thu phí (ghi danh)': cellText(finance?.enrollmentStatus),
     'Nhãn kế toán': accountantFinanceStatusTag(lead),
     'Full NE': cellText(finance?.fullNeStatus),
@@ -131,6 +136,8 @@ export function buildLeadProfileExportRow(
     'Đã ghi nhận (đ)': sumRecordedPaymentsVnd(finance),
     'Đã duyệt (đ)': sumApprovedPaymentsVnd(finance),
     'Còn thiếu (đ)': moneyCell(obligation.tuitionMissing ? '' : obligation.remainingVnd),
+    'Kho lưu trữ': cellText(lead.archiveLabel),
+    'Ngày cất kho': cellText(lead.archivedAt),
   }
 
   for (const slot of PAYMENT_SLOT_DEFS) {

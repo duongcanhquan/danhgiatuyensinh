@@ -524,7 +524,7 @@ function ProfileEditorPanel({
         {!draftHasRules ? (
           <p className="font-medium text-amber-950">
             Chưa có quy tắc cộng điểm — kéo mẫu từ thư viện vào canvas, nhập điểm ± từng dòng, rồi bấm{' '}
-            <strong>Lưu profile</strong>. Trên danh sách hồ sơ, chọn đúng bộ chấm điểm này để xem điểm tích lũy.
+            <strong>Lưu profile</strong>. Điểm hồ sơ trên danh sách theo bộ này, không gồm cột Độ đầy đủ.
           </p>
         ) : (
           <p>
@@ -533,7 +533,7 @@ function ProfileEditorPanel({
             <strong>{samplePreview.priorityTag}</strong>
             <span className="text-slate-600">
               {' '}
-              — áp dụng ngay trên màn Hồ sơ sau khi lưu; điểm cột bảng = quy tắc khớp dữ liệu thật từng lead.
+              — áp dụng trên màn Hồ sơ sau khi lưu. Không gồm độ đầy đủ (cột % riêng).
             </span>
           </p>
         )}

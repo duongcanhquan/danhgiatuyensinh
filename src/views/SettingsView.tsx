@@ -185,11 +185,12 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'scoring':
       return (
         <>
-          <p className="font-semibold text-slate-900">Điểm thông tin</p>
+          <p className="font-semibold text-slate-900">Độ đầy đủ (điểm thông tin)</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Cấu hình <strong>độ đầy dữ liệu</strong> trên hồ sơ (%, trọng số trường, kẹp min–max) lưu tại{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-[0.9em]">scoringAux/infoScoreConfig</code>. Khác{' '}
-            <strong>Cài đặt Profile</strong> (điểm tích lũy HOT/WARM/COLD theo quy tắc).
+            Cấu hình <strong>độ đầy dữ liệu</strong> trên hồ sơ (%, trọng số trường, kẹp min–max). Đây là cột{' '}
+            <strong>Độ đầy đủ</strong> trên danh sách — <strong>không</strong> cộng vào điểm hồ sơ và{' '}
+            <strong>không</strong> quyết định nhãn HOT/WARM, trừ khi bật tab Phân loại tỷ trọng. Khác{' '}
+            <strong>Cài đặt Profile</strong> (điểm tiềm năng + nhãn theo quy tắc).
           </p>
         </>
       )
@@ -240,8 +241,9 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Cài đặt Profile</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Một hoặc nhiều <strong>profile</strong>: khối quy tắc kéo thả, điều kiện khớp trường lead, điểm có thể{' '}
-            <strong>âm hoặc dương</strong>, ngưỡng HOT/WARM. Dùng tab <strong>Quy tắc mẫu</strong> để soạn mẫu tái sử dụng.
+            Bộ quy tắc điểm tiềm năng và ngưỡng HOT/WARM. Điểm hồ sơ = quy tắc + tín hiệu TVV —{' '}
+            <strong>không gồm độ đầy đủ</strong>. Cột Độ đầy đủ cấu hình ở tab Điểm thông tin. Muốn trộn hai thước: bật tab
+            Phân loại tỷ trọng.
           </p>
         </>
       )

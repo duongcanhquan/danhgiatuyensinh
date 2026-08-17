@@ -168,13 +168,13 @@ export function ConsultingAssistantPanel({
               <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-wide text-violet-900">
-                  Điểm thông tin {ml.source === 'mvp_mock' ? '(MVP)' : '(đã lưu)'}
+                  Độ đầy đủ {ml.source === 'mvp_mock' ? '(đang tính)' : '(đã lưu)'}
                 </p>
                 <p className="truncate text-xs font-semibold text-slate-800">{ml.mlWinProbability}%</p>
                 <p className="text-xs leading-snug text-violet-800/90">
                   {ml.source === 'mvp_mock'
-                    ? 'Tỷ lệ thông tin có trên hồ sơ (app tính) — không phải xác suất ML.'
-                    : 'Giá trị đã lưu — % phản ánh mức thông tin ghi nhận trên một người.'}
+                    ? 'Tỷ lệ thông tin có trên hồ sơ — không phải điểm HOT/WARM, không phải ML.'
+                    : 'Giá trị đã lưu trên hồ sơ — vẫn là độ đầy đủ, không phải nhãn ưu tiên.'}
                 </p>
               </div>
             </div>

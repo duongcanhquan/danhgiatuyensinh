@@ -9,6 +9,7 @@ import {
 } from '../utils/receiptStorageConfig'
 import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { fetchWithTimeout, withTimeout } from '../utils/fetchWithTimeout'
+import { sanitizeDriveFolderName } from '../utils/inviteDriveErrors'
 
 /** Timeout từng lần thử R2/Drive — ngắn để mau chuyển sang Firebase. */
 const RECEIPT_FETCH_TIMEOUT_MS = 12_000
@@ -20,9 +21,9 @@ export function receiptStorageFolderName(lead: {
   customerId?: string
   id: string
 }): string {
-  const id = (lead.systemCode || lead.customerId || lead.id).trim()
+  const id = (lead.systemCode || lead.customerId || lead.id).trim() || lead.id
   const name = lead.fullName.trim() || 'HoSo'
-  return `${name}_${id}`.replace(/[^\w.\-()À-ỹ\s]/gi, '_').replace(/\s+/g, '_')
+  return sanitizeDriveFolderName(`${name}_${id}`)
 }
 
 async function uploadReceiptToR2(

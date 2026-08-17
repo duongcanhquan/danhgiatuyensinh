@@ -290,6 +290,15 @@ service cloud.firestore {
       }
     }
 
+    match /leads_archive/{leadId} {
+      allow read: if isPlatform()
+        || (isSchoolAdmin() && hasResolvedOrg() && schoolOrgActive() && matchesOrgData(resource.data));
+      allow create: if isPlatform() || (isSchoolAdmin() && (createInOwnOrg() || createLegacyVietmyOk()));
+      allow update: if false;
+      allow delete: if isPlatform()
+        || (isSchoolAdmin() && hasResolvedOrg() && schoolOrgActive() && matchesOrgData(resource.data));
+    }
+
     // ----- Legacy global scoringAux (vietmy only until fully migrated) -----
     match /scoringAux/{docId} {
       allow read, write: if isPlatform()

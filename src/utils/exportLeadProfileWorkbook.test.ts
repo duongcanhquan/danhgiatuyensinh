@@ -50,6 +50,10 @@ describe('buildLeadProfileExportRow', () => {
     expect(row['1. Cọc / Ứng — tiền (đ)']).toBe(5_000_000)
     expect(row['1. Cọc / Ứng — duyệt']).toBe('ĐỒNG Ý')
     expect(row['Đã duyệt (đ)']).toBe(5_000_000)
+    expect(row['Điểm hồ sơ']).toBe(62)
+    expect(row['Độ đầy đủ (%)']).toBeGreaterThan(0)
+    expect(row).not.toHaveProperty('Điểm')
+    expect(row).not.toHaveProperty('Điểm TT')
   })
 
   it('marks missing national id', () => {

@@ -23,7 +23,7 @@ import {
   scoringSignalsToEvaluationFlat,
 } from './leadScoringSignals'
 import { evaluationRecordFieldValue, leadSourceFieldsForScoring } from './leadSemanticFieldValue'
-import { computeInfoScoreRaw, type InfoScoreRuntime } from './infoScoreRules'
+import type { InfoScoreRuntime } from './infoScoreRules'
 import type { LeadClassificationRuntime } from './leadClassificationConfig'
 import { evaluateLeadWithClassification } from './leadClassificationScore'
 import { entryMatchesMasterValue, findMasterEntryForListItem } from './masterDataMatch'
@@ -737,10 +737,11 @@ function sumBuiltinScoringSignalPoints(
 }
 
 export type EvaluateLeadOptions = {
-  /** Lead gốc — cần để cộng điểm thông tin và kiểm tra cờ hành vi. */
+  /** Lead gốc — cần để kiểm tra cờ hành vi/rủi ro. Độ đầy đủ không cộng vào điểm hồ sơ. */
   lead?: Lead
+  /** Chỉ dùng khi bật phân loại tỷ trọng (trụ hồ sơ). Không cộng vào điểm profile thường. */
   infoScoreRuntime?: InfoScoreRuntime | null
-  /** Mặc định true khi có `lead`: cộng điểm thông tin + hành vi mẫu (tránh trùng rule profile). */
+  /** Mặc định true khi có `lead`: cộng tín hiệu hành vi mẫu (tránh trùng rule profile). Không gồm độ đầy đủ. */
   includeAuxScores?: boolean
   /** Phân loại HOT/WARM/COLD theo tỷ trọng hồ sơ vs gọi điện (admin cấu hình). */
   classificationRuntime?: LeadClassificationRuntime | null
@@ -794,7 +795,6 @@ export function evaluateLead(
     if (includeAux && options?.lead) {
       const covered = collectProfileTargetFields(profileForBlocks)
       raw += sumBuiltinScoringSignalPoints(merged, covered)
-      raw += computeInfoScoreRaw(options.lead, options.infoScoreRuntime)
     }
     const calculatedScore = Number.isFinite(raw) ? raw : 0
     const priorityTag = scoreToPriorityTag(calculatedScore, profile.thresholds)

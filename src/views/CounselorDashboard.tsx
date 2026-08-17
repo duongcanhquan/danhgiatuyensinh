@@ -1121,12 +1121,13 @@ export function CounselorDashboard() {
         profileName: activeScoringProfile?.profileName ?? 'Mặc định',
         scholarshipsById,
         counselorNameById: counselorDirectoryLabelById,
+        infoScoreRuntime: dashboardScoringOpts.infoScoreRuntime,
       })
     } catch (e) {
       console.error(e)
       appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
     }
-  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById, counselorDirectoryLabelById])
+  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById, counselorDirectoryLabelById, dashboardScoringOpts.infoScoreRuntime])
 
   const exportFilteredList = useCallback(() => {
     if (!rowsForExcelExport.length) {
@@ -1139,6 +1140,7 @@ export function CounselorDashboard() {
         scholarshipsById,
         counselorNameById: counselorDirectoryLabelById,
         evaluatedByLeadId: evalMapForExport(rowsForExcelExport),
+        infoScoreRuntime: dashboardScoringOpts.infoScoreRuntime,
         filename: `VietMy_TVV_HoSo_${new Date().toISOString().slice(0, 10)}.xlsx`,
       })
       if (searchScanTruncated || scopeFetchTruncated) {
@@ -1159,6 +1161,7 @@ export function CounselorDashboard() {
     evalMapForExport,
     searchScanTruncated,
     scopeFetchTruncated,
+    dashboardScoringOpts.infoScoreRuntime,
   ])
 
   const applyRowCrmChange = useCallback(

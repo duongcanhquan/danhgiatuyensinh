@@ -1,19 +1,23 @@
 import type { Lead, PriorityTag, ScholarshipRecord } from '../types'
 import { exportLeadProfileWorkbook } from './exportLeadProfileWorkbook'
+import type { InfoScoreRuntime } from './infoScoreRules'
 
 export type EvaluatedLeadExportRow = Record<string, string | number>
+
+type ExportMeta = {
+  profileName?: string
+  filename?: string
+  scholarshipsById?: Map<string, ScholarshipRecord>
+  counselorNameById?: Map<string, string>
+  infoScoreRuntime?: InfoScoreRuntime | null
+}
 
 /** Xuất chỉ các hồ sơ có id nằm trong `selectedIds` (cùng cấu trúc hồ sơ đầy đủ). */
 export function exportSelectedEvaluatedLeadsToXlsx(
   allRows: Lead[],
   selectedIds: ReadonlySet<string>,
   evaluatedByLeadId: Map<string, { calculatedScore: number; priorityTag: PriorityTag }>,
-  options: {
-    profileName?: string
-    filename?: string
-    scholarshipsById?: Map<string, ScholarshipRecord>
-    counselorNameById?: Map<string, string>
-  },
+  options: ExportMeta,
 ): void {
   const rows = allRows.filter((l) => selectedIds.has(l.id))
   if (!rows.length) return
@@ -23,6 +27,7 @@ export function exportSelectedEvaluatedLeadsToXlsx(
     scholarshipsById: options.scholarshipsById,
     counselorNameById: options.counselorNameById,
     evaluatedByLeadId,
+    infoScoreRuntime: options.infoScoreRuntime,
     sheetName: 'Hồ sơ sinh viên',
   })
 }
@@ -30,12 +35,7 @@ export function exportSelectedEvaluatedLeadsToXlsx(
 export function exportEvaluatedLeadsToXlsx(
   rows: Lead[],
   evaluatedByLeadId: Map<string, { calculatedScore: number; priorityTag: PriorityTag }>,
-  options: {
-    profileName?: string
-    filename?: string
-    scholarshipsById?: Map<string, ScholarshipRecord>
-    counselorNameById?: Map<string, string>
-  },
+  options: ExportMeta,
 ): void {
   if (!rows.length) return
   exportLeadProfileWorkbook(rows, {
@@ -44,6 +44,7 @@ export function exportEvaluatedLeadsToXlsx(
     scholarshipsById: options.scholarshipsById,
     counselorNameById: options.counselorNameById,
     evaluatedByLeadId,
+    infoScoreRuntime: options.infoScoreRuntime,
     sheetName: 'Hồ sơ sinh viên',
   })
 }

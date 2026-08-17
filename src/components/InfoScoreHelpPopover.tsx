@@ -3,16 +3,38 @@ import { CircleHelp, X } from 'lucide-react'
 import type { MlWinDisplay } from '../utils/mlWinMock'
 import { buildMlWinHoverText } from '../utils/mlWinMock'
 
-type InfoScoreHelpPopoverProps = {
-  hint: string
-  ml?: MlWinDisplay | null
-  className?: string
+type ColumnHelpTone = 'violet' | 'amber'
+
+const TONE: Record<ColumnHelpTone, { btn: string; title: string; border: string }> = {
+  violet: {
+    btn: 'border-violet-300/80 bg-violet-50 text-violet-900 hover:bg-violet-100',
+    title: 'text-violet-900',
+    border: 'border-violet-200',
+  },
+  amber: {
+    btn: 'border-amber-300/80 bg-amber-50 text-amber-950 hover:bg-amber-100',
+    title: 'text-amber-950',
+    border: 'border-amber-200',
+  },
 }
 
 /** Nút ? — bấm mở popover (chuột/touch); không chỉ dựa vào title. */
-export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopoverProps) {
+export function ColumnHelpPopover({
+  title,
+  hint,
+  detail,
+  tone = 'violet',
+  className,
+}: {
+  title: string
+  hint: string
+  detail?: string | null
+  tone?: ColumnHelpTone
+  className?: string
+}) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const spec = TONE[tone]
 
   useEffect(() => {
     if (!open) return
@@ -30,14 +52,12 @@ export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopov
     }
   }, [open])
 
-  const detail = ml ? buildMlWinHoverText(ml) : null
-
   return (
     <div ref={wrapRef} className={`relative inline-flex ${className ?? ''}`}>
       <button
         type="button"
-        className="rounded-full border border-violet-300/80 bg-violet-50 p-0.5 text-violet-900 shadow-sm hover:bg-violet-100"
-        aria-label="Giải thích điểm thông tin"
+        className={`rounded-full border p-0.5 shadow-sm ${spec.btn}`}
+        aria-label={`Giải thích ${title}`}
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation()
@@ -49,12 +69,12 @@ export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopov
       {open ? (
         <div
           role="dialog"
-          aria-label="Điểm thông tin"
-          className="absolute right-0 top-full z-[60] mt-1 w-[min(24rem,calc(100vw-2rem))] rounded-lg border border-violet-200 bg-white p-2.5 text-left text-xs leading-snug text-slate-800 shadow-lg md:w-[min(28rem,calc(100vw-2rem))]"
+          aria-label={title}
+          className={`absolute right-0 top-full z-[60] mt-1 w-[min(24rem,calc(100vw-2rem))] rounded-lg border bg-white p-2.5 text-left text-xs leading-snug text-slate-800 shadow-lg md:w-[min(28rem,calc(100vw-2rem))] ${spec.border}`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-1 flex items-start justify-between gap-2">
-            <p className="font-bold text-violet-900">Điểm thông tin</p>
+            <p className={`font-bold ${spec.title}`}>{title}</p>
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -73,5 +93,24 @@ export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopov
         </div>
       ) : null}
     </div>
+  )
+}
+
+type InfoScoreHelpPopoverProps = {
+  hint: string
+  ml?: MlWinDisplay | null
+  className?: string
+}
+
+/** Nút ? độ đầy đủ — giữ API cũ. */
+export function InfoScoreHelpPopover({ hint, ml, className }: InfoScoreHelpPopoverProps) {
+  return (
+    <ColumnHelpPopover
+      title="Độ đầy đủ"
+      hint={hint}
+      detail={ml ? buildMlWinHoverText(ml) : null}
+      tone="violet"
+      className={className}
+    />
   )
 }

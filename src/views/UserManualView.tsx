@@ -191,11 +191,11 @@ function sectionsData(): Section[] {
             </li>
           </ol>
           <p className={p}>
-            Cột <strong>% (điểm thông tin)</strong> trên bảng phản ánh <strong>độ đầy dữ liệu tĩnh</strong> (điểm nền + các
-            tiêu chí bật và khớp, rồi kẹp min–max %) — không phải HOT/WARM. Đặt chuột lên vòng % để xem chi tiết. Cách tính
-            và chỉnh: <strong>Cài đặt → Chấm điểm → tab Điểm thông tin</strong> (bảng có cột «Cách đánh giá» cho từng{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-xs">id</code>); nhãn HOT/WARM ở tab{' '}
-            <strong>Profile chấm điểm</strong>.
+            Cột <strong>Độ đầy đủ</strong> trên bảng đo <strong>tỷ lệ dữ liệu tĩnh</strong> đã có trên hồ sơ (điểm nền +
+            tiêu chí bật và khớp, kẹp min–max %) — <strong>không</strong> phải HOT/WARM và <strong>không cộng</strong> vào
+            cột Điểm hồ sơ. Bấm <strong>?</strong> hoặc đặt chuột lên vòng % để xem chi tiết. Cách tính:{' '}
+            <strong>Cài đặt → Chấm điểm → Điểm thông tin</strong>. Nhãn HOT/WARM nằm tab <strong>Profile chấm điểm</strong>
+            (trừ khi bật Phân loại tỷ trọng).
           </p>
           <p className={p}>
             <strong>Chia sẻ đúng bộ lọc:</strong> sau khi chỉnh lọc, copy địa chỉ trên thanh trình duyệt và gửi cho đồng
@@ -391,20 +391,17 @@ function sectionsData(): Section[] {
             hiện trong form hồ sơ và trong điều kiện chấm điểm khi cần so khớp “thuộc danh sách”.
           </p>
           <p className={p}>
-            <strong>Chấm điểm (profile):</strong> bộ quy tắc và ngưỡng điểm để hệ thống tự gán nhãn ưu tiên (ví dụ HOT /
-            WARM / COLD) dựa trên <em>dữ liệu đã có trên hồ sơ</em> — không phải đoạn chat AI và không đọc kho tài liệu
-            như khi phân tích AI.
+            <strong>Chấm điểm (profile):</strong> bộ quy tắc và ngưỡng để gán nhãn ưu tiên (HOT / WARM / COLD) — điểm hồ sơ
+            chỉ từ quy tắc + tín hiệu TVV, không gồm độ đầy đủ. Không phải đoạn chat AI.
           </p>
           <ul className={ul}>
             <li>Tab quy tắc mẫu: giúp thêm nhanh khối điều kiện khi soạn profile.</li>
             <li>Nên chuẩn hóa cột dữ liệu (ngành quan tâm, học lực, loại trường…) để chấm điểm ổn định.</li>
           </ul>
           <p className={p}>
-            <strong>Điểm thông tin (% trên bảng hồ sơ):</strong> <strong>Cài đặt → Chấm điểm → Điểm thông tin</strong> — chỉnh
-            điểm nền, kẹp %, bật/tắt từng dòng tiêu chí và điểm khi khớp (mặc định bật bộ «lõi»; một số tiêu chí bổ sung như
-            nguồn, ngành quan tâm, học lực, mô tả dài… mặc định tắt — bật nếu trường muốn đưa vào %). Lưu toàn trường.{' '}
-            <strong>Profile chấm điểm (HOT/WARM)</strong> nằm tab kế bên trong cùng màn Chấm điểm. Từng hồ sơ vẫn có thể ghi
-            đè % khi đã lưu sẵn trên lead (mlWinProbability + mlExplanation).
+            <strong>Độ đầy đủ / điểm thông tin (cột % trên bảng hồ sơ):</strong>{' '}
+            <strong>Cài đặt → Chấm điểm → Điểm thông tin</strong> — chỉnh điểm nền, kẹp %, bật/tắt tiêu chí. Lưu toàn trường.
+            Cột này độc lập với <strong>Điểm hồ sơ</strong>. Từng hồ sơ vẫn có thể ghi đè % khi đã lưu sẵn trên lead.
           </p>
         </div>
       ),

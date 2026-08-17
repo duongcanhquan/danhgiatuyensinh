@@ -78,8 +78,9 @@ export function LeadClassificationRulesPanel({ canEdit }: { canEdit: boolean }) 
       <div>
         <h3 className="text-base font-bold text-slate-900">Phân loại HOT / WARM / COLD (tỷ trọng)</h3>
         <p className="mt-1 text-xs leading-relaxed text-slate-600">
-          Điểm tổng hợp 0–100 = <strong>Hồ sơ</strong> × tỷ trọng + <strong>Gọi điện &amp; tương tác</strong> × phần
-          còn lại. Mỗi trụ chuẩn hóa 0–100 trước khi nhân tỷ trọng — tránh hồ sơ “ăn” hết điểm khi đã gọi nhiều.
+          Tắt (mặc định): điểm hồ sơ và nhãn HOT/WARM chỉ theo bộ chấm + tín hiệu TVV — không gồm độ đầy đủ. Bật: điểm
+          tổng hợp 0–100 = <strong>Hồ sơ</strong> × tỷ trọng + <strong>Gọi điện</strong> × phần còn lại. Trong trụ Hồ sơ
+          có thể nhân độ đầy đủ theo trọng số bên dưới — khi đó nhãn không còn độc lập với cột Độ đầy đủ.
         </p>
       </div>
 
@@ -99,13 +100,13 @@ export function LeadClassificationRulesPanel({ canEdit }: { canEdit: boolean }) 
           disabled={!canEdit || busy}
           onChange={(e) => patch((d) => ({ ...d, enabled: e.target.checked }))}
         />
-        Bật phân loại theo tỷ trọng (tắt = logic chấm điểm cũ)
+        Bật phân loại theo tỷ trọng (tắt = điểm hồ sơ độc lập với độ đầy đủ)
       </label>
 
       <section className="space-y-2 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
         <h4 className="font-semibold text-violet-950">Tỷ trọng hai trụ chính</h4>
         <WeightRow
-          label="Hồ sơ (quy tắc + điểm thông tin)"
+          label="Hồ sơ (quy tắc bộ chấm + độ đầy đủ)"
           value={working.profileWeightPercent}
           disabled={!canEdit || busy}
           onChange={(n) => patch((d) => ({ ...d, profileWeightPercent: n }))}
@@ -124,7 +125,7 @@ export function LeadClassificationRulesPanel({ canEdit }: { canEdit: boolean }) 
           onChange={(n) => patch((d) => ({ ...d, profile: { ...d.profile, profileRules: n } }))}
         />
         <WeightRow
-          label="Điểm thông tin (% đầy hồ sơ)"
+          label="Độ đầy đủ (% thông tin trên hồ sơ)"
           value={working.profile.infoScore}
           disabled={!canEdit || busy}
           onChange={(n) => patch((d) => ({ ...d, profile: { ...d.profile, infoScore: n } }))}

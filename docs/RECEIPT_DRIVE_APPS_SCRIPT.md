@@ -17,7 +17,11 @@ Cài đặt tổng: [`HUONG-DAN-CAI-WEBHOOK-VA-CHAY.md`](./HUONG-DAN-CAI-WEBHOOK
 4. `Project Settings` → Script properties → `RECEIPT_WEBHOOK_TOKEN` = **value bí mật** (không phải tên key).
 5. Deploy → Web app → Execute as **Me** → Who has access **Anyone** → copy URL **`/exec`** (không dùng `/dev`).
 
-App gọi Apps Script bằng `Content-Type: text/plain` (tránh CORS preflight khi TVV bấm giấy mời trên trình duyệt).
+**Lỗi «không tạo được thư mục» chỉ trên một máy:** URL `/dev` hoặc quyền «Only myself» chạy được trên máy chủ script (đã login Google), máy TVV khác thì fail CORS / trang đăng nhập. App gọi Cloud Function `ensureInviteDriveFolder` (không CORS); fallback trình duyệt nếu CF chưa deploy.
+
+App gọi Apps Script bằng `Content-Type: text/plain` (tránh CORS preflight). Sau khi sửa `.gs`, **Deploy → Manage deployments → New version**.
+
+Cần `firebase deploy --only functions` để máy khác tạo folder ổn định.
 
 ## 2) Cấu hình trong app (ưu tiên)
 

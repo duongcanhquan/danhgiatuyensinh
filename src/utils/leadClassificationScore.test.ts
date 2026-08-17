@@ -69,4 +69,11 @@ describe('leadClassificationScore', () => {
     expect(richCall.engagementPart).toBeGreaterThan(thin.engagementPart)
     expect(richCall.compositeScore).toBeGreaterThan(thin.compositeScore)
   })
+
+  it('trụ hồ sơ tăng khi độ đầy đủ tăng (khi bật phân loại)', () => {
+    const emptyPhone = computeLeadClassification(stubLead({ phone: '', parentPhone: '', fullName: 'A' }), null, cfg)
+    const full = computeLeadClassification(stubLead(), null, cfg)
+    expect(full.profileDetail.infoNorm).toBeGreaterThan(emptyPhone.profileDetail.infoNorm)
+    expect(full.profilePart).toBeGreaterThan(emptyPhone.profilePart)
+  })
 })

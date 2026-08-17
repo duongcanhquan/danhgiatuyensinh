@@ -26,7 +26,7 @@ describe('bulkLeadRescore', () => {
     thresholds: { hotMinScore: 81, warmMinScore: 51 },
   }
 
-  it('phát hiện thay đổi điểm khi hồ sơ có highSchool khớp rule (kèm điểm thông tin)', () => {
+  it('phát hiện thay đổi điểm khi hồ sơ khớp rule (không cộng độ đầy đủ)', () => {
     const lead = {
       id: 'l1',
       calculatedScore: 5,
@@ -35,7 +35,7 @@ describe('bulkLeadRescore', () => {
       schoolType: '',
     }
     const r = computeLeadScoringResult(lead as never, profile as ScoringProfile)
-    expect(r.calculatedScore).toBeGreaterThan(40)
+    expect(r.calculatedScore).toBe(40)
     expect(r.changed).toBe(true)
   })
 

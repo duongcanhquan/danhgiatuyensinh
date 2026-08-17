@@ -2,7 +2,7 @@ import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
-import { AlertTriangle, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
+import { AlertTriangle, Archive, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, RefreshCw, Search, SlidersHorizontal, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -91,6 +91,12 @@ import {
 } from '../utils/aiGatekeeper'
 import { buildInstitutionalRagBlock } from '../utils/knowledgeRag'
 import { buildMlWinHoverText, resolveMlWinDisplay } from '../utils/mlWinMock'
+import {
+  INFO_SCORE_COLUMN_LABEL,
+  PROFILE_SCORE_COLUMN_LABEL,
+  infoScoreHelpHint,
+  profileScoreHelpHint,
+} from '../utils/leadScoreDisplayCopy'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import {
   formatLeadCounselorNotePreview,
@@ -167,6 +173,8 @@ import { appConfirm } from '../utils/appConfirm'
 import { appAlert } from '../utils/appNotify'
 import { MSG_NO_CHANGES, MSG_NO_SESSION, MSG_SAVE_FAILED, userFacingWriteError } from '../utils/userFacingWriteError'
 import { AppNotice } from '../components/AppNotice'
+import { LeadArchivePanel } from '../components/LeadArchivePanel'
+import { isLeadOperational } from '../utils/leadArchive'
 import { ViewportModal } from '../components/ViewportModal'
 import {
   formatUploadedDateRangeChip,
@@ -200,7 +208,7 @@ import { sliceClientPagedRows } from '../utils/leadListClientPaging'
 import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { useAITasks } from '../hooks/useAITasks'
 import { MlWinGauge } from '../components/MlWinGauge'
-import { InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
+import { ColumnHelpPopover, InfoScoreHelpPopover } from '../components/InfoScoreHelpPopover'
 import { SearchableFilterSelect } from '../components/SearchableFilterSelect'
 import { ScoringViewModeHint } from '../components/ScoringViewModeHint'
 import { resolveLeadPrimarySource } from '../utils/leadSemanticFieldValue'
@@ -392,10 +400,6 @@ function leadUiFiltersEqual(a: LeadUiFilters, b: LeadUiFilters): boolean {
   )
 }
 
-/** Tooltip cột Điểm thông tin — đặt chuột lên nút ? hoặc gauge để xem chi tiết. */
-const ML_WIN_COLUMN_HINT =
-  'Điểm thông tin = độ đầy dữ liệu tĩnh trên hồ sơ (điểm nền + các tiêu chí bật và khớp; kẹp min–max theo Cài đặt → Điểm thông tin). Bám theo 20 cột Excel quy chuẩn + tiêu chí mở rộng (educationLevel, description) nếu bật. Có thể ghi đè từng lead trên Firestore (mlWinProbability + mlExplanation). Đặt chuột lên vòng % để xem bảng chi tiết.'
-
 function formatAssignedCounselorLabel(l: Lead, names: Map<string, string>): string {
   return resolveCounselorDisplayName(leadAssignedUid(l), {
     directoryNames: names,
@@ -490,6 +494,7 @@ export function LeadManagement() {
     isTeamLeadRole(profile?.role) || profileHasTeamRoster(profile)
   const [inspectProfileOpen, setInspectProfileOpen] = useState(false)
   const [createLeadOpen, setCreateLeadOpen] = useState(false)
+  const [archivePanelOpen, setArchivePanelOpen] = useState(false)
   const [createLeadNotice, setCreateLeadNotice] = useState<string | null>(null)
 
   const [tagFilter, setTagFilter] = useState<string>('ALL')
@@ -1109,6 +1114,8 @@ export function LeadManagement() {
     ;(async () => {
       try {
         const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, openLeadIdFromUrl))
+        const archivedSnap =
+          snap.exists() ? null : await getDoc(doc(db, FS_COLLECTIONS.leadsArchive, openLeadIdFromUrl))
         if (!cancelled) {
           setSearchParams(
             (prev) => {
@@ -1120,8 +1127,15 @@ export function LeadManagement() {
           )
         }
         if (cancelled) return
-        if (!snap.exists()) return
-        const row = mapDoc(openLeadIdFromUrl, snap.data() as Record<string, unknown>)
+        const raw = snap.exists()
+          ? snap.data()
+          : archivedSnap?.exists()
+            ? archivedSnap.data()
+            : null
+        if (!raw) return
+        const row = mapDoc(openLeadIdFromUrl, raw as Record<string, unknown>, {
+          includeArchived: Boolean(archivedSnap?.exists()),
+        })
         if (row) {
           captureListChromeBeforeDetailRef.current()
           setSelected(row)
@@ -1174,7 +1188,8 @@ export function LeadManagement() {
       if (!db) return
       try {
         const snap = await getDoc(doc(db, FS_COLLECTIONS.leads, leadId))
-        if (!snap.exists()) {
+        const archivedSnap = snap.exists() ? null : await getDoc(doc(db, FS_COLLECTIONS.leadsArchive, leadId))
+        if (!snap.exists() && !archivedSnap?.exists()) {
           setCreateLeadNotice((prev) =>
             [prev, `Không đọc được hồ sơ vừa tạo (id ${leadId.slice(0, 8)}…). Thử tìm theo mã hệ thống.`]
               .filter(Boolean)
@@ -1182,7 +1197,10 @@ export function LeadManagement() {
           )
           return
         }
-        const row = mapDoc(leadId, snap.data() as Record<string, unknown>)
+        const raw = snap.exists() ? snap.data() : archivedSnap!.data()
+        const row = mapDoc(leadId, raw as Record<string, unknown>, {
+          includeArchived: Boolean(archivedSnap?.exists()),
+        })
         if (row) {
           captureListChromeBeforeDetail()
           setSelected(row)
@@ -2214,6 +2232,7 @@ export function LeadManagement() {
         profileName: activeScoringProfile?.profileName ?? 'Mặc định',
         scholarshipsById,
         counselorNameById: counselorDirectoryLabelById,
+        infoScoreRuntime,
         filename: `VietMy_HoSo_SinhVien_${new Date().toISOString().slice(0, 10)}.xlsx`,
       })
       if (searchScanTruncated || scopeFetchTruncated) {
@@ -3511,12 +3530,13 @@ export function LeadManagement() {
         profileName: activeScoringProfile?.profileName ?? 'Mặc định',
         scholarshipsById,
         counselorNameById: counselorDirectoryLabelById,
+        infoScoreRuntime,
       })
     } catch (e) {
       console.error(e)
       appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
     }
-  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById, counselorDirectoryLabelById])
+  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById, counselorDirectoryLabelById, infoScoreRuntime])
 
   return (
     <div className="bento-board gap-4">
@@ -3691,29 +3711,85 @@ export function LeadManagement() {
           </div>
         </div>
 
-        {/* Tìm kiếm + nguồn nhập + thao tác (một hàng). */}
+        {/* Tìm kiếm (gọn) + Công cụ cạnh nhau; nguồn nhập / tạo mới bên phải. */}
         <div className="flex flex-wrap items-end gap-2.5">
-          <label className={`${LEAD_FILTER_LABEL} min-w-[10rem] flex-1 basis-[12rem]`}>
-            <span>Tìm kiếm</span>
-            <input
-              type="text"
-              inputMode="search"
-              enterKeyHint="search"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              value={listSearchInput.value}
-              onChange={(e) => listSearchInput.onChange(e.target.value)}
-              onCompositionStart={listSearchInput.onCompositionStart}
-              onCompositionEnd={listSearchInput.onCompositionEnd}
-              onKeyDown={listSearchInput.onKeyDown}
-              onBlur={listSearchInput.onBlur}
-              placeholder={leadSearchPlaceholderForRole(profile?.role, showAdminGlobalFilters)}
-              title={leadSearchScopeHintForRole(profile?.role, showAdminGlobalFilters)}
-              className={LEAD_FILTER_CONTROL}
-            />
-          </label>
+          <div className="flex min-w-0 items-end gap-2">
+            <label className={`${LEAD_FILTER_LABEL} w-[min(100%,16rem)] shrink-0`}>
+              <span>Tìm kiếm</span>
+              <span className="relative block">
+                <Search
+                  className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                  aria-hidden
+                  strokeWidth={2.25}
+                />
+                <input
+                  type="text"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  value={listSearchInput.value}
+                  onChange={(e) => listSearchInput.onChange(e.target.value)}
+                  onCompositionStart={listSearchInput.onCompositionStart}
+                  onCompositionEnd={listSearchInput.onCompositionEnd}
+                  onKeyDown={listSearchInput.onKeyDown}
+                  onBlur={listSearchInput.onBlur}
+                  placeholder={leadSearchPlaceholderForRole(profile?.role, showAdminGlobalFilters)}
+                  title={leadSearchScopeHintForRole(profile?.role, showAdminGlobalFilters)}
+                  className={`${LEAD_FILTER_CONTROL} pl-7`}
+                />
+              </span>
+            </label>
+            <div className="flex shrink-0 flex-col gap-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-amber-800">Công cụ</span>
+              <button
+                type="button"
+                onClick={() => setWorkspaceToolsOpen((v) => !v)}
+                className={[
+                  LEAD_BTN,
+                  'min-h-8 px-2.5 font-bold shadow-md',
+                  workspaceToolsOpen
+                    ? 'border-amber-700 bg-amber-600 text-white hover:bg-amber-700'
+                    : 'border-amber-500 bg-amber-400 text-amber-950 ring-2 ring-amber-300/80 hover:bg-amber-300',
+                ].join(' ')}
+                aria-expanded={workspaceToolsOpen}
+                title="Hiện/ẩn hàng chờ gọi và bộ lọc"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={2.4} />
+                Công cụ
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 transition ${workspaceToolsOpen ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+                {activeFilterChips.length > 0 ? (
+                  <span
+                    className={[
+                      'rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
+                      workspaceToolsOpen ? 'bg-white/25 text-white' : 'bg-amber-950 text-amber-50',
+                    ].join(' ')}
+                  >
+                    {activeFilterChips.length}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+            {canDeleteLeads ? (
+              <div className="flex shrink-0 flex-col gap-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">Kho lạnh</span>
+                <button
+                  type="button"
+                  onClick={() => setArchivePanelOpen(true)}
+                  className={`${LEAD_BTN} min-h-8 border-slate-700 bg-slate-800 px-2.5 font-bold text-white hover:bg-slate-700`}
+                  title="Cất hồ sơ theo năm / đợt / chiến dịch — không còn trong thao tác hàng ngày"
+                >
+                  <Archive className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Lưu trữ
+                </button>
+              </div>
+            ) : null}
+          </div>
           <div className="min-w-0 shrink-0">
             <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               Nguồn nhập
@@ -3779,29 +3855,6 @@ export function LeadManagement() {
               Tải Excel
               {rowsForExcelExport.length ? (
                 <span className="tabular-nums opacity-80">({rowsForExcelExport.length})</span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => setWorkspaceToolsOpen((v) => !v)}
-              className={[
-                LEAD_BTN,
-                workspaceToolsOpen
-                  ? 'border-amber-400 bg-amber-100 text-amber-950'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 hover:bg-amber-50/80',
-              ].join(' ')}
-              aria-expanded={workspaceToolsOpen}
-              title="Hiện/ẩn hàng chờ gọi và bộ lọc"
-            >
-              <ChevronDown
-                className={`h-3.5 w-3.5 shrink-0 transition ${workspaceToolsOpen ? 'rotate-180' : ''}`}
-                aria-hidden
-              />
-              Công cụ
-              {activeFilterChips.length > 0 ? (
-                <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-amber-950">
-                  {activeFilterChips.length}
-                </span>
               ) : null}
             </button>
           </div>
@@ -4629,37 +4682,46 @@ export function LeadManagement() {
                   Tương tác
                 </th>
                 <th className="w-[5%] px-1.5 py-2 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('score')}
-                    className="flex flex-col items-start gap-0 text-left normal-case tracking-normal transition hover:text-amber-700"
-                  >
+                  <div className="flex flex-col items-start gap-0">
                     <span className="flex items-center gap-0.5">
-                      Điểm
-                      {sortKey === 'score' ? (
-                        <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => toggleSort('score')}
+                        className="flex items-center gap-0.5 text-left normal-case tracking-normal transition hover:text-amber-700"
+                      >
+                        {PROFILE_SCORE_COLUMN_LABEL}
+                        {sortKey === 'score' ? (
+                          <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        ) : null}
+                      </button>
+                      <ColumnHelpPopover
+                        title={PROFILE_SCORE_COLUMN_LABEL}
+                        hint={profileScoreHelpHint(classificationRuntime.enabled)}
+                        tone="amber"
+                      />
                     </span>
                     {profileScoringActive ? (
                       <span className="text-[10px] font-normal text-[var(--color-primary)]">
-                        {profileScoringLive ? 'profile' : 'chưa quy tắc'}
+                        {profileScoringLive ? 'bộ chấm' : 'chưa quy tắc'}
                       </span>
                     ) : null}
-                  </button>
+                  </div>
                 </th>
                 <th className="w-[5.5%] min-w-[3.25rem] px-0.5 py-2 text-center font-semibold normal-case tracking-normal">
                   <div className="flex flex-col items-center gap-0">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('mlWin')}
-                      className="inline-flex flex-col items-center text-[11px] leading-tight text-[var(--color-primary)] transition hover:text-[var(--color-primary)]"
-                    >
-                      <span>Điểm TT</span>
-                      {sortKey === 'mlWin' ? (
-                        <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                      ) : null}
-                    </button>
-                    <InfoScoreHelpPopover hint={ML_WIN_COLUMN_HINT} />
+                    <span className="inline-flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort('mlWin')}
+                        className="inline-flex flex-col items-center text-[11px] leading-tight text-[var(--color-primary)] transition hover:text-[var(--color-primary)]"
+                      >
+                        <span>{INFO_SCORE_COLUMN_LABEL}</span>
+                        {sortKey === 'mlWin' ? (
+                          <span className="text-amber-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        ) : null}
+                      </button>
+                      <InfoScoreHelpPopover hint={infoScoreHelpHint()} />
+                    </span>
                   </div>
                 </th>
                 <th className="w-[6%] px-1.5 py-2 font-semibold">
@@ -4848,8 +4910,11 @@ export function LeadManagement() {
                   <td className="px-1.5 py-1.5 font-medium tabular-nums text-[var(--color-primary)]">
                     {displayScore}
                   </td>
-                  <td className="cursor-help px-0.5 py-1 text-center" title={buildMlWinHoverText(ml)}>
-                    <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
+                  <td className="cursor-help px-0.5 py-1 text-center">
+                    <div className="inline-flex items-center justify-center gap-0.5">
+                      <MlWinGauge value={ml.mlWinProbability} title={buildMlWinHoverText(ml)} />
+                      <InfoScoreHelpPopover hint={infoScoreHelpHint()} ml={ml} />
+                    </div>
                   </td>
                   <td className="px-1.5 py-1.5">
                     <TagBadge tag={displayTag} />
@@ -5637,6 +5702,29 @@ export function LeadManagement() {
           )
         : null}
 
+      {archivePanelOpen && db && profile ? (
+        <LeadArchivePanel
+          db={db}
+          orgId={effectiveOrgId}
+          uid={profile.id}
+          programOptions={programOptions}
+          sourceOptions={nguonOptions}
+          selectedIds={[...selectedIds]}
+          scholarshipsById={scholarshipsById}
+          counselorNameById={counselorDirectoryLabelById}
+          onClose={() => setArchivePanelOpen(false)}
+          onLiveChanged={() => {
+            setSelectedIds(new Set())
+            refetchLeads()
+          }}
+          onOpenArchived={(lead) => {
+            setArchivePanelOpen(false)
+            captureListChromeBeforeDetail()
+            setSelected(lead)
+          }}
+        />
+      ) : null}
+
       <CreateLeadModal
         open={createLeadOpen}
         onClose={() => setCreateLeadOpen(false)}
@@ -6359,7 +6447,7 @@ function LeadDetailPanel({
     [interactions],
   )
 
-  const showCounselorProgressForm = canWriteLead(profile, lead, can, pickListUsers)
+  const showCounselorProgressForm = canWriteLead(profile, lead, can, pickListUsers) && isLeadOperational(lead)
 
   /** Khối phân công bên phải ẩn khi TVV peer xem hồ sơ không phải của mình — khi đó không gỡ CRM bên trái. */
   const peerModeForCrmBlock = !reassignElevated && Boolean(can('leads:reassign:peer'))
@@ -6594,7 +6682,7 @@ function LeadDetailPanel({
       const scholarship2 = lead.scholarship2Id
         ? (scholarships.find((s) => s.id === lead.scholarship2Id) ?? null)
         : null
-      const { folderUrl } = await triggerInvitationN8n({
+      const { folderUrl, folderWarning } = await triggerInvitationN8n({
         lead,
         docType,
         scholarship,
@@ -6603,15 +6691,29 @@ function LeadDetailPanel({
       })
       if (folderUrl) {
         const touch = leadTouchPatch()
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
-          ...touch,
-          inviteFolderUrl: folderUrl,
-        })
-        onUpdated({ inviteFolderUrl: folderUrl, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt })
-        setMsg('Đã tạo thư mục Drive và gửi yêu cầu giấy tờ qua n8n. Bấm «Mở ngay» để xem hồ sơ.')
+        try {
+          await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
+            ...touch,
+            inviteFolderUrl: folderUrl,
+          })
+          onUpdated({ inviteFolderUrl: folderUrl, updatedAt: touch.updatedAt, lastTouchedAt: touch.lastTouchedAt })
+        } catch (saveErr) {
+          console.error(saveErr)
+          setMsg(
+            `Đã tạo giấy mời nhưng chưa ghi được link thư mục lên hồ sơ. ${userFacingWriteError(saveErr)}`,
+          )
+          return
+        }
+        setMsg(
+          folderWarning
+            ? `Giấy mời đã gửi qua n8n. Chưa tạo được thư mục Drive: ${folderWarning}`
+            : 'Đã tạo thư mục Drive và gửi yêu cầu giấy tờ qua n8n. Bấm «Mở ngay» để xem hồ sơ.',
+        )
       } else {
         setMsg(
-          'Đã gửi n8n nhưng chưa có link thư mục Drive. Kiểm tra Cài đặt → Chứng từ (URL Apps Script) và Giấy mời & mẫu (folder gốc).',
+          folderWarning
+            ? `Chưa có link thư mục Drive: ${folderWarning}`
+            : 'Chưa có link thư mục Drive sau khi gửi n8n. Kiểm tra Cài đặt → Chứng từ (URL Apps Script) và Giấy mời & mẫu (folder gốc).',
         )
       }
     } catch (e) {
@@ -7269,6 +7371,12 @@ function LeadDetailPanel({
         </div>
       </header>
 
+      {!isLeadOperational(lead) ? (
+        <p className="border-b border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-800 sm:px-4">
+          Hồ sơ đang ở kho lưu trữ{lead.archiveLabel ? ` — ${lead.archiveLabel}` : ''}. Chỉ xem; không tạo giấy mời, không sửa, không tính lại.
+        </p>
+      ) : null}
+
       <section
         className="shrink-0 border-b border-slate-200/90 bg-white px-3 py-2.5 sm:px-4"
         aria-label="Tình trạng tư vấn"
@@ -7434,16 +7542,21 @@ function LeadDetailPanel({
                     </button>
                   </div>
                   <div
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1"
-                    title="Điểm và nhãn theo bộ chấm đang chọn"
+                    className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1"
+                    title={profileScoreHelpHint(classificationRuntime.enabled)}
                   >
-                    <span className="hidden text-[9px] font-bold uppercase tracking-wide text-violet-700 sm:inline">
-                      Điểm
+                    <span className="hidden text-[9px] font-bold uppercase tracking-wide text-amber-800 sm:inline">
+                      {PROFILE_SCORE_COLUMN_LABEL}
                     </span>
-                    <span className="tabular-nums text-sm font-bold text-violet-900">
+                    <span className="tabular-nums text-sm font-bold text-amber-950">
                       {String(detailScoringPreview?.calculatedScore ?? lead.calculatedScore)}
                     </span>
                     <TagBadge tag={detailScoringPreview?.priorityTag ?? lead.priorityTag} />
+                    <ColumnHelpPopover
+                      title={PROFILE_SCORE_COLUMN_LABEL}
+                      hint={profileScoreHelpHint(classificationRuntime.enabled)}
+                      tone="amber"
+                    />
                   </div>
                 </nav>
                 {/* SĐT — thu gọn mặc định để lộ nội dung bên dưới */}

@@ -1,6 +1,10 @@
 const ROOT_FOLDER_ID = '1GLfOI4XJG4X1I9TnENrVX0aCVYIyqCf7'
 const TOKEN_PROP_KEY = 'RECEIPT_WEBHOOK_TOKEN'
 
+function doGet() {
+  return jsonOut({ ok: true, service: 'receipt-drive-webapp', hint: 'POST action=ensure_folder|upload' })
+}
+
 function doPost(e) {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}')
@@ -25,7 +29,7 @@ function doPost(e) {
     const slot = String(body.slot || '').trim()
 
     const rootId = String(body.rootFolderId || ROOT_FOLDER_ID).trim() || ROOT_FOLDER_ID
-    const root = DriveApp.getFolderById(rootId)
+    const root = getRootFolder(rootId)
     const studentFolder = getOrCreateSubFolder(root, folderName)
 
     const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Ho_Chi_Minh', 'yyyyMMdd_HHmmss')
@@ -69,7 +73,7 @@ function ensureFolderOnly(body) {
   const folderName = safeFolderName(body.folderName || `${leadName}_${profileCode}`)
   const rootId = String(body.rootFolderId || ROOT_FOLDER_ID).trim() || ROOT_FOLDER_ID
   if (!rootId) return jsonOut({ ok: false, error: 'Missing rootFolderId.' })
-  const root = DriveApp.getFolderById(rootId)
+  const root = getRootFolder(rootId)
   const studentFolder = getOrCreateSubFolder(root, folderName)
   return jsonOut({
     ok: true,
@@ -78,17 +82,40 @@ function ensureFolderOnly(body) {
   })
 }
 
+function getRootFolder(rootId) {
+  try {
+    return DriveApp.getFolderById(rootId)
+  } catch (err) {
+    throw new Error(
+      'Không mở được thư mục gốc Drive (sai ID hoặc chưa chia sẻ folder cho tài khoản chạy script). ' +
+        String(err && err.message ? err.message : err),
+    )
+  }
+}
+
 function getOrCreateSubFolder(parent, folderName) {
   const iter = parent.getFoldersByName(folderName)
   if (iter.hasNext()) return iter.next()
-  return parent.createFolder(folderName)
+  try {
+    return parent.createFolder(folderName)
+  } catch (err) {
+    const again = parent.getFoldersByName(folderName)
+    if (again.hasNext()) return again.next()
+    throw new Error(
+      'Không tạo được thư mục giấy mời trên Drive. Kiểm tra quyền Content manager trên folder gốc. ' +
+        String(err && err.message ? err.message : err),
+    )
+  }
 }
 
 function safeFolderName(input) {
-  return String(input || 'HoSo')
+  var cleaned = String(input || 'HoSo')
     .replace(/[^\w.\-()À-ỹ\s]/g, '_')
     .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.]+|[_.]+$/g, '')
     .slice(0, 120)
+  return cleaned || 'HoSo'
 }
 
 function safeName(input) {

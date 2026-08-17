@@ -18,6 +18,7 @@ import { AccountantLeadReviewCard } from '../components/accountant/AccountantLea
 import { canAccessAccountantPortal } from '../auth/accountantPortal'
 import { exportLeadProfileWorkbook } from '../utils/exportLeadProfileWorkbook'
 import { appAlert } from '../utils/appNotify'
+import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 
 type QueueFilter = 'pending' | 'done' | 'all'
 
@@ -54,6 +55,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
   const canWriteAccountant = can('finance:accountant')
   const { leads, loading, error, reload } = useAccountantLeads(canPortal)
   const { items: scholarships } = useScholarships()
+  const { runtime: infoScoreRuntime } = useInfoScoreRules()
   const { users: directoryUsers } = useCounselorDirectory()
   const [rows, setRows] = useState<Lead[]>([])
   const [search, setSearch] = useState('')
@@ -393,6 +395,7 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
                 scholarshipsById: scholarshipById,
                 counselorNameById: directoryNames,
                 studentCodeIndex: codeSequenceIndex,
+                infoScoreRuntime,
                 filename: `VietMy_KeToan_HoSo_${new Date().toISOString().slice(0, 10)}.xlsx`,
               })
             } catch (e) {

@@ -3,6 +3,8 @@ import type { Lead, ScoringProfile, ScoringRule } from '../types'
 import { Timestamp } from 'firebase/firestore'
 import { evaluateLead, leadToEvaluationRecord, persistedLeadScoringFields, scoreToPriorityTag, sumBlockMaxWeights } from './scoring'
 import { SCORING_SIGNAL_META } from './leadScoringSignals'
+import { computeMockMlWinProbability } from './mlWinMock'
+import { computeInfoScoreRaw } from './infoScoreRules'
 
 describe('scoreToPriorityTag', () => {
   it('maps fixed thresholds to HOT / WARM / COLD / LOSS', () => {
@@ -857,7 +859,7 @@ describe('evaluateLead aux scores', () => {
     thresholds: { hotMinScore: 80, warmMinScore: 50 },
   }
 
-  it('cộng điểm thông tin khi truyền lead + infoScoreRuntime', () => {
+  it('không cộng độ đầy đủ vào điểm hồ sơ khi truyền lead + infoScoreRuntime', () => {
     const lead = {
       id: 'l1',
       fullName: 'Test',
@@ -882,7 +884,34 @@ describe('evaluateLead aux scores', () => {
       infoScoreRuntime,
       includeAuxScores: true,
     })
-    expect(r.calculatedScore).toBe(25)
+    expect(r.calculatedScore).toBe(0)
+    expect(r.priorityTag).toBe('COLD')
+    expect(computeInfoScoreRaw(lead, infoScoreRuntime)).toBe(25)
+  })
+
+  it('cùng bộ chấm: hồ sơ đầy vs trống cho điểm hồ sơ giống nhau', () => {
+    const thin = { id: 'thin', fullName: '', phone: '' } as Lead
+    const rich = {
+      id: 'rich',
+      fullName: 'Nguyễn Văn A',
+      phone: '0912345678',
+      parentPhone: '0987654321',
+      highSchool: 'THPT A',
+      province: 'Hà Nội',
+    } as Lead
+    const thinScore = evaluateLead(leadToEvaluationRecord(thin), emptyProfile, undefined, null, {
+      lead: thin,
+      includeAuxScores: true,
+    })
+    const richScore = evaluateLead(leadToEvaluationRecord(rich), emptyProfile, undefined, null, {
+      lead: rich,
+      includeAuxScores: true,
+    })
+    expect(thinScore.calculatedScore).toBe(richScore.calculatedScore)
+    expect(thinScore.calculatedScore).toBe(0)
+    expect(computeMockMlWinProbability(rich).mlWinProbability).toBeGreaterThan(
+      computeMockMlWinProbability(thin).mlWinProbability,
+    )
   })
 
   it('cộng điểm hành vi mẫu khi TVV bật cờ và profile chưa có rule sig_*', () => {

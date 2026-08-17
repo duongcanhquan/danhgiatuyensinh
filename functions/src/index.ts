@@ -56,6 +56,7 @@ import { omicallClick2Call as postOmicallClick2Call } from './omicallClick2CallA
 import { registerOmicallCallWebhook } from './omicallWebhookApi.js'
 import { registerPublicRegistrationFunctions } from './publicRegistration.js'
 import { registerAccountantFinanceCallables } from './accountantFinanceApi.js'
+import { registerEnsureInviteDriveFolderCallable } from './ensureInviteDriveFolder.js'
 import { isAuthUserNotFound, toStaffAuthHttpsError } from './authAdminErrors.js'
 import {
   getAllDocumentsChunked,
@@ -2237,6 +2238,9 @@ export const notifyCrmPortalRegistration = publicRegistrationFns.notifyCrmPortal
 const accountantFinanceFns = registerAccountantFinanceCallables()
 export const accountantApplyPaymentDecision = accountantFinanceFns.accountantApplyPaymentDecision
 export const accountantConfirmFullNe = accountantFinanceFns.accountantConfirmFullNe
+
+const inviteDriveFns = registerEnsureInviteDriveFolderCallable(db)
+export const ensureInviteDriveFolder = inviteDriveFns.ensureInviteDriveFolder
 
 export const syncCounselorLoadOnLeadWrite = registerCounselorLoadOnLeadWrite(
   db,

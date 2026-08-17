@@ -301,7 +301,7 @@ export function infoScoreMaxRaw(merged: InfoScoreRulesPersisted): number {
   return merged.basePoints + fe.reduce((s, f) => s + f.pointsIfMatch, 0)
 }
 
-/** Điểm thông tin thô (chưa kẹp %) — dùng cộng vào calculatedScore profile. */
+/** Điểm thông tin thô (chưa kẹp %) — chỉ cho checklist / công thức %. Không cộng vào điểm hồ sơ. */
 export function computeInfoScoreRaw(lead: Lead, runtime?: InfoScoreRuntime | null): number {
   const r =
     runtime ??

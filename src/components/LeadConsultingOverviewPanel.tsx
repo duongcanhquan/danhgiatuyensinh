@@ -8,6 +8,14 @@ import {
 import { TagBadge } from './TagBadge'
 import { MlWinGauge } from './MlWinGauge'
 import type { ConsultingHubTab } from './LeadConsultingHub'
+import { ColumnHelpPopover } from './InfoScoreHelpPopover'
+import {
+  INFO_SCORE_COLUMN_LABEL,
+  PROFILE_SCORE_COLUMN_LABEL,
+  infoScoreHelpHint,
+  profileScoreHelpHint,
+} from '../utils/leadScoreDisplayCopy'
+import { useLeadClassificationRules } from '../contexts/LeadClassificationRulesContext'
 
 export function LeadConsultingOverviewPanel({
   lead,
@@ -32,6 +40,7 @@ export function LeadConsultingOverviewPanel({
   onGoToProfile?: () => void
   onGoToAi?: () => void
 }) {
+  const { runtime: classificationRuntime } = useLeadClassificationRules()
   const insights = buildLeadConsultingInsights(lead, playbooks, knowledgeDocs, {
     infoScoreRuntime,
     priorityTag,
@@ -51,7 +60,10 @@ export function LeadConsultingOverviewPanel({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <section className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white p-3 sm:p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-violet-900">Điểm thông tin</p>
+          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-violet-900">
+            {INFO_SCORE_COLUMN_LABEL}
+            <ColumnHelpPopover title={INFO_SCORE_COLUMN_LABEL} hint={infoScoreHelpHint()} tone="violet" />
+          </p>
           <div className="mt-2 flex items-center gap-3">
             <MlWinGauge value={insights.infoPercent} />
             <div>
@@ -69,17 +81,26 @@ export function LeadConsultingOverviewPanel({
           ) : null}
         </section>
 
-        <section className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-indigo-50/80 to-white p-3 sm:p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900">Chấm điểm lead</p>
+        <section className="rounded-xl border border-amber-200/80 bg-gradient-to-br from-amber-50/80 to-white p-3 sm:p-4">
+          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-900">
+            {PROFILE_SCORE_COLUMN_LABEL}
+            <ColumnHelpPopover
+              title={PROFILE_SCORE_COLUMN_LABEL}
+              hint={profileScoreHelpHint(classificationRuntime.enabled)}
+              tone="amber"
+            />
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {insights.priorityTag ? <TagBadge tag={insights.priorityTag} /> : null}
-            <span className="text-2xl font-bold tabular-nums text-emerald-950">
+            <span className="text-2xl font-bold tabular-nums text-amber-950">
               {insights.calculatedScore != null ? insights.calculatedScore : '—'}
             </span>
-            <span className="text-xs text-emerald-800">điểm</span>
+            <span className="text-xs text-amber-800">điểm</span>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-slate-600">
-            Nhãn và điểm theo bộ chấm đang chọn — dùng khi lọc HOT/WARM và khớp playbook điều kiện nhãn.
+            {classificationRuntime.enabled
+              ? 'Nhãn HOT/WARM đang theo phân loại tỷ trọng (có thể gồm độ đầy đủ). Cột Độ đầy đủ bên trái vẫn độc lập.'
+              : 'Nhãn HOT/WARM theo bộ chấm + tín hiệu TVV. Không gồm độ đầy đủ bên trái.'}
           </p>
         </section>
 

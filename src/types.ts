@@ -429,6 +429,7 @@ export interface Lead {
   inviteFolderUrl?: string
 
   // --- System / analytics (not Excel columns) ---
+  /** Điểm hồ sơ (bộ chấm + tín hiệu TVV). Không gồm độ đầy đủ, trừ khi bật phân loại tỷ trọng. */
   calculatedScore: number
   priorityTag: PriorityTag
   /** Thời điểm upload / import (ưu tiên hiển thị vòng đời lead) */
@@ -464,7 +465,7 @@ export interface Lead {
   importedAt?: Timestamp
   lastTouchedAt?: Timestamp
   routingMeta?: LeadRoutingMeta
-  /** Điểm thông tin (0–100): tỷ lệ thông tin đã ghi nhận trên hồ sơ; nên đi kèm `mlExplanation` khi lưu. */
+  /** Độ đầy đủ 0–100 (điểm thông tin). Độc lập với `calculatedScore`, trừ khi bật phân loại tỷ trọng. */
   mlWinProbability?: number
   /** Giải thích đi kèm điểm thông tin (khi đủ cặp với `mlWinProbability`, UI hiển thị bản đã lưu thay MVP). */
   mlExplanation?: string
@@ -496,6 +497,16 @@ export interface Lead {
    * `uncalled` | `callback` (KNM / gọi lại) | `called` (đã xử lý xong vòng gọi).
    */
   callWorkBucket?: 'uncalled' | 'callback' | 'called'
+  /**
+   * `archived` = đã chuyển sang kho lạnh (`leads_archive`). Thiếu field = đang hoạt động.
+   * Danh sách / tìm / tính lại / giấy mời không thao tác hồ sơ này.
+   */
+  lifecycle?: 'active' | 'archived'
+  archivedAt?: Timestamp
+  archivedBy?: UserId
+  archiveLabel?: string
+  archiveBatchId?: string
+
   /** Chế độ xử lý hồ sơ (sàng data / lọc gọi nhanh / chăm & chốt). */
   workMode?: LeadWorkMode
   /** Số lần đã ghi nhận cuộc gọi (tăng khi lưu đánh giá / soft KNM). */
@@ -1254,6 +1265,8 @@ export interface AuditLog {
 export const FS_COLLECTIONS = {
   users: 'users',
   leads: 'leads',
+  /** Hồ sơ đã cất (không còn trong thao tác hàng ngày). */
+  leadsArchive: 'leads_archive',
   /** Dành cho mở rộng (chưa có hook đọc/ghi trong app hiện tại). */
   scoringRuleSets: 'scoringRuleSets',
   /** Mỗi doc = một `ScoringProfile` (rules + thresholds nhúng trong doc) */
