@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardCheck,
+  GraduationCap,
   LayoutDashboard,
   LineChart,
   LogOut,
@@ -22,6 +23,7 @@ import { canAccessSettingsPage } from '../auth/permissions'
 import type { Permission } from '../types'
 import { USER_ROLE_LABELS } from '../types'
 import { canAccessPortalRegistrationControl } from '../utils/portalRegistrationControl'
+import { canAccessConsultingSkillLab } from '../auth/consultingSkillAccess'
 import { getFirebaseAuth, isFirebaseConfigured } from '../services/firebase'
 import { KpiEvaluationRulesProvider } from '../contexts/KpiEvaluationRulesContext'
 import { KpiV2ConfigProvider } from '../contexts/KpiV2ConfigContext'
@@ -57,6 +59,14 @@ function navAllowed(item: NavDef, can: (p: Permission) => boolean, permissions: 
 
 const mainNav: NavDef[] = [
   { to: '/leads', label: 'Hồ sơ', shortLabel: 'Hồ sơ', icon: Users, group: 'work', bottomPrimary: true },
+  {
+    to: '/ky-nang-tu-van',
+    label: 'Kỹ năng tư vấn với AI',
+    shortLabel: 'Kỹ năng',
+    icon: GraduationCap,
+    group: 'work',
+    show: (can) => canAccessConsultingSkillLab(can),
+  },
   {
     to: '/kiem-soat-dang-ky',
     label: 'Kiểm soát đăng ký',
@@ -197,6 +207,7 @@ export function Layout() {
 
   const currentPageLabel = useMemo(() => {
     if (location.pathname.startsWith('/huong-dan')) return 'Hướng dẫn'
+    if (location.pathname.startsWith('/ky-nang-tu-van')) return 'Kỹ năng tư vấn với AI'
     const sorted = [...navItems].sort((a, b) => b.to.length - a.to.length)
     const hit = sorted.find((item) => isNavActive(location.pathname, item.to))
     return hit?.label ?? 'VietMy'

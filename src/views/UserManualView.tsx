@@ -104,8 +104,9 @@ function sectionsData(): Section[] {
             <li>Không đăng nhập được: kiểm tra mạng, đúng email/mật khẩu; nếu vẫn lỗi, liên hệ quản trị.</li>
             <li>Thiếu mục trên menu: do quyền tài khoản — báo quản trị để được mở đúng vai trò.</li>
             <li>
-              TVV thường thấy <strong>Hồ sơ</strong> và <strong>Ngày của tôi</strong>; trưởng nhóm thêm{' '}
-              <strong>Điều hành</strong> — các màn KPI kỳ mở qua thanh KPI Sale.
+              TVV thường thấy <strong>Hồ sơ</strong>, <strong>Kỹ năng tư vấn với AI</strong> và{' '}
+              <strong>Ngày của tôi</strong>; trưởng nhóm thêm báo cáo / điều hành. Kỹ năng tư vấn dùng kho tri thức đã
+              duyệt để chat, tra cứu ngành và luyện hội thoại.
             </li>
           </ul>
         </div>

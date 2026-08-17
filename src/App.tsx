@@ -73,6 +73,11 @@ const PortalRegistrationControlView = lazyWithRetry(() =>
     default: m.PortalRegistrationControlView,
   })),
 )
+const ConsultingSkillLabView = lazyWithRetry(() =>
+  import('./views/ConsultingSkillLabView').then((m) => ({
+    default: m.ConsultingSkillLabView,
+  })),
+)
 
 function RouteFallback() {
   return (
@@ -137,6 +142,7 @@ export default function App() {
                           <Route index element={<DefaultHomeRedirect />} />
                           <Route path="tong-ket" element={<SummaryHubView />} />
                           <Route path="leads" element={<LeadsWorkspace />} />
+                          <Route path="ky-nang-tu-van" element={<ConsultingSkillLabView />} />
                           <Route path="kiem-soat-dang-ky" element={<PortalRegistrationControlView />} />
                           <Route path="counselor" element={<Navigate to="/leads" replace />} />
                           <Route

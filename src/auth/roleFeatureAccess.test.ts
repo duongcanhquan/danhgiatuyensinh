@@ -3,6 +3,7 @@ import { canAccessSettingsPage, defaultPermissionsForRole, hasPermission } from 
 import { canAccessSummaryTab, enabledSummaryTabs } from '../utils/summaryNavigation'
 import { canCreateLead, hasGlobalLeadFilters } from './leadAccess'
 import { canAccessAccountantPortal } from './accountantPortal'
+import { canAccessConsultingSkillLab, canChatInConsultingSkillLab } from './consultingSkillAccess'
 import type { Permission, VietMyUserProfile } from '../types'
 
 function canFromRole(role: VietMyUserProfile['role']) {
@@ -26,6 +27,7 @@ describe('role feature boundaries', () => {
     expect(hasGlobalLeadFilters(defaultPermissionsForRole('marketing'))).toBe(true)
     expect(can('analytics:advanced')).toBe(true)
     expect(canCreateLead(stubProfile('marketing'), can)).toBe(false)
+    expect(canAccessConsultingSkillLab(can)).toBe(false)
     expect(canAccessSettingsPage(defaultPermissionsForRole('marketing'))).toBe(false)
   })
 
@@ -54,6 +56,8 @@ describe('role feature boundaries', () => {
     expect(can('leads:read:self_assigned')).toBe(true)
     expect(can('leads:reassign:peer')).toBe(true)
     expect(can('ai:use')).toBe(true)
+    expect(canAccessConsultingSkillLab(can)).toBe(true)
+    expect(canChatInConsultingSkillLab(can)).toBe(true)
     expect(canAccessSettingsPage(defaultPermissionsForRole('counselor'))).toBe(false)
     expect(enabledSummaryTabs(can)).toContain('kpi-nhan-su')
     expect(enabledSummaryTabs(can)).not.toContain('bang-diem')
@@ -65,6 +69,8 @@ describe('role feature boundaries', () => {
     expect(can('leads:reassign:peer')).toBe(false)
     expect(can('ai:use')).toBe(false)
     expect(can('dashboard:counselor')).toBe(true)
+    expect(canAccessConsultingSkillLab(can)).toBe(true)
+    expect(canChatInConsultingSkillLab(can)).toBe(false)
   })
 
   it('kế toán: chỉ cổng tài chính', () => {
@@ -72,6 +78,7 @@ describe('role feature boundaries', () => {
     const can = canFromRole('accountant')
     expect(canAccessAccountantPortal(can, stubProfile('accountant'))).toBe(true)
     expect(can('leads:read:self_assigned')).toBe(false)
+    expect(canAccessConsultingSkillLab(can)).toBe(false)
     expect(canAccessSettingsPage(perms)).toBe(false)
     expect(enabledSummaryTabs(can)).toEqual(['tong-quan'])
   })
