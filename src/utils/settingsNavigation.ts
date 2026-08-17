@@ -36,7 +36,7 @@ export const SETTINGS_MAIN_TAB_ORDER: SettingsMainTabId[] = [
 export const SETTINGS_MAIN_LABELS: Record<SettingsMainTabId, string> = {
   data: 'Cài đặt trường',
   rules: 'Cài đặt profile',
-  advise: 'Cấu hình AI Tư vấn',
+  advise: 'Tư vấn & AI',
   connect: 'Cài đặt kết nối',
   people: 'Cài đặt Nhân sự',
 }
@@ -136,9 +136,9 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
   scoring: 'Điểm thông tin',
   classification: 'Phân loại nhãn',
   rule_templates: 'Quy tắc mẫu',
-  consulting: 'Bộ tư vấn',
+  consulting: 'Nạp nội dung',
   knowledge: 'Tri thức tuyển sinh',
-  llm: 'AI hỗ trợ',
+  llm: 'Máy AI',
   kpi: 'Quy tắc KPI',
   staff: 'Quản lý nhân sự',
   permissions: 'Phân quyền',
@@ -158,7 +158,7 @@ export const SETTINGS_SUB_LABELS: Record<SettingsSubTabId, string> = {
 export const SETTINGS_MAIN_SUBS: Record<SettingsMainTabId, SettingsSubTabId[]> = {
   data: ['intake', 'intake_staff', 'lead_profile', 'master'],
   rules: ['scoring_profiles', 'scoring', 'classification', 'rule_templates'],
-  advise: ['consulting'],
+  advise: ['consulting', 'llm'],
   connect: ['hub'],
   people: ['kpi', 'staff', 'permissions'],
 }
@@ -173,8 +173,8 @@ export const SETTINGS_CONNECT_DETAIL_SUBS: readonly SettingsSubTabId[] = [
   'public_registration',
 ] as const
 
-/** AI nằm trong Tư vấn bước 4. */
-export const SETTINGS_AI_ADVISE_HREF = '/settings?tab=advise&sub=consulting&adviseStep=ai'
+/** Máy AI (API / model / tác vụ) — tách khỏi nạp nội dung. */
+export const SETTINGS_AI_ADVISE_HREF = '/settings?tab=advise&sub=llm'
 
 export function isConnectDetailSub(sub: SettingsSubTabId): boolean {
   return (SETTINGS_CONNECT_DETAIL_SUBS as readonly string[]).includes(sub)
@@ -187,7 +187,7 @@ export function shouldShowSettingsSubNav(
   activeSub: SettingsSubTabId,
 ): boolean {
   if (isConnectDetailSub(activeSub)) return false
-  if (main === 'advise' || main === 'connect') return false
+  if (main === 'connect') return false
   return subs.length > 1
 }
 
@@ -210,8 +210,8 @@ const LEGACY_TAB_ROUTE: Partial<Record<string, { main: SettingsMainTabId; sub: S
   rule_templates: { main: 'rules', sub: 'rule_templates' },
   consulting: { main: 'advise', sub: 'consulting' },
   knowledge: { main: 'advise', sub: 'consulting' },
-  llm: { main: 'advise', sub: 'consulting' },
-  ai_lab: { main: 'advise', sub: 'consulting' },
+  llm: { main: 'advise', sub: 'llm' },
+  ai_lab: { main: 'advise', sub: 'llm' },
   advise: { main: 'advise', sub: 'consulting' },
   kpi: { main: 'people', sub: 'kpi' },
   staff: { main: 'people', sub: 'staff' },
@@ -269,8 +269,9 @@ export function isSettingsSubEnabled(sub: SettingsSubTabId, ctx: SettingsAccessC
     case 'consulting':
       return ctx.canPlaybooks || ctx.canAiEngine
     case 'knowledge':
-    case 'llm':
       return false
+    case 'llm':
+      return ctx.canAiEngine
     case 'omicall':
       return ctx.canOmicall
     case 'hub':
@@ -311,9 +312,11 @@ export function resolveSettingsRoute(
   if (
     tabParam === 'connect' &&
     (subParam === 'consulting' || subParam === 'knowledge' || subParam === 'llm') &&
-    isSettingsSubEnabled('consulting', ctx)
+    (subParam === 'llm'
+      ? isSettingsSubEnabled('llm', ctx)
+      : isSettingsSubEnabled('consulting', ctx))
   ) {
-    return { main: 'advise', sub: 'consulting' }
+    return { main: 'advise', sub: subParam === 'llm' ? 'llm' : 'consulting' }
   }
 
   // Học phí chỉ còn trong «Cài đặt thông tin» (profileSub=tuition).
@@ -329,11 +332,14 @@ export function resolveSettingsRoute(
   }
 
   if (
-    (subParam === 'knowledge' ||
-      subParam === 'llm' ||
-      tabParam === 'llm' ||
-      tabParam === 'ai_lab' ||
-      tabParam === 'consulting') &&
+    (subParam === 'llm' || tabParam === 'llm' || tabParam === 'ai_lab') &&
+    isSettingsSubEnabled('llm', ctx)
+  ) {
+    return { main: 'advise', sub: 'llm' }
+  }
+
+  if (
+    (subParam === 'knowledge' || tabParam === 'consulting') &&
     isSettingsSubEnabled('consulting', ctx)
   ) {
     return { main: 'advise', sub: 'consulting' }

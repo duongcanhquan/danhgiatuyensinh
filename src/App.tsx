@@ -153,7 +153,7 @@ export default function App() {
                           <Route path="call-history" element={<Navigate to="/tong-ket?tab=lich-goi" replace />} />
                           <Route
                             path="ai"
-                            element={<Navigate to="/settings?tab=advise&sub=consulting&adviseStep=ai" replace />}
+                            element={<Navigate to="/settings?tab=advise&sub=llm" replace />}
                           />
                           <Route
                             path="staff"

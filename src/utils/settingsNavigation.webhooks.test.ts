@@ -6,6 +6,7 @@ import {
   isSettingsSubEnabled,
   resolveSettingsRoute,
   shouldShowSettingsSubNav,
+  SETTINGS_AI_ADVISE_HREF,
   SETTINGS_MAIN_LABELS,
   type SettingsAccessContext,
 } from './settingsNavigation'
@@ -29,33 +30,39 @@ describe('settingsNavigation five groups', () => {
     expect(enabledMainTabs(fullAccess)).toEqual(['data', 'rules', 'advise', 'connect', 'people'])
     expect(SETTINGS_MAIN_LABELS.data).toBe('Cài đặt trường')
     expect(SETTINGS_MAIN_LABELS.rules).toBe('Cài đặt profile')
-    expect(SETTINGS_MAIN_LABELS.advise).toBe('Cấu hình AI Tư vấn')
+    expect(SETTINGS_MAIN_LABELS.advise).toBe('Tư vấn & AI')
     expect(SETTINGS_MAIN_LABELS.connect).toBe('Cài đặt kết nối')
     expect(SETTINGS_MAIN_LABELS.people).toBe('Cài đặt Nhân sự')
   })
 
-  it('advise owns consulting; connect only hub (+ details deep)', () => {
-    expect(enabledSubsForMain('advise', fullAccess)).toEqual(['consulting'])
+  it('advise splits content vs AI machine', () => {
+    expect(enabledSubsForMain('advise', fullAccess)).toEqual(['consulting', 'llm'])
     expect(enabledSubsForMain('connect', fullAccess)).toEqual(['hub'])
     expect(enabledSubsForMain('connect', fullAccess)).not.toContain('consulting')
-    expect(shouldShowSettingsSubNav('advise', ['consulting'], 'consulting')).toBe(false)
+    expect(shouldShowSettingsSubNav('advise', ['consulting', 'llm'], 'consulting')).toBe(true)
     expect(shouldShowSettingsSubNav('connect', ['hub'], 'hub')).toBe(false)
     expect(shouldShowSettingsSubNav('data', ['intake', 'master'], 'intake')).toBe(true)
+    expect(SETTINGS_AI_ADVISE_HREF).toBe('/settings?tab=advise&sub=llm')
   })
 
-  it('legacy connect+consulting / llm → advise', () => {
+  it('legacy connect+consulting / llm → advise zones', () => {
     expect(resolveSettingsRoute('connect', 'consulting', fullAccess)).toEqual({
       main: 'advise',
       sub: 'consulting',
     })
     expect(resolveSettingsRoute('connect', 'llm', fullAccess)).toEqual({
       main: 'advise',
-      sub: 'consulting',
+      sub: 'llm',
     })
     expect(resolveSettingsRoute('advise', 'consulting', fullAccess)).toEqual({
       main: 'advise',
       sub: 'consulting',
     })
+    expect(resolveSettingsRoute('llm', null, fullAccess)).toEqual({
+      main: 'advise',
+      sub: 'llm',
+    })
+    expect(isSettingsSubEnabled('llm', fullAccess)).toBe(true)
   })
 
   it('URL sâu kênh vẫn mở được', () => {

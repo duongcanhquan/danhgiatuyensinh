@@ -49,6 +49,7 @@ import {
   parseAdviseHubStep,
   type AdviseHubStep,
 } from '../components/ConsultingAdviseHub'
+import { AiSupportSettingsPanel } from '../components/AiSupportSettingsPanel'
 import { StaffManagementView } from '../views/StaffManagementView'
 import { ViewportModal } from '../components/ViewportModal'
 import { appAlert } from '../utils/appNotify'
@@ -250,24 +251,26 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'consulting':
       return (
         <>
-          <p className="font-semibold text-slate-900">Tư vấn — nạp theo 4 bước</p>
+          <p className="font-semibold text-slate-900">Nạp nội dung tư vấn</p>
           <p className="mt-1.5">
-            <strong>1. Tri thức</strong> (học phí, ngành, FAQ đã duyệt) → <strong>2. Mẫu tư vấn</strong> (kịch bản theo hồ sơ) →{' '}
-            <strong>3. Mảnh thoại</strong> (đoạn copy lúc gọi) → <strong>4. AI hỗ trợ</strong> (Gemini Flash-Lite).
+            Ba phần: <strong>Tri thức</strong> (sự thật đã duyệt) → <strong>Mẫu tư vấn</strong> (kịch bản theo hồ sơ) →{' '}
+            <strong>Mảnh thoại</strong> (câu copy lúc gọi).
           </p>
           <p className="mt-2 text-slate-700">
-            Tri thức là <strong>sự thật</strong>; mẫu/mảnh thoại là <strong>cách nói</strong>. AI chỉ được khẳng định số liệu khi có trong Tri thức.
+            Khóa API / model nằm tab <strong>Máy AI</strong> bên cạnh — tách riêng để dễ hiểu.
           </p>
           <p className={`mt-2 border-t border-slate-200 pt-2 ${settingsCopyMuted}`}>
-            Cloudflare R2 trong app dùng cho <strong>chứng từ / bill</strong> — không phải kho RAG. Tri thức nằm trên Firestore.
+            Tri thức lưu trên Firestore. Cloudflare R2 trong app chỉ dùng cho <strong>chứng từ / bill</strong>.
           </p>
         </>
       )
     case 'knowledge':
       return (
         <>
-          <p className="font-semibold text-slate-900">Tri thức đã gộp vào Tư vấn</p>
-          <p className="mt-1.5">Mở tab <strong>Tư vấn</strong> → bước <strong>1. Tri thức</strong>.</p>
+          <p className="font-semibold text-slate-900">Tri thức đã gộp vào Nạp nội dung</p>
+          <p className="mt-1.5">
+            Mở <strong>Tư vấn &amp; AI</strong> → <strong>Nạp nội dung</strong> → Tri thức.
+          </p>
         </>
       )
     case 'omicall':
@@ -285,8 +288,8 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
         <>
           <p className="font-semibold text-slate-900">Kênh — lưới đầu nối</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Bấm ô để mở cấu hình (Gọi điện, tự động hóa, email, chứng từ…). AI nằm ở nhóm{' '}
-            <strong>Tư vấn</strong> bước 4.
+            Bấm ô để mở cấu hình (Gọi điện, tự động hóa, email, chứng từ…). Máy AI nằm ở nhóm{' '}
+            <strong>Tư vấn &amp; AI</strong>.
           </p>
         </>
       )
@@ -342,9 +345,10 @@ function settingsGuideBody(sub: SettingsSubTabId, ctx: SettingsAccessContext): R
     case 'llm':
       return (
         <>
-          <p className="font-semibold text-slate-900">AI hỗ trợ — đã gộp vào Tư vấn</p>
+          <p className="font-semibold text-slate-900">Máy AI</p>
           <p className={`mt-1.5 ${settingsCopyMuted}`}>
-            Mở tab <strong>Tư vấn</strong> → bước <strong>4. AI hỗ trợ</strong> để cấu hình khóa API, lọc và tác vụ.
+            Khóa API (Gemini Flash-Lite mặc định), lọc khi gọi AI, tác vụ phân tích. Nội dung TVV học nằm tab{' '}
+            <strong>Nạp nội dung</strong>.
           </p>
         </>
       )
@@ -774,29 +778,43 @@ export function SettingsView() {
 
   const adviseStepParam = searchParams.get('adviseStep')
   useEffect(() => {
-    // Legacy URL AI / Tư vấn cũ → advise
-    if (subParam === 'llm' || tabParam === 'llm' || tabParam === 'ai_lab') {
-      setAdviseHubStep('ai')
+    // Legacy bước AI trong hub → tab Máy AI
+    if (adviseStepParam === 'ai' || adviseStepParam === 'llm' || adviseStepParam === '4') {
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
           n.set('tab', 'advise')
-          n.set('sub', 'consulting')
-          n.set('adviseStep', 'ai')
+          n.set('sub', 'llm')
+          n.delete('adviseStep')
           return n
         },
         { replace: true },
       )
       return
     }
-    if (tabParam === 'connect' && (subParam === 'consulting' || subParam === 'knowledge')) {
+    // Legacy URL AI / Tư vấn cũ
+    if (tabParam === 'llm' || tabParam === 'ai_lab') {
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev)
+          n.set('tab', 'advise')
+          n.set('sub', 'llm')
+          n.delete('adviseStep')
+          return n
+        },
+        { replace: true },
+      )
+      return
+    }
+    if (tabParam === 'connect' && (subParam === 'consulting' || subParam === 'knowledge' || subParam === 'llm')) {
       setAdviseHubStep(subParam === 'knowledge' ? 'facts' : parseAdviseHubStep(adviseStepParam) ?? 'facts')
       setSearchParams(
         (prev) => {
           const n = new URLSearchParams(prev)
           n.set('tab', 'advise')
-          n.set('sub', 'consulting')
+          n.set('sub', subParam === 'llm' ? 'llm' : 'consulting')
           if (subParam === 'knowledge') n.set('adviseStep', 'facts')
+          if (subParam === 'llm') n.delete('adviseStep')
           return n
         },
         { replace: true },
@@ -1001,7 +1019,7 @@ export function SettingsView() {
                 </span>
               ) : activeMainTab === 'advise' ? (
                 <span className="text-[11px] font-medium text-emerald-900/80 sm:text-xs">
-                  Tri thức → Mẫu → Mảnh thoại → AI — một khu nạp tư vấn
+                  Nạp nội dung (tri thức / mẫu / thoại) · Máy AI (khóa &amp; model) — tách riêng cho dễ hiểu
                 </span>
               ) : activeMainTab === 'connect' ? (
                 <span className="text-[11px] font-medium text-violet-900/80 sm:text-xs">
@@ -1355,6 +1373,19 @@ export function SettingsView() {
               onStepChange={setAdviseStep}
             />
           </div>
+        </div>
+      ) : null}
+
+      {db && activeSubTab === 'llm' && canAiEngine ? (
+        <div
+          role="tabpanel"
+          aria-labelledby="tab-llm"
+          className="bento-cell flex flex-col gap-3 !p-3 sm:!p-4"
+        >
+          <h2 id="tab-llm" className="sr-only">
+            Máy AI
+          </h2>
+          <AiSupportSettingsPanel db={db} />
         </div>
       ) : null}
 

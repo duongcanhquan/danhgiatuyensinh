@@ -1,12 +1,12 @@
-import { BookOpen, MessageSquareText, Sparkles, Wand2 } from 'lucide-react'
+import { BookOpen, MessageSquareText, Wand2 } from 'lucide-react'
 import type { Firestore } from 'firebase/firestore'
 import type { ConsultingPlaybook } from '../types'
 import { ConsultingPlaybookSection } from './ConsultingPlaybookSection'
 import { KnowledgeBaseTab } from './KnowledgeBaseTab'
 import { ScriptHubManager } from './ScriptHubManager'
-import { AiSupportSettingsPanel } from './AiSupportSettingsPanel'
 
-export type AdviseHubStep = 'facts' | 'plays' | 'snippets' | 'ai'
+/** Chỉ các bước nạp nội dung — máy AI nằm tab riêng «Máy AI». */
+export type AdviseHubStep = 'facts' | 'plays' | 'snippets'
 
 const STEPS: {
   id: AdviseHubStep
@@ -19,15 +19,15 @@ const STEPS: {
 }[] = [
   {
     id: 'facts',
-    label: '1. Tri thức',
+    label: 'Tri thức',
     short: 'Tri thức',
-    blurb: 'Nạp học phí, ngành, FAQ đã duyệt — AI và TVV chỉ lấy số liệu từ đây.',
+    blurb: 'Nạp học phí, ngành, FAQ đã duyệt — đây là nguồn sự thật cho TVV và AI.',
     Icon: BookOpen,
     needAi: true,
   },
   {
     id: 'plays',
-    label: '2. Mẫu tư vấn',
+    label: 'Mẫu tư vấn',
     short: 'Mẫu',
     blurb: 'Kịch bản theo hồ sơ (ngành, tỉnh, HOT/WARM): USP và xử lý phản đối.',
     Icon: Wand2,
@@ -35,26 +35,18 @@ const STEPS: {
   },
   {
     id: 'snippets',
-    label: '3. Mảnh thoại',
+    label: 'Mảnh thoại',
     short: 'Thoại',
     blurb: 'Đoạn mở đầu → USP → phản đối → chốt; TVV bấm copy lúc gọi.',
     Icon: MessageSquareText,
     needPlaybooks: true,
-  },
-  {
-    id: 'ai',
-    label: '4. AI hỗ trợ',
-    short: 'AI',
-    blurb: 'Khóa Gemini Flash-Lite, lọc khi gọi AI, tác vụ phân tích hồ sơ.',
-    Icon: Sparkles,
-    needAi: true,
   },
 ]
 
 function firstAllowedStep(canPlaybooks: boolean, canAiEngine: boolean): AdviseHubStep {
   if (canAiEngine) return 'facts'
   if (canPlaybooks) return 'plays'
-  return 'ai'
+  return 'facts'
 }
 
 export function ConsultingAdviseHub({
@@ -96,9 +88,9 @@ export function ConsultingAdviseHub({
     <div className="flex flex-col gap-3 pb-6">
       <div className="shrink-0 space-y-2">
         <div
-          className="flex flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-white p-1 shadow-sm"
+          className="flex flex-wrap gap-1 rounded-xl border border-teal-200/80 bg-gradient-to-r from-teal-50/80 to-emerald-50/50 p-1 shadow-sm"
           role="tablist"
-          aria-label="Các bước nạp tư vấn"
+          aria-label="Nạp nội dung tư vấn"
         >
           {visible.map((s) => {
             const selected = active === s.id
@@ -112,8 +104,8 @@ export function ConsultingAdviseHub({
                 className={[
                   'inline-flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition sm:flex-none sm:px-3',
                   selected
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-emerald-950/80 hover:bg-emerald-50',
+                    ? 'bg-teal-700 text-white shadow-sm'
+                    : 'text-teal-950/80 hover:bg-white/80',
                 ].join(' ')}
               >
                 <s.Icon className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
@@ -144,7 +136,6 @@ export function ConsultingAdviseHub({
           />
         ) : null}
         {active === 'snippets' && canPlaybooks ? <ScriptHubManager db={db} /> : null}
-        {active === 'ai' && canAiEngine ? <AiSupportSettingsPanel db={db} /> : null}
       </div>
     </div>
   )
@@ -155,6 +146,7 @@ export function parseAdviseHubStep(raw: string | null | undefined): AdviseHubSte
   if (s === 'facts' || s === 'knowledge' || s === 'tri-thuc' || s === '1') return 'facts'
   if (s === 'plays' || s === 'playbooks' || s === 'mau' || s === '2') return 'plays'
   if (s === 'snippets' || s === 'script' || s === 'script_hub' || s === '3') return 'snippets'
-  if (s === 'ai' || s === 'llm' || s === '4') return 'ai'
+  // Legacy bước 4 AI → không còn trong hub nội dung
+  if (s === 'ai' || s === 'llm' || s === '4') return null
   return null
 }

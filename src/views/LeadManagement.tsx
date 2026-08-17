@@ -8108,7 +8108,7 @@ function LeadDetailPanel({
                                 <p className="mt-1 leading-relaxed">
                                   Siêu quản trị vào{' '}
                                   <Link
-                                    to="/settings?tab=advise&sub=consulting&adviseStep=ai"
+                                    to="/settings?tab=advise&sub=llm"
                                     className="font-semibold underline"
                                   >
                                     Cài đặt → Tư vấn → AI
@@ -8123,7 +8123,7 @@ function LeadDetailPanel({
                                 <p className="mt-1 leading-relaxed">
                                   Tạo ở{' '}
                                   <Link
-                                    to="/settings?tab=advise&sub=consulting&adviseStep=ai"
+                                    to="/settings?tab=advise&sub=llm"
                                     className="font-semibold underline"
                                   >
                                     Cài đặt → AI

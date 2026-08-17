@@ -401,7 +401,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
               </p>
               <ol className="list-decimal space-y-3 pl-4 marker:text-emerald-600">
                 <li>
-                  <strong className="text-slate-900">Nạp tri thức</strong> — bước <strong>1. Tri thức</strong> trong Tư vấn:
+                  <strong className="text-slate-900">Nạp tri thức</strong> — tab <strong>Nạp nội dung</strong> → Tri thức:
                   học phí, quy chế, ngành (đã duyệt).
                 </li>
                 <li>
