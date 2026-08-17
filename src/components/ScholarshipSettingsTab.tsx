@@ -12,6 +12,7 @@ import {
   SCHOLARSHIP_AUDIENCE_LABELS,
   SCHOLARSHIP_CATEGORY_LABELS,
 } from '../types'
+import { appConfirmDelete } from '../utils/appConfirm'
 import { useScholarships } from '../hooks/useScholarships'
 import { useOrg } from '../contexts/OrgProvider'
 import { useMasterData } from '../hooks/useMasterData'
@@ -326,12 +327,14 @@ export function ScholarshipSettingsTab({ db, canEdit }: { db: Firestore; canEdit
                       type="button"
                       disabled={busy}
                       onClick={() => {
-                        if (!window.confirm(`Xóa «${row.label}»?`)) return
-                        void run(async () => {
-                          await deleteDoc(doc(db, FS_COLLECTIONS.scholarships, row.id))
-                          setMsg('Đã xóa học bổng.')
-                          if (editingId === row.id) setEditingId(null)
-                        })
+                        void (async () => {
+                          if (!(await appConfirmDelete(row.label))) return
+                          void run(async () => {
+                            await deleteDoc(doc(db, FS_COLLECTIONS.scholarships, row.id))
+                            setMsg('Đã xóa học bổng.')
+                            if (editingId === row.id) setEditingId(null)
+                          })
+                        })()
                       }}
                       className="rounded border border-rose-200 p-1 text-rose-700 hover:bg-rose-50"
                       aria-label="Xóa"

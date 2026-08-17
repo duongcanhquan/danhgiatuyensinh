@@ -1,6 +1,8 @@
 import type { LeadFinanceDraft } from '../utils/leadFinance'
 import { PAYMENT_SLOT_DEFS, formatAmountInput, sumFinanceDraft } from '../utils/leadFinance'
 import type { LeadPaymentApprovalStatus, LeadPaymentSlotKey } from '../types'
+import { assertReceiptImageFile, RECEIPT_IMAGE_ACCEPT } from '../utils/receiptImageOptimize'
+import { appAlert } from '../utils/appNotify'
 
 const INPUT =
   'w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/25 disabled:bg-slate-50'
@@ -51,8 +53,8 @@ export function LeadProfileFinanceSection({
   return (
     <div className="space-y-2 text-xs text-slate-800">
       <p className="rounded-md border border-sky-200/80 bg-sky-50/70 px-2 py-1.5 text-[11px] leading-snug text-sky-950">
-        Chọn ảnh/PDF bill rồi bấm <strong>Lưu hồ sơ</strong>. Khi lên thành công sẽ hiện «Xem bill đã lưu» ngay dưới ô chọn file.
-        Ảnh được nén tự động trước khi tải lên.
+        Chọn <strong>ảnh hóa đơn</strong> (JPG/PNG/WEBP) rồi bấm <strong>Lưu hồ sơ</strong>. Không nhận PDF.
+        Ảnh được resize/nén tự động trước khi tải lên.
       </p>
       <div className="hidden gap-2 px-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:grid sm:grid-cols-[minmax(7rem,1fr)_1fr_1fr_minmax(6rem,0.8fr)_minmax(7rem,0.9fr)]">
         <span>Khoản thu</span>
@@ -94,9 +96,24 @@ export function LeadProfileFinanceSection({
                 <span className="mb-0.5 block text-[10px] font-semibold text-slate-600 lg:hidden">Chứng từ</span>
                 <input
                   type="file"
+                  accept={RECEIPT_IMAGE_ACCEPT}
                   className={`${INPUT} text-[10px] file:mr-1.5 file:rounded file:border-0 file:bg-slate-100 file:px-1.5 file:py-0.5`}
                   disabled={disabled}
-                  onChange={(e) => patchLine(key, { pendingFile: e.target.files?.[0] ?? null })}
+                  onChange={(e) => {
+                    const next = e.target.files?.[0] ?? null
+                    e.target.value = ''
+                    if (!next) {
+                      patchLine(key, { pendingFile: null })
+                      return
+                    }
+                    try {
+                      assertReceiptImageFile(next)
+                      patchLine(key, { pendingFile: next })
+                    } catch (err) {
+                      patchLine(key, { pendingFile: null })
+                      appAlert(err instanceof Error ? err.message : 'Chỉ nhận ảnh hóa đơn.', 'warning')
+                    }
+                  }}
                 />
                 {row.pendingFile ? (
                   <span className="mt-0.5 block truncate text-[10px] text-amber-800">

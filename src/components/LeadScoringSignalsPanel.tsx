@@ -1,6 +1,4 @@
-import { useMemo, useState } from 'react'
-import { doc, updateDoc } from 'firebase/firestore'
-import type { Firestore } from 'firebase/firestore'
+import { useMemo } from 'react'
 import type {
   Lead,
   LeadScoringSignalKey,
@@ -9,9 +7,7 @@ import type {
   ProfileCustomScoringSignal,
   ScoringProfile,
 } from '../types'
-import { FS_COLLECTIONS } from '../types'
 import { persistedLeadScoringFields } from '../utils/scoring'
-import { leadTouchPatch } from '../utils/leadTouch'
 import { ALL_SCORING_SIGNAL_KEYS, mergeSchoolAndProfileCustomSignals, SCORING_SIGNAL_META } from '../utils/leadScoringSignals'
 import { useMasterData } from '../hooks/useMasterData'
 import { useSchoolTvvSignalDefinitions } from '../hooks/useSchoolTvvSignalDefinitions'
@@ -40,20 +36,35 @@ function buildCustomSignalsPatch(
   return Object.keys(merged).length ? merged : undefined
 }
 
+export function scoringMapsEqual(
+  a: Record<string, boolean> | undefined,
+  b: Record<string, boolean> | undefined,
+): boolean {
+  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])
+  for (const k of keys) {
+    if (Boolean(a?.[k]) !== Boolean(b?.[k])) return false
+  }
+  return true
+}
+
 export function LeadScoringSignalsPanel({
   lead,
-  db,
+  scoringSignals,
+  scoringCustomSignals,
+  onDraftChange,
   activeScoringProfile,
   canEdit,
-  onUpdated,
   compact,
 }: {
   lead: Lead
-  db: Firestore
+  scoringSignals: LeadScoringSignals | undefined
+  scoringCustomSignals: Record<string, boolean> | undefined
+  onDraftChange: (next: {
+    scoringSignals: LeadScoringSignals | undefined
+    scoringCustomSignals: Record<string, boolean> | undefined
+  }) => void
   activeScoringProfile: ScoringProfile | null
   canEdit: boolean
-  onUpdated: (patch: Partial<Lead>) => void
-  /** Chi tiết hồ sơ: gọn, hai cột Hành vi | Rủi ro khi đủ rộng. */
   compact?: boolean
 }) {
   const {
@@ -89,16 +100,32 @@ export function LeadScoringSignalsPanel({
     [regionLabels, highSchoolLabels, majorLabels, academicPerformanceLabels, byKind, catalogs],
   )
 
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
+  const liveFields = useMemo(() => {
+    if (!activeScoringProfile) return null
+    return persistedLeadScoringFields(
+      lead,
+      { scoringSignals, scoringCustomSignals },
+      activeScoringProfile,
+      masterBuckets,
+      schoolTvvSignalDefs,
+      scoringPersistOpts,
+    )
+  }, [
+    activeScoringProfile,
+    lead,
+    scoringSignals,
+    scoringCustomSignals,
+    masterBuckets,
+    schoolTvvSignalDefs,
+    scoringPersistOpts,
+  ])
 
   const formatScoreSummary = (score?: number, tag?: PriorityTag) => {
     if (typeof score !== 'number' || !tag) return null
     return `Điểm ${Math.round(score)} · ${tag}`
   }
 
-  /** Tổng kết đang hiển thị = điểm đã lưu trên hồ sơ (cập nhật ngay sau mỗi lần bấm). */
-  const liveSummary = formatScoreSummary(lead.calculatedScore, lead.priorityTag)
+  const liveSummary = formatScoreSummary(liveFields?.calculatedScore, liveFields?.priorityTag)
 
   const behaviorKeys = useMemo(
     () => ALL_SCORING_SIGNAL_KEYS.filter((k) => SCORING_SIGNAL_META[k].group === 'behavior'),
@@ -110,44 +137,11 @@ export function LeadScoringSignalsPanel({
   )
 
   const toggle = (key: LeadScoringSignalKey, checked: boolean) => {
-    if (!canEdit || busy) return
-    void (async () => {
-      setBusy(true)
-      setMsg(null)
-      try {
-        const nextSignals = buildSignalsPatch(lead.scoringSignals, key, checked)
-        const scoreFields = activeScoringProfile
-          ? persistedLeadScoringFields(
-              lead,
-              { scoringSignals: nextSignals },
-              activeScoringProfile,
-              masterBuckets,
-              schoolTvvSignalDefs,
-              scoringPersistOpts,
-            )
-          : {}
-        const touch = leadTouchPatch()
-        const patch: Record<string, unknown> = {
-          scoringSignals: nextSignals ?? null,
-          ...scoreFields,
-          ...touch,
-        }
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
-        onUpdated({
-          scoringSignals: nextSignals,
-          ...scoreFields,
-          updatedAt: touch.updatedAt,
-          lastTouchedAt: touch.lastTouchedAt,
-        })
-        const summary = formatScoreSummary(scoreFields.calculatedScore, scoreFields.priorityTag)
-        setMsg(summary ? `Đã lưu · ${summary}` : 'Đã lưu.')
-      } catch (e) {
-        console.error(e)
-        setMsg('Không lưu được — kiểm tra quyền ghi Firestore.')
-      } finally {
-        setBusy(false)
-      }
-    })()
+    if (!canEdit) return
+    onDraftChange({
+      scoringSignals: buildSignalsPatch(scoringSignals, key, checked),
+      scoringCustomSignals,
+    })
   }
 
   const customBehavior = useMemo(() => {
@@ -163,44 +157,11 @@ export function LeadScoringSignalsPanel({
   }, [activeScoringProfile, schoolTvvSignalDefs])
 
   const toggleCustom = (def: ProfileCustomScoringSignal, checked: boolean) => {
-    if (!canEdit || busy) return
-    void (async () => {
-      setBusy(true)
-      setMsg(null)
-      try {
-        const nextCustom = buildCustomSignalsPatch(lead.scoringCustomSignals, def.id, checked)
-        const scoreFields = activeScoringProfile
-          ? persistedLeadScoringFields(
-              lead,
-              { scoringCustomSignals: nextCustom },
-              activeScoringProfile,
-              masterBuckets,
-              schoolTvvSignalDefs,
-              scoringPersistOpts,
-            )
-          : {}
-        const touch = leadTouchPatch()
-        const patch: Record<string, unknown> = {
-          scoringCustomSignals: nextCustom ?? null,
-          ...scoreFields,
-          ...touch,
-        }
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
-        onUpdated({
-          scoringCustomSignals: nextCustom,
-          ...scoreFields,
-          updatedAt: touch.updatedAt,
-          lastTouchedAt: touch.lastTouchedAt,
-        })
-        const summary = formatScoreSummary(scoreFields.calculatedScore, scoreFields.priorityTag)
-        setMsg(summary ? `Đã lưu · ${summary}` : 'Đã lưu.')
-      } catch (e) {
-        console.error(e)
-        setMsg('Không lưu được — kiểm tra quyền ghi Firestore.')
-      } finally {
-        setBusy(false)
-      }
-    })()
+    if (!canEdit) return
+    onDraftChange({
+      scoringSignals,
+      scoringCustomSignals: buildCustomSignalsPatch(scoringCustomSignals, def.id, checked),
+    })
   }
 
   const shell = compact
@@ -233,8 +194,7 @@ export function LeadScoringSignalsPanel({
       {!compact ? <h3 className={titleCls}>Hành vi &amp; Rủi ro (chấm điểm)</h3> : null}
       {!compact ? (
         <p className={introCls}>
-          TVV bật khi đúng tình huống — <strong>mỗi lần bật/tắt là lưu ngay</strong> lên hệ thống và cập nhật điểm/nhãn theo
-          bộ chấm điểm đang chọn (nếu có).
+          Bật/tắt thoải mái — chỉ ghi nhận khi bấm <strong>Lưu cập nhật</strong>.
         </p>
       ) : null}
       {!canEdit ? <p className={warnCls}>Bạn không có quyền ghi hồ sơ — chỉ xem.</p> : null}
@@ -247,16 +207,15 @@ export function LeadScoringSignalsPanel({
           ].join(' ')}
           aria-live="polite"
         >
-          <span className="font-semibold">Tổng kết bộ chấm:</span>{' '}
-          {liveSummary ?? 'Chưa có điểm — bật/tắt tín hiệu để tính ngay.'}
+          <span className="font-semibold">Xem trước điểm:</span> {liveSummary ?? 'Chưa có điểm.'}
           {activeScoringProfile.profileName ? (
             <span className="mt-0.5 block text-[10px] font-normal text-indigo-800/80">
-              Theo «{activeScoringProfile.profileName}» — mỗi lần bấm là tính lại điểm &amp; nhãn.
+              Theo «{activeScoringProfile.profileName}» — chưa lưu cho đến khi bấm Lưu.
             </span>
           ) : null}
         </p>
       ) : (
-        <p className={warnCls}>Chưa chọn bộ chấm — tín hiệu vẫn lưu, nhưng chưa tính điểm/nhãn.</p>
+        <p className={warnCls}>Chưa chọn bộ chấm — tín hiệu vẫn ghi nháp, điểm chưa tính.</p>
       )}
       <div className={groupsWrap}>
         <div>
@@ -268,8 +227,8 @@ export function LeadScoringSignalsPanel({
                   id={`sig-${lead.id}-${k}`}
                   type="checkbox"
                   className={chkB}
-                  checked={lead.scoringSignals?.[k] === true}
-                  disabled={!canEdit || busy}
+                  checked={scoringSignals?.[k] === true}
+                  disabled={!canEdit}
                   onChange={(e) => toggle(k, e.target.checked)}
                 />
                 <label htmlFor={`sig-${lead.id}-${k}`} className={lblCls}>
@@ -284,8 +243,8 @@ export function LeadScoringSignalsPanel({
                   id={`sigc-${lead.id}-${def.id}`}
                   type="checkbox"
                   className={chkB}
-                  checked={lead.scoringCustomSignals?.[def.id] === true}
-                  disabled={!canEdit || busy}
+                  checked={scoringCustomSignals?.[def.id] === true}
+                  disabled={!canEdit}
                   onChange={(e) => toggleCustom(def, e.target.checked)}
                 />
                 <label htmlFor={`sigc-${lead.id}-${def.id}`} className={lblCls}>
@@ -307,8 +266,8 @@ export function LeadScoringSignalsPanel({
                   id={`sig-risk-${lead.id}-${k}`}
                   type="checkbox"
                   className={chkR}
-                  checked={lead.scoringSignals?.[k] === true}
-                  disabled={!canEdit || busy}
+                  checked={scoringSignals?.[k] === true}
+                  disabled={!canEdit}
                   onChange={(e) => toggle(k, e.target.checked)}
                 />
                 <label htmlFor={`sig-risk-${lead.id}-${k}`} className={lblCls}>
@@ -323,11 +282,11 @@ export function LeadScoringSignalsPanel({
                   id={`sigc-risk-${lead.id}-${def.id}`}
                   type="checkbox"
                   className={chkR}
-                  checked={lead.scoringCustomSignals?.[def.id] === true}
-                  disabled={!canEdit || busy}
+                  checked={scoringCustomSignals?.[def.id] === true}
+                  disabled={!canEdit}
                   onChange={(e) => toggleCustom(def, e.target.checked)}
                 />
-                <label htmlFor={`sigc-risk-${lead.id}-${def.id}`} className={lblCls}>
+                <label htmlFor={`sigc-${lead.id}-${def.id}`} className={lblCls}>
                   <span className="font-medium">{def.label}</span>
                   <span className={`${ptSpan} text-rose-700`}>({def.points})</span>
                 </label>
@@ -336,8 +295,6 @@ export function LeadScoringSignalsPanel({
           </ul>
         </div>
       </div>
-      {busy ? <p className="mt-2 text-xs text-slate-500">Đang tính điểm &amp; lưu…</p> : null}
-      {msg && !busy ? <p className="mt-2 text-xs font-medium text-emerald-800">{msg}</p> : null}
     </section>
   )
 }

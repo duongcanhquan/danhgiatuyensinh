@@ -4,6 +4,7 @@ import { useCounselorDirectory } from '../../hooks/useCounselorDirectory'
 import { canManageAccountantStaff } from '../../auth/accountantPortal'
 import { USER_ROLE_LABELS, type VietMyUserProfile } from '../../types'
 import { confirmDangerousStaffAccountDelete } from '../../utils/dangerousDeleteConfirm'
+import { appConfirm } from '../../utils/appConfirm'
 import { ViewportModal } from '../../components/ViewportModal'
 
 export function AccountantStaffView() {
@@ -94,7 +95,16 @@ export function AccountantStaffView() {
 
   const toggleActive = async (u: VietMyUserProfile, next: boolean) => {
     const label = next ? 'Kích hoạt' : 'Vô hiệu (khóa đăng nhập)'
-    if (!window.confirm(`${label} «${u.email}»?`)) return
+    if (
+      !(await appConfirm({
+        title: `${label}?`,
+        description: u.email,
+        variant: next ? 'default' : 'warning',
+        confirmLabel: next ? 'Kích hoạt' : 'Vô hiệu',
+        cancelLabel: 'Hủy',
+      }))
+    )
+      return
     setErr(null)
     setMsg(null)
     try {

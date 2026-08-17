@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { appConfirmWarning } from '../utils/appConfirm'
+import { userFacingWriteError } from '../utils/userFacingWriteError'
 import {
   AlertTriangle,
   CalendarDays,
@@ -220,14 +222,14 @@ export function KpiSettingsPanel({ canEdit }: { canEdit: boolean }) {
       await rulesCtx.saveRules(clean)
       setMsg('Đã lưu cấu hình vận hành.')
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Không lưu được — kiểm tra quyền Firestore.')
+      setMsg(userFacingWriteError(e))
     } finally {
       setBusy(false)
     }
   }
 
   const resetV2 = async () => {
-    if (!canEdit || !window.confirm('Xóa cấu hình KPI v2 trên server và dùng mặc định app?')) return
+    if (!canEdit || !(await appConfirmWarning('Xóa cấu hình KPI v2 trên server và dùng mặc định app?'))) return
     setBusy(true)
     setMsg(null)
     try {
@@ -242,7 +244,7 @@ export function KpiSettingsPanel({ canEdit }: { canEdit: boolean }) {
   }
 
   const resetOps = async () => {
-    if (!canEdit || !window.confirm('Xóa cấu hình vận hành trên server và dùng mặc định app?')) return
+    if (!canEdit || !(await appConfirmWarning('Xóa cấu hình vận hành trên server và dùng mặc định app?'))) return
     setBusy(true)
     setMsg(null)
     try {

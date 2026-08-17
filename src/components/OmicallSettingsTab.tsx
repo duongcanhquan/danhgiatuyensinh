@@ -10,6 +10,7 @@ import {
   resolveOmicallSipCredentials,
 } from '../utils/omicallConfig'
 import { reconcileOmicallKpi } from '../services/reconcileOmicallKpi'
+import { appConfirmWarning } from '../utils/appConfirm'
 import { triggerOmicallHistorySync } from '../services/triggerOmicallSync'
 import { probeOmicallInternalPhones } from '../services/omicallCallCenterProbe'
 import { registerOmicallWebhookOnServer } from '../services/omicallRegisterWebhook'
@@ -730,8 +731,10 @@ export function OmicallSettingsTab({ hideTitle = false }: { hideTitle?: boolean 
               type="button"
               disabled={busy}
               onClick={() => {
-                if (!window.confirm('Xóa cấu hình OMICall trên server?')) return
-                void resetConfig().then(() => setMsg('Đã xóa cấu hình.'))
+                void (async () => {
+                  if (!(await appConfirmWarning('Xóa cấu hình OMICall trên server?'))) return
+                  void resetConfig().then(() => setMsg('Đã xóa cấu hình.'))
+                })()
               }}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
             >

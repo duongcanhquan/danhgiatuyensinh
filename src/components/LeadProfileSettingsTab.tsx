@@ -9,6 +9,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import type { LeadSourceRecord, LeadWorkMode } from '../types'
 
 import { FS_COLLECTIONS } from '../types'
+import { appConfirmDelete } from '../utils/appConfirm'
 
 import { useLeadSources } from '../hooks/useLeadSources'
 
@@ -981,9 +982,9 @@ function SourceRow({
             }
 
             onDelete={() => {
-
-              if (window.confirm(`Xóa «${row.label}»?`)) onDelete(row.id)
-
+              void (async () => {
+                if (await appConfirmDelete(row.label)) onDelete(row.id)
+              })()
             }}
 
           />

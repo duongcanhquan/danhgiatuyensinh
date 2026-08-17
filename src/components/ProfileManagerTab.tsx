@@ -17,6 +17,8 @@ import type { Firestore } from 'firebase/firestore'
 import { ChevronRight, CircleHelp, Maximize2, X, ChevronsRight } from 'lucide-react'
 import type { ScoringProfile } from '../types'
 import { FS_COLLECTIONS } from '../types'
+import { appConfirmDelete } from '../utils/appConfirm'
+import { MSG_SAVE_FAILED } from '../utils/userFacingWriteError'
 import { useScoringProfiles } from '../hooks/useScoringProfiles'
 import { useAuth } from '../hooks/useAuth'
 import { ProfileDropCanvas } from './ProfileDropCanvas'
@@ -209,7 +211,7 @@ function ProfileEditorPanel({
       setSaveMsg('Đã lưu profile.')
     } catch (e) {
       console.error(e)
-      setSaveMsg('Lưu thất bại — kiểm tra Firestore Rules.')
+      setSaveMsg(MSG_SAVE_FAILED)
     } finally {
       setBusy(false)
     }
@@ -217,7 +219,7 @@ function ProfileEditorPanel({
 
   const deleteProfile = useCallback(async () => {
     if (!canEditProfile || isDefaultProfile) return
-    if (!window.confirm(`Xóa profile «${draft.profileName}»?`)) return
+    if (!(await appConfirmDelete(draft.profileName))) return
     setBusy(true)
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.scoringProfiles, draft.id))

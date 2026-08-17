@@ -5,6 +5,8 @@ import type { InfoScoreFieldRowPersisted, InfoScoreRulesPersisted } from '../typ
 import { useInfoScoreRules } from '../contexts/InfoScoreRulesContext'
 import { getDefaultInfoScoreRules, INFO_SCORE_CRITERION_HELP, infoScoreMaxRaw, mergeInfoScoreRules } from '../utils/infoScoreRules'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
+import { appConfirmWarning } from '../utils/appConfirm'
+import { userFacingWriteError } from '../utils/userFacingWriteError'
 
 function clampPct(n: number): number {
   if (!Number.isFinite(n)) return 0
@@ -77,7 +79,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
       setMsg('Đã lưu cấu hình điểm thông tin.')
     } catch (e) {
       console.error(e)
-      setMsg(e instanceof Error ? e.message : 'Không lưu được — kiểm tra quyền Firestore (scoringAux).')
+      setMsg(userFacingWriteError(e))
     } finally {
       setBusy(false)
     }
@@ -85,7 +87,7 @@ export function InfoCompletenessRulesPanel({ canEdit }: { canEdit: boolean }) {
 
   const resetServer = async () => {
     if (!canEdit) return
-    if (!window.confirm('Xóa cấu hình trên server và quay về mặc định app cho mọi người?')) return
+    if (!(await appConfirmWarning('Xóa cấu hình trên server và quay về mặc định app cho mọi người?'))) return
     setBusy(true)
     setMsg(null)
     try {

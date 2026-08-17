@@ -7,6 +7,7 @@ import { useScoringRuleTemplates } from '../hooks/useScoringRuleTemplates'
 import { inferRuleCategory } from '../utils/scoringEngine'
 import { buildScoringBlockFromTemplateDoc, getRuleLibraryTemplates, type RuleLibraryTemplate } from '../utils/ruleLibrary'
 import { scoringRuleTemplateDocToFirestorePayload } from '../utils/scoringRuleTemplatesFirestore'
+import { appConfirm, appConfirmDelete } from '../utils/appConfirm'
 import { SCORING_CONDITION_UI_OPTIONS } from '../utils/scoringConditionOptions'
 import { scoringTargetFieldForIntakeColumn, STANDARD_LEAD_INTAKE_COLUMNS } from '../utils/excelLeadMapper'
 import { AI_LEAD_FIELD_OPTIONS } from './aiLeadFieldOptions'
@@ -165,10 +166,18 @@ export function RuleTemplateLibraryPanel({ db, canEdit }: { db: Firestore; canEd
     if (!canEdit || !session || !db) return
     const persisted = docs.some((d) => d.id === session.id)
     if (!persisted) return
-    const confirmMsg = session.replacesBuiltinKey?.trim()
-      ? 'Xóa bản chỉnh mẫu có sẵn? Phần mềm sẽ dùng lại mẫu gốc.'
-      : `Xóa mẫu «${session.title}» khỏi thư viện?`
-    if (!window.confirm(confirmMsg)) return
+    if (
+      !(await (session.replacesBuiltinKey?.trim()
+        ? appConfirm({
+            title: 'Xóa bản chỉnh mẫu có sẵn?',
+            description: 'Phần mềm sẽ dùng lại mẫu gốc.',
+            variant: 'warning',
+            confirmLabel: 'Xóa',
+            cancelLabel: 'Hủy',
+          })
+        : appConfirmDelete(session.title)))
+    )
+      return
     setBusy(true)
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.scoringRuleTemplates, session.id))

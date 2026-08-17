@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import type { MasterDataEntry } from '../types'
 import { FS_COLLECTIONS } from '../types'
 import { masterDataEntriesForFirestore } from '../utils/masterDataRegistry'
+import { appConfirmDelete } from '../utils/appConfirm'
 
 const INPUT =
   'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 disabled:bg-slate-50'
@@ -142,7 +143,9 @@ export function MasterCatalogEditor({
                 extraColumn={extraColumn}
                 onSave={saveRow}
                 onDelete={() => {
-                  if (window.confirm(`Xóa «${row.label}»?`)) void removeRow(row.id)
+                  void (async () => {
+                    if (await appConfirmDelete(row.label)) void removeRow(row.id)
+                  })()
                 }}
               />
             ))}

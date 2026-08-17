@@ -2,6 +2,8 @@
  * Xuất báo cáo dạng PDF qua hộp thoại In của trình duyệt (In → Lưu PDF).
  * Không thêm dependency nặng — đủ cho admin / trưởng nhóm / cá nhân.
  */
+import { appAlert } from './appNotify'
+
 export function printReportAsPdf(opts: {
   title: string
   subtitle?: string
@@ -10,7 +12,7 @@ export function printReportAsPdf(opts: {
 }): void {
   const w = window.open('', '_blank', 'noopener,noreferrer,width=960,height=720')
   if (!w) {
-    window.alert('Trình duyệt chặn cửa sổ in. Cho phép pop-up rồi thử lại.')
+    appAlert('Trình duyệt chặn cửa sổ in. Cho phép pop-up rồi thử lại.', 'warning')
     return
   }
   const title = escapeHtml(opts.title)

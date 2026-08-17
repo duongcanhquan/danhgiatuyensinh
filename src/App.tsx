@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AppConfirmDialogHost } from './components/AppConfirmDialogHost'
+import { AppNotifyHost } from './components/AppNotifyHost'
 import { AuthProvider } from './contexts/AuthProvider'
 import { ManagementViewScopeProvider } from './contexts/ManagementViewScopeContext'
 import { CallSessionConfigProvider } from './contexts/CallSessionConfigContext'
@@ -100,6 +101,7 @@ export default function App() {
     <AppErrorBoundary>
       <AuthProvider>
         <AppConfirmDialogHost />
+        <AppNotifyHost />
         <ManagementViewScopeProvider>
         {/* Org + danh bạ/master data phải bọc cả OMICall (panel gọi ngoài Layout). */}
         <OrgProvider>

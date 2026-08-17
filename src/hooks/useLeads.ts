@@ -1352,6 +1352,7 @@ export function useLeads(opts?: UseLeadsOptions) {
   const [scopeProgramOptions, setScopeProgramOptions] = useState<string[]>([])
   const [searchScanTruncated, setSearchScanTruncated] = useState(false)
   const [searchHitTotal, setSearchHitTotal] = useState<number | null>(null)
+  const [searchMatchedLeads, setSearchMatchedLeads] = useState<Lead[] | null>(null)
   const [scopeFetchTruncated, setScopeFetchTruncated] = useState(false)
   /** Tăng khi gọi `refetchLeads` — ép chạy lại tải danh sách cùng bộ lọc (sau bulk, v.v.). */
   const [manualRefreshKey, setManualRefreshKey] = useState(0)
@@ -1446,6 +1447,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         setScopeTagCounts(null)
         setScopeSourceOptions([])
         setSearchHitTotal(null)
+        setSearchMatchedLeads(null)
         setScopeFetchTruncated(false)
         setError(
           configured ? null : 'Chưa cấu hình Firebase. Thêm biến môi trường theo .env.example.',
@@ -1466,6 +1468,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         setScopeSourceOptions([])
         setScopeProgramOptions([])
         setSearchHitTotal(null)
+        setSearchMatchedLeads(null)
         setScopeFetchTruncated(false)
         setTotalPages(1)
       })
@@ -1483,6 +1486,7 @@ export function useLeads(opts?: UseLeadsOptions) {
         setScopeTagCounts(null)
         setScopeSourceOptions([])
         setSearchHitTotal(null)
+        setSearchMatchedLeads(null)
         setScopeFetchTruncated(false)
       })
       return
@@ -1497,6 +1501,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     if (fkChanged) {
       lastDataFilterKey.current = filterKey
       searchBucketRef.current = null
+      setSearchMatchedLeads(null)
       setCurrentPageState(1)
       // Chỉ reset cursor / tổng / tag khi đổi phạm vi server — không vì mỗi lần gõ tìm.
       if (scopeKeyChanged) {
@@ -1916,6 +1921,7 @@ export function useLeads(opts?: UseLeadsOptions) {
       if (pageKeep && classified.kind === 'text') mapped = mapped.filter((l) => pageKeep(l))
       mapped.sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
       searchBucketRef.current = mapped
+      setSearchMatchedLeads(mapped)
       setSearchHitTotal(mapped.length)
     }
 
@@ -2054,6 +2060,7 @@ export function useLeads(opts?: UseLeadsOptions) {
           setLeads([])
           setTotalPages(1)
           setSearchHitTotal(null)
+          setSearchMatchedLeads(null)
           setScopeFetchTruncated(false)
           setScopeTagCounts(null)
           if (includeScopeSourceOptions) setScopeSourceOptions([])
@@ -2235,7 +2242,9 @@ export function useLeads(opts?: UseLeadsOptions) {
     if (bucket?.length) {
       const idx = bucket.findIndex((r) => r.id === id)
       if (idx !== -1) {
-        searchBucketRef.current = bucket.map((r, i) => (i === idx ? mergeRow(r) : r))
+        const nextBucket = bucket.map((r, i) => (i === idx ? mergeRow(r) : r))
+        searchBucketRef.current = nextBucket
+        setSearchMatchedLeads(nextBucket)
       }
     }
   }, [])
@@ -2247,7 +2256,9 @@ export function useLeads(opts?: UseLeadsOptions) {
     setLeads((rows) => rows.filter((r) => !drop.has(r.id)))
     const bucket = searchBucketRef.current
     if (bucket?.length) {
-      searchBucketRef.current = bucket.filter((r) => !drop.has(r.id))
+      const nextBucket = bucket.filter((r) => !drop.has(r.id))
+      searchBucketRef.current = nextBucket
+      setSearchMatchedLeads(nextBucket)
     }
   }, [])
 
@@ -2265,6 +2276,7 @@ export function useLeads(opts?: UseLeadsOptions) {
     fetchScopeProgramOptions,
     searchScanTruncated,
     searchHitTotal,
+    searchMatchedLeads,
     scopeFetchTruncated,
     applyLocalLeadPatch,
     removeLocalLeads,

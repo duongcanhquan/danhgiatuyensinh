@@ -14,6 +14,10 @@ import {
 import { foldFinanceStatusText } from '../../utils/paymentApprovalStatus'
 import { useAuth } from '../../hooks/useAuth'
 import { AccountantReceiptPreview } from './AccountantReceiptPreview'
+import { assertReceiptImageFile, RECEIPT_IMAGE_ACCEPT } from '../../utils/receiptImageOptimize'
+import { appAlert } from '../../utils/appNotify'
+import { appConfirm, appConfirmWarning } from '../../utils/appConfirm'
+import { userFacingWriteError } from '../../utils/userFacingWriteError'
 import { Check, Loader2, RotateCcw } from 'lucide-react'
 
 /** Cổng kế toán: một cỡ chữ duy nhất (text-sm = 14px). */
@@ -69,22 +73,29 @@ function PaymentSlotActions({
     const db = getFirestoreDb()
     if (!db) return
     if (!amountVnd) {
-      window.alert('Chưa có số tiền — TVV cần ghi nhận trước.')
+      appAlert('Chưa có số tiền — TVV cần ghi nhận trước.', 'warning')
       return
     }
     if (!dateVal.trim()) {
-      window.alert('Chọn ngày thu trước khi duyệt.')
+      appAlert('Chọn ngày thu trước khi duyệt.', 'warning')
       return
     }
     if (decision === 'ĐỒNG Ý') {
-      if (
-        !hasBill &&
-        !window.confirm(`Chưa có bill cho ${slotLabel}. Vẫn duyệt ${amountVnd.toLocaleString('vi-VN')}đ?`)
-      ) {
-        return
-      }
-      if (hasBill && !window.confirm(`Duyệt ${slotLabel} — ${amountVnd.toLocaleString('vi-VN')}đ?`)) {
-        return
+      if (!hasBill) {
+        const ok = await appConfirmWarning(
+          `Chưa có hóa đơn cho ${slotLabel}`,
+          `Vẫn duyệt ${amountVnd.toLocaleString('vi-VN')}đ?`,
+        )
+        if (!ok) return
+      } else {
+        const ok = await appConfirm({
+          title: `Duyệt ${slotLabel}?`,
+          description: `${amountVnd.toLocaleString('vi-VN')}đ sẽ được ghi nhận.`,
+          variant: 'default',
+          confirmLabel: 'Duyệt',
+          cancelLabel: 'Hủy',
+        })
+        if (!ok) return
       }
     }
     setBusy(true)
@@ -105,7 +116,7 @@ function PaymentSlotActions({
       setRejectOpen(false)
       onDone(next)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Không lưu được.')
+      appAlert(userFacingWriteError(e), 'error')
     } finally {
       setBusy(false)
     }
@@ -167,13 +178,27 @@ function PaymentSlotActions({
             <label
               className={`flex h-8 cursor-pointer items-center justify-center self-end rounded-md border border-dashed border-slate-300 bg-white font-medium text-slate-600 ${T}`}
             >
-              {billFile ? billFile.name.slice(0, 12) : '+ Bill'}
+              {billFile ? billFile.name.slice(0, 12) : '+ Ảnh HĐ'}
               <input
                 type="file"
-                accept="image/*,.pdf"
+                accept={RECEIPT_IMAGE_ACCEPT}
                 className="sr-only"
                 disabled={disabled || busy}
-                onChange={(e) => setBillFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const next = e.target.files?.[0] ?? null
+                  e.target.value = ''
+                  if (!next) {
+                    setBillFile(null)
+                    return
+                  }
+                  try {
+                    assertReceiptImageFile(next)
+                    setBillFile(next)
+                  } catch (err) {
+                    setBillFile(null)
+                    appAlert(err instanceof Error ? err.message : 'Chỉ nhận ảnh hóa đơn.', 'warning')
+                  }
+                }}
               />
             </label>
             {!rejectOpen ? (
@@ -265,14 +290,27 @@ function FullNeBlock({
       type="button"
       disabled={disabled || busy}
       onClick={() => {
-        if (!window.confirm(`Xác nhận ${lead.fullName} đã nộp đủ tiền (Full NE)? Hồ sơ sẽ ghi ĐÃ HOÀN THIỆN.`)) return
-        const db = getFirestoreDb()
-        if (!db) return
-        setBusy(true)
-        void persistAccountantFullNe({ db, lead, accountantName })
-          .then(({ lead: next }) => onDone(next))
-          .catch((e) => window.alert(e instanceof Error ? e.message : 'Lỗi'))
-          .finally(() => setBusy(false))
+        void (async () => {
+          const ok = await appConfirm({
+            title: `Xác nhận Full NE — ${lead.fullName}?`,
+            description: 'Hồ sơ sẽ ghi ĐÃ HOÀN THIỆN (đã nộp đủ tiền).',
+            variant: 'warning',
+            confirmLabel: 'Xác nhận',
+            cancelLabel: 'Hủy',
+          })
+          if (!ok) return
+          const db = getFirestoreDb()
+          if (!db) return
+          setBusy(true)
+          try {
+            const { lead: next } = await persistAccountantFullNe({ db, lead, accountantName })
+            onDone(next)
+          } catch (e) {
+            appAlert(userFacingWriteError(e), 'error')
+          } finally {
+            setBusy(false)
+          }
+        })()
       }}
       className={[
         `h-8 w-full rounded-md font-semibold text-white disabled:opacity-40 ${T}`,

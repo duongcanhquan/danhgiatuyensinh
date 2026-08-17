@@ -150,8 +150,8 @@ describe('receipt-r2 worker', () => {
           leadId: 'L2',
           folderName: 'Test_1',
           slot: 'deposit',
-          fileName: 'bill.txt',
-          contentType: 'text/plain',
+          fileName: 'bill.jpg',
+          contentType: 'image/jpeg',
           base64,
         }),
       }),
@@ -188,5 +188,21 @@ describe('receipt-r2 worker', () => {
     expect(
       (await worker.fetch(new Request('https://r2.test/upload', { method: 'POST', body: badSlot }), env)).status,
     ).toBe(400)
+  })
+
+  it('rejects PDF', async () => {
+    const env = makeEnv()
+    const form = new FormData()
+    form.append('token', 'test-token')
+    form.append('leadId', 'L1')
+    form.append('folderName', 'A')
+    form.append('slot', 'deposit')
+    form.append('fileName', 'bill.pdf')
+    form.append('file', new File([new Uint8Array([1, 2, 3])], 'bill.pdf', { type: 'application/pdf' }))
+    const res = await worker.fetch(new Request('https://r2.test/upload', { method: 'POST', body: form }), env)
+    expect(res.status).toBe(400)
+    const data = (await res.json()) as { ok: boolean; error: string }
+    expect(data.ok).toBe(false)
+    expect(data.error).toMatch(/ảnh/i)
   })
 })

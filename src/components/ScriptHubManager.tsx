@@ -15,6 +15,8 @@ import {
   SCRIPT_CATEGORIES,
   SCRIPT_CATEGORY_LABELS,
 } from '../types'
+import { appConfirmDelete, appConfirmWarning } from '../utils/appConfirm'
+import { MSG_SAVE_FAILED } from '../utils/userFacingWriteError'
 import { useScriptSnippets } from '../hooks/useScriptSnippets'
 import { useAuth } from '../hooks/useAuth'
 import { useMasterData } from '../hooks/useMasterData'
@@ -218,7 +220,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
       closeModal()
     } catch (e) {
       console.error(e)
-      setMsg('Không lưu được — kiểm tra Firestore Rules (scriptSnippets).')
+      setMsg(MSG_SAVE_FAILED)
     } finally {
       setBusy(false)
     }
@@ -254,7 +256,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
   const removeSnippet = useCallback(
     async (s: ScriptSnippet) => {
       if (!canEdit || !db) return
-      if (!window.confirm(`Xóa snippet «${s.title}»?`)) return
+      if (!(await appConfirmDelete(s.title))) return
       setBusy(true)
       try {
         await deleteDoc(doc(db, FS_COLLECTIONS.scriptSnippets, s.id))
@@ -290,13 +292,14 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                 type="button"
                 disabled={seedBusy || loading}
                 onClick={() => {
-                  if (
-                    !window.confirm(
-                      'Nạp 20 snippet mẫu (id vietmy_seed_script_01 … 20) vào Firestore? Dùng quyền đăng nhập hiện tại; ghi đè nếu trùng id.',
-                    )
-                  )
-                    return
                   void (async () => {
+                    if (
+                      !(await appConfirmWarning(
+                        'Nạp snippet mẫu?',
+                        'Dùng quyền đăng nhập hiện tại; ghi đè nếu trùng id.',
+                      ))
+                    )
+                      return
                     setSeedBusy(true)
                     setMsg(null)
                     try {
@@ -304,7 +307,7 @@ export function ScriptHubManager({ db }: { db: Firestore }) {
                       setMsg(`Đã ghi ${n} snippet.`)
                     } catch (e) {
                       console.error(e)
-                      setMsg(e instanceof Error ? e.message : 'Không nạp được — kiểm tra Rules và file public/seed.')
+                      setMsg(e instanceof Error ? e.message : 'Không nạp được. Thử lại hoặc liên hệ quản trị.')
                     } finally {
                       setSeedBusy(false)
                     }

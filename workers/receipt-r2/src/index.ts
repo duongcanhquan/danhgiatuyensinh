@@ -26,6 +26,15 @@ type UploadFields = {
 
 const RECEIPT_ROOT = 'receipts'
 const ALLOWED_SLOTS = ['deposit', 'supplementL1', 'supplementL2', 'supplementL3', 'supplementL4']
+const MAX_BYTES = 8 * 1024 * 1024
+
+function isReceiptImage(contentType: string, fileName: string): boolean {
+  const ct = (contentType || '').toLowerCase()
+  const name = (fileName || '').toLowerCase()
+  if (ct === 'application/pdf' || name.endsWith('.pdf')) return false
+  if (ct.startsWith('image/')) return true
+  return /\.(jpe?g|png|webp|gif|bmp)$/i.test(name)
+}
 
 function corsHeaders(origin: string | null, env: Env): HeadersInit {
   const allowed = (env.ALLOWED_ORIGINS ?? '*')
@@ -177,11 +186,14 @@ async function handleUpload(request: Request, env: Env, cors: HeadersInit): Prom
   if (!ALLOWED_SLOTS.includes(slot)) {
     return json({ ok: false, error: 'slot không hợp lệ' }, 400, cors)
   }
-  if (bytes.length > 12 * 1024 * 1024) {
-    return json({ ok: false, error: 'File quá lớn (tối đa 12 MB)' }, 413, cors)
+  if (bytes.length > MAX_BYTES) {
+    return json({ ok: false, error: 'File quá lớn (tối đa 8 MB). Chỉ nhận ảnh JPG/PNG.' }, 413, cors)
   }
   if (bytes.length === 0) {
     return json({ ok: false, error: 'File rỗng' }, 400, cors)
+  }
+  if (!isReceiptImage(contentType, fileName)) {
+    return json({ ok: false, error: 'Chỉ nhận ảnh hóa đơn (JPG/PNG/WEBP). Không nhận PDF.' }, 400, cors)
   }
 
   const objectKey = buildObjectKey({ leadId, folderName, slot, fileName })

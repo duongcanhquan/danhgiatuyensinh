@@ -68,3 +68,25 @@ export async function appConfirm(opts: AppConfirmOptions): Promise<boolean> {
   if (host) return host(opts)
   return browserFallback(opts)
 }
+
+/** Xác nhận xóa một mục (nút đỏ «Xóa»). */
+export async function appConfirmDelete(itemLabel: string): Promise<boolean> {
+  return appConfirm({
+    title: `Xóa «${itemLabel}»?`,
+    description: 'Thao tác này không hoàn tác được.',
+    variant: 'danger',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+  })
+}
+
+/** Xác nhận thao tác có rủi ro — thay window.confirm một câu. */
+export async function appConfirmWarning(title: string, description?: string): Promise<boolean> {
+  return appConfirm({
+    title,
+    description,
+    variant: 'warning',
+    confirmLabel: 'Tiếp tục',
+    cancelLabel: 'Hủy',
+  })
+}

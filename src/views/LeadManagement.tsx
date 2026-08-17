@@ -2,7 +2,7 @@ import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, Link } from 'react-router-dom'
-import { ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
+import { AlertTriangle, ChevronDown, CircleHelp, ClipboardList, Download, Info as InfoIcon, RefreshCw, Sparkles, Trash2, UserPlus, UserRound, Wand2, X, Zap } from 'lucide-react'
 import {
   addDoc,
   collection,
@@ -63,7 +63,6 @@ import { profileHasTeamRoster } from '../contexts/ManagementViewScopeContext'
 import { counselorIdsInManagerScope } from '../utils/teamScope'
 import { useLeadScoring } from '../hooks/useLeadScoring'
 import { useAutoPersistLeadScores } from '../hooks/useAutoPersistLeadScores'
-import { leadNeedsAutoScorePersist } from '../hooks/leadNeedsAutoScorePersist'
 import { useLeadSources } from '../hooks/useLeadSources'
 import { useScholarships } from '../hooks/useScholarships'
 import { TagBadge } from '../components/TagBadge'
@@ -80,7 +79,6 @@ import {
   exportEvaluatedLeadsToXlsx,
   exportSelectedEvaluatedLeadsToXlsx,
 } from '../utils/exportEvaluatedLeads'
-import { evaluateLeadWithClassification } from '../utils/leadClassificationScore'
 import { persistLeadRescoresToFirestore, rescoreLeadList } from '../utils/bulkLeadRescore'
 import { useOrgAiIntegration } from '../contexts/OrgAiIntegrationContext'
 import { resolveAIIntegrationConfig, runAIAnalysis, getAiIntegrationDiagnostics } from '../utils/aiEngine'
@@ -165,6 +163,11 @@ import {
   confirmDangerousSelectedLeadsDelete,
   confirmDangerousSingleLeadDelete,
 } from '../utils/dangerousDeleteConfirm'
+import { appConfirm } from '../utils/appConfirm'
+import { appAlert } from '../utils/appNotify'
+import { MSG_NO_CHANGES, MSG_NO_SESSION, MSG_SAVE_FAILED, userFacingWriteError } from '../utils/userFacingWriteError'
+import { AppNotice } from '../components/AppNotice'
+import { ViewportModal } from '../components/ViewportModal'
 import {
   formatUploadedDateRangeChip,
   leadMatchesUploadedDateRange,
@@ -202,7 +205,7 @@ import { SearchableFilterSelect } from '../components/SearchableFilterSelect'
 import { ScoringViewModeHint } from '../components/ScoringViewModeHint'
 import { resolveLeadPrimarySource } from '../utils/leadSemanticFieldValue'
 import { profileHasActiveRules } from '../utils/scoringProfileUtils'
-import { LeadScoringSignalsPanel } from '../components/LeadScoringSignalsPanel'
+import { LeadScoringSignalsPanel, scoringMapsEqual } from '../components/LeadScoringSignalsPanel'
 import { LeadProfileCoreForm } from '../components/LeadProfileCoreForm'
 import { LeadActivityTimeline } from '../components/LeadActivityTimeline'
 import { LeadProfileFinanceSection } from '../components/LeadProfileFinanceSection'
@@ -757,6 +760,7 @@ export function LeadManagement() {
     scopeFetchTruncated,
     searchScanTruncated,
     searchHitTotal,
+    searchMatchedLeads,
     scopeTagCounts,
     scopeSourceOptions,
     fetchScopeSourceOptions,
@@ -1321,6 +1325,9 @@ export function LeadManagement() {
         leadMatchesUploadedDateRange(l, uploadedFromFilter, uploadedToFilter),
       )
     }
+    if (aiShortlistOnly) {
+      rows = rows.filter((l) => Boolean(l.isAiShortlisted))
+    }
     return rows
   }, [
     leads,
@@ -1343,6 +1350,7 @@ export function LeadManagement() {
     assigneeFilter,
     uploadedFromFilter,
     uploadedToFilter,
+    aiShortlistOnly,
   ])
 
   /** Predicate client cho quét sâu chọn/xóa theo lọc (ngày tải, hàng chờ, …). */
@@ -1483,6 +1491,14 @@ export function LeadManagement() {
     scoreByLeadId,
     infoScoreRuntime,
   ])
+
+  /** Hồ sơ Excel = cả tập đã tìm/lọc (không cắt theo trang đang xem). */
+  const rowsForExcelExport = useMemo(() => {
+    if (searchMatchedLeads?.length) {
+      return searchMatchedLeads.filter(matchActiveClientFilters)
+    }
+    return sortedFiltered
+  }, [searchMatchedLeads, matchActiveClientFilters, sortedFiltered])
 
   /** Hồ sơ đã tải thuộc đúng tab nguồn — dùng đếm bento / hàng chờ của tôi. */
   const originScopedLeads = useMemo(
@@ -2184,15 +2200,32 @@ export function LeadManagement() {
   )
 
   const handleExportEvaluated = () => {
+    if (!rowsForExcelExport.length) {
+      appAlert('Không có hồ sơ trong bộ lọc hiện tại để tải.', 'warning')
+      return
+    }
     const m = new Map<string, { calculatedScore: number; priorityTag: PriorityTag }>()
-    for (const l of sortedFiltered) {
+    for (const l of rowsForExcelExport) {
       const ev = activeScoringProfile ? scoreByLeadId.get(l.id) ?? scoreLead(l) : scoreLead(l)
       m.set(l.id, ev)
     }
-    exportEvaluatedLeadsToXlsx(sortedFiltered, m, {
-      profileName: activeScoringProfile?.profileName ?? 'Mặc định',
-      scholarshipsById,
-    })
+    try {
+      exportEvaluatedLeadsToXlsx(rowsForExcelExport, m, {
+        profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+        scholarshipsById,
+        counselorNameById: counselorDirectoryLabelById,
+        filename: `VietMy_HoSo_SinhVien_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      })
+      if (searchScanTruncated || scopeFetchTruncated) {
+        appAlert(
+          `Đã tải ${rowsForExcelExport.length} hồ sơ. Danh sách có thể chưa đủ vì hạn mức quét — thu hẹp tìm/lọc nếu thiếu hồ sơ.`,
+          'warning',
+        )
+      }
+    } catch (e) {
+      console.error(e)
+      appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
+    }
   }
 
   const runBulkRescore = useCallback(
@@ -2201,9 +2234,13 @@ export function LeadManagement() {
       const profileName = activeScoringProfile.profileName?.trim() || 'profile'
       if (
         !opts?.silent &&
-        !window.confirm(
-          `Tính lại điểm và nhãn cho mọi hồ sơ trong phạm vi hiện tại theo bộ «${profileName}»?\n\nThao tác ghi lên Firestore (có thể mất vài phút nếu nhiều hồ sơ).`,
-        )
+        !(await appConfirm({
+          title: `Tính lại điểm theo bộ «${profileName}»?`,
+          description: 'Ghi điểm và nhãn cho mọi hồ sơ trong phạm vi đang xem. Có thể mất vài phút nếu danh sách lớn.',
+          variant: 'warning',
+          confirmLabel: 'Tính lại',
+          cancelLabel: 'Hủy',
+        }))
       ) {
         return
       }
@@ -2477,7 +2514,7 @@ export function LeadManagement() {
     )
     const ids = pickLeadIdsForAssign(meta, bulkAssignPickRule, limitCap)
     if (!ids.length) {
-      window.alert('Không còn hồ sơ để phân với số lượng / quy tắc đã chọn.')
+      appAlert('Không còn hồ sơ để phân với số lượng / quy tắc đã chọn.', 'warning')
       return
     }
 
@@ -2485,15 +2522,17 @@ export function LeadManagement() {
       for (const id of ids) {
         const row = resolveLeadForBulk(id)
         if (!row) {
-          window.alert(
+          appAlert(
             'Có hồ sơ chưa tải đủ để kiểm tra quyền — bỏ chọn hoặc bấm lại «Chọn tất cả theo lọc».',
+            'warning',
           )
           return
         }
         const owner = leadAssignedUid(row)
         if (owner !== profile.id) {
-          window.alert(
+          appAlert(
             'Chỉ có thể «Giao việc hàng loạt» cho các hồ sơ đang gán cho bạn. Bỏ chọn hồ sơ của đồng nghiệp hoặc liên hệ Admin/Trưởng.',
+            'warning',
           )
           return
         }
@@ -2505,25 +2544,25 @@ export function LeadManagement() {
       for (const id of ids) {
         const row = resolveLeadForBulk(id)
         if (!row) {
-          window.alert('Có hồ sơ chưa tải đủ — bỏ chọn hoặc bấm lại «Chọn tất cả theo lọc».')
+          appAlert('Có hồ sơ chưa tải đủ — bỏ chọn hoặc bấm lại «Chọn tất cả theo lọc».', 'warning')
           return
         }
         const owner = leadAssignedUid(row)
         // Chưa gán hoặc đang trong nhóm → được phân; ngoài nhóm → chặn.
         if (owner && !team.has(owner)) {
-          window.alert('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.')
+          appAlert('Có hồ sơ nằm ngoài phạm vi nhóm — bỏ chọn hoặc liên hệ Quản trị.', 'warning')
           return
         }
       }
       if (bulkAssignMode === 'single') {
         if (!team.has(bulkReassignUid)) {
-          window.alert('Chỉ được gán cho TVV trong nhóm bạn quản lý.')
+          appAlert('Chỉ được gán cho TVV trong nhóm bạn quản lý.', 'warning')
           return
         }
       } else {
         for (const uid of bulkAssignPoolIds) {
           if (!team.has(uid)) {
-            window.alert('Chỉ được chia cho TVV trong nhóm bạn quản lý.')
+            appAlert('Chỉ được chia cho TVV trong nhóm bạn quản lý.', 'warning')
             return
           }
         }
@@ -2542,7 +2581,7 @@ export function LeadManagement() {
         },
       )
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Không lập được kế hoạch phân lead.')
+      appAlert(e instanceof Error ? e.message : 'Không lập được kế hoạch phân hồ sơ.', 'error')
       return
     }
 
@@ -3467,44 +3506,36 @@ export function LeadManagement() {
 
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
-    exportSelectedEvaluatedLeadsToXlsx(rows, selectedIds, evalMapForExport(rows), {
-      profileName: activeScoringProfile?.profileName ?? 'Mặc định',
-      scholarshipsById,
-    })
-  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById])
+    try {
+      exportSelectedEvaluatedLeadsToXlsx(rows, selectedIds, evalMapForExport(rows), {
+        profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+        scholarshipsById,
+        counselorNameById: counselorDirectoryLabelById,
+      })
+    } catch (e) {
+      console.error(e)
+      appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
+    }
+  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById, counselorDirectoryLabelById])
 
   return (
     <div className="bento-board gap-4">
       {!configured || !db ? (
-        <div className="flex justify-end">
-          <span className="rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-sm text-amber-900">
-            Firebase chưa cấu hình.
-          </span>
-        </div>
+        <AppNotice tone="warning">Chưa kết nối được hệ thống. Kiểm tra cấu hình rồi tải lại trang.</AppNotice>
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-base text-rose-900 shadow-sm backdrop-blur-xl">
+        <AppNotice tone="error" role="alert">
           {/permission|insufficient/i.test(error)
-            ? 'Không đọc được hồ sơ của trường. Đăng xuất rồi đăng nhập lại; nếu vẫn lỗi, nhờ Siêu quản trị kiểm tra mã trường trên tài khoản và deploy Firestore Rules.'
+            ? 'Không đọc được hồ sơ của trường. Đăng xuất rồi đăng nhập lại; nếu vẫn lỗi, nhờ quản trị kiểm tra tài khoản.'
             : error}
-        </div>
+        </AppNotice>
       ) : null}
 
       {createLeadNotice ? (
-        <div
-          role="status"
-          className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950 shadow-sm"
-        >
-          <p className="min-w-0 flex-1">{createLeadNotice}</p>
-          <button
-            type="button"
-            className="shrink-0 rounded-lg border border-emerald-400/80 bg-white px-2.5 py-1 text-xs font-bold text-emerald-900"
-            onClick={() => setCreateLeadNotice(null)}
-          >
-            Đóng
-          </button>
-        </div>
+        <AppNotice tone="success" onDismiss={() => setCreateLeadNotice(null)}>
+          {createLeadNotice}
+        </AppNotice>
       ) : null}
 
       <BentoCell className="space-y-2 !p-2.5 sm:!p-3">
@@ -3737,6 +3768,19 @@ export function LeadManagement() {
                 Tạo mới
               </button>
             ) : null}
+            <button
+              type="button"
+              disabled={!rowsForExcelExport.length}
+              onClick={handleExportEvaluated}
+              title="Tải Excel đầy đủ hồ sơ đang hiện sau tìm / lọc"
+              className={`${LEAD_BTN} border-emerald-400 bg-emerald-50 text-emerald-950 hover:border-emerald-500 hover:bg-emerald-100 disabled:opacity-40`}
+            >
+              <Download className="h-4 w-4 shrink-0" aria-hidden />
+              Tải Excel
+              {rowsForExcelExport.length ? (
+                <span className="tabular-nums opacity-80">({rowsForExcelExport.length})</span>
+              ) : null}
+            </button>
             <button
               type="button"
               onClick={() => setWorkspaceToolsOpen((v) => !v)}
@@ -4390,12 +4434,12 @@ export function LeadManagement() {
                 </button>
                 <button
                   type="button"
-                  disabled={!sortedFiltered.length}
+                  disabled={!rowsForExcelExport.length}
                   onClick={handleExportEvaluated}
                   className={`${LEAD_BTN} border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-400 hover:bg-indigo-100 disabled:opacity-40`}
                 >
                   <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Xuất Excel
+                  Tải Excel
                 </button>
               </div>
             </div>
@@ -4407,45 +4451,25 @@ export function LeadManagement() {
               />
             ) : null}
             {rescoreMsg ? (
-              <div
-                className={[
-                  'flex items-start justify-between gap-2 rounded-xl border px-3 py-2 text-sm shadow-sm',
-                  /không|lỗi|hủy|thiếu|ngoài phạm vi/i.test(rescoreMsg)
-                    ? 'border-rose-200 bg-rose-50 text-rose-950'
-                    : /đang|quét|chấm|lưu|xóa…|xóa \d/i.test(rescoreMsg)
-                      ? 'border-sky-200 bg-sky-50 text-sky-950'
-                      : 'border-emerald-200 bg-emerald-50 text-emerald-950',
-                ].join(' ')}
-                role="status"
-              >
-                <p className="min-w-0 flex-1 font-medium leading-snug">{rescoreMsg}</p>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold opacity-70 hover:bg-white/60 hover:opacity-100"
-                  onClick={() => setRescoreMsg(null)}
-                  aria-label="Đóng thông báo"
-                >
-                  Đóng
-                </button>
-              </div>
+              <AppNotice onDismiss={() => setRescoreMsg(null)}>{rescoreMsg}</AppNotice>
             ) : null}
             {(tagClientEval || callQueueNeedsScope || workModeNeedsScope || programNeedsScope) &&
             scopeFetchTruncated ? (
-              <p className="text-xs font-medium text-amber-900">
+              <AppNotice compact tone="warning">
                 {clientKeepMatchNeeded
                   ? `Đã quét tối đa ${LEADS_UI_PROGRAM_SCAN_MAX.toLocaleString('vi-VN')} hồ sơ hoặc đủ ${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} kết quả khớp — có thể còn hồ sơ phía sau.`
                   : `Đã đạt giới hạn tải (${LEADS_UI_FULL_SCOPE_MAX.toLocaleString('vi-VN')} hồ sơ) — có thể thiếu một phần ở đuôi danh sách.`}
-              </p>
+              </AppNotice>
             ) : null}
             {urlQuery && searchScanTruncated ? (
-              <p className="text-xs font-medium text-amber-900">
+              <AppNotice compact tone="warning">
                 Đã quét một phần hồ sơ gần nhất — nếu không thấy mã vừa tạo, thử lại sau vài giây hoặc bỏ lọc phụ.
-              </p>
+              </AppNotice>
             ) : null}
             {urlQuery && searchHitTotal === 0 && !loading && !loadingPage ? (
-              <p className="text-xs font-medium text-rose-800">
-                Không thấy hồ sơ khớp «{urlQuery}» trong trường đang chọn. Kiểm tra đúng mã / SĐT, hoặc đổi trường (Siêu quản trị).
-              </p>
+              <AppNotice compact tone="error">
+                {`Không thấy hồ sơ khớp «${urlQuery}» trong trường đang chọn. Kiểm tra đúng mã / SĐT, hoặc đổi trường.`}
+              </AppNotice>
             ) : null}
           </div>
         </details>
@@ -4453,9 +4477,9 @@ export function LeadManagement() {
         ) : null}
 
         {rescoreMsg && !workspaceToolsOpen ? (
-          <p className="text-xs font-medium text-sky-900" role="status">
+          <AppNotice compact onDismiss={() => setRescoreMsg(null)}>
             {rescoreMsg}
-          </p>
+          </AppNotice>
         ) : null}
       </BentoCell>
 
@@ -5922,7 +5946,7 @@ function LeadCrmQuickBlock({
     const sameAssign = (prevAssign ?? '') === (nextUid ?? '')
     const sameStatus = prevStatus === crmCounselorStatus
     if (sameAssign && sameStatus) {
-      setCrmMsg('Không có thay đổi.')
+      setCrmMsg(MSG_NO_CHANGES)
       return
     }
     if (peerMode && !nextUid) {
@@ -5981,7 +6005,7 @@ function LeadCrmQuickBlock({
       setCrmMsg('Đã cập nhật phân công.')
     } catch (e) {
       console.error(e)
-      setCrmMsg('Không lưu được. Kiểm tra quyền Firestore.')
+      setCrmMsg(userFacingWriteError(e))
     } finally {
       setCrmBusy(false)
     }
@@ -6067,13 +6091,9 @@ function LeadCrmQuickBlock({
         </select>
       </label>
       {crmMsg ? (
-        <p
-          className={
-            compact ? 'mt-1 text-[11px] text-[var(--color-primary)]' : 'mt-2 text-sm text-[var(--color-primary)]'
-          }
-        >
+        <AppNotice compact className={compact ? 'mt-1' : 'mt-2'} onDismiss={() => setCrmMsg(null)}>
           {crmMsg}
-        </p>
+        </AppNotice>
       ) : null}
       <button
         type="button"
@@ -6160,11 +6180,29 @@ function LeadDetailPanel({
 
   const [coreDraft, setCoreDraft] = useState(() => leadToCoreDraft(lead))
   const coreDirty = useMemo(() => isCoreDraftDirty(lead, coreDraft), [lead, coreDraft])
-  const scoreAutoSyncedRef = useRef<string | null>(null)
+
+  const [financeDraft, setFinanceDraft] = useState(() => leadToFinanceDraft(lead))
+  const financeDirty = useMemo(() => isFinanceDraftDirty(lead, financeDraft), [lead, financeDraft])
+  const [financeSaving, setFinanceSaving] = useState(false)
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [signalsDraft, setSignalsDraft] = useState<Lead['scoringSignals']>(() => lead.scoringSignals)
+  const [customSignalsDraft, setCustomSignalsDraft] = useState<Lead['scoringCustomSignals']>(
+    () => lead.scoringCustomSignals,
+  )
+  const signalsDirty = useMemo(
+    () =>
+      !scoringMapsEqual(signalsDraft, lead.scoringSignals) ||
+      !scoringMapsEqual(customSignalsDraft, lead.scoringCustomSignals),
+    [signalsDraft, customSignalsDraft, lead.scoringSignals, lead.scoringCustomSignals],
+  )
 
   const detailScoringPreview = useMemo(() => {
     if (!activeScoringProfile) return scoringPreview
-    const merged = mergeCoreDraftIntoLead(lead, coreDraft)
+    const merged: Lead = {
+      ...mergeCoreDraftIntoLead(lead, coreDraft),
+      scoringSignals: signalsDraft,
+      scoringCustomSignals: customSignalsDraft,
+    }
     return evaluateLead(
       leadToEvaluationRecord(merged),
       activeScoringProfile,
@@ -6176,6 +6214,8 @@ function LeadDetailPanel({
     activeScoringProfile,
     lead,
     coreDraft,
+    signalsDraft,
+    customSignalsDraft,
     scoringMasterBuckets,
     schoolTvvSignalDefs,
     infoScoreRuntime,
@@ -6184,68 +6224,10 @@ function LeadDetailPanel({
   ])
 
   useEffect(() => {
-    scoreAutoSyncedRef.current = null
-  }, [lead.id])
-
-  useEffect(() => {
-    if (!db || !profile || !activeScoringProfile || !profileHasActiveRules(activeScoringProfile)) return
-    if (!canWriteLead(profile, lead, can, pickListUsers)) return
-    if (coreDirty) return
-    const live = detailScoringPreview
-    if (!live) return
-    // Chỉ tự ghi khi điểm lệch — không ghi đè nhãn tay khi điểm đã khớp.
-    if (!leadNeedsAutoScorePersist(lead, live)) return
-    const syncKey = `${lead.id}:${activeScoringProfile.id}:${live.calculatedScore}:${live.priorityTag}`
-    if (scoreAutoSyncedRef.current === syncKey) return
-    scoreAutoSyncedRef.current = syncKey
-
-    void (async () => {
-      try {
-        const patch: Partial<Lead> = {
-          calculatedScore: live.calculatedScore,
-          priorityTag: live.priorityTag,
-        }
-        if (classificationRuntime.enabled) {
-          const merged = mergeCoreDraftIntoLead(lead, coreDraft)
-          const full = evaluateLeadWithClassification(
-            merged,
-            activeScoringProfile,
-            classificationRuntime,
-            scoringMasterBuckets,
-            schoolTvvSignalDefs,
-            { infoScoreRuntime },
-          )
-          patch.leadScoreProfilePart = full.profilePart
-          patch.leadScoreEngagementPart = full.engagementPart
-        }
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), patch)
-        onUpdated(patch)
-      } catch (e) {
-        console.error(e)
-        scoreAutoSyncedRef.current = null
-      }
-    })()
-  }, [
-    db,
-    profile,
-    can,
-    pickListUsers,
-    lead,
-    activeScoringProfile,
-    detailScoringPreview,
-    coreDirty,
-    onUpdated,
-  ])
-
-
-  const [financeDraft, setFinanceDraft] = useState(() => leadToFinanceDraft(lead))
-  const financeDirty = useMemo(() => isFinanceDraftDirty(lead, financeDraft), [lead, financeDraft])
-  const [financeSaving, setFinanceSaving] = useState(false)
-  const [inviteBusy, setInviteBusy] = useState(false)
-
-  useEffect(() => {
     setCoreDraft(leadToCoreDraft(lead))
     setFinanceDraft(leadToFinanceDraft(lead))
+    setSignalsDraft(lead.scoringSignals)
+    setCustomSignalsDraft(lead.scoringCustomSignals)
   }, [lead.id])
 
   useEffect(() => {
@@ -6273,7 +6255,7 @@ function LeadDetailPanel({
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [detailLeftTab, setDetailLeftTab] = useState<'counselor' | 'profile'>('counselor')
   const [detailRightTab, setDetailRightTab] = useState<'assign' | 'history' | 'assist'>('assist')
-  const [statusQuickBusy, setStatusQuickBusy] = useState(false)
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
   const signalsHelpRef = useRef<HTMLDialogElement>(null)
 
   const consultingDataOn = detailRightTab === 'assist' || playbookDataEnabled
@@ -6328,6 +6310,9 @@ function LeadDetailPanel({
     )
     setCrmDirty(null)
     setStatusDirty(null)
+    setSignalsDraft(lead.scoringSignals)
+    setCustomSignalsDraft(lead.scoringCustomSignals)
+    setCloseConfirmOpen(false)
     setMsg(null)
     setDetailLeftTab(
       leadWorkModePrimaryFocus(effectiveWorkMode) === 'care_dossier' ? 'profile' : 'counselor',
@@ -6345,28 +6330,6 @@ function LeadDetailPanel({
       document.body.style.overflow = prev
     }
   }, [])
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (e.defaultPrevented) return
-      if (llmAccessHelpOpen) {
-        e.preventDefault()
-        setLlmAccessHelpOpen(false)
-        return
-      }
-      const help = signalsHelpRef.current
-      if (help?.open) {
-        help.close()
-        e.preventDefault()
-        return
-      }
-      e.preventDefault()
-      onClose()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [llmAccessHelpOpen, onClose])
 
   const { orgConfig } = useOrgAiIntegration()
   const { tasks: aiTasks, loading: aiTasksLoading, error: aiTasksErr } = useAITasks({
@@ -6404,69 +6367,12 @@ function LeadDetailPanel({
   const crmQuickBlockVisible =
     canReassignLead && Boolean(db) && !(peerModeForCrmBlock && !leadIsMineForCrm)
 
-  const saveCrmStatusQuick = useCallback(
-    async (next: LeadCounselorStatus) => {
-      if (!db || !profile || !showCounselorProgressForm) return
-      if (next === lead.status) {
-        setCrmDirty(null)
-        return
-      }
-      setStatusQuickBusy(true)
-      setMsg(null)
-      try {
-        const touch = leadTouchPatch()
-        const assignPatch = {
-          status: next,
-          pipelineStatus: counselorStatusToPipeline(next),
-        } as Partial<Lead>
-        const scoreFields = persistedLeadScoringFields(
-          lead,
-          assignPatch,
-          activeScoringProfile,
-          scoringMasterBuckets,
-          schoolTvvSignalDefs ?? null,
-          detailScoringOpts,
-        )
-        await updateDoc(doc(db, FS_COLLECTIONS.leads, lead.id), {
-          ...assignPatch,
-          ...scoreFields,
-          ...touch,
-        })
-        const performer = profile.displayName?.trim() || profile.email || profile.id
-        await commitAuditLog(db, {
-          leadId: lead.id,
-          actionType: 'STATUS_CHANGE',
-          description: `Tình trạng: ${LEAD_COUNSELOR_STATUS_LABELS[lead.status]} → ${LEAD_COUNSELOR_STATUS_LABELS[next]}`,
-          performedBy: profile.id,
-          performedByName: performer,
-        })
-        setCrmDirty(null)
-        onUpdated({
-          status: next,
-          pipelineStatus: counselorStatusToPipeline(next),
-          ...scoreFields,
-          updatedAt: touch.updatedAt,
-          lastTouchedAt: touch.lastTouchedAt,
-        })
-        setMsg(`Đã chuyển tình trạng → ${LEAD_COUNSELOR_STATUS_LABELS[next]}`)
-      } catch (e) {
-        console.error(e)
-        setMsg(e instanceof Error ? e.message : 'Không đổi được tình trạng.')
-      } finally {
-        setStatusQuickBusy(false)
-      }
+  const pickCrmStatus = useCallback(
+    (next: LeadCounselorStatus) => {
+      if (!showCounselorProgressForm) return
+      setCrmDirty(next === lead.status ? null : next)
     },
-    [
-      db,
-      profile,
-      showCounselorProgressForm,
-      lead,
-      activeScoringProfile,
-      scoringMasterBuckets,
-      schoolTvvSignalDefs,
-      detailScoringOpts,
-      onUpdated,
-    ],
+    [showCounselorProgressForm, lead.status],
   )
 
   const dispositionChanged =
@@ -6488,6 +6394,7 @@ function LeadDetailPanel({
     () =>
       coreDirty ||
       financeDirty ||
+      signalsDirty ||
       (crmDirty !== null && crmForForm !== lead.status) ||
       (statusDirty !== null && statusForForm !== lead.pipelineStatus) ||
       noteChanged ||
@@ -6495,6 +6402,7 @@ function LeadDetailPanel({
     [
       coreDirty,
       financeDirty,
+      signalsDirty,
       crmDirty,
       crmForForm,
       lead.status,
@@ -6514,8 +6422,45 @@ function LeadDetailPanel({
   }, [hasUnsavedProgress, onUnsavedChange])
 
   const requestClosePanel = useCallback(() => {
+    if (closeConfirmOpen) return
+    if (hasUnsavedProgress) {
+      setCloseConfirmOpen(true)
+      return
+    }
+    onClose()
+  }, [closeConfirmOpen, hasUnsavedProgress, onClose])
+
+  const discardAndClose = useCallback(() => {
+    setCloseConfirmOpen(false)
     onClose()
   }, [onClose])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (e.defaultPrevented) return
+      if (closeConfirmOpen) {
+        e.preventDefault()
+        setCloseConfirmOpen(false)
+        return
+      }
+      if (llmAccessHelpOpen) {
+        e.preventDefault()
+        setLlmAccessHelpOpen(false)
+        return
+      }
+      const help = signalsHelpRef.current
+      if (help?.open) {
+        help.close()
+        e.preventDefault()
+        return
+      }
+      e.preventDefault()
+      requestClosePanel()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [llmAccessHelpOpen, closeConfirmOpen, requestClosePanel])
 
   const [aiSelTaskId, setAiSelTaskId] = useState('')
   const [aiRunning, setAiRunning] = useState(false)
@@ -6561,7 +6506,7 @@ function LeadDetailPanel({
 
   const saveFinanceProfile = async (): Promise<{ ok: boolean; message: string }> => {
     if (!db || !profile) {
-      const message = 'Chưa có kết nối hoặc chưa đăng nhập.'
+      const message = MSG_NO_SESSION
       setMsg(message)
       return { ok: false, message }
     }
@@ -6625,7 +6570,7 @@ function LeadDetailPanel({
       return { ok: saved.firestoreVerified, message }
     } catch (e) {
       console.error(e)
-      const message = e instanceof Error ? e.message : 'Không lưu được tài chính.'
+      const message = userFacingWriteError(e)
       setMsg(message)
       return { ok: false, message }
     } finally {
@@ -6635,7 +6580,7 @@ function LeadDetailPanel({
 
   const handleInvitation = async (docType: InviteDocumentType, scholarshipId: string) => {
     if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      setMsg(MSG_NO_SESSION)
       return
     }
     if (!showCounselorProgressForm) {
@@ -6707,7 +6652,7 @@ function LeadDetailPanel({
 
   const saveCoreProfile = async (): Promise<{ ok: boolean; savedUserFields: boolean }> => {
     if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
+      setMsg(MSG_NO_SESSION)
       return { ok: false, savedUserFields: false }
     }
     if (!showCounselorProgressForm) {
@@ -6779,51 +6724,17 @@ function LeadDetailPanel({
       return { ok: true, savedUserFields: true }
     } catch (e) {
       console.error(e)
-      setMsg('Không lưu được thông tin hồ sơ. Kiểm tra Firestore Rules.')
+      setMsg(MSG_SAVE_FAILED)
       return { ok: false, savedUserFields: false }
     } finally {
       setSaving(false)
     }
   }
 
-  /** Một nút trên tab Hồ sơ ứng viên — lưu tài chính + thông tin hồ sơ nếu có thay đổi. */
-  const saveAllProfileInfo = async () => {
+  const saveUnified = async (): Promise<boolean> => {
     if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
-      return
-    }
-    if (!showCounselorProgressForm) {
-      setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này.')
-      return
-    }
-    if (!coreDirty && !financeDirty) {
-      setMsg('Không có thay đổi để lưu.')
-      return
-    }
-    const hadFinance = financeDirty
-    const hadCore = coreDirty
-    let financeMsg = ''
-    if (hadFinance) {
-      const fin = await saveFinanceProfile()
-      financeMsg = fin.message
-      if (!fin.ok) return
-    }
-    if (hadCore) {
-      const core = await saveCoreProfile()
-      if (hadFinance && financeMsg) {
-        setMsg(
-          core.savedUserFields
-            ? `${financeMsg} Đã lưu thông tin hồ sơ.`
-            : financeMsg,
-        )
-      }
-    }
-  }
-
-  const saveUnified = async () => {
-    if (!db || !profile) {
-      setMsg('Chưa có kết nối hoặc chưa đăng nhập.')
-      return
+      setMsg(MSG_NO_SESSION)
+      return false
     }
     const canMutateLead = showCounselorProgressForm
     const noteTrim = note.trim()
@@ -6840,34 +6751,35 @@ function LeadDetailPanel({
       (lead.lastCallDispositionId && isCallDispositionId(lead.lastCallDispositionId)
         ? lead.lastCallDispositionId
         : null)
+    const signalsChanged = signalsDirty
 
-    if (!crmChanged && !pipeChanged && !noteDidChange && !coreChanged && !dispChanged) {
-      setMsg('Không có thay đổi.')
-      return
+    if (!crmChanged && !pipeChanged && !noteDidChange && !coreChanged && !dispChanged && !signalsChanged) {
+      setMsg(MSG_NO_CHANGES)
+      return false
     }
     if ((noteDidChange || dispChanged) && !canSaveInteraction && !canMutateLead) {
       setMsg('Bạn không có quyền cập nhật ghi chú / phản hồi nhanh trên hồ sơ này.')
-      return
+      return false
     }
     if (coreChanged && !canMutateLead) {
       setMsg('Bạn không có quyền chỉnh thông tin hồ sơ này (cần Admin hoặc TVV được gán + quyền ghi hồ sơ).')
-      return
+      return false
     }
-    if (crmChanged && !canMutateLead && !dispChanged) {
-      setMsg('Bạn không có quyền đổi tình trạng tư vấn trên hồ sơ này.')
-      return
+    if ((crmChanged || signalsChanged) && !canMutateLead && !dispChanged) {
+      setMsg('Bạn không có quyền đổi tình trạng / đánh giá trên hồ sơ này.')
+      return false
     }
     if (pipeChanged && !noteDidChange && !canMutateLead && !dispChanged) {
       setMsg(
         'Để chỉnh tình trạng hồ sơ không kèm ghi chú, cần quyền chỉnh sửa hồ sơ được gán (hoặc sửa ghi chú TVV rồi bấm «Lưu cập nhật»).',
       )
-      return
+      return false
     }
     const canPersistNote = noteDidChange && canSaveInteraction
     if (noteDidChange && !canSaveInteraction) {
-      if (!crmChanged && !pipeChanged && !coreChanged && !dispChanged) {
+      if (!crmChanged && !pipeChanged && !coreChanged && !dispChanged && !signalsChanged) {
         setMsg('Bạn không có quyền ghi tương tác.')
-        return
+        return false
       }
       // Có thay đổi khác được phép — bỏ qua ghi chú, vẫn lưu phần còn lại.
     }
@@ -6880,7 +6792,7 @@ function LeadDetailPanel({
         if (dupMsg) {
           setMsg(dupMsg)
           setSaving(false)
-          return
+          return false
         }
       }
       const nextCrm = crmChanged ? crmForForm : lead.status
@@ -6892,6 +6804,10 @@ function LeadDetailPanel({
       if (crmChanged) dataPatch.status = nextCrm
       if (pipeChanged) dataPatch.pipelineStatus = statusForForm
       else if (crmChanged) dataPatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
+      if (signalsChanged) {
+        dataPatch.scoringSignals = signalsDraft
+        dataPatch.scoringCustomSignals = customSignalsDraft
+      }
 
       const coreAsPartial = corePatch as unknown as Partial<Lead>
       const callerLabel = profile.displayName?.trim() || profile.email?.trim() || profile.id
@@ -6950,6 +6866,10 @@ function LeadDetailPanel({
         if (pipeChanged) leadFirestorePatch.pipelineStatus = statusForForm
         else if (crmChanged) leadFirestorePatch.pipelineStatus = counselorStatusToPipeline(crmForForm)
       }
+      if (signalsChanged) {
+        leadFirestorePatch.scoringSignals = signalsDraft ?? null
+        leadFirestorePatch.scoringCustomSignals = customSignalsDraft ?? null
+      }
       const dispDefForActivity = nextDispositionId ? getCallDisposition(nextDispositionId) : undefined
       const activityFromInteraction =
         dispChanged && dispDefForActivity
@@ -6995,6 +6915,16 @@ function LeadDetailPanel({
           leadId: lead.id,
           actionType: 'STATUS_CHANGE',
           description: parts.join(' · '),
+          performedBy: profile.id,
+          performedByName: performer,
+        })
+      }
+
+      if (signalsChanged) {
+        await commitAuditLog(db, {
+          leadId: lead.id,
+          actionType: 'SYSTEM_UPDATE',
+          description: 'Cập nhật đánh giá gọi (hành vi / rủi ro)',
           performedBy: profile.id,
           performedByName: performer,
         })
@@ -7129,14 +7059,51 @@ function LeadDetailPanel({
       setNote(noteTrim || noteBaselineSaved)
       setStatusDirty(null)
       setCrmDirty(null)
+      if (signalsChanged) {
+        setSignalsDraft(signalsDraft)
+        setCustomSignalsDraft(customSignalsDraft)
+      }
       if (dispDef) setDispositionDraft(dispDef.id)
       setMsg(dispDef ? `Đã lưu · Phản hồi nhanh: ${dispDef.label}` : 'Đã lưu cập nhật.')
+      return true
     } catch (e) {
       console.error(e)
-      setMsg('Không lưu được. Kiểm tra Firestore Rules.')
+      setMsg(MSG_SAVE_FAILED)
+      return false
     } finally {
       setSaving(false)
     }
+  }
+
+  /** Lưu mọi thay đổi nháp trên chi tiết hồ sơ — một lần ghi / lịch sử theo nhóm. */
+  const persistAllDrafts = async (): Promise<boolean> => {
+    if (!hasUnsavedProgress) {
+      setMsg(MSG_NO_CHANGES)
+      return true
+    }
+    if (financeDirty) {
+      const fin = await saveFinanceProfile()
+      if (!fin.ok) return false
+    }
+    const stillNeedsUnified =
+      coreDirty ||
+      signalsDirty ||
+      (crmDirty !== null && crmForForm !== lead.status) ||
+      (statusDirty !== null && statusForForm !== lead.pipelineStatus) ||
+      noteChanged ||
+      dispositionChanged
+    if (stillNeedsUnified) {
+      const ok = await saveUnified()
+      if (!ok) return false
+    }
+    return true
+  }
+
+  const saveAndClose = async () => {
+    const ok = await persistAllDrafts()
+    if (!ok) return
+    setCloseConfirmOpen(false)
+    onClose()
   }
 
   const runAiLlmAnalysis = async () => {
@@ -7284,10 +7251,15 @@ function LeadDetailPanel({
               <span className="hidden sm:inline">{deleteBusy ? 'Đang xóa…' : 'Xóa'}</span>
             </button>
           ) : null}
+          {hasUnsavedProgress ? (
+            <span className="hidden items-center rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900 sm:inline-flex">
+              Chưa lưu
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={requestClosePanel}
-            title="Đóng chi tiết hồ sơ"
+            title={hasUnsavedProgress ? 'Có thay đổi chưa lưu — sẽ hỏi trước khi đóng' : 'Đóng chi tiết hồ sơ'}
             aria-label="Đóng chi tiết hồ sơ"
             className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border-2 border-slate-800 bg-slate-900 px-3.5 py-2 text-sm font-bold text-white shadow-md transition hover:border-slate-950 hover:bg-slate-950 sm:min-h-11 sm:px-4 sm:text-base"
           >
@@ -7308,9 +7280,15 @@ function LeadDetailPanel({
               <span className="ml-1 font-normal normal-case tracking-normal text-slate-400">
                 · chỉ xem
               </span>
-            ) : statusQuickBusy ? (
-              <span className="ml-1 font-normal normal-case tracking-normal text-amber-700">· đang lưu…</span>
-            ) : null}
+            ) : crmDirty !== null && crmForForm !== lead.status ? (
+              <span className="ml-1 font-normal normal-case tracking-normal text-amber-700">
+                · chưa lưu
+              </span>
+            ) : (
+              <span className="ml-1 font-normal normal-case tracking-normal text-slate-400">
+                · chọn rồi bấm Lưu
+              </span>
+            )}
           </p>
           {lead.finance?.enrollmentStatus?.trim() ? (
             <p className="text-[11px] text-slate-500" title="Thu phí trên Sheet / kế toán">
@@ -7325,9 +7303,9 @@ function LeadDetailPanel({
               <button
                 key={s}
                 type="button"
-                disabled={!showCounselorProgressForm || statusQuickBusy}
+                disabled={!showCounselorProgressForm || saving}
                 title={LEAD_COUNSELOR_STATUS_HINTS[s]}
-                onClick={() => void saveCrmStatusQuick(s)}
+                onClick={() => pickCrmStatus(s)}
                 className={[
                   'min-h-9 rounded-lg border px-2.5 py-1.5 text-left text-xs font-bold leading-snug transition disabled:cursor-not-allowed disabled:opacity-50',
                   leadCounselorStatusButtonClass(s, selected),
@@ -7576,13 +7554,13 @@ function LeadDetailPanel({
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 border-b border-indigo-100 pb-1.5">
                           {showCounselorProgressForm ? (
                             <div className="flex flex-wrap items-center gap-2">
-                              {coreDirty || financeDirty ? (
+                              {hasUnsavedProgress ? (
                                 <span className="text-[10px] font-semibold text-amber-800">Chưa lưu</span>
                               ) : null}
                               <button
                                 type="button"
-                                disabled={saving || financeSaving || (!coreDirty && !financeDirty)}
-                                onClick={() => void saveAllProfileInfo()}
+                                disabled={saving || financeSaving || !hasUnsavedProgress}
+                                onClick={() => void persistAllDrafts()}
                                 className="rounded-lg border border-rose-700 bg-rose-600 px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
                               >
                                 {saving || financeSaving ? 'Đang lưu…' : 'Lưu thông tin'}
@@ -7591,7 +7569,9 @@ function LeadDetailPanel({
                           ) : null}
                         </div>
                         {msg && detailLeftTab === 'profile' ? (
-                          <p className="mt-1 shrink-0 text-[11px] font-medium text-amber-900">{msg}</p>
+                          <AppNotice compact className="mt-1" onDismiss={() => setMsg(null)}>
+                            {msg}
+                          </AppNotice>
                         ) : null}
                         <div className="mt-1.5 flex flex-col">
                           <LeadProfileCoreForm
@@ -7675,9 +7655,7 @@ function LeadDetailPanel({
                                         <select
                                           value={crmForForm}
                                           onChange={(e) => {
-                                            const next = e.target.value as LeadCounselorStatus
-                                            setCrmDirty(next)
-                                            void saveCrmStatusQuick(next)
+                                            pickCrmStatus(e.target.value as LeadCounselorStatus)
                                           }}
                                           className="mt-0.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-amber-400/50"
                                         >
@@ -7804,7 +7782,7 @@ function LeadDetailPanel({
                                       </button>
                                     </div>
                                     <p className="mt-0.5 text-[10px] font-medium leading-snug text-emerald-900/75">
-                                      Tín hiệu hành vi / rủi ro theo bộ chấm — mỗi mục lưu ngay, không thay ghi chú bên dưới.
+                                      Tín hiệu hành vi / rủi ro theo bộ chấm — bật/tắt thoải mái, chỉ ghi khi bấm Lưu cập nhật.
                                     </p>
                                     <dialog
                                       ref={signalsHelpRef}
@@ -7832,8 +7810,8 @@ function LeadDetailPanel({
                                             chấm đang chọn — phục vụ nhãn HOT/WARM, lọc danh sách và AI.
                                           </p>
                                           <p className="mt-2">
-                                            Bật/tắt từng mục trong Đánh giá gọi là <strong>lưu ngay</strong> (không dùng
-                                            chung nút «Lưu cập nhật»).
+                                            Bật/tắt từng mục trong Đánh giá gọi chỉ là <strong>nháp</strong> — hệ thống
+                                            ghi nhận khi bấm «Lưu cập nhật» (cùng tình trạng, phản hồi nhanh và ghi chú).
                                           </p>
                                         </div>
                                       </div>
@@ -7842,10 +7820,14 @@ function LeadDetailPanel({
                                       <LeadScoringSignalsPanel
                                         key={`sig-${lead.id}`}
                                         lead={lead}
-                                        db={db}
+                                        scoringSignals={signalsDraft}
+                                        scoringCustomSignals={customSignalsDraft}
+                                        onDraftChange={({ scoringSignals, scoringCustomSignals }) => {
+                                          setSignalsDraft(scoringSignals)
+                                          setCustomSignalsDraft(scoringCustomSignals)
+                                        }}
                                         activeScoringProfile={activeScoringProfile}
                                         canEdit={canEditScoringSignals}
-                                        onUpdated={onUpdated}
                                         compact
                                       />
                                     </div>
@@ -7869,11 +7851,12 @@ function LeadDetailPanel({
                                     type="button"
                                     disabled={
                                       saving ||
+                                      financeSaving ||
                                       !db ||
                                       (!showCounselorProgressForm && !canSaveInteraction) ||
                                       !hasUnsavedProgress
                                     }
-                                    onClick={() => void saveUnified()}
+                                    onClick={() => void persistAllDrafts()}
                                     title="Lưu cập nhật"
                                     className="flex h-auto w-[4.75rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-amber-700 bg-gradient-to-b from-amber-500 to-orange-600 px-1.5 text-center text-[11px] font-extrabold leading-tight text-white shadow-md transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-45 sm:w-[5.25rem] sm:text-xs"
                                   >
@@ -7887,7 +7870,11 @@ function LeadDetailPanel({
                                     )}
                                   </button>
                                 </div>
-                                {msg ? <p className="mt-1 text-xs font-bold text-amber-900">{msg}</p> : null}
+                                {msg ? (
+                                  <AppNotice compact className="mt-1" onDismiss={() => setMsg(null)}>
+                                    {msg}
+                                  </AppNotice>
+                                ) : null}
                               </div>
                             </div>
                           ) : null}
@@ -8108,6 +8095,54 @@ function LeadDetailPanel({
         </div>
       </div>
       </div>
+
+      <ViewportModal
+        open={closeConfirmOpen}
+        onClose={() => setCloseConfirmOpen(false)}
+        titleId="lead-close-unsaved-title"
+        size="md"
+        zIndexClass="z-[300]"
+        closeDisabled={saving || financeSaving}
+        title={
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-950">
+              <AlertTriangle className="h-5 w-5" aria-hidden />
+            </span>
+            <span>Có thay đổi chưa lưu</span>
+          </span>
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCloseConfirmOpen(false)}
+              className="inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Ở lại
+            </button>
+            <button
+              type="button"
+              onClick={discardAndClose}
+              disabled={saving || financeSaving}
+              className="inline-flex h-10 min-w-[7rem] items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-50"
+            >
+              Bỏ thay đổi
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveAndClose()}
+              disabled={saving || financeSaving}
+              className="inline-flex h-10 min-w-[7rem] flex-1 items-center justify-center rounded-xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-50 sm:flex-none"
+            >
+              {saving || financeSaving ? 'Đang lưu…' : 'Lưu rồi đóng'}
+            </button>
+          </>
+        }
+      >
+        <p className="leading-relaxed text-slate-800">
+          Bạn đã chỉnh thông tin nhưng chưa bấm Lưu. Đóng ngay sẽ bỏ các thay đổi này — lịch sử không ghi thêm thao tác.
+        </p>
+      </ViewportModal>
 
       {llmAccessHelpOpen ? (
         <>

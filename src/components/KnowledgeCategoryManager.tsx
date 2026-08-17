@@ -5,6 +5,7 @@ import {
   normalizeKnowledgeCategoryId,
 } from '../utils/knowledgeCategories'
 import type { KnowledgeCategoryDef } from '../utils/knowledgeCategories'
+import { appConfirm } from '../utils/appConfirm'
 
 const inputCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-300/60'
@@ -163,15 +164,19 @@ export function KnowledgeCategoryManager({
                               className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-40"
                               title="Xóa danh mục"
                               onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    `Xóa danh mục «${c.label}»? Tài liệu cũ vẫn giữ mã ${c.id}.`,
+                                void (async () => {
+                                  const ok = await appConfirm({
+                                    title: `Xóa danh mục «${c.label}»?`,
+                                    description: `Tài liệu cũ vẫn giữ mã ${c.id}.`,
+                                    variant: 'danger',
+                                    confirmLabel: 'Xóa',
+                                    cancelLabel: 'Hủy',
+                                  })
+                                  if (!ok) return
+                                  void onRemove(c.id).catch((e) =>
+                                    setErr(e instanceof Error ? e.message : 'Không xóa được'),
                                   )
-                                )
-                                  return
-                                void onRemove(c.id).catch((e) =>
-                                  setErr(e instanceof Error ? e.message : 'Không xóa được'),
-                                )
+                                })()
                               }}
                             >
                               <Trash2 className="h-4 w-4" aria-hidden />

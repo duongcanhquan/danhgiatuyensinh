@@ -4,6 +4,7 @@ import type { CallEvalDimension, CallEvalOption, CallEvalScoringGroup } from '..
 import { useCallSessionConfig } from '../contexts/CallSessionConfigContext'
 import { getDefaultCallEvaluationConfig } from '../utils/callSessionEvaluation'
 import { VietMyAccentHeading } from './VietMyAccentHeading'
+import { appConfirmWarning } from '../utils/appConfirm'
 
 export function CallSessionChipsSettingsPanel() {
   const { dimensions, configFromRemote, loading, error, saveDimensions, resetToBuiltin } =
@@ -70,7 +71,7 @@ export function CallSessionChipsSettingsPanel() {
   }, [saveDimensions, working])
 
   const onReset = useCallback(async () => {
-    if (!window.confirm('Khôi phục bảng đánh giá mặc định (theo khung tâm lý / tư vấn)?')) return
+    if (!(await appConfirmWarning('Khôi phục bảng đánh giá mặc định (theo khung tâm lý / tư vấn)?'))) return
     setBusy(true)
     try {
       await resetToBuiltin()

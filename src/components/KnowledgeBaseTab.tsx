@@ -18,6 +18,9 @@ import {
   getKnowledgeUploadTemplate,
   KNOWLEDGE_UPLOAD_TEMPLATE_FILENAME,
 } from '../utils/configTemplateDownload'
+import { appAlert } from '../utils/appNotify'
+import { appConfirmDelete, appConfirmWarning } from '../utils/appConfirm'
+import { MSG_DELETE_FAILED, MSG_SAVE_FAILED } from '../utils/userFacingWriteError'
 
 type MainTab = 'data' | 'categories' | 'setup'
 
@@ -255,14 +258,14 @@ export function KnowledgeBaseTab({
       setMainTab('data')
     } catch (e) {
       console.error(e)
-      setMsg('Không lưu được — kiểm tra Firestore Rules.')
+      setMsg(MSG_SAVE_FAILED)
     } finally {
       setBusy(false)
     }
   }
 
   const remove = async (id: string) => {
-    if (!window.confirm('Xóa tài liệu này khỏi kho tri thức?')) return
+    if (!(await appConfirmDelete('tài liệu này'))) return
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.knowledgeDocuments, id))
       if (editingId === id || selectedDocId === id) {
@@ -273,7 +276,7 @@ export function KnowledgeBaseTab({
       setMsg('Đã xóa tài liệu.')
     } catch (e) {
       console.error(e)
-      window.alert('Không xóa được.')
+      appAlert(MSG_DELETE_FAILED, 'error')
     }
   }
 
@@ -308,9 +311,10 @@ export function KnowledgeBaseTab({
         }
         const rows = parseKnowledgeDocumentsJson(parsed)
         if (
-          !window.confirm(
-            `Nạp ${rows.length} tài liệu vào Firestore? Ghi theo id (merge): trùng id sẽ cập nhật nội dung.`,
-          )
+          !(await appConfirmWarning(
+            `Nạp ${rows.length} tài liệu?`,
+            'Trùng id sẽ cập nhật nội dung đã có.',
+          ))
         ) {
           return
         }
@@ -428,13 +432,14 @@ export function KnowledgeBaseTab({
                 type="button"
                 disabled={seedBusy || loading}
                 onClick={() => {
-                  if (
-                    !window.confirm(
-                      'Nạp bộ mẫu kho tri thức (id vietmy_seed_knowledge_001 …) vào Firestore? Dùng quyền đăng nhập hiện tại; ghi đè nếu trùng id.',
-                    )
-                  )
-                    return
                   void (async () => {
+                    if (
+                      !(await appConfirmWarning(
+                        'Nạp bộ mẫu kho tri thức?',
+                        'Dùng quyền đăng nhập hiện tại; ghi đè nếu trùng id.',
+                      ))
+                    )
+                      return
                     setSeedBusy(true)
                     setMsg(null)
                     try {
@@ -446,7 +451,7 @@ export function KnowledgeBaseTab({
                       setMsg(
                         e instanceof Error
                           ? e.message
-                          : 'Không nạp được — kiểm tra Rules và file seed (npm run export:public-seed).',
+                          : 'Không nạp được — kiểm tra quyền tài khoản và file mẫu.',
                       )
                     } finally {
                       setSeedBusy(false)

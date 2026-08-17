@@ -27,6 +27,7 @@ import {
 } from '../tenancy/platformOps'
 import { normalizeUserRole } from '../auth/roleUtils'
 import { confirmDangerousStaffAccountDelete } from '../utils/dangerousDeleteConfirm'
+import { appConfirm } from '../utils/appConfirm'
 import {
   defaultRoleCapabilities,
   loadRoleCapabilities,
@@ -406,16 +407,14 @@ export function OrganizationsView() {
   const onSoftDelete = async (org: OrgRow) => {
     if (org.id === DEFAULT_ORG_ID) return
     if (
-      !window.confirm(
-        [
-          'CẢNH BÁO — ẨN TRƯỜNG KHỎI DANH SÁCH',
-          '',
-          `Ẩn trường «${org.name}» khỏi CRM và bộ chọn trường?`,
-          '',
-          'Hồ sơ / cấu hình vẫn giữ trong hệ thống (không xóa sạch dữ liệu hồ sơ).',
-          'Chỉ tiếp tục nếu bạn chắc chắn.',
-        ].join('\n'),
-      )
+      !(await appConfirm({
+        title: `Ẩn trường «${org.name}»?`,
+        description: 'Trường sẽ biến khỏi CRM và bộ chọn trường. Hồ sơ / cấu hình vẫn giữ trong hệ thống — không xóa sạch dữ liệu.',
+        details: ['Chỉ tiếp tục nếu bạn chắc chắn.'],
+        variant: 'danger',
+        confirmLabel: 'Ẩn trường',
+        cancelLabel: 'Hủy',
+      }))
     ) {
       return
     }

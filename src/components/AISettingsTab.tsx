@@ -9,6 +9,8 @@ import { useAITasks } from '../hooks/useAITasks'
 import { useAuth } from '../hooks/useAuth'
 import { useOrgAiIntegration } from '../contexts/OrgAiIntegrationContext'
 import { callIntegrationChat, clearAIConfigFromStorage, getAiIntegrationDiagnostics, loadAIConfigFromStorage, resolveAIIntegrationConfig } from '../utils/aiEngine'
+import { appConfirmDelete } from '../utils/appConfirm'
+import { MSG_SAVE_FAILED } from '../utils/userFacingWriteError'
 import {
   DEFAULT_AI_GATEKEEPER_RULES,
   loadAiGatekeeperFromStorage,
@@ -200,7 +202,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
       setSubTab('library')
     } catch (e) {
       console.error(e)
-      setMsg('Không lưu được — kiểm tra Firestore Rules (collection ai_tasks).')
+      setMsg(MSG_SAVE_FAILED)
     } finally {
       setBusy(false)
     }
@@ -228,7 +230,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
       setSubTab('library')
     } catch (e) {
       console.error(e)
-      setMsg('Không tạo được tác vụ mẫu — kiểm tra Firestore Rules (collection ai_tasks).')
+      setMsg('Không tạo được tác vụ mẫu. Thử lại hoặc liên hệ quản trị.')
     } finally {
       setBusy(false)
     }
@@ -252,7 +254,7 @@ export function AISettingsTab({ db }: { db: Firestore }) {
   const removeTask = useCallback(
     async (t: AITask) => {
       if (!canTasks || !db) return
-      if (!window.confirm(`Xóa tác vụ «${t.name}»?`)) return
+      if (!(await appConfirmDelete(t.name))) return
       setBusy(true)
       try {
         await deleteDoc(doc(db, FS_COLLECTIONS.ai_tasks, t.id))

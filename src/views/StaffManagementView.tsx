@@ -32,6 +32,7 @@ import {
 import { STAFF_ASSIGNABLE_PERMISSIONS } from '../utils/roleCapabilitiesConfig'
 import { defaultPermissionsForRole } from '../auth/permissions'
 import { confirmDangerousStaffAccountDelete } from '../utils/dangerousDeleteConfirm'
+import { appConfirm } from '../utils/appConfirm'
 import { StaffExcelImportPanel } from '../components/StaffExcelImportPanel'
 import { BentoCell, BentoGrid, BentoStat } from '../components/bento'
 import {
@@ -438,7 +439,16 @@ export function StaffManagementView({
 
   const toggleActive = async (u: VietMyUserProfile, next: boolean) => {
     const label = next ? 'Kích hoạt' : 'Vô hiệu (khóa đăng nhập)'
-    if (!window.confirm(`${label} tài khoản «${u.email}»?`)) return
+    if (
+      !(await appConfirm({
+        title: `${label} tài khoản?`,
+        description: u.email,
+        variant: next ? 'default' : 'warning',
+        confirmLabel: next ? 'Kích hoạt' : 'Vô hiệu',
+        cancelLabel: 'Hủy',
+      }))
+    )
+      return
     setErr(null)
     setMsg(null)
     try {

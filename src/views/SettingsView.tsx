@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { FirebaseError } from 'firebase/app'
 import {
   doc,
   getDoc,
@@ -52,6 +51,9 @@ import {
 } from '../components/ConsultingAdviseHub'
 import { StaffManagementView } from '../views/StaffManagementView'
 import { ViewportModal } from '../components/ViewportModal'
+import { appAlert } from '../utils/appNotify'
+import { appConfirmDelete } from '../utils/appConfirm'
+import { userFacingWriteError } from '../utils/userFacingWriteError'
 import { PermissionMatrixPanel } from '../components/PermissionMatrixPanel'
 import { canViewPermissionMatrix } from '../auth/permissions'
 import { LeadProfileSettingsTab } from '../components/LeadProfileSettingsTab'
@@ -109,20 +111,7 @@ function ConnectDetailBack({
 }
 
 function firestoreWriteErrorMessage(e: unknown): string {
-  if (e instanceof FirebaseError) {
-    if (e.code === 'permission-denied') {
-      return 'Firestore từ chối ghi. Kiểm tra quyền tài khoản và Rules cho collection masterData.'
-    }
-    if (e.code === 'unavailable') {
-      return 'Firestore tạm thời không khả dụng. Thử lại sau.'
-    }
-    if (e.code === 'unauthenticated') {
-      return 'Phiên đăng nhập không hợp lệ hoặc hết hạn. Đăng nhập lại.'
-    }
-    return e.message || 'Không lưu được dữ liệu.'
-  }
-  if (e instanceof Error) return e.message
-  return 'Không lưu được dữ liệu.'
+  return userFacingWriteError(e)
 }
 
 /** Đồng bộ cỡ/khoảng dòng (body Cài đặt) — cùng thang với Layout (text-sm). */
@@ -538,13 +527,11 @@ export function SettingsView() {
   const removeMasterCatalog = async (c: MasterCatalogDefinition) => {
     if (!db || !canMaster) return
     if (catalogs.length <= 1) {
-      window.alert('Cần giữ ít nhất một danh mục.')
+      appAlert('Cần giữ ít nhất một danh mục.', 'warning')
       return
     }
     if (
-      !window.confirm(
-        `Xóa loại danh mục «${c.label}»? Các mục trong danh mục này sẽ bị xóa khỏi Firestore.`,
-      )
+      !(await appConfirmDelete(c.label))
     ) {
       return
     }
@@ -555,7 +542,7 @@ export function SettingsView() {
         parseCatalogsFromRegistryData(regSnap.data() as Record<string, unknown>) ?? [...catalogs]
       const next = base.filter((x) => x.id !== c.id)
       if (next.length < 1) {
-        window.alert('Không thể xóa — cấu hình đăng ký không hợp lệ.')
+        appAlert('Không thể xóa — cấu hình đăng ký không hợp lệ.', 'error')
         return
       }
       const batch = writeBatch(db)
@@ -567,7 +554,7 @@ export function SettingsView() {
       await batch.commit()
     } catch (e) {
       console.error(e)
-      window.alert(firestoreWriteErrorMessage(e))
+      appAlert(firestoreWriteErrorMessage(e), 'error')
     }
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, RefreshCw, Search } from 'lucide-react'
+import { Download, Loader2, RefreshCw, Search } from 'lucide-react'
 import type { Lead } from '../types'
 import { useAuth } from '../hooks/useAuth'
 import { useAccountantLeads } from '../hooks/useAccountantLeads'
@@ -16,6 +16,8 @@ import { buildAccountantLeadSummary, type AccountantStatusTag } from '../utils/a
 import { formatStaffDisplayName } from '../utils/counselorDisplay'
 import { AccountantLeadReviewCard } from '../components/accountant/AccountantLeadReviewCard'
 import { canAccessAccountantPortal } from '../auth/accountantPortal'
+import { exportLeadProfileWorkbook } from '../utils/exportLeadProfileWorkbook'
+import { appAlert } from '../utils/appNotify'
 
 type QueueFilter = 'pending' | 'done' | 'all'
 
@@ -367,16 +369,47 @@ export function AccountantView({ portalMode = false }: { portalMode?: boolean })
         </p>
       ) : null}
 
-      <p className="text-sm text-slate-500">
-        Đang hiện <strong className="font-semibold text-slate-800">{filtered.length}</strong> hồ sơ
-        {filterTag
-          ? ` · lọc ${STATUS_FILTER_OPTIONS.find((o) => o.tag === filterTag)?.sheetLabel ?? filterTag}`
-          : queueFilter === 'pending'
-            ? ' · Cần duyệt'
-            : queueFilter === 'done'
-              ? ' · Đã xong'
-              : ''}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-slate-500">
+          Đang hiện <strong className="font-semibold text-slate-800">{filtered.length}</strong> hồ sơ
+          {filterTag
+            ? ` · lọc ${STATUS_FILTER_OPTIONS.find((o) => o.tag === filterTag)?.sheetLabel ?? filterTag}`
+            : queueFilter === 'pending'
+              ? ' · Cần duyệt'
+              : queueFilter === 'done'
+                ? ' · Đã xong'
+                : ''}
+        </p>
+        <button
+          type="button"
+          disabled={!filtered.length}
+          onClick={() => {
+            if (!filtered.length) {
+              appAlert('Không có hồ sơ trong bộ lọc hiện tại để tải.', 'warning')
+              return
+            }
+            try {
+              exportLeadProfileWorkbook(filtered, {
+                scholarshipsById: scholarshipById,
+                counselorNameById: directoryNames,
+                studentCodeIndex: codeSequenceIndex,
+                filename: `VietMy_KeToan_HoSo_${new Date().toISOString().slice(0, 10)}.xlsx`,
+              })
+            } catch (e) {
+              console.error(e)
+              appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
+            }
+          }}
+          title="Tải Excel đầy đủ hồ sơ đang hiện sau tìm / lọc"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-400 bg-emerald-50 px-3 text-sm font-semibold text-emerald-950 shadow-sm transition hover:border-emerald-500 hover:bg-emerald-100 disabled:opacity-40"
+        >
+          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Tải Excel
+          {filtered.length ? (
+            <span className="tabular-nums opacity-80">({filtered.length})</span>
+          ) : null}
+        </button>
+      </div>
 
       <div className="space-y-1.5">
         {filtered.length === 0 ? (

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { ConfigQuickStartPanel } from './ConfigQuickStartPanel'
-import { FirebaseError } from 'firebase/app'
 import { addDoc, collection, deleteDoc, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { BookOpen, Database, Download, Search, Upload, X } from 'lucide-react'
@@ -33,22 +32,12 @@ import {
   resolvePlaybookContentCategory,
   type PlaybookContentCategoryId,
 } from '../utils/playbookContentCategories'
+import { appAlert } from '../utils/appNotify'
+import { appConfirmDelete, appConfirmWarning } from '../utils/appConfirm'
+import { userFacingWriteError } from '../utils/userFacingWriteError'
 
 function firestoreWriteErrorMessage(e: unknown): string {
-  if (e instanceof FirebaseError) {
-    if (e.code === 'permission-denied') {
-      return 'Firestore từ chối ghi. Kiểm tra quyền tài khoản và Rules.'
-    }
-    if (e.code === 'unavailable') {
-      return 'Firestore tạm thời không khả dụng. Thử lại sau.'
-    }
-    if (e.code === 'unauthenticated') {
-      return 'Phiên đăng nhập không hợp lệ hoặc hết hạn. Đăng nhập lại.'
-    }
-    return e.message || 'Không lưu được dữ liệu.'
-  }
-  if (e instanceof Error) return e.message
-  return 'Không lưu được dữ liệu.'
+  return userFacingWriteError(e)
 }
 
 type MainTab = 'setup' | 'data'
@@ -135,12 +124,12 @@ function PlaybookDataDetailPanel({
     if (!playbook || !canEdit) return
     const { triggerConditions, matchKeywords, matchAllLeads } = matchConfig
     if (!matchAllLeads && !triggerConditions.length && !matchKeywords.length) {
-      window.alert('Chọn ít nhất một cách kích hoạt: «Áp dụng mọi hồ sơ», điều kiện, hoặc từ khóa.')
+      appAlert('Chọn ít nhất một cách kích hoạt: «Áp dụng mọi hồ sơ», điều kiện, hoặc từ khóa.', 'warning')
       return
     }
     const pri = Math.floor(Number.parseInt(priority, 10))
     if (!Number.isFinite(pri) || pri < 0 || pri > 1000) {
-      window.alert('Ưu tiên phải là số nguyên từ 0 đến 1000.')
+      appAlert('Ưu tiên phải là số nguyên từ 0 đến 1000.', 'warning')
       return
     }
     setBusy(true)
@@ -167,7 +156,7 @@ function PlaybookDataDetailPanel({
       onSaved?.()
     } catch (e) {
       console.error(e)
-      window.alert(firestoreWriteErrorMessage(e))
+      appAlert(firestoreWriteErrorMessage(e), 'error')
     } finally {
       setBusy(false)
     }
@@ -175,14 +164,14 @@ function PlaybookDataDetailPanel({
 
   const remove = async () => {
     if (!playbook || !canEdit) return
-    if (!window.confirm(`Xóa playbook «${playbook.title}»?`)) return
+    if (!(await appConfirmDelete(playbook.title))) return
     setBusy(true)
     try {
       await deleteDoc(doc(db, FS_COLLECTIONS.consultingPlaybooks, playbook.id))
       onDeleted?.()
     } catch (e) {
       console.error(e)
-      window.alert(firestoreWriteErrorMessage(e))
+      appAlert(firestoreWriteErrorMessage(e), 'error')
     } finally {
       setBusy(false)
     }
@@ -391,7 +380,7 @@ function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void
   const save = async () => {
     const { triggerConditions, matchKeywords, matchAllLeads } = matchConfig
     if (!matchAllLeads && !triggerConditions.length && !matchKeywords.length) {
-      window.alert('Thêm ít nhất một điều kiện, từ khóa, hoặc bật «Áp dụng mọi hồ sơ».')
+      appAlert('Thêm ít nhất một điều kiện, từ khóa, hoặc bật «Áp dụng mọi hồ sơ».', 'warning')
       return
     }
     setBusy(true)
@@ -420,7 +409,7 @@ function PlaybookQuickAdd({ db, onSaved }: { db: Firestore; onSaved?: () => void
       onSaved?.()
     } catch (e) {
       console.error(e)
-      window.alert(firestoreWriteErrorMessage(e))
+      appAlert(firestoreWriteErrorMessage(e), 'error')
     } finally {
       setBusy(false)
     }
@@ -607,9 +596,10 @@ export function ConsultingPlaybookSection({
         }
         const rows = parseConsultingPlaybooksJson(parsed)
         if (
-          !window.confirm(
-            `Nạp ${rows.length} playbook vào Firestore? Ghi theo id (merge): trùng id sẽ cập nhật. Nhãn seedTag: ${VIETMY_PLAYBOOK_JSON_UPLOAD_TAG}.`,
-          )
+          !(await appConfirmWarning(
+            `Nạp ${rows.length} playbook?`,
+            'Trùng id sẽ cập nhật bản đã có.',
+          ))
         ) {
           return
         }
@@ -719,13 +709,14 @@ export function ConsultingPlaybookSection({
                   type="button"
                   disabled={seedBusy || loading}
                   onClick={() => {
-                    if (
-                      !window.confirm(
-                        'Nạp 50 playbook mẫu (id vietmy_seed_playbook_01 … 50) vào Firestore? Dùng quyền tài khoản đang đăng nhập; có thể ghi đè bản seed cùng id.',
-                      )
-                    )
-                      return
                     void (async () => {
+                      if (
+                        !(await appConfirmWarning(
+                          'Nạp playbook mẫu?',
+                          'Dùng quyền tài khoản đang đăng nhập; có thể ghi đè bản mẫu cùng id.',
+                        ))
+                      )
+                        return
                       setSeedBusy(true)
                       setMsg(null)
                       try {

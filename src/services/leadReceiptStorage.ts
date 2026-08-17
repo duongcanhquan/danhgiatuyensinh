@@ -154,7 +154,12 @@ export async function uploadLeadReceiptFile(
 ): Promise<ReceiptUploadResult> {
   const orgId = String(lead.orgId ?? '').trim() || DEFAULT_ORG_ID
   await ensureReceiptStorageConfigLoaded(getFirestoreDb(), orgId)
-  const prepared = await optimizeReceiptFile(file)
+  let prepared: File
+  try {
+    prepared = await optimizeReceiptFile(file)
+  } catch (e) {
+    throw e instanceof Error ? e : new Error('Không xử lý được ảnh hóa đơn.')
+  }
   const runtime = resolveReceiptStorageRuntime()
 
   const tryR2 = async (): Promise<ReceiptUploadResult> => {

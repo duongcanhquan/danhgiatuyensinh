@@ -4,6 +4,7 @@ import { addDoc, collection, doc, Timestamp, updateDoc } from 'firebase/firestor
 import {
   CalendarClock,
   ChevronDown,
+  Download,
   Filter,
   Flame,
   FolderOpen,
@@ -53,6 +54,9 @@ import { resolveLeadDisplayPriorityTag } from '../utils/leadPriorityTag'
 import { assigneeFirestoreMirror, counselorStatusToPipeline } from '../utils/leadIdentity'
 import { formatStaffDirectoryLabel } from '../utils/counselorDisplay'
 import { exportSelectedEvaluatedLeadsToXlsx } from '../utils/exportEvaluatedLeads'
+import { exportLeadProfileWorkbook } from '../utils/exportLeadProfileWorkbook'
+import { useScholarships } from '../hooks/useScholarships'
+import { appAlert } from '../utils/appNotify'
 import { evaluateLead, leadToEvaluationRecord, persistedLeadScoringFields } from '../utils/scoring'
 import {
   counselorListFilterSignature,
@@ -524,6 +528,7 @@ export function CounselorDashboard() {
   const { profile, can } = useAuth()
   const { highSchoolLabels, majorLabels, regionLabels, byKind, academicPerformanceLabels, catalogs } = useMasterData()
   const { users: directoryUsers, counselors: counselorUsers, loading: counselorsLoading } = useCounselorDirectory()
+  const { byId: scholarshipsById } = useScholarships()
 
   const counselorDirectoryLabelById = useMemo(() => {
     const m = new Map<string, string>()
@@ -634,6 +639,8 @@ export function CounselorDashboard() {
     refetchLeads,
     totalLeadCount,
     searchHitTotal,
+    searchMatchedLeads,
+    searchScanTruncated,
   } = useLeads({
     serverFilters: leadServerFilters,
     searchText: urlQRaw,
@@ -772,9 +779,8 @@ export function CounselorDashboard() {
     setPage(1)
   }, [listFilterSig, setPage])
 
-  const filtered = useMemo(() => {
-    const q = qLower
-    return leads.filter((l) => {
+  const matchCounselorListFilters = useCallback(
+    (l: Lead) => {
       if (regionFilter !== 'ALL' && l.province.trim() !== regionFilter) return false
       if (schoolFilter !== 'ALL' && (l.highSchool ?? '').trim() !== schoolFilter) return false
       if (majorFilter !== 'ALL' && l.educationLevel.trim() !== majorFilter) return false
@@ -793,29 +799,33 @@ export function CounselorDashboard() {
       if (tagFilter !== 'ALL' && tag !== tagFilter) return false
       if (pipelineUrlFilter !== 'ALL' && l.pipelineStatus !== pipelineUrlFilter) return false
       if (sourceUrlFilter !== 'ALL' && (l.source ?? '').trim() !== sourceUrlFilter) return false
-      // Ô tìm đã quét trong useLeads (searchText); fullScope vẫn lọc lại cho chắc.
-      if (!q || !listNeedsFullScope) return true
-      return leadMatchesClientSearch(l, q, counselorDirectoryLabelById)
-    })
-  }, [
-    leads,
-    qLower,
-    dueOnly,
-    tagFilter,
-    displayPriorityTag,
-    myDayFilter,
-    regionFilter,
-    schoolFilter,
-    majorFilter,
-    counselorFilterUid,
-    counselorDirectoryLabelById,
-    dateAxis,
-    dateFrom,
-    dateTo,
-    pipelineUrlFilter,
-    sourceUrlFilter,
-    listNeedsFullScope,
-  ])
+      if (!qLower || !listNeedsFullScope) return true
+      return leadMatchesClientSearch(l, qLower, counselorDirectoryLabelById)
+    },
+    [
+      qLower,
+      dueOnly,
+      tagFilter,
+      displayPriorityTag,
+      myDayFilter,
+      regionFilter,
+      schoolFilter,
+      majorFilter,
+      counselorFilterUid,
+      counselorDirectoryLabelById,
+      dateAxis,
+      dateFrom,
+      dateTo,
+      pipelineUrlFilter,
+      sourceUrlFilter,
+      listNeedsFullScope,
+    ],
+  )
+
+  const filtered = useMemo(
+    () => leads.filter(matchCounselorListFilters),
+    [leads, matchCounselorListFilters],
+  )
 
   const listRows = useMemo(() => {
     let rows = filtered
@@ -824,6 +834,20 @@ export function CounselorDashboard() {
       (a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0),
     )
   }, [filtered, crmStageFilter])
+
+  const rowsForExcelExport = useMemo(() => {
+    const source = searchMatchedLeads != null ? searchMatchedLeads : null
+    let rows = source != null ? source.filter(matchCounselorListFilters) : listRows
+    if (source != null && crmStageFilter !== 'ALL') {
+      rows = rows.filter((l) => l.status === crmStageFilter)
+    }
+    if (source != null) {
+      rows = [...rows].sort(
+        (a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0),
+      )
+    }
+    return rows
+  }, [searchMatchedLeads, matchCounselorListFilters, listRows, crmStageFilter])
 
   const clientPagingActive = listNeedsFullScope
   const maxListPage = clientPagingActive
@@ -1092,10 +1116,50 @@ export function CounselorDashboard() {
 
   const exportBulkSelection = useCallback(() => {
     const rows = leads.filter((l) => selectedIds.has(l.id))
-    exportSelectedEvaluatedLeadsToXlsx(rows, selectedIds, evalMapForExport(rows), {
-      profileName: activeScoringProfile?.profileName ?? 'Mặc định',
-    })
-  }, [leads, selectedIds, evalMapForExport, activeScoringProfile])
+    try {
+      exportSelectedEvaluatedLeadsToXlsx(rows, selectedIds, evalMapForExport(rows), {
+        profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+        scholarshipsById,
+        counselorNameById: counselorDirectoryLabelById,
+      })
+    } catch (e) {
+      console.error(e)
+      appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
+    }
+  }, [leads, selectedIds, evalMapForExport, activeScoringProfile, scholarshipsById, counselorDirectoryLabelById])
+
+  const exportFilteredList = useCallback(() => {
+    if (!rowsForExcelExport.length) {
+      appAlert('Không có hồ sơ trong bộ lọc hiện tại để tải.', 'warning')
+      return
+    }
+    try {
+      exportLeadProfileWorkbook(rowsForExcelExport, {
+        profileName: activeScoringProfile?.profileName ?? 'Mặc định',
+        scholarshipsById,
+        counselorNameById: counselorDirectoryLabelById,
+        evaluatedByLeadId: evalMapForExport(rowsForExcelExport),
+        filename: `VietMy_TVV_HoSo_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      })
+      if (searchScanTruncated || scopeFetchTruncated) {
+        appAlert(
+          `Đã tải ${rowsForExcelExport.length} hồ sơ. Danh sách có thể chưa đủ vì hạn mức quét — thu hẹp tìm/lọc nếu thiếu hồ sơ.`,
+          'warning',
+        )
+      }
+    } catch (e) {
+      console.error(e)
+      appAlert(e instanceof Error ? e.message : 'Không tải được file Excel.', 'error')
+    }
+  }, [
+    rowsForExcelExport,
+    activeScoringProfile,
+    scholarshipsById,
+    counselorDirectoryLabelById,
+    evalMapForExport,
+    searchScanTruncated,
+    scopeFetchTruncated,
+  ])
 
   const applyRowCrmChange = useCallback(
     async (lead: Lead, next: LeadCounselorStatus) => {
@@ -1212,6 +1276,19 @@ export function CounselorDashboard() {
                   />
                 </div>
               </label>
+              <button
+                type="button"
+                disabled={!rowsForExcelExport.length}
+                onClick={exportFilteredList}
+                title="Tải Excel đầy đủ hồ sơ đang hiện sau tìm / lọc"
+                className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-400 bg-emerald-50 px-3 text-sm font-semibold text-emerald-950 shadow-sm transition hover:border-emerald-500 hover:bg-emerald-100 disabled:opacity-40 sm:w-auto"
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Tải Excel
+                {rowsForExcelExport.length ? (
+                  <span className="tabular-nums opacity-80">({rowsForExcelExport.length})</span>
+                ) : null}
+              </button>
               <button
                 type="button"
                 onClick={() => setFiltersExpanded((x) => !x)}

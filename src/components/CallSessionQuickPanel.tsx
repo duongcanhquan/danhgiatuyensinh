@@ -17,6 +17,7 @@ import {
   validateEvaluationSelections,
 } from '../utils/callSessionEvaluation'
 import { evaluateCallAiEligibility } from '../utils/callSessionAiEligibility'
+import { appAlert } from '../utils/appNotify'
 import {
   callFormVariantForWorkMode,
   filterDimensionsForCallForm,
@@ -146,7 +147,7 @@ export function CallSessionQuickPanel({
       setLastAi(result.callAiAssessment ?? null)
       if (result.aiSkippedReason) {
         // Đã lưu đánh giá; AI bị bỏ qua — báo nhẹ, vẫn đóng panel.
-        window.alert(result.aiSkippedReason)
+        appAlert(result.aiSkippedReason, 'info')
       }
       onSaved?.({ callAiAssessment: result.callAiAssessment })
       resetDraft()
