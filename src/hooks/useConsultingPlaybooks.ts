@@ -78,7 +78,7 @@ export function useConsultingPlaybooks(opts?: { enabled?: boolean }) {
       firestore,
       (rows, err, isLoading) => {
         setPlaybooks(rows)
-        setError(err ? firestoreReadErrorMessage({ message: err }, 'Không đọc được playbook.') : null)
+        setError(err ? firestoreReadErrorMessage(err, 'Không đọc được playbook.') : null)
         setLoading(isLoading)
       },
     )

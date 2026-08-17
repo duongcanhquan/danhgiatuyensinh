@@ -6,6 +6,7 @@ import type {
   ScriptCategory,
 } from '../types'
 import { FS_COLLECTIONS } from '../types'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 
 import { normalizeKnowledgeCategoryId } from './knowledgeCategories'
 import { parsePlaybookContentCategory } from './playbookContentCategories'
@@ -47,8 +48,13 @@ export function parseKnowledgeDocumentsJson(raw: unknown, maxItems = 500): Knowl
 }
 
 /** Ghi / merge từng tài liệu theo `id` document. */
-export async function importKnowledgeDocumentsBatch(db: Firestore, entries: KnowledgeImportRow[]): Promise<number> {
+export async function importKnowledgeDocumentsBatch(
+  db: Firestore,
+  entries: KnowledgeImportRow[],
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<number> {
   const now = Timestamp.now()
+  const org = orgId.trim() || DEFAULT_ORG_ID
   let batch = writeBatch(db)
   let ops = 0
   for (const e of entries) {
@@ -59,6 +65,7 @@ export async function importKnowledgeDocumentsBatch(db: Firestore, entries: Know
         type: e.type,
         content: e.content,
         uploadedAt: now,
+        orgId: org,
       },
       { merge: true },
     )
@@ -262,12 +269,15 @@ export async function importVietMyScriptSnippetsFromPublic(db: Firestore): Promi
   return entries.length
 }
 
-export async function importVietMyKnowledgeFromPublic(db: Firestore): Promise<number> {
+export async function importVietMyKnowledgeFromPublic(
+  db: Firestore,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<number> {
   const res = await fetch(seedAssetUrl('knowledge-documents.json'))
   if (!res.ok) throw new Error(`Không tải được bản mẫu kho tri thức (${res.status}).`)
   const raw: unknown = await res.json()
   const entries = parseKnowledgeDocumentsJson(raw, 500)
-  return importKnowledgeDocumentsBatch(db, entries)
+  return importKnowledgeDocumentsBatch(db, entries, orgId)
 }
 
 export async function importVietMyPlaybooksFromPublic(db: Firestore): Promise<number> {

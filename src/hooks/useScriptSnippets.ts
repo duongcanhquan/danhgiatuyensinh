@@ -65,7 +65,7 @@ export function useScriptSnippets() {
       firestore,
       (rows, err, isLoading) => {
         setSnippets(rows)
-        setError(err ? firestoreReadErrorMessage({ message: err }, 'Không đọc được kịch bản.') : null)
+        setError(err ? firestoreReadErrorMessage(err, 'Không đọc được kịch bản.') : null)
         setLoading(isLoading)
       },
     )

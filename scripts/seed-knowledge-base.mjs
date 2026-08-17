@@ -79,6 +79,7 @@ async function main() {
       type: e.type,
       content: e.content,
       uploadedAt: Timestamp.now(),
+      orgId: process.env.ORG_ID?.trim() || 'vietmy',
     })
     ops++
     written++

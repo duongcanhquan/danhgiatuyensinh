@@ -6,6 +6,8 @@ import type { Firestore } from 'firebase/firestore'
 import { Database, Download, FolderTree, Search, Settings2, Upload, X } from 'lucide-react'
 import { useKnowledgeDocuments } from '../hooks/useKnowledgeDocuments'
 import { useKnowledgeCategories } from '../hooks/useKnowledgeCategories'
+import { useOrg } from '../contexts/OrgProvider'
+import { DEFAULT_ORG_ID } from '../tenancy/orgConstants'
 import { KnowledgeCategoryManager } from './KnowledgeCategoryManager'
 import { knowledgeCategoryLabel, knowledgeDocSearchScore } from '../utils/knowledgeCategories'
 import {
@@ -44,6 +46,8 @@ export function KnowledgeBaseTab({
   canEdit?: boolean
 }) {
   const { documents, loading, error } = useKnowledgeDocuments()
+  const { effectiveOrgId } = useOrg()
+  const orgKey = effectiveOrgId.trim() || DEFAULT_ORG_ID
   const { categories, addCategory, updateCategory, removeCategory } = useKnowledgeCategories()
   const [mainTab, setMainTab] = useState<MainTab>('data')
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
@@ -240,6 +244,7 @@ export function KnowledgeBaseTab({
           type,
           content: content.trim(),
           uploadedAt: Timestamp.now(),
+          orgId: orgKey,
         })
         setMsg('Đã lưu thông tin tài liệu.')
         setIsNewDoc(false)
@@ -249,6 +254,7 @@ export function KnowledgeBaseTab({
           type,
           content: content.trim(),
           uploadedAt: Timestamp.now(),
+          orgId: orgKey,
         })
         setSelectedDocId(ref.id)
         setEditingId(ref.id)
@@ -318,7 +324,7 @@ export function KnowledgeBaseTab({
         ) {
           return
         }
-        const n = await importKnowledgeDocumentsBatch(db, rows)
+        const n = await importKnowledgeDocumentsBatch(db, rows, orgKey)
         setMsg(`Đã ghi ${n} tài liệu từ file. Xem tab Dữ liệu.`)
         setMainTab('data')
       } catch (err) {
@@ -443,7 +449,7 @@ export function KnowledgeBaseTab({
                     setSeedBusy(true)
                     setMsg(null)
                     try {
-                      const n = await importVietMyKnowledgeFromPublic(db)
+                      const n = await importVietMyKnowledgeFromPublic(db, orgKey)
                       setMsg(`Đã ghi ${n} tài liệu mẫu. Xem tab Dữ liệu.`)
                       setMainTab('data')
                     } catch (e) {
@@ -600,6 +606,11 @@ export function KnowledgeBaseTab({
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                 {loading ? <p className="text-xs text-slate-500">Đang tải…</p> : null}
+                {!loading && !error && documents.length === 0 ? (
+                  <p className="mb-2 text-xs leading-relaxed text-slate-600">
+                    Chưa có tài liệu gắn trường này. Vào tab Nạp dữ liệu → Nạp bộ mẫu để ghi lại (có mã trường).
+                  </p>
+                ) : null}
                 <ul className="space-y-1" role="listbox" aria-label="Danh sách tài liệu">
                   {filteredDocs.map((d) => {
                     const matchScore = searchQuery ? knowledgeDocSearchScore(d, searchQuery) : 0
